@@ -136,10 +136,7 @@ var mvcBuilder = builder.Services
         options.JsonSerializerOptions.PropertyNamingPolicy = null;
     });
 
-if (builder.Environment.IsDevelopment())
-{
-    mvcBuilder.AddRazorRuntimeCompilation();
-}
+mvcBuilder.AddRazorRuntimeCompilation();
 
 builder.Services.AddAntiforgery(o => o.HeaderName = "RequestVerificationToken");
 builder.Services.AddMemoryCache();
