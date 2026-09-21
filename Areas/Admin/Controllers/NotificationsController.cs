@@ -132,7 +132,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
 
         [HttpPost]
-        public IActionResult SendNotification(int studentId, string message, string category)
+        public async Task<IActionResult> SendNotification(int studentId, string message, string category)
         {
             if (!Enum.TryParse(category, out NotificationCategory parsedCategory))
             {
@@ -150,16 +150,16 @@ namespace QdratNew.Areas.Admin.Controllers
             };
 
             _context.Notifications.Add(notification);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
 
             return RedirectToAction("Index");
         }
 
 
         [HttpPost]
-        public IActionResult SendBulkNotification(string message)
+        public async Task<IActionResult> SendBulkNotification(string message)
         {
-            var students = _context.Students.ToList(); // جلب جميع الطلاب
+            var students = await _context.Students.ToListAsync(); // جلب جميع الطلاب
 
             foreach (var student in students)
             {
@@ -173,16 +173,16 @@ namespace QdratNew.Areas.Admin.Controllers
                 _context.Notifications.Add(notification);
             }
 
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
             return RedirectToAction("Index");
         }
 
         [HttpPost]
-        public IActionResult SendCourseNotification(int courseId, string message)
+        public async Task<IActionResult> SendCourseNotification(int courseId, string message)
         {
-            var studentsInCourse = _context.Students
+            var studentsInCourse = await _context.Students
                 .Where(s => _context.StudentCourses.Any(sc => sc.StudentID == s.StudentID && sc.CourseId == courseId))
-                .ToList();
+                .ToListAsync();
 
             foreach (var student in studentsInCourse)
             {
@@ -196,14 +196,14 @@ namespace QdratNew.Areas.Admin.Controllers
                 _context.Notifications.Add(notification);
             }
 
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
             return RedirectToAction("Index");
         }
 
 
 
         [HttpPost]
-        public IActionResult SendExamReminder(int studentId, string subject, DateTime examDate)
+        public async Task<IActionResult> SendExamReminder(int studentId, string subject, DateTime examDate)
         {
             var notification = new Notification
             {
@@ -214,12 +214,12 @@ namespace QdratNew.Areas.Admin.Controllers
             };
 
             _context.Notifications.Add(notification);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
 
             return RedirectToAction("Index");
         }
         [HttpPost]
-        public IActionResult SendAssignmentDeadline(int studentId, string subject, DateTime dueDate)
+        public async Task<IActionResult> SendAssignmentDeadline(int studentId, string subject, DateTime dueDate)
         {
             var notification = new Notification
             {
@@ -230,12 +230,12 @@ namespace QdratNew.Areas.Admin.Controllers
             };
 
             _context.Notifications.Add(notification);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
 
             return RedirectToAction("Index");
         }
         [HttpPost]
-        public IActionResult SendCourseUpdate(int studentId, string courseName)
+        public async Task<IActionResult> SendCourseUpdate(int studentId, string courseName)
         {
             var notification = new Notification
             {
@@ -246,7 +246,7 @@ namespace QdratNew.Areas.Admin.Controllers
             };
 
             _context.Notifications.Add(notification);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
 
             return RedirectToAction("Index");
         }
@@ -294,7 +294,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
 
         [HttpPost]
-        public IActionResult SendMotivationalMessage(int studentId, string message)
+        public async Task<IActionResult> SendMotivationalMessage(int studentId, string message)
         {
             var notification = new Notification
             {
@@ -305,7 +305,7 @@ namespace QdratNew.Areas.Admin.Controllers
             };
 
             _context.Notifications.Add(notification);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
 
             return RedirectToAction("Index");
         }
