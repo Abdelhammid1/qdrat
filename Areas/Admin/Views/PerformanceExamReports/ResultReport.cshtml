@@ -1,0 +1,1187 @@
+@model QdratNew.ViewModels.Reports.StudentExamReportViewModel
+@using System.Text.Json
+@{
+    Layout = "~/Views/Shared/_ReportLayout.cshtml";
+    ViewData["Title"] = "تقرير اختبار مؤشرات الأداء";
+
+    var isPassed = Model.OverallPercent >= 60;
+
+    // Per-section derived values
+    var sectionPercents = Model.Sections
+        .Select(s => s.Total == 0 ? 0.0 : Math.Round(s.Correct * 100.0 / s.Total, 1))
+        .ToList();
+    var sectionColors = sectionPercents
+        .Select(p => p >= 60 ? "#22c55e" : "#ef4444")
+        .ToList();
+    var failingDetails = Model.Sections
+        .Select((s, i) => new { Section = s, Percent = sectionPercents[i] })
+        .Where(x => x.Percent < 60)
+        .ToList();
+    var hasRemedialPlan = failingDetails.Any();
+
+    // Attendance aggregates
+    var hasAttendance = Model.LectureAttendances?.Any() == true;
+    var presentCount  = hasAttendance ? Model.LectureAttendances.Count(a => a.AttendanceStatus == "حاضر")  : 0;
+    var lateCount     = hasAttendance ? Model.LectureAttendances.Count(a => a.AttendanceStatus == "متأخر") : 0;
+    var absentCount   = hasAttendance ? Model.LectureAttendances.Count(a => a.AttendanceStatus == "غائب")  : 0;
+    var totalLectures = hasAttendance ? Model.LectureAttendances.Count : 0;
+    var attendanceRate = totalLectures > 0 ? (presentCount + lateCount) * 100.0 / totalLectures : 100.0;
+
+    // Homework
+    var hasHomework = Model.Homeworks?.Any() == true;
+}
+
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
+
+<style>
+    /* ─── Design tokens ─── */
+    :root {
+        --r-primary: #4CA6A8;
+        --r-success: #22c55e;
+        --r-danger:  #ef4444;
+        --r-warning: #f59e0b;
+        --r-info:    #3b82f6;
+        --r-card:    var(--report-card,   #121a2f);
+        --r-card2:   var(--report-card-2, #182238);
+        --r-text:    var(--report-text,   #f8fafc);
+        --r-muted:   var(--report-muted,  #94a3b8);
+        --r-border:  var(--report-border, rgba(255,255,255,.10));
+        --r-radius:  14px;
+    }
+
+    @@media print {
+        :root {
+            --r-card:  #ffffff !important;
+            --r-card2: #f3f6fa !important;
+            --r-text:  #111827 !important;
+            --r-muted: #4b5563 !important;
+            --r-border:#b8c2cc !important;
+        }
+        .no-print { display: none !important; }
+        .score-circle::after { background: #fff !important; }
+
+        @@page {
+            size: A4 portrait;
+            margin: 13mm 14mm 12mm;
+        }
+
+        html,
+        body {
+            width: auto !important;
+            min-width: 0 !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            color: #111827 !important;
+            font-size: 10pt !important;
+            line-height: 1.42 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+
+        body > .max-w-6xl {
+            width: 100% !important;
+            max-width: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            gap: 0 !important;
+            display: block !important;
+            box-sizing: border-box !important;
+        }
+
+        .card,
+        .report-header,
+        .rec-card,
+        .rem-axis-card {
+            background: #ffffff !important;
+            color: #111827 !important;
+            border: 1.25px solid #aeb8c4 !important;
+            box-shadow: none !important;
+            border-radius: 6px !important;
+            box-sizing: border-box !important;
+            overflow: visible !important;
+            page-break-inside: auto !important;
+            break-inside: auto !important;
+        }
+
+        .card {
+            padding: 11px 13px !important;
+            margin: 0 0 8mm !important;
+        }
+
+        .card:hover,
+        .stat-card:hover,
+        .hm-cell:hover {
+            transform: none !important;
+        }
+
+        .report-header {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            margin-top: 0 !important;
+        }
+
+        .sec-title {
+            color: #0f5f62 !important;
+            border-right-color: #0f5f62 !important;
+            font-size: 12pt !important;
+            margin: 0 0 9px !important;
+            padding-right: 8px !important;
+            line-height: 1.35 !important;
+        }
+
+        .stats-row {
+            grid-template-columns: repeat(4, 1fr) !important;
+            gap: 6px !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+        }
+
+        .donut-cell {
+            grid-column: span 4 !important;
+        }
+
+        .stat-card {
+            background: #ffffff !important;
+            border: 1px solid #b8c2cc !important;
+            border-radius: 6px !important;
+            padding: 7px 6px !important;
+            box-shadow: none !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+        }
+
+        .stat-icon {
+            font-size: 13pt !important;
+            margin-bottom: 2px !important;
+        }
+
+        .stat-val {
+            font-size: 16pt !important;
+        }
+
+        .stat-lbl {
+            font-size: 8.5pt !important;
+            color: #4b5563 !important;
+        }
+
+        .axis-chart-wrap {
+            height: 155px !important;
+            margin: 0 0 8px !important;
+            overflow: hidden !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+        }
+
+        .axis-chart-wrap canvas {
+            height: 155px !important;
+            max-height: 155px !important;
+            margin: 0 !important;
+            transform: none !important;
+        }
+
+        .rtbl {
+            width: 100% !important;
+            table-layout: fixed !important;
+            border-collapse: collapse !important;
+            font-size: 8.4pt !important;
+            color: #111827 !important;
+            page-break-inside: auto !important;
+            break-inside: auto !important;
+        }
+
+        .rtbl thead {
+            display: table-header-group !important;
+        }
+
+        .rtbl tr {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+        }
+
+        .rtbl th,
+        .rtbl td {
+            background: #ffffff !important;
+            color: #111827 !important;
+            border: 1px solid #b8c2cc !important;
+            padding: 4px 4px !important;
+            vertical-align: middle !important;
+            overflow-wrap: anywhere !important;
+        }
+
+        .rtbl th {
+            background: #eef2f6 !important;
+            color: #0f5f62 !important;
+            font-weight: 800 !important;
+        }
+
+        .axis-table th:first-child,
+        .axis-table td:first-child {
+            width: 30% !important;
+        }
+
+        .pill-pass,
+        .pill-fail,
+        .pill-late,
+        .status-badge {
+            border-radius: 6px !important;
+            padding: 2px 6px !important;
+            font-size: 8.5pt !important;
+            white-space: nowrap !important;
+        }
+
+        .heatmap {
+            grid-template-columns: repeat(5, 1fr) !important;
+            gap: 5px !important;
+        }
+
+        .hm-cell,
+        .att-mini {
+            background: #ffffff !important;
+            border: 1px solid #b8c2cc !important;
+            border-radius: 6px !important;
+            padding: 6px 5px !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+        }
+
+        .hm-num,
+        .hm-date,
+        .hm-title,
+        .att-mini-lbl {
+            color: #4b5563 !important;
+        }
+
+        .hm-status,
+        .att-mini-val,
+        .hw-title,
+        .hw-avg-val {
+            color: #111827 !important;
+        }
+
+        .hw-avg {
+            background: #ffffff !important;
+            border: 1px solid #b8c2cc !important;
+            padding: 10px 8px !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+        }
+
+        .hw-avg-val {
+            font-size: 22pt !important;
+        }
+
+        .rec-card,
+        .rem-axis-card {
+            padding: 10px 12px !important;
+            margin: 0 0 7mm !important;
+        }
+
+        .footer-note {
+            margin-top: 6mm !important;
+            color: #4b5563 !important;
+            font-size: 8.5pt !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+        }
+    }
+
+    body { font-family: 'Cairo', sans-serif; }
+
+    /* ─── Section headings ─── */
+    .sec-title {
+        font-size: 1.05rem;
+        font-weight: 800;
+        color: var(--r-primary);
+        border-right: 4px solid var(--r-primary);
+        padding-right: 12px;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    /* ─── Chips ─── */
+    .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: rgba(76,166,168,.15);
+        border: 1px solid rgba(76,166,168,.30);
+        color: var(--r-primary);
+        padding: 4px 12px;
+        border-radius: 50px;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    /* ─── Score circle ─── */
+    .score-circle {
+        width: 140px;
+        height: 140px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        position: relative;
+    }
+    .score-circle.pass { background: conic-gradient(var(--r-success) calc(var(--p)*1%), rgba(34,197,94,.15) 0); }
+    .score-circle.fail { background: conic-gradient(var(--r-danger)  calc(var(--p)*1%), rgba(239,68,68,.15)  0); }
+    .score-circle::after {
+        content: attr(data-label);
+        position: absolute;
+        inset: 15px;
+        background: var(--r-card);
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-weight: 800;
+        font-size: 20px;
+    }
+    .score-circle.pass::after { color: var(--r-success); }
+    .score-circle.fail::after { color: var(--r-danger);  }
+
+    /* ─── Status badge ─── */
+    .status-badge {
+        display: inline-block;
+        padding: 7px 18px;
+        border-radius: 50px;
+        font-weight: 700;
+        font-size: 15px;
+    }
+    .status-badge.pass { background: rgba(34,197,94,.15);  color: var(--r-success); border: 1.5px solid var(--r-success); }
+    .status-badge.fail { background: rgba(239,68,68,.15);  color: var(--r-danger);  border: 1.5px solid var(--r-danger);  }
+
+    /* ─── Stat cards grid ─── */
+    .stats-row {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr) 1.5fr;
+        gap: 16px;
+        align-items: stretch;
+    }
+    @@media (max-width: 1024px) {
+        .stats-row { grid-template-columns: repeat(2, 1fr); }
+        .donut-cell { grid-column: span 2; }
+    }
+    @@media (max-width: 640px) {
+        .stats-row { grid-template-columns: 1fr 1fr; }
+        .donut-cell { grid-column: span 2; }
+    }
+
+    .stat-card {
+        background: var(--r-card);
+        border: 1px solid var(--r-border);
+        border-radius: var(--r-radius);
+        padding: 20px;
+        text-align: center;
+        transition: transform .2s;
+    }
+    .stat-card:hover { transform: translateY(-3px); }
+    .stat-icon { font-size: 28px; margin-bottom: 8px; }
+    .stat-val  { font-size: 32px; font-weight: 800; line-height: 1; margin-bottom: 4px; }
+    .stat-lbl  { font-size: 13px; color: var(--r-muted); font-weight: 600; }
+    .c-total   { color: var(--r-info);    }
+    .c-correct { color: var(--r-success); }
+    .c-wrong   { color: var(--r-danger);  }
+    .c-skipped { color: var(--r-muted);   }
+
+    /* ─── Generic table ─── */
+    .rtbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .rtbl th {
+        background: var(--r-card2);
+        color: var(--r-primary);
+        font-weight: 700;
+        padding: 12px 10px;
+        border: 1px solid var(--r-border);
+    }
+    .rtbl td {
+        padding: 10px;
+        border: 1px solid var(--r-border);
+        text-align: center;
+        color: var(--r-text);
+    }
+    .rtbl tbody tr:hover { background: rgba(76,166,168,.05); }
+
+    /* ─── Pill badges ─── */
+    .pill-pass { background: rgba(34,197,94,.15);  color: var(--r-success); border-radius: 50px; padding: 3px 10px; font-weight: 700; font-size: 12px; white-space: nowrap; }
+    .pill-fail { background: rgba(239,68,68,.15);  color: var(--r-danger);  border-radius: 50px; padding: 3px 10px; font-weight: 700; font-size: 12px; white-space: nowrap; }
+    .pill-progress { background: rgba(139,92,246,.15); color: #7c3aed; border-radius: 50px; padding: 3px 10px; font-weight: 700; font-size: 12px; white-space: nowrap; }
+    .pill-late { background: rgba(245,158,11,.15); color: var(--r-warning); border-radius: 50px; padding: 3px 10px; font-weight: 700; font-size: 12px; white-space: nowrap; }
+
+    /* ─── Attendance heatmap ─── */
+    .heatmap { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+    @@media (max-width: 640px) { .heatmap { grid-template-columns: repeat(2, 1fr); } }
+
+    .hm-cell {
+        border-radius: 12px;
+        padding: 14px 10px;
+        text-align: center;
+        border: 1px solid var(--r-border);
+        transition: transform .2s;
+    }
+    .hm-cell:hover { transform: scale(1.04); }
+    .hm-cell.att-present { background: rgba(34,197,94,.12);  border-color: rgba(34,197,94,.30);  }
+    .hm-cell.att-late    { background: rgba(245,158,11,.12); border-color: rgba(245,158,11,.30); }
+    .hm-cell.att-absent  { background: rgba(239,68,68,.12);  border-color: rgba(239,68,68,.30);  }
+    .hm-num  { font-size: 11px; color: var(--r-muted); margin-bottom: 3px; }
+    .hm-date { font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+    .hm-icon { font-size: 22px; margin-bottom: 4px; }
+    .hm-lbl  { font-size: 11px; font-weight: 700; }
+    .att-present .hm-lbl { color: var(--r-success); }
+    .att-late    .hm-lbl { color: var(--r-warning); }
+    .att-absent  .hm-lbl { color: var(--r-danger);  }
+    .hm-perm { font-size: 10px; color: var(--r-muted); margin-top: 4px; }
+
+    /* ─── Homework avg card ─── */
+    .hw-avg {
+        background: linear-gradient(135deg, rgba(59,130,246,.15), rgba(76,166,168,.10));
+        border: 1px solid rgba(59,130,246,.30);
+        border-radius: var(--r-radius);
+        padding: 28px 20px;
+        text-align: center;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+    }
+    .hw-avg-val { font-size: 52px; font-weight: 800; line-height: 1; }
+
+    /* ─── Recommendation card ─── */
+    .rec-card {
+        background: linear-gradient(135deg, rgba(76,166,168,.12) 0%, rgba(59,130,246,.08) 100%);
+        border: 1px solid rgba(76,166,168,.30);
+        border-radius: var(--r-radius);
+        padding: 24px;
+    }
+    .rec-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 10px 14px;
+        border-radius: 10px;
+        margin-bottom: 10px;
+        font-size: 14px;
+        line-height: 1.8;
+    }
+    .rec-item .ri { font-size: 20px; flex-shrink: 0; padding-top: 2px; }
+    .rec-positive { background: rgba(34,197,94,.10);  border-right: 3px solid var(--r-success); }
+    .rec-warning  { background: rgba(245,158,11,.10); border-right: 3px solid var(--r-warning); }
+    .rec-danger   { background: rgba(239,68,68,.10);  border-right: 3px solid var(--r-danger);  }
+    .rec-info     { background: rgba(76,166,168,.10); border-right: 3px solid var(--r-primary); }
+
+    /* ─── Remedial plan ─── */
+    .remedial-banner {
+        background: rgba(245,158,11,.12);
+        border: 1.5px solid rgba(245,158,11,.40);
+        border-radius: 12px;
+        padding: 16px 20px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 20px;
+        color: var(--r-warning);
+        font-weight: 600;
+        font-size: 15px;
+    }
+    .rem-axis-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 16px; }
+    .rem-axis-card {
+        background: var(--r-card);
+        border: 1px solid rgba(239,68,68,.25);
+        border-radius: var(--r-radius);
+        padding: 20px;
+    }
+    .btn-remedial {
+        display: inline-block;
+        background: linear-gradient(135deg, #ef4444, #dc2626);
+        color: #fff !important;
+        border: none;
+        border-radius: 8px;
+        padding: 8px 18px;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        text-decoration: none;
+        font-family: 'Cairo', sans-serif;
+        transition: opacity .2s;
+        margin-top: 14px;
+    }
+    .btn-remedial:hover { opacity: .85; }
+
+    /* ─── Print button ─── */
+    .btn-print {
+        background: var(--r-primary);
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        padding: 9px 18px;
+        cursor: pointer;
+        font-weight: 700;
+        font-family: 'Cairo', sans-serif;
+        font-size: 14px;
+        transition: opacity .2s;
+    }
+    .btn-print:hover { opacity: .85; }
+
+    /* ─── Empty states ─── */
+    .empty-state { text-align: center; padding: 40px 20px; color: var(--r-muted); }
+    .empty-state .ei { font-size: 48px; margin-bottom: 12px; }
+
+    /* ─── Attendance summary mini-cards ─── */
+    .att-summary { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+    .att-mini { border-radius: 10px; padding: 10px 18px; text-align: center; min-width: 90px; }
+    .att-mini-val { font-size: 22px; font-weight: 800; }
+    .att-mini-lbl { font-size: 11px; color: var(--r-muted); }
+</style>
+
+<!-- ═══════════════════════════════════════════════════
+     MAIN REPORT WRAPPER
+═══════════════════════════════════════════════════ -->
+<div style="display:flex; flex-direction:column; gap:24px;">
+
+    <!-- ══════════════════════════════════
+         §1  EXAM SUMMARY HEADER
+    ══════════════════════════════════ -->
+    <div class="card report-header" style="padding:28px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:20px;">
+
+            <!-- Student info + chips -->
+            <div style="flex:1; min-width:240px;">
+                <div style="display:flex; align-items:center; gap:14px; margin-bottom:14px;">
+                    <div style="width:54px;height:54px;border-radius:50%;background:rgba(76,166,168,.2);display:grid;place-items:center;font-size:26px;flex-shrink:0;">
+                        👤
+                    </div>
+                    <div>
+                        <h2 style="font-size:1.6rem;font-weight:800;color:var(--r-primary);margin:0 0 2px;">@Model.StudentName</h2>
+                        <p style="color:var(--r-muted);font-size:13px;margin:0;">اختبار مؤشر الأداء</p>
+                    </div>
+                </div>
+
+                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+                    @if (!string.IsNullOrEmpty(Model.CurriculumTitle))
+                    { <span class="chip">📚 @Model.CurriculumTitle</span> }
+                    @if (!string.IsNullOrEmpty(Model.BatchName))
+                    { <span class="chip">🏷️ @Model.BatchName</span> }
+                    @if (!string.IsNullOrEmpty(Model.InstructorName))
+                    { <span class="chip">👨‍🏫 @Model.InstructorName</span> }
+                    @if (!string.IsNullOrEmpty(Model.ExamTitle))
+                    { <span class="chip">📋 @Model.ExamTitle</span> }
+                </div>
+
+                <div style="display:flex;flex-wrap:wrap;gap:20px;font-size:14px;">
+                    <span>
+                        <span style="color:var(--r-muted);">📅 التاريخ: </span>
+                        <strong>@Model.ExamDate.ToString("yyyy/MM/dd")</strong>
+                    </span>
+                    <span>
+                        <span style="color:var(--r-muted);">🕐 الوقت: </span>
+                        <strong>@Model.ExamDate.ToString("HH:mm")</strong>
+                    </span>
+                    @if (!string.IsNullOrEmpty(Model.ElapsedTimeFormatted) && Model.ElapsedTimeFormatted != "غير محدد")
+                    {
+                        <span>
+                            <span style="color:var(--r-muted);">⏱️ مدة الحل: </span>
+                            <strong style="color:var(--r-primary);">@Model.ElapsedTimeFormatted</strong>
+                        </span>
+                    }
+                    @if (Model.TimeUsagePercent > 0)
+                    {
+                        <span>
+                            <span style="color:var(--r-muted);">استهلاك الوقت: </span>
+                            <strong>@Model.TimeUsagePercent.ToString("F0")%</strong>
+                        </span>
+                    }
+                </div>
+            </div>
+
+            <!-- Overall score circle -->
+            <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+                <div class="score-circle @(isPassed ? "pass" : "fail")"
+                     style="--p:@Model.OverallPercent"
+                     data-label="@Model.OverallPercent%">
+                </div>
+                <div style="text-align:center;">
+                    <div style="color:var(--r-muted);font-size:12px;">النسبة العامة</div>
+                    <div style="font-weight:700;font-size:15px;">@Model.CorrectAnswers / @Model.TotalQuestions</div>
+                </div>
+            </div>
+
+            <!-- Pass/Fail + actions -->
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:12px;">
+                <span class="status-badge @(isPassed ? "pass" : "fail")" style="font-size:16px;">
+                    @(isPassed ? "✅ اجتاز الاختبار" : "📈 قيد التطوير — إعادة المحاولة متاحة")
+                </span>
+                @if (!string.IsNullOrWhiteSpace(Model.CheatingFlagMessage))
+                {
+                    <div style="font-size:12px;color:var(--r-danger);font-weight:700;max-width:220px;text-align:left;">
+                        ⚠️ @Model.CheatingFlagMessage
+                    </div>
+                }
+                <button class="btn-print no-print" onclick="window.print()">🖨️ طباعة / PDF</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════
+         §2  QUESTION STATISTICS + DONUT
+    ══════════════════════════════════ -->
+    <div>
+        <div class="sec-title">📊 إحصائيات الأسئلة</div>
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-icon">📋</div>
+                <div class="stat-val c-total">@Model.TotalQuestions</div>
+                <div class="stat-lbl">إجمالي الأسئلة</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">✅</div>
+                <div class="stat-val c-correct">@Model.CorrectAnswers</div>
+                <div class="stat-lbl">صحيحة</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">❌</div>
+                <div class="stat-val c-wrong">@Model.WrongAnswers</div>
+                <div class="stat-lbl">خاطئة</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⏭️</div>
+                <div class="stat-val c-skipped">@Model.Skipped</div>
+                <div class="stat-lbl">متخطاة</div>
+            </div>
+            <div class="stat-card donut-cell" style="display:flex;flex-direction:column;align-items:center;justify-content:center;">
+                <div style="font-size:13px;font-weight:700;color:var(--r-primary);margin-bottom:10px;">توزيع الإجابات</div>
+                <div style="position:relative;width:100%;height:160px;">
+                    <canvas id="donutChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════
+         §3  AXIS PERFORMANCE — CHART + TABLE
+    ══════════════════════════════════ -->
+    <div class="card axis-performance-card" style="padding:24px;">
+        <div class="sec-title">🧭 أداء المحاور</div>
+
+        @if (Model.Sections.Any())
+        {
+            <!-- Bar chart with 60% reference line -->
+            <div class="axis-chart-wrap" style="position:relative;height:300px;margin-bottom:28px;">
+                <canvas id="axisBarChart"></canvas>
+            </div>
+
+            <!-- Per-axis breakdown table -->
+            <div style="overflow-x:auto;">
+                <table class="rtbl axis-table">
+                    <thead>
+                        <tr>
+                            <th style="text-align:right;">المحور</th>
+                            <th>عدد الأسئلة</th>
+                            <th>صحيحة</th>
+                            <th>خاطئة</th>
+                            <th>متخطاة</th>
+                            <th>النسبة %</th>
+                            <th>الحالة</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (int i = 0; i < Model.Sections.Count; i++)
+                        {
+                            var s   = Model.Sections[i];
+                            var pct = sectionPercents[i];
+                            var sp  = pct >= 60;
+                            <tr>
+                                <td style="text-align:right;font-weight:600;">@s.SectionTitle</td>
+                                <td>@s.Total</td>
+                                <td style="color:var(--r-success);font-weight:700;">@s.Correct</td>
+                                <td style="color:var(--r-danger);font-weight:700;">@s.Wrong</td>
+                                <td style="color:var(--r-muted);">@s.Skipped</td>
+                                <td style="font-weight:700;color:@(sp ? "var(--r-success)" : "var(--r-danger)");">
+                                    @pct%
+                                </td>
+                                <td>
+                                    @if (sp) { <span class="pill-pass">✅ متمكّن</span> }
+                                    else      { <span class="pill-progress">📈 قيد التطوير</span> }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <div class="empty-state"><div class="ei">📭</div><p>لا توجد بيانات محاور</p></div>
+        }
+    </div>
+
+    <!-- ══════════════════════════════════
+         §4  LECTURE ATTENDANCE HEATMAP
+    ══════════════════════════════════ -->
+    <div class="card" style="padding:24px;">
+        <div class="sec-title">📅 حضور محاضرات المنهج</div>
+
+        @if (hasAttendance)
+        {
+            <div class="att-summary">
+                <div class="att-mini" style="background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.30);">
+                    <div class="att-mini-val" style="color:var(--r-success);">@presentCount</div>
+                    <div class="att-mini-lbl">حاضر</div>
+                </div>
+                <div class="att-mini" style="background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.30);">
+                    <div class="att-mini-val" style="color:var(--r-warning);">@lateCount</div>
+                    <div class="att-mini-lbl">متأخر</div>
+                </div>
+                <div class="att-mini" style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.30);">
+                    <div class="att-mini-val" style="color:var(--r-danger);">@absentCount</div>
+                    <div class="att-mini-lbl">غائب</div>
+                </div>
+                <div class="att-mini" style="background:rgba(76,166,168,.12);border:1px solid rgba(76,166,168,.30);">
+                    <div class="att-mini-val" style="color:var(--r-primary);">@attendanceRate.ToString("F0")%</div>
+                    <div class="att-mini-lbl">نسبة الحضور</div>
+                </div>
+            </div>
+
+            <div class="heatmap">
+                @foreach (var lec in Model.LectureAttendances)
+                {
+                    var cellCls  = lec.AttendanceStatus switch {
+                        "حاضر"  => "att-present",
+                        "متأخر" => "att-late",
+                        _       => "att-absent"
+                    };
+                    var cellIcon = lec.AttendanceStatus switch {
+                        "حاضر"  => "🟢",
+                        "متأخر" => "🟡",
+                        _       => "🔴"
+                    };
+                    <div class="hm-cell @cellCls">
+                        <div class="hm-num">محاضرة @lec.LectureNumber</div>
+                        <div class="hm-date">@lec.LectureDate.ToString("MM/dd")</div>
+                        <div class="hm-icon">@cellIcon</div>
+                        <div class="hm-lbl">
+                            @if (lec.AttendanceStatus == "متأخر" && lec.LateMinutes > 0)
+                            { <text>متأخر @lec.LateMinutes د</text> }
+                            else
+                            { @lec.AttendanceStatus }
+                        </div>
+                        @if (lec.PermissionsCount > 0)
+                        { <div class="hm-perm">📝 @lec.PermissionsCount أذن</div> }
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="empty-state">
+                <div class="ei">📅</div>
+                <p>لا تتوفر بيانات حضور للمحاضرات</p>
+            </div>
+        }
+    </div>
+
+    <!-- ══════════════════════════════════
+         §5  HOMEWORK PERFORMANCE
+    ══════════════════════════════════ -->
+    <div class="card" style="padding:24px;">
+        <div class="sec-title">📝 أداء الواجبات المنزلية</div>
+
+        @if (hasHomework)
+        {
+            <div style="display:grid;grid-template-columns:1fr 2.5fr;gap:20px;align-items:start;">
+                <div class="hw-avg">
+                    <div style="font-size:13px;font-weight:700;color:var(--r-muted);">متوسط درجات الواجبات</div>
+                    <div class="hw-avg-val" style="color:@(Model.HomeworkAverage >= 60 ? "var(--r-success)" : "var(--r-danger)");">
+                        @Model.HomeworkAverage.ToString("F1")%
+                    </div>
+                    <div style="font-size:13px;color:var(--r-muted);">
+                        @Model.Homeworks.Count(h => h.IsSubmitted) من @Model.Homeworks.Count واجب مُسلَّم
+                    </div>
+                    <span class="status-badge @(Model.HomeworkAverage >= 60 ? "pass" : "fail")" style="margin-top:6px;font-size:13px;">
+                        @(Model.HomeworkAverage >= 60 ? "✅ جيد" : "⚠️ يحتاج تحسيناً")
+                    </span>
+                </div>
+
+                <div style="overflow-x:auto;">
+                    <table class="rtbl">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th style="text-align:right;">عنوان الواجب</th>
+                                <th>مُسلَّم؟</th>
+                                <th>الدرجة</th>
+                                <th>من أصل</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var hw in Model.Homeworks)
+                            {
+                                <tr>
+                                    <td>@hw.Number</td>
+                                    <td style="text-align:right;">@hw.Title</td>
+                                    <td>
+                                        @if (hw.IsSubmitted) { <span class="pill-pass">✅ نعم</span> }
+                                        else                 { <span class="pill-fail">❌ لا</span>  }
+                                    </td>
+                                    <td style="font-weight:700;">@(hw.Score.HasValue ? hw.Score.Value.ToString("F1") : "—")</td>
+                                    <td>@hw.MaxScore</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="empty-state"><div class="ei">📝</div><p>لا توجد واجبات مسجلة في هذه الدفعة</p></div>
+        }
+    </div>
+
+    <!-- ══════════════════════════════════
+         §6  FULL LECTURE ATTENDANCE TABLE
+    ══════════════════════════════════ -->
+    @if (hasAttendance)
+    {
+        <div class="card" style="padding:24px;">
+            <div class="sec-title">📚 جدول الحضور التفصيلي</div>
+            <div style="overflow-x:auto;">
+                <table class="rtbl">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th style="text-align:right;">عنوان المحاضرة</th>
+                            <th>التاريخ</th>
+                            <th>حالة الحضور</th>
+                            <th>التأخير (دقائق)</th>
+                            <th>الأذون</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var lec in Model.LectureAttendances)
+                        {
+                            <tr>
+                                <td>@lec.LectureNumber</td>
+                                <td style="text-align:right;">@lec.LectureTitle</td>
+                                <td>@lec.LectureDate.ToString("yyyy/MM/dd")</td>
+                                <td>
+                                    @switch (lec.AttendanceStatus)
+                                    {
+                                        case "حاضر":
+                                            <span class="pill-pass">🟢 حاضر</span>
+                                            break;
+                                        case "متأخر":
+                                            <span class="pill-late">🟡 متأخر</span>
+                                            break;
+                                        default:
+                                            <span class="pill-fail">🔴 غائب</span>
+                                            break;
+                                    }
+                                </td>
+                                <td>@(lec.LateMinutes > 0 ? lec.LateMinutes.ToString() : "—")</td>
+                                <td>@lec.PermissionsCount</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    <!-- ══════════════════════════════════
+         §7  SMART RECOMMENDATION CARD
+    ══════════════════════════════════ -->
+    <div class="rec-card">
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
+            <span style="font-size:38px;">🤖</span>
+            <div>
+                <h3 style="font-size:1.1rem;font-weight:800;margin:0 0 4px;color:var(--r-primary);">التوصيات الذكية</h3>
+                <p style="font-size:13px;color:var(--r-muted);margin:0;">تحليل شامل لأدائك مع توصيات مخصصة لتطويرك</p>
+            </div>
+        </div>
+
+        @if (isPassed && !hasRemedialPlan)
+        {
+            <div class="rec-item rec-positive">
+                <span class="ri">🎉</span>
+                <span>أحسنت يا <strong>@Model.StudentName</strong>! لقد اجتزت اختبار مؤشر الأداء بنجاح. نسبتك العامة <strong style="color:var(--r-success);">@Model.OverallPercent%</strong> تعكس مستوىً جيدًا من الاستيعاب والتمكن من المنهج.</span>
+            </div>
+            <div class="rec-item rec-positive">
+                <span class="ri">📖</span>
+                <span>جميع محاورك بمستوى الإتقان المطلوب. يمكنك الانتقال إلى المنهج التالي بثقة، مع مراجعة دورية لتثبيت المعلومات.</span>
+            </div>
+        }
+
+        @if (hasRemedialPlan)
+        {
+            <div class="rec-item rec-warning">
+                <span class="ri">📚</span>
+                <span>يا <strong>@Model.StudentName</strong>، نسبتك الإجمالية <strong>@Model.OverallPercent%</strong> وبعض المحاور تحتاج تقوية. هذه نقطة انطلاق لبناء أساس أقوى — وخطتك القادمة سترفع رقمك.</span>
+            </div>
+            <div class="rec-item rec-danger">
+                <span class="ri">🎯</span>
+                <div>
+                    <strong>المحاور التي تحتاج إلى مراجعة:</strong>
+                    <ul style="margin:8px 0 0;padding-right:20px;">
+                        @foreach (var fd in failingDetails)
+                        {
+                            <li style="margin-bottom:4px;">
+                                @fd.Section.SectionTitle — <strong style="color:var(--r-danger);">@fd.Percent%</strong>
+                                <span style="color:var(--r-muted);font-size:12px;">(المطلوب: 60%)</span>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            </div>
+            <div class="rec-item rec-warning">
+                <span class="ri">💪</span>
+                <span>راجع الخطة العلاجية المُعدَّة خصيصًا لك، وركّز على محاور الأولوية قبل إعادة الاختبار.</span>
+            </div>
+        }
+
+        @if (hasAttendance && attendanceRate < 70)
+        {
+            <div class="rec-item rec-danger">
+                <span class="ri">⚠️</span>
+                <span>نسبة حضورك <strong style="color:var(--r-danger);">@attendanceRate.ToString("F0")%</strong> أقل من الحد المطلوب (70%). الانتظام في حضور المحاضرات ضروري لاستيعاب المادة.</span>
+            </div>
+        }
+        else if (hasAttendance)
+        {
+            <div class="rec-item rec-positive">
+                <span class="ri">📅</span>
+                <span>نسبة حضورك <strong style="color:var(--r-success);">@attendanceRate.ToString("F0")%</strong> ممتازة. الانتظام في الحضور ينعكس إيجابًا على فهمك للمادة.</span>
+            </div>
+        }
+
+        @if (hasHomework && Model.HomeworkAverage < 60)
+        {
+            <div class="rec-item rec-danger">
+                <span class="ri">📝</span>
+                <span>متوسط درجات واجباتك <strong style="color:var(--r-danger);">@Model.HomeworkAverage.ToString("F1")%</strong> يحتاج إلى تحسين. اجتهد في تسليم الواجبات في مواعيدها.</span>
+            </div>
+        }
+        else if (hasHomework)
+        {
+            <div class="rec-item rec-positive">
+                <span class="ri">✏️</span>
+                <span>أداؤك في الواجبات متميز! متوسط درجاتك <strong style="color:var(--r-success);">@Model.HomeworkAverage.ToString("F1")%</strong>.</span>
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Model.SpeedAccuracyFeedback) && Model.SpeedAccuracyFeedback != "—")
+        {
+            <div class="rec-item rec-info">
+                <span class="ri">⚡</span>
+                <span><strong>تحليل السرعة والدقة: </strong>@Model.SpeedAccuracyFeedback</span>
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Model.MotivationalMessage) && Model.MotivationalMessage != "—")
+        {
+            <div class="rec-item rec-positive">
+                <span class="ri">💬</span>
+                <span>@Model.MotivationalMessage</span>
+            </div>
+        }
+    </div>
+
+    <!-- ══════════════════════════════════
+         §8  REMEDIAL PLAN  (conditional)
+    ══════════════════════════════════ -->
+    @if (hasRemedialPlan)
+    {
+        <div>
+            <div class="sec-title" style="color:var(--r-warning);border-color:var(--r-warning);">🩺 الخطة العلاجية</div>
+
+            <div class="remedial-banner">
+                <span style="font-size:26px;">⚠️</span>
+                <span>تم توليد خطة علاجية للمحاور التالية بناءً على أدائك في الاختبار</span>
+            </div>
+
+            <div class="rem-axis-grid">
+                @foreach (var fd in failingDetails)
+                {
+                    <div class="rem-axis-card">
+                        <div style="font-weight:800;font-size:16px;margin-bottom:8px;">📌 @fd.Section.SectionTitle</div>
+                        <div style="color:var(--r-danger);font-weight:600;font-size:14px;margin-bottom:10px;">
+                            النسبة المحققة: <strong>@fd.Percent%</strong>
+                            <span style="color:var(--r-muted);font-size:12px;"> (الحد الأدنى: 60%)</span>
+                        </div>
+
+                        @if (!string.IsNullOrWhiteSpace(fd.Section.Guidance))
+                        {
+                            <div style="font-size:13px;color:var(--r-muted);margin-bottom:12px;line-height:1.7;padding:10px;background:rgba(255,255,255,.04);border-radius:8px;">
+                                <strong style="color:var(--r-text);">💡 </strong>@fd.Section.Guidance
+                            </div>
+                        }
+
+                        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                            <span style="font-size:12px;background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.20);border-radius:6px;padding:4px 10px;color:var(--r-success);">
+                                صحيح: @fd.Section.Correct / @fd.Section.Total
+                            </span>
+                            <span style="font-size:12px;background:rgba(239,68,68,.10);border:1px solid rgba(239,68,68,.20);border-radius:6px;padding:4px 10px;color:var(--r-danger);">
+                                خاطئ: @fd.Section.Wrong
+                            </span>
+                            @if (fd.Section.Skipped > 0)
+                            {
+                                <span style="font-size:12px;background:rgba(148,163,184,.10);border:1px solid rgba(148,163,184,.20);border-radius:6px;padding:4px 10px;color:var(--r-muted);">
+                                    متخطي: @fd.Section.Skipped
+                                </span>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    // ── Chart.js global defaults (dark theme) ──
+    Chart.defaults.color       = 'rgba(148,163,184,0.9)';
+    Chart.defaults.borderColor = 'rgba(255,255,255,0.07)';
+    Chart.defaults.font.family = "'Cairo', sans-serif";
+
+    // ── Custom plugin: 60% reference line on bar chart ──
+    const refLinePlugin = {
+        id: 'refLine60',
+        afterDraw(chart) {
+            if (chart.canvas.id !== 'axisBarChart') return;
+            const { ctx, chartArea, scales } = chart;
+            if (!scales.y) return;
+            const y = scales.y.getPixelForValue(60);
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(chartArea.left, y);
+            ctx.lineTo(chartArea.right, y);
+            ctx.lineWidth   = 2;
+            ctx.strokeStyle = '#ef4444';
+            ctx.setLineDash([6, 4]);
+            ctx.stroke();
+            ctx.restore();
+            ctx.save();
+            ctx.fillStyle = '#ef4444';
+            ctx.font      = "bold 11px 'Cairo', sans-serif";
+            const lbl = 'حد النجاح 60%';
+            ctx.fillText(lbl, chartArea.right - ctx.measureText(lbl).width - 4, y - 6);
+            ctx.restore();
+        }
+    };
+    Chart.register(refLinePlugin);
+
+    // ══ §2  Donut chart ══
+    let donutChart = null;
+    const donutEl = document.getElementById('donutChart');
+    if (donutEl) {
+        donutChart = new Chart(donutEl, {
+            type: 'doughnut',
+            data: {
+                labels: ['صحيحة', 'خاطئة', 'متخطاة'],
+                datasets: [{
+                    data: [@Model.CorrectAnswers, @Model.WrongAnswers, @Model.Skipped],
+                    backgroundColor: ['#22c55e', '#ef4444', '#64748b'],
+                    borderWidth: 0,
+                    hoverOffset: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '68%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { font: { size: 12 }, padding: 10, boxWidth: 12, boxHeight: 12 }
+                    },
+                    tooltip: {
+                        rtl: true,
+                        callbacks: { label: c => ` ${c.label}: ${c.raw}` }
+                    }
+                }
+            }
+        });
+    }
+
+    // ══ §3  Axis bar chart ══
+    const axisLabels   = @Html.Raw(JsonSerializer.Serialize(Model.Sections.Select(s => s.SectionTitle)));
+    const axisPercents = @Html.Raw(JsonSerializer.Serialize(sectionPercents));
+    const axisColors   = @Html.Raw(JsonSerializer.Serialize(sectionColors));
+
+    let axisBarChart = null;
+    const barEl = document.getElementById('axisBarChart');
+    if (barEl) {
+        axisBarChart = new Chart(barEl, {
+            type: 'bar',
+            data: {
+                labels: axisLabels,
+                datasets: [{
+                    label: 'النسبة %',
+                    data: axisPercents,
+                    backgroundColor: axisColors.map(c => c + 'BB'),
+                    borderColor: axisColors,
+                    borderWidth: 1.5,
+                    borderRadius: 8,
+                    barPercentage: 0.70,
+                    categoryPercentage: 0.75
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        rtl: true,
+                        callbacks: { label: c => ` ${c.raw}%` }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { font: { size: 12 }, maxRotation: 30 }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        ticks: { font: { size: 12 }, callback: v => v + '%' }
+                    }
+                }
+            }
+        });
+    }
+
+    function setChartPrintMode(isPrint) {
+        const textColor = isPrint ? '#1e293b' : 'rgba(148,163,184,0.9)';
+        const gridColor = isPrint ? '#cbd5e1' : 'rgba(255,255,255,0.05)';
+
+        if (donutChart) {
+            donutChart.options.plugins.legend.labels.color = textColor;
+            donutChart.resize();
+            donutChart.update('none');
+        }
+
+        if (axisBarChart) {
+            axisBarChart.options.scales.x.ticks.color = textColor;
+            axisBarChart.options.scales.y.ticks.color = textColor;
+            axisBarChart.options.scales.y.grid.color = gridColor;
+            axisBarChart.resize();
+            axisBarChart.update('none');
+        }
+    }
+
+    window.addEventListener('beforeprint', function () {
+        setChartPrintMode(true);
+    });
+
+    window.addEventListener('afterprint', function () {
+        setChartPrintMode(false);
+    });
+})();
+</script>
+}

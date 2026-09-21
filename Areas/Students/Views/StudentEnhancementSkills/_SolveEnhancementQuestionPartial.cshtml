@@ -1,0 +1,255 @@
+@model QdratNew.ViewModels.EnhancementSkills.EnhancementSolveViewModel
+@using QdratNew.Enums
+@using QdratNew.Helpers
+
+@{
+    var allIdsStr = string.Join(",", Model.AllQuestionIds);
+    var total     = Model.AllQuestionIds.Count;
+    var index     = Model.CurrentIndex + 1;
+    var answered  = Model.AnswersMap.Count(kv => !string.IsNullOrEmpty(kv.Value));
+    var pct       = total > 0 ? (int)Math.Round(answered * 100.0 / total) : 0;
+    var isLast    = Model.CurrentIndex == total - 1;
+
+    var isRTL          = Model.IsRTL;
+    var isQuantitative = Model.IsQuantitative;
+    var dir            = isRTL ? "rtl" : "ltr";
+    var textAlign      = isRTL ? "right" : "left";
+
+    // دالة تحويل النصوص: أرقام هندية للمناهج الكمية
+    Func<string, string> htmlConvert = s =>
+    {
+        if (string.IsNullOrWhiteSpace(s)) return s ?? "";
+        try
+        {
+            if (isQuantitative)
+            {
+                if (s.Contains("style=", StringComparison.OrdinalIgnoreCase))
+                    return NumberHelper.ToIndicNumbersInsideHtml(s);
+                return HtmlNumberHelper.ConvertHtmlPreservingTags(s, true);
+            }
+            return s;
+        }
+        catch { return s; }
+    };
+
+    // ترجمة التسميات بناءً على اتجاه المنهج
+    Func<string, string> T = key => isRTL ? key : key switch
+    {
+        "السؤال"            => "Question",
+        "من"                => "of",
+        "القيمة الأولى"     => "Value A",
+        "القيمة الثانية"    => "Value B",
+        "القطعة اللفظية"    => "Passage",
+        "السابق"            => "Previous",
+        "التالي"            => "Next",
+        "للمراجعة"          => "Mark Review",
+        "تسليم نهائي"       => "Submit",
+        _                   => key
+    };
+}
+
+<style>
+:root {
+  --eq-p: #2e9e9e; --eq-p-d: #1d7b7b; --eq-p-a: rgba(46,158,158,.12);
+  --eq-ink: #1e293b; --eq-ink2: #475569; --eq-line: rgba(0,0,0,.07);
+  --eq-card: #ffffff;
+  --eq-r: 16px; --eq-sh: 0 2px 16px rgba(0,0,0,.08);
+  --eq-ease: .25s cubic-bezier(.4,0,.2,1);
+}
+* { box-sizing: border-box; }
+.eq-wrap { font-family: 'Cairo', system-ui, sans-serif; direction: rtl; padding: 20px; max-width: 860px; margin: 0 auto; }
+
+/* Header */
+.eq-head { background: linear-gradient(135deg,#0f1f3d,#1a3a5c); border-radius: var(--eq-r); padding: 18px 24px; margin-bottom: 20px; display: flex; align-items: center; gap: 16px; }
+.eq-head-title { color: #fff; font-size: 1rem; font-weight: 800; flex: 1; }
+.eq-counter { color: rgba(255,255,255,.7); font-size: .82rem; font-weight: 700; white-space: nowrap; }
+.eq-prog-wrap { background: rgba(255,255,255,.15); border-radius: 99px; height: 6px; width: 160px; flex-shrink: 0; overflow: hidden; }
+.eq-prog-fill { background: var(--eq-p); height: 100%; border-radius: 99px; }
+
+/* Navigator dots */
+.eq-nav-strip { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.eq-nav-dot { width: 32px; height: 32px; border-radius: 8px; border: 2px solid var(--eq-line); background: var(--eq-card); font-size: .72rem; font-weight: 800; color: var(--eq-ink2); display: flex; align-items: center; justify-content: center; }
+.eq-nav-dot.answered { background: var(--eq-p); border-color: var(--eq-p); color: #fff; }
+.eq-nav-dot.current  { border-color: var(--eq-p); color: var(--eq-p); box-shadow: 0 0 0 3px var(--eq-p-a); }
+.eq-nav-dot.review   { background: #f59e0b; border-color: #f59e0b; color: #fff; }
+
+/* Question card */
+.eq-card { background: var(--eq-card); border-radius: var(--eq-r); border: 1px solid var(--eq-line); box-shadow: var(--eq-sh); overflow: hidden; margin-bottom: 16px; }
+.eq-card-head { background: var(--eq-p-a); padding: 14px 20px; border-bottom: 1px solid var(--eq-line); }
+.eq-q-label { font-size: .72rem; font-weight: 800; color: var(--eq-p-d); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+.eq-q-title { font-size: 1rem; font-weight: 700; color: var(--eq-ink); line-height: 1.65; }
+.eq-q-img { margin-top: 12px; border-radius: 10px; max-height: 280px; object-fit: contain; max-width: 100%; display: block; }
+
+/* Comparison */
+.eq-compare { display: flex; gap: 12px; align-items: center; margin-top: 12px; }
+.eq-cmp-box { flex: 1; background: #f1f5f9; border-radius: 10px; padding: 14px; text-align: center; }
+.eq-cmp-val { font-size: 1.3rem; font-weight: 900; color: var(--eq-ink); }
+.eq-cmp-lbl { font-size: .7rem; color: var(--eq-ink2); margin-top: 2px; }
+.eq-cmp-vs  { font-size: .85rem; font-weight: 800; color: var(--eq-ink2); flex-shrink: 0; }
+
+/* Passage */
+.eq-passage { background: #f8fafc; border-right: 3px solid var(--eq-p); padding: 12px 16px; border-radius: 0 10px 10px 0; margin-top: 10px; font-size: .88rem; color: var(--eq-ink2); line-height: 1.75; }
+
+/* Options */
+.eq-opts { padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+.eq-opt { display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-radius: 12px; border: 2px solid var(--eq-line); background: var(--eq-card); cursor: pointer; transition: all var(--eq-ease); user-select: none; }
+.eq-opt:hover { border-color: var(--eq-p); background: var(--eq-p-a); }
+.eq-opt input[type="radio"] { display: none; }
+.eq-opt.selected { border-color: var(--eq-p); background: var(--eq-p-a); }
+.eq-opt-letter { width: 30px; height: 30px; border-radius: 8px; background: var(--eq-line); display: flex; align-items: center; justify-content: center; font-size: .75rem; font-weight: 900; color: var(--eq-ink2); flex-shrink: 0; transition: all var(--eq-ease); }
+.eq-opt.selected .eq-opt-letter { background: var(--eq-p); color: #fff; }
+.eq-opt-text { font-size: .92rem; font-weight: 600; color: var(--eq-ink); line-height: 1.5; }
+.eq-opt img { max-height: 80px; border-radius: 8px; object-fit: contain; }
+
+/* Footer */
+.eq-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.eq-btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px; border-radius: 10px; border: none; font-family: 'Cairo', sans-serif; font-size: .85rem; font-weight: 700; cursor: pointer; transition: all var(--eq-ease); text-decoration: none; }
+.eq-btn:disabled { opacity: .5; cursor: not-allowed; }
+.eq-btn-primary { background: var(--eq-p); color: #fff; box-shadow: 0 3px 10px rgba(46,158,158,.35); }
+.eq-btn-primary:hover:not(:disabled) { background: var(--eq-p-d); }
+.eq-btn-outline { background: transparent; color: var(--eq-ink2); border: 2px solid var(--eq-line); }
+.eq-btn-outline:hover:not(:disabled) { border-color: var(--eq-p); color: var(--eq-p); }
+.eq-btn-review  { background: rgba(245,158,11,.12); color: #92400e; border: 2px solid rgba(245,158,11,.3); }
+.eq-btn-review:hover:not(:disabled) { background: rgba(245,158,11,.2); }
+.eq-btn-submit  { background: #22c55e; color: #fff; box-shadow: 0 3px 10px rgba(34,197,94,.3); }
+.eq-btn-submit:hover:not(:disabled) { background: #16a34a; }
+</style>
+
+<div class="eq-wrap" dir="@dir" style="direction:@dir">
+  <form id="eq-form"
+        data-set-id="@Model.SetId"
+        data-current-question-id="@Model.CurrentQuestionId"
+        method="post">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="AllIds" value="@allIdsStr" />
+
+    <!-- HEADER -->
+    <div class="eq-head">
+      <i class="fa-solid fa-bolt" style="color:#2e9e9e;font-size:1.2rem"></i>
+      <span class="eq-head-title">المهارات التعزيزية</span>
+      <span class="eq-counter">@T("السؤال") @index @T("من") @total</span>
+      <div class="eq-prog-wrap">
+        <div class="eq-prog-fill" style="width:@pct%"></div>
+      </div>
+    </div>
+
+    <!-- NAVIGATOR DOTS -->
+    <div class="eq-nav-strip">
+      @for (int i = 0; i < Model.AllQuestionIds.Count; i++)
+      {
+        var qId       = Model.AllQuestionIds[i];
+        var isCurrent = qId == Model.CurrentQuestionId;
+        var isAnswered= Model.AnswersMap.ContainsKey(qId) && !string.IsNullOrEmpty(Model.AnswersMap[qId]);
+        var isReview  = Model.ReviewMarkedIds?.Contains(qId) == true;
+        var dotClass  = isCurrent ? "current" : isReview ? "review" : isAnswered ? "answered" : "";
+        <span class="eq-nav-dot @dotClass">@(i + 1)</span>
+      }
+    </div>
+
+    <!-- QUESTION CARD -->
+    <div class="eq-card">
+      <div class="eq-card-head">
+        <div class="eq-q-label" style="text-align:@textAlign">
+          <i class="fa-solid fa-circle-question" style="margin-left:4px"></i>
+          @T("السؤال") @index
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(Model.Question?.VerbalPassageContent))
+        {
+          <div class="eq-passage" dir="@dir" style="text-align:@textAlign">
+            @Html.Raw(htmlConvert(Model.Question.VerbalPassageContent))
+          </div>
+        }
+
+        @if (Model.Question?.DisplayType == QuestionDisplayType.ComparisonText ||
+             Model.Question?.DisplayType == QuestionDisplayType.ComparisonWithImage)
+        {
+          <div class="eq-compare">
+            <div class="eq-cmp-box">
+              <div class="eq-cmp-val" dir="@dir">@Html.Raw(htmlConvert(Model.Question.ComparisonValue1 ?? ""))</div>
+              <div class="eq-cmp-lbl">@T("القيمة الأولى")</div>
+            </div>
+            <span class="eq-cmp-vs">@(isRTL ? "مقارنة" : "vs")</span>
+            <div class="eq-cmp-box">
+              <div class="eq-cmp-val" dir="@dir">@Html.Raw(htmlConvert(Model.Question.ComparisonValue2 ?? ""))</div>
+              <div class="eq-cmp-lbl">@T("القيمة الثانية")</div>
+            </div>
+          </div>
+        }
+
+        <div class="eq-q-title" dir="@dir" style="text-align:@textAlign">
+          @Html.Raw(htmlConvert(Model.Question?.Title ?? ""))
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(Model.Question?.ImageUrl))
+        {
+          <img src="@Model.Question.ImageUrl" class="eq-q-img" alt="صورة السؤال" />
+        }
+      </div>
+
+      <!-- OPTIONS -->
+      <div class="eq-opts">
+        @{
+          var letters = new[] { "أ", "ب", "ج", "د", "هـ" };
+          var opts = Model.Question?.Options
+                     ?? new List<QdratNew.ViewModels.Question.QuestionOptionDisplayViewModel>();
+
+          for (int oi = 0; oi < opts.Count; oi++)
+          {
+            var opt    = opts[oi];
+            var letter = oi < letters.Length ? letters[oi] : (oi + 1).ToString();
+            var optVal = opt.Text ?? opt.ImageUrl ?? letter;
+            var isSel  = Model.SelectedAnswer == optVal;
+            <label class="eq-opt @(isSel ? "selected" : "")">
+              <input type="radio" name="SelectedOption" value="@optVal" @(isSel ? "checked" : "") />
+              <span class="eq-opt-letter">@letter</span>
+              @if (!string.IsNullOrWhiteSpace(opt.ImageUrl))
+              {
+                <img src="@opt.ImageUrl" alt="خيار @letter" />
+              }
+              else
+              {
+                <span class="eq-opt-text" dir="@dir" style="text-align:@textAlign">
+                  @Html.Raw(htmlConvert(opt.Text ?? ""))
+                </span>
+              }
+            </label>
+          }
+        }
+      </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="eq-foot">
+      <!-- يسار: السابق + للمراجعة -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        @if (Model.CurrentIndex > 0)
+        {
+          <button type="button" class="eq-btn eq-btn-outline enhancement-nav-button" data-nav="prev">
+            <i class="fa-solid fa-arrow-right"></i> @T("السابق")
+          </button>
+        }
+        <button type="button" class="eq-btn eq-btn-review enhancement-nav-button" data-nav="review">
+          <i class="fa-solid fa-bookmark"></i> @T("للمراجعة")
+        </button>
+      </div>
+
+      <!-- يمين: التالي أو التسليم -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        @if (!isLast)
+        {
+          <button type="button" class="eq-btn eq-btn-primary enhancement-nav-button" data-nav="next">
+            @T("التالي") <i class="fa-solid fa-arrow-left"></i>
+          </button>
+        }
+        else
+        {
+          <button type="button" class="eq-btn eq-btn-submit enhancement-nav-button" data-nav="submit">
+            <i class="fa-solid fa-paper-plane"></i> @T("تسليم نهائي")
+          </button>
+        }
+      </div>
+    </div>
+
+  </form>
+</div>

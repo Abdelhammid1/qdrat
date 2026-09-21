@@ -1,0 +1,655 @@
+@model QdratNew.ViewModels.Dashboard.AdminDrillDownPageViewModel
+
+@{
+    ViewData["Title"] = Model.Title;
+    bool hasStudentRows = Model.Rows.Any(r => r.StudentId > 0);
+}
+
+<div class="drill-page" dir="rtl">
+    <div class="drill-header">
+        <div>
+            <a href="@Model.BackUrl" class="back-link">← العودة لغرفة العمليات</a>
+            <h1>@Model.Title</h1>
+            <p>@Model.Subtitle</p>
+        </div>
+
+        <div class="generated-box">
+            <span>آخر تحديث</span>
+            <strong>@Model.GeneratedAt.ToString("yyyy/MM/dd HH:mm:ss")</strong>
+        </div>
+    </div>
+
+    @if (Model.Kpis.Any())
+    {
+        <section class="drill-kpis">
+            @foreach (var kpi in Model.Kpis)
+            {
+                <article class="drill-kpi @kpi.CssClass">
+                    <span>@kpi.Label</span>
+                    <strong>@kpi.Value</strong>
+                    <small>@kpi.Hint</small>
+                </article>
+            }
+        </section>
+    }
+
+    <section class="drill-card">
+        @if (Model.Rows.Any())
+        {
+            <div class="table-responsive">
+                <table class="drill-table" id="drillTable">
+                    <thead>
+                        <tr>
+                            @if (hasStudentRows)
+                            {
+                                <th style="width:40px">
+                                    <input type="checkbox" id="drillSelectAll" class="drill-chk" title="تحديد الكل" />
+                                </th>
+                            }
+                            @foreach (var column in Model.Columns)
+                            {
+                                <th>@column.Header</th>
+                            }
+                            <th>إجراء</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in Model.Rows)
+                        {
+                            bool isStudentRow = row.StudentId > 0;
+                            <tr class="@row.RowCssClass @(isStudentRow ? "drill-selectable" : "")"
+                                data-student-id="@(isStudentRow ? row.StudentId.ToString() : "")"
+                                data-user-id="@(isStudentRow ? row.UserId ?? "" : "")"
+                                data-entity-name="@(isStudentRow ? row.EntityName ?? "" : "")">
+
+                                @if (hasStudentRows)
+                                {
+                                    <td onclick="event.stopPropagation()" style="width:40px">
+                                        @if (isStudentRow)
+                                        {
+                                            <input type="checkbox" class="drill-chk drill-row-chk"
+                                                   data-student-id="@row.StudentId"
+                                                   data-user-id="@(row.UserId ?? "")"
+                                                   data-entity-name="@(row.EntityName ?? "")" />
+                                        }
+                                    </td>
+                                }
+
+                                @foreach (var column in Model.Columns)
+                                {
+                                    <td>
+                                        @if (row.Cells.ContainsKey(column.Key))
+                                        {
+                                            @row.Cells[column.Key]
+                                        }
+                                        else
+                                        {
+                                            <span>-</span>
+                                        }
+                                    </td>
+                                }
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(row.ActionUrl))
+                                    {
+                                        <a href="@row.ActionUrl" class="row-action">@row.ActionText</a>
+                                    }
+                                    else
+                                    {
+                                        <span class="no-action">لا يوجد</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <div class="empty-drill">@Model.EmptyMessage</div>
+        }
+    </section>
+</div>
+
+@* ============================================================
+   Footer الطافي — يظهر فقط للصفوف التي تحتوي على StudentId
+   ============================================================ *@
+@if (hasStudentRows)
+{
+    <div class="drill-footer" id="drillFooter">
+        @* معلومات الطالب المحدد *@
+        <div class="df-student-info">
+            <div class="df-avatars" id="dfAvatars"></div>
+            <div class="df-text">
+                <div class="df-count"><span id="dfCount">0</span> طالب</div>
+                <div class="df-name" id="dfName">—</div>
+            </div>
+        </div>
+
+        <div class="df-divider"></div>
+
+        @* أزرار الإجراءات الخمسة *@
+        <div class="df-actions">
+            <a id="dfBtnProfile" class="df-btn blue disabled" href="#" target="_blank"
+               title="عرض ملف الطالب الشامل">
+                <span class="df-btn-icon">👤</span>
+                <span class="df-btn-label">ملف الطالب</span>
+            </a>
+
+            <a id="dfBtnUser" class="df-btn purple disabled" href="#" target="_blank"
+               title="تفاصيل حساب المستخدم">
+                <span class="df-btn-icon">🔐</span>
+                <span class="df-btn-label">تفاصيل المستخدم</span>
+            </a>
+
+            <a id="dfBtnBatches" class="df-btn teal disabled" href="#" target="_blank"
+               title="الدفعات المسجل فيها الطالب">
+                <span class="df-btn-icon">📋</span>
+                <span class="df-btn-label">الدفعات</span>
+            </a>
+
+            <a id="dfBtnActivity" class="df-btn amber disabled" href="#" target="_blank"
+               title="سجل نشاط الطالب على المنصة">
+                <span class="df-btn-icon">📊</span>
+                <span class="df-btn-label">سجل النشاط</span>
+            </a>
+
+            <a id="dfBtnReport" class="df-btn green disabled" href="#" target="_blank"
+               title="تقرير عام بالواجبات والاختبارات والحضور">
+                <span class="df-btn-icon">📈</span>
+                <span class="df-btn-label">التقرير العام</span>
+            </a>
+        </div>
+
+        <button class="df-close" onclick="drillClearSelection()" title="إلغاء التحديد">✕</button>
+    </div>
+}
+
+<style>
+    .drill-page {
+        background: #eef3f9;
+        min-height: 100vh;
+        padding: 24px;
+        font-family: "IBM Plex Sans Arabic", "Cairo", "Tahoma", sans-serif;
+    }
+
+    .drill-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 18px;
+        background: linear-gradient(135deg, #0f172a, #172554);
+        color: #ffffff;
+        border-radius: 26px;
+        padding: 26px;
+        margin-bottom: 18px;
+        box-shadow: 0 20px 45px rgba(15, 23, 42, .18);
+    }
+
+    .back-link {
+        display: inline-flex;
+        color: #93c5fd;
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 900;
+        margin-bottom: 12px;
+    }
+
+    .drill-header h1 { margin: 0 0 8px; font-size: 30px; font-weight: 900; }
+    .drill-header p  { margin: 0; color: #cbd5e1; line-height: 1.8; font-size: 14px; max-width: 780px; }
+
+    .generated-box {
+        background: rgba(255,255,255,.08);
+        border-radius: 16px;
+        padding: 14px 16px;
+        min-width: 190px;
+    }
+    .generated-box span   { display: block; color: #cbd5e1; font-size: 12px; margin-bottom: 5px; }
+    .generated-box strong { display: block; color: #ffffff; font-size: 13px; }
+
+    .drill-kpis {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+        margin-bottom: 18px;
+    }
+
+    .drill-kpi {
+        background: #ffffff;
+        border-radius: 22px;
+        padding: 18px;
+        box-shadow: 0 14px 35px rgba(15, 23, 42, .08);
+        border-bottom: 5px solid #3b82f6;
+    }
+    .drill-kpi.success { border-bottom-color: #22c55e; }
+    .drill-kpi.warning { border-bottom-color: #f59e0b; }
+    .drill-kpi.danger  { border-bottom-color: #ef4444; }
+    .drill-kpi span    { display: block; color: #64748b; font-size: 13px; font-weight: 800; margin-bottom: 10px; }
+    .drill-kpi strong  { display: block; color: #0f172a; font-size: 32px; font-weight: 900; margin-bottom: 10px; }
+    .drill-kpi small   { color: #64748b; font-size: 12px; font-weight: 700; }
+
+    .drill-card {
+        background: #ffffff;
+        border-radius: 24px;
+        padding: 20px;
+        border: 1px solid rgba(148, 163, 184, .22);
+        box-shadow: 0 14px 35px rgba(15, 23, 42, .07);
+    }
+
+    .table-responsive { overflow-x: auto; width: 100%; }
+
+    .drill-table {
+        width: 100%;
+        min-width: 980px;
+        border-collapse: collapse;
+    }
+
+    .drill-table th {
+        background: #f8fafc;
+        color: #475569;
+        font-size: 12px;
+        font-weight: 900;
+        padding: 14px;
+        text-align: right;
+        border-bottom: 1px solid #e2e8f0;
+        white-space: nowrap;
+    }
+
+    .drill-table td {
+        color: #0f172a;
+        font-size: 13px;
+        padding: 14px;
+        border-bottom: 1px solid #f1f5f9;
+        vertical-align: middle;
+    }
+
+    .drill-table tr.success td { background: #f0fdf4; }
+    .drill-table tr.warning td { background: #fff7ed; }
+    .drill-table tr.danger td  { background: #fef2f2; }
+    .drill-table tr.idle td    { background: #f8fafc; color: #64748b; }
+
+    /* Selectable rows */
+    .drill-selectable { cursor: pointer; transition: background .12s; }
+    .drill-selectable.is-selected td { background: #eff6ff !important; }
+
+    .drill-chk { width: 16px; height: 16px; accent-color: #2563eb; cursor: pointer; }
+
+    .row-action {
+        display: inline-flex;
+        border-radius: 12px;
+        padding: 8px 11px;
+        background: #2563eb;
+        color: #ffffff;
+        text-decoration: none;
+        font-size: 12px;
+        font-weight: 900;
+        white-space: nowrap;
+    }
+
+    .no-action { color: #94a3b8; font-size: 12px; font-weight: 800; }
+
+    .empty-drill {
+        text-align: center;
+        padding: 50px 20px;
+        color: #64748b;
+        background: #f8fafc;
+        border-radius: 20px;
+        font-size: 14px;
+        font-weight: 800;
+    }
+
+    /* ===================================================
+       Footer الطافي
+       =================================================== */
+    .drill-footer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: var(--sidebar-w, 260px);
+        background: #0f172a;
+        border-top: 2px solid #3b82f6;
+        padding: 10px 20px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        z-index: 500;
+        transform: translateY(100%);
+        transition: transform .32s cubic-bezier(.16,1,.3,1),
+                    right var(--transition-med, .28s);
+        box-shadow: 0 -10px 40px rgba(0,0,0,.35);
+    }
+
+    .drill-footer.is-visible { transform: translateY(0); }
+
+    body.sidebar-is-collapsed .drill-footer {
+        right: var(--sidebar-collapsed-w, 64px);
+    }
+
+    /* Student info chip */
+    .df-student-info {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-shrink: 0;
+        min-width: 170px;
+    }
+
+    .df-avatars { display: flex; align-items: center; }
+
+    .df-av {
+        width: 32px; height: 32px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #3b82f6, #7c3aed);
+        color: #fff;
+        font-size: .75rem;
+        font-weight: 800;
+        display: flex; align-items: center; justify-content: center;
+        border: 2px solid #0f172a;
+        margin-right: -7px;
+        flex-shrink: 0;
+    }
+
+    .df-count { color: #f1f5f9; font-size: .9rem; font-weight: 800; line-height: 1; }
+    .df-name  { color: #64748b; font-size: .72rem; margin-top: 2px; }
+
+    .df-divider { width: 1px; height: 34px; background: #1e293b; flex-shrink: 0; }
+
+    /* Action buttons */
+    .df-actions {
+        display: flex;
+        gap: 7px;
+        flex-wrap: wrap;
+        align-items: center;
+        flex: 1;
+        justify-content: center;
+    }
+
+    .df-btn {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        padding: 7px 14px;
+        border-radius: 10px;
+        font-family: "Cairo", "IBM Plex Sans Arabic", sans-serif;
+        font-size: .72rem;
+        font-weight: 700;
+        text-decoration: none;
+        transition: opacity .15s, transform .1s;
+        white-space: nowrap;
+        min-width: 82px;
+        line-height: 1.2;
+    }
+
+    .df-btn:hover         { opacity: .88; transform: translateY(-1px); }
+    .df-btn:active        { transform: scale(.96); }
+    .df-btn.disabled      { opacity: .3; pointer-events: none; cursor: not-allowed; }
+
+    .df-btn-icon  { font-size: 1.1rem; line-height: 1; }
+    .df-btn-label { font-size: .7rem; }
+
+    .df-btn.blue   { background: #2563eb; color: #fff; }
+    .df-btn.purple { background: #7c3aed; color: #fff; }
+    .df-btn.teal   { background: #0891b2; color: #fff; }
+    .df-btn.amber  { background: #d97706; color: #fff; }
+    .df-btn.green  { background: #059669; color: #fff; }
+
+    .df-close {
+        background: none;
+        border: none;
+        color: #475569;
+        font-size: 1.1rem;
+        cursor: pointer;
+        padding: 6px 10px;
+        border-radius: 7px;
+        transition: color .15s, background .15s;
+        margin-right: 0;
+        flex-shrink: 0;
+    }
+    .df-close:hover { color: #f1f5f9; background: #1e293b; }
+
+    /* Padding for main when footer visible */
+    #qdratMain.drill-footer-open { padding-bottom: 80px; }
+
+    @@media (max-width: 1200px) {
+        .drill-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @@media (max-width: 768px) {
+        .drill-page   { padding: 14px; }
+        .drill-header { flex-direction: column; }
+        .generated-box { width: 100%; }
+        .drill-kpis   { grid-template-columns: 1fr; }
+        .df-actions   { gap: 5px; }
+        .df-btn       { min-width: 70px; padding: 6px 10px; }
+    }
+</style>
+
+@if (hasStudentRows)
+{
+    <script>
+        /* ===== State ===== */
+        var dfSelected = {};   // { studentId: { name, userId } }
+
+        function dfGetArray() {
+            return Object.keys(dfSelected).map(function (id) {
+                return Object.assign({ id: dfCleanRouteValue(id) }, dfSelected[id]);
+            });
+        }
+
+        function dfCleanRouteValue(value) {
+            if (value === null || value === undefined) {
+                return '';
+            }
+
+            var text = String(value).trim();
+
+            try {
+                text = decodeURIComponent(text);
+            } catch (e) {
+                /* Keep original text if it is not a valid encoded value. */
+            }
+
+            return text.replace(/^["']+|["']+$/g, '').trim();
+        }
+
+        function dfBuildAdminUrl(path, id) {
+            var cleanId = dfCleanRouteValue(id);
+            return cleanId ? path + encodeURIComponent(cleanId) : '#';
+        }
+
+        /* ===== Generate avatar initials ===== */
+        function dfInitials(name) {
+            if (!name) return '؟';
+            var parts = name.trim().split(/\s+/);
+            if (parts.length >= 2) return parts[0][0] + parts[1][0];
+            return name.substring(0, 2);
+        }
+
+        /* ===== Update footer ===== */
+        function dfUpdate() {
+            var arr = dfGetArray();
+            var footer = document.getElementById('drillFooter');
+            var main   = document.getElementById('qdratMain');
+            var count  = arr.length;
+
+            if (count === 0) {
+                footer.classList.remove('is-visible');
+                if (main) main.classList.remove('drill-footer-open');
+                return;
+            }
+
+            footer.classList.add('is-visible');
+            if (main) main.classList.add('drill-footer-open');
+
+            /* Avatars (max 3) */
+            var avHtml = '';
+            arr.slice(0, 3).forEach(function (s) {
+                avHtml += '<div class="df-av">' + dfInitials(s.name) + '</div>';
+            });
+            document.getElementById('dfAvatars').innerHTML = avHtml;
+
+            /* Count + name */
+            document.getElementById('dfCount').textContent = count;
+            if (count === 1) {
+                document.getElementById('dfName').textContent = arr[0].name;
+            } else {
+                document.getElementById('dfName').textContent =
+                    arr.slice(0, 2).map(function (s) {
+                        return (s.name || '').split(' ')[0];
+                    }).join('، ') + (count > 2 ? ' و' + (count - 2) + ' آخرين' : '');
+            }
+
+            /* Single selection — activate buttons */
+            var single = (count === 1);
+            var s = single ? arr[0] : null;
+            var studentId = single ? dfCleanRouteValue(s.id) : '';
+            var userId = single ? dfCleanRouteValue(s.userId) : '';
+
+            /* ملف الطالب */
+            var btnProfile = document.getElementById('dfBtnProfile');
+            if (single && studentId) {
+                btnProfile.href = dfBuildAdminUrl('/Admin/Students/Details/', studentId);
+                btnProfile.classList.remove('disabled');
+            } else {
+                btnProfile.href = '#';
+                btnProfile.classList.add('disabled');
+            }
+
+            /* تفاصيل المستخدم */
+            var btnUser = document.getElementById('dfBtnUser');
+            if (single && userId) {
+                btnUser.href = dfBuildAdminUrl('/Admin/Users/Details/', userId);
+                btnUser.classList.remove('disabled');
+            } else {
+                btnUser.href = '#';
+                btnUser.classList.add('disabled');
+            }
+
+            /* الدفعات */
+            var btnBatches = document.getElementById('dfBtnBatches');
+            if (single && studentId) {
+                btnBatches.href = dfBuildAdminUrl('/Admin/Students/StudentBatches/', studentId);
+                btnBatches.classList.remove('disabled');
+            } else {
+                btnBatches.href = '#';
+                btnBatches.classList.add('disabled');
+            }
+
+            /* سجل النشاط */
+            var btnActivity = document.getElementById('dfBtnActivity');
+            if (single && studentId) {
+                btnActivity.href = dfBuildAdminUrl('/Admin/Students/ActivityLog/', studentId);
+                btnActivity.classList.remove('disabled');
+            } else {
+                btnActivity.href = '#';
+                btnActivity.classList.add('disabled');
+            }
+
+            /* التقرير العام */
+            var btnReport = document.getElementById('dfBtnReport');
+            if (single && studentId) {
+                btnReport.href = dfBuildAdminUrl('/Admin/Students/GeneralReport/', studentId);
+                btnReport.classList.remove('disabled');
+            } else {
+                btnReport.href = '#';
+                btnReport.classList.add('disabled');
+            }
+        }
+
+        /* ===== Toggle row ===== */
+        function dfToggleRow(studentId, name, userId, rowEl, chkEl) {
+            studentId = dfCleanRouteValue(studentId);
+            userId = dfCleanRouteValue(userId);
+
+            if (dfSelected[studentId]) {
+                delete dfSelected[studentId];
+                if (rowEl) rowEl.classList.remove('is-selected');
+                if (chkEl) chkEl.checked = false;
+            } else {
+                dfSelected[studentId] = { name: name, userId: userId };
+                if (rowEl) rowEl.classList.add('is-selected');
+                if (chkEl) chkEl.checked = true;
+            }
+            dfUpdate();
+        }
+
+        /* ===== Clear selection ===== */
+        function drillClearSelection() {
+            dfSelected = {};
+            document.querySelectorAll('.drill-row-chk').forEach(function (c) { c.checked = false; });
+            document.querySelectorAll('.drill-selectable').forEach(function (r) { r.classList.remove('is-selected'); });
+            var all = document.getElementById('drillSelectAll');
+            if (all) all.checked = false;
+            dfUpdate();
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+
+            /* Row click */
+            document.querySelectorAll('.drill-selectable').forEach(function (row) {
+                row.addEventListener('click', function () {
+                    var id     = row.dataset.studentId;
+                    var name   = row.dataset.entityName;
+                    var userId = row.dataset.userId;
+                    var chk    = row.querySelector('.drill-row-chk');
+                    dfToggleRow(id, name, userId, row, chk);
+                });
+            });
+
+            /* Individual checkbox */
+            document.querySelectorAll('.drill-row-chk').forEach(function (chk) {
+                chk.addEventListener('change', function (e) {
+                    e.stopPropagation();
+                    var id     = dfCleanRouteValue(chk.dataset.studentId);
+                    var name   = chk.dataset.entityName;
+                    var userId = dfCleanRouteValue(chk.dataset.userId);
+                    var row    = chk.closest('tr');
+                    if (chk.checked && !dfSelected[id]) {
+                        dfSelected[id] = { name: name, userId: userId };
+                        row.classList.add('is-selected');
+                    } else if (!chk.checked && dfSelected[id]) {
+                        delete dfSelected[id];
+                        row.classList.remove('is-selected');
+                    }
+                    dfUpdate();
+                    /* sync select-all */
+                    var allChks     = document.querySelectorAll('.drill-row-chk');
+                    var checkedChks = document.querySelectorAll('.drill-row-chk:checked');
+                    var sa = document.getElementById('drillSelectAll');
+                    if (sa) sa.checked = allChks.length > 0 && allChks.length === checkedChks.length;
+                });
+            });
+
+            /* Select all */
+            var selectAll = document.getElementById('drillSelectAll');
+            if (selectAll) {
+                selectAll.addEventListener('change', function () {
+                    var checked = this.checked;
+                    document.querySelectorAll('.drill-selectable').forEach(function (row) {
+                        var chk    = row.querySelector('.drill-row-chk');
+                        var id     = dfCleanRouteValue(row.dataset.studentId);
+                        var name   = row.dataset.entityName;
+                        var userId = dfCleanRouteValue(row.dataset.userId);
+                        if (checked) {
+                            chk.checked = true;
+                            dfSelected[id] = { name: name, userId: userId };
+                            row.classList.add('is-selected');
+                        } else {
+                            chk.checked = false;
+                            delete dfSelected[id];
+                            row.classList.remove('is-selected');
+                        }
+                    });
+                    dfUpdate();
+                });
+            }
+
+            /* Escape key */
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') drillClearSelection();
+            });
+        });
+    </script>
+}

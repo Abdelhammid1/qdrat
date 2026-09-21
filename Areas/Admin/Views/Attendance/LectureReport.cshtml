@@ -1,0 +1,1412 @@
+﻿@model QdratNew.ViewModels.Attendance.AdminRecordAttendanceVM
+
+@{
+    ViewData["Title"] = "تقرير حضور المحاضرة";
+
+    var studentsList = Model.Students != null
+        ? Model.Students.ToList()
+        : new List<QdratNew.ViewModels.Attendance.AdminAttendanceStudentRowVM>();
+
+    var total = studentsList.Count;
+    var present = studentsList.Count(x => x.IsPresent);
+    var absent = total - present;
+    var late = studentsList.Count(x => x.IsLateArrival);
+    var early = studentsList.Count(x => x.HasEarlyLeavePermission);
+    var rate = total > 0 ? Math.Round((present * 100.0) / total, 1) : 0;
+}
+
+@section Styles {
+    <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet" />
+
+    <style>
+        :root {
+            --ink: #0D1B2A;
+            --ink-2: #2C3E50;
+            --ink-3: #5A6A7A;
+            --ink-4: #8FA0B0;
+            --ink-5: #C8D5E0;
+            --canvas: #F3F6FA;
+            --surface: #FFFFFF;
+            --surface-2: #F8FAFC;
+            --surface-3: #EEF2F7;
+            --border: #DDE4EC;
+            --blue: #1B5EAE;
+            --blue-2: #2471D0;
+            --blue-bg: #E8F1FB;
+            --blue-dark: #103E7A;
+            --emerald: #0D7A5B;
+            --emerald-bg: #E4F5EE;
+            --amber: #985D09;
+            --amber-bg: #FDF0D8;
+            --rose: #BF1030;
+            --rose-bg: #FDEAEE;
+            --violet: #5535B5;
+            --violet-bg: #EDE8F9;
+            --r-sm: 6px;
+            --r-md: 10px;
+            --r-lg: 14px;
+            --r-xl: 20px;
+            --sh-xs: 0 1px 3px rgba(13,27,42,.06);
+            --sh-sm: 0 2px 8px rgba(13,27,42,.08);
+            --sh-md: 0 4px 18px rgba(13,27,42,.10);
+            --ease: cubic-bezier(.25,.46,.45,.94);
+        }
+
+        .attendance-report-page {
+            background: var(--canvas);
+            min-height: 100vh;
+            padding: 32px 28px 64px;
+            direction: rtl;
+            font-family: 'Cairo', sans-serif;
+            color: var(--ink-2);
+        }
+
+        .attendance-report-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-bottom: 28px;
+        }
+
+        .attendance-report-brand {
+            display: flex;
+            align-items: center;
+            gap: 13px;
+        }
+
+        .attendance-report-brand-icon {
+            width: 46px;
+            height: 46px;
+            background: var(--blue);
+            border-radius: var(--r-lg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 20px;
+            box-shadow: 0 4px 14px rgba(27,94,174,.28);
+        }
+
+        .attendance-report-brand-title {
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--ink);
+            line-height: 1.15;
+        }
+
+        .attendance-report-brand-sub {
+            font-size: 16px;
+            color: var(--ink-4);
+            margin-top: 2px;
+        }
+
+        .top-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn-secondary-action,
+        .btn-print-action {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            border-radius: var(--r-md);
+            padding: 10px 20px;
+            font-size: 18px;
+            font-weight: 700;
+            text-decoration: none;
+            cursor: pointer;
+            transition: background .16s var(--ease), transform .14s, box-shadow .16s;
+            min-height: 44px;
+        }
+
+        .btn-secondary-action {
+            background: var(--surface);
+            color: var(--blue);
+            border: 1px solid #B6D3F4;
+        }
+
+            .btn-secondary-action:hover {
+                background: var(--blue-bg);
+                color: var(--blue-dark);
+                transform: translateY(-2px);
+                box-shadow: var(--sh-sm);
+            }
+
+        .btn-print-action {
+            background: var(--blue);
+            color: #fff;
+            border: none;
+            box-shadow: 0 3px 10px rgba(27,94,174,.28);
+        }
+
+            .btn-print-action:hover {
+                background: var(--blue-dark);
+                color: #fff;
+                transform: translateY(-2px);
+                box-shadow: 0 6px 18px rgba(27,94,174,.32);
+            }
+
+        .lecture-info-card,
+        .students-table-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            overflow: hidden;
+            box-shadow: var(--sh-sm);
+            margin-bottom: 24px;
+        }
+
+        .lecture-info-header {
+            padding: 15px 18px;
+            border-bottom: 1px solid var(--surface-3);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--ink);
+        }
+
+            .lecture-info-header i {
+                color: var(--blue);
+            }
+
+        .lecture-info-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            padding: 18px;
+        }
+
+        .lecture-info-item {
+            background: var(--surface-2);
+            border: 1px solid var(--surface-3);
+            border-radius: var(--r-lg);
+            padding: 14px 15px;
+        }
+
+        .lecture-info-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--ink-4);
+            margin-bottom: 5px;
+        }
+
+        .lecture-info-value {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--ink);
+            line-height: 1.5;
+        }
+
+        .attendance-kpis {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 13px;
+            margin-bottom: 24px;
+        }
+
+        .kpi-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            padding: 18px 19px;
+            display: flex;
+            align-items: center;
+            gap: 13px;
+            box-shadow: var(--sh-xs);
+            transition: transform .2s var(--ease), box-shadow .2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+            .kpi-card::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                right: 0;
+                width: 4px;
+                height: 100%;
+                border-radius: 0 var(--r-xl) var(--r-xl) 0;
+            }
+
+            .kpi-card:hover {
+                transform: translateY(-3px);
+                box-shadow: var(--sh-sm);
+            }
+
+        .kpi-blue::after {
+            background: var(--blue);
+        }
+
+        .kpi-emerald::after {
+            background: var(--emerald);
+        }
+
+        .kpi-rose::after {
+            background: var(--rose);
+        }
+
+        .kpi-amber::after {
+            background: var(--amber);
+        }
+
+        .kpi-violet::after {
+            background: var(--violet);
+        }
+
+        .kpi-info::after {
+            background: var(--blue-2);
+        }
+
+        .kpi-ico {
+            width: 42px;
+            height: 42px;
+            border-radius: var(--r-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .ico-blue {
+            background: var(--blue-bg);
+            color: var(--blue);
+        }
+
+        .ico-emerald {
+            background: var(--emerald-bg);
+            color: var(--emerald);
+        }
+
+        .ico-rose {
+            background: var(--rose-bg);
+            color: var(--rose);
+        }
+
+        .ico-amber {
+            background: var(--amber-bg);
+            color: var(--amber);
+        }
+
+        .ico-violet {
+            background: var(--violet-bg);
+            color: var(--violet);
+        }
+
+        .ico-info {
+            background: var(--blue-bg);
+            color: var(--blue-2);
+        }
+
+        .kpi-label {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--ink-4);
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            margin-bottom: 3px;
+        }
+
+        .kpi-val {
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--ink);
+            line-height: 1;
+        }
+
+        .students-table-topbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 11px 16px;
+            border-bottom: 1px solid var(--surface-3);
+            flex-wrap: wrap;
+        }
+
+        .table-section-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--ink);
+            margin-left: 10px;
+        }
+
+            .table-section-title i {
+                color: var(--blue);
+            }
+
+        .students-table-search-wrap {
+            position: relative;
+            flex: 1;
+            min-width: 220px;
+            max-width: 420px;
+        }
+
+            .students-table-search-wrap i {
+                position: absolute;
+                right: 11px;
+                top: 50%;
+                transform: translateY(-50%);
+                color: var(--ink-4);
+                font-size: 17px;
+                pointer-events: none;
+            }
+
+            .students-table-search-wrap input {
+                width: 100%;
+                padding: 7px 32px 7px 12px;
+                border: 1px solid var(--border);
+                border-radius: var(--r-md);
+                font-size: 18px;
+                background: var(--surface-2);
+                color: var(--ink);
+                transition: border-color .15s, box-shadow .15s;
+            }
+
+                .students-table-search-wrap input:focus {
+                    outline: none;
+                    border-color: var(--blue-2);
+                    box-shadow: 0 0 0 3px rgba(36,113,208,.1);
+                    background: var(--surface);
+                }
+
+        .students-count-badge {
+            margin-right: auto;
+            font-size: 16px;
+            color: var(--ink-4);
+        }
+
+            .students-count-badge strong {
+                color: var(--blue);
+                font-weight: 800;
+            }
+
+        .table-responsive-safe {
+            width: 100%;
+            overflow-x: visible;
+            overflow-y: visible;
+        }
+
+        #attendanceReportTable {
+            width: 100% !important;
+            min-width: 0 !important;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+
+            #attendanceReportTable thead {
+                width: 100%;
+            }
+
+                #attendanceReportTable thead tr {
+                    width: 100%;
+                }
+
+                #attendanceReportTable thead th {
+                    background: #4ca7a7 !important;
+                    color: #ffffff !important;
+                    padding: 13px 12px !important;
+                    font-size: 15px !important;
+                    font-weight: 800 !important;
+                    white-space: nowrap;
+                    border: none !important;
+                    text-align: center;
+                    vertical-align: middle;
+                }
+
+                    #attendanceReportTable thead th:first-child {
+                        border-top-right-radius: 8px;
+                        text-align: right;
+                    }
+
+                    #attendanceReportTable thead th:last-child {
+                        border-top-left-radius: 8px;
+                    }
+
+            #attendanceReportTable tbody tr {
+                border-bottom: 1px solid var(--surface-3);
+                transition: background .1s;
+            }
+
+                #attendanceReportTable tbody tr:last-child {
+                    border-bottom: none;
+                }
+
+                #attendanceReportTable tbody tr:hover {
+                    background: #F5F8FD;
+                }
+
+            #attendanceReportTable td {
+                padding: 13px 12px !important;
+                vertical-align: middle !important;
+                font-size: 18px !important;
+                color: var(--ink-2);
+                border: none !important;
+                text-align: center;
+            }
+
+                #attendanceReportTable td:first-child {
+                    text-align: right;
+                }
+
+
+
+
+        .dataTables_wrapper {
+            width: 100%;
+            direction: rtl;
+            overflow: visible;
+        }
+
+            .dataTables_wrapper table.dataTable {
+                width: 100% !important;
+                margin: 0 !important;
+                border-collapse: collapse !important;
+            }
+
+            .dataTables_wrapper .dataTables_scroll {
+                overflow: visible !important;
+            }
+
+            .dataTables_wrapper .dataTables_scrollHead,
+            .dataTables_wrapper .dataTables_scrollHeadInner,
+            .dataTables_wrapper .dataTables_scrollBody {
+                width: 100% !important;
+                overflow: visible !important;
+            }
+
+                .dataTables_wrapper .dataTables_scrollHead table,
+                .dataTables_wrapper .dataTables_scrollBody table {
+                    width: 100% !important;
+                    margin: 0 !important;
+                }
+
+        table.dataTable thead > tr > th.sorting,
+        table.dataTable thead > tr > th.sorting_asc,
+        table.dataTable thead > tr > th.sorting_desc {
+            padding-left: 24px !important;
+            padding-right: 12px !important;
+        }
+
+        table.dataTable thead .sorting:before,
+        table.dataTable thead .sorting:after,
+        table.dataTable thead .sorting_asc:before,
+        table.dataTable thead .sorting_asc:after,
+        table.dataTable thead .sorting_desc:before,
+        table.dataTable thead .sorting_desc:after {
+            left: 8px !important;
+            right: auto !important;
+            color: rgba(255,255,255,.75) !important;
+        }
+
+
+
+
+            #attendanceReportTable thead th {
+                background: var(--surface-2) !important;
+                padding: 11px 15px !important;
+                font-size: 15px !important;
+                font-weight: 800 !important;
+                color: var(--ink-4) !important;
+                text-transform: uppercase;
+                letter-spacing: .05em;
+                white-space: nowrap;
+                border: none !important;
+                text-align: center;
+            }
+
+            #attendanceReportTable tbody tr {
+                border-bottom: 1px solid var(--surface-3);
+                transition: background .1s;
+            }
+
+                #attendanceReportTable tbody tr:last-child {
+                    border-bottom: none;
+                }
+
+                #attendanceReportTable tbody tr:hover {
+                    background: #F5F8FD;
+                }
+
+            #attendanceReportTable td {
+                padding: 11px 15px !important;
+                vertical-align: middle !important;
+                font-size: 18px !important;
+                color: var(--ink-2);
+                border: none !important;
+                text-align: center;
+            }
+
+        .student-title-cell {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-align: right;
+        }
+
+        .student-avatar {
+            width: 33px;
+            height: 33px;
+            border-radius: 50%;
+            background: var(--blue-bg);
+            color: var(--blue);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .student-item-name {
+            font-weight: 700;
+            color: var(--ink);
+            font-size: 18px;
+        }
+
+        .time-chip,
+        .notes-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 11px;
+            border-radius: 30px;
+            font-size: 16px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .time-chip {
+            background: var(--blue-bg);
+            color: var(--blue);
+            direction: ltr;
+        }
+
+        .notes-chip {
+            background: var(--surface-3);
+            color: var(--ink-3);
+            max-width: 260px;
+            white-space: normal;
+            text-align: right;
+            line-height: 1.6;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 5px 11px;
+            border-radius: 30px;
+            font-size: 16px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .sp-present {
+            background: var(--emerald-bg);
+            color: var(--emerald);
+        }
+
+        .sp-absent {
+            background: var(--rose-bg);
+            color: var(--rose);
+        }
+
+        .sp-late {
+            background: var(--amber-bg);
+            color: var(--amber);
+        }
+
+        .sp-early {
+            background: var(--blue-bg);
+            color: var(--blue);
+        }
+
+        .sp-muted {
+            background: var(--surface-3);
+            color: var(--ink-4);
+        }
+
+        .dataTables_wrapper {
+            direction: rtl;
+            overflow: visible;
+        }
+
+            .dataTables_wrapper .dataTables_filter {
+                display: none;
+            }
+
+            .dataTables_wrapper .dataTables_length,
+            .dataTables_wrapper .dataTables_info {
+                padding: 9px 16px;
+                font-size: 16px;
+                color: var(--ink-4);
+            }
+
+            .dataTables_wrapper .dataTables_paginate {
+                padding: 9px 16px;
+            }
+
+                .dataTables_wrapper .dataTables_paginate .paginate_button {
+                    border-radius: var(--r-sm) !important;
+                    font-size: 16px !important;
+                    padding: 4px 10px !important;
+                    border: 1px solid var(--border) !important;
+                    margin: 0 2px !important;
+                    color: var(--ink-3) !important;
+                }
+
+                    .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+                    .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
+                        background: var(--blue) !important;
+                        border-color: var(--blue) !important;
+                        color: #fff !important;
+                    }
+
+                    .dataTables_wrapper .dataTables_paginate .paginate_button:hover:not(.current):not(.disabled) {
+                        background: var(--blue-bg) !important;
+                        border-color: #B6D3F4 !important;
+                        color: var(--blue) !important;
+                    }
+
+            .dataTables_wrapper .dataTables_length select {
+                border: 1px solid var(--border);
+                border-radius: var(--r-sm);
+                padding: 3px 8px;
+                font-size: 16px;
+                color: var(--ink);
+            }
+
+        div.dataTables_wrapper div.dataTables_paginate,
+        div.dataTables_wrapper div.dataTables_info,
+        div.dataTables_wrapper div.dataTables_length {
+            border-top: 1px solid var(--surface-3);
+            background: var(--surface-2);
+        }
+
+        .students-empty {
+            text-align: center;
+            padding: 56px 16px;
+            color: var(--ink-4);
+        }
+
+            .students-empty i {
+                font-size: 20px;
+                display: block;
+                margin-bottom: 12px;
+                color: var(--ink-5);
+            }
+
+        .students-empty-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--ink-3);
+        }
+
+        .students-empty-sub {
+            font-size: 16px;
+            margin-top: 4px;
+        }
+
+        #attendancePrintableContent {
+            display: none !important;
+        }
+
+        @@media (max-width: 1200px) {
+            .attendance-kpis {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @@media (max-width: 992px) {
+            .lecture-info-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @@media (max-width: 768px) {
+            .attendance-report-page {
+                padding: 22px 14px 48px;
+            }
+
+            .top-actions {
+                width: 100%;
+            }
+
+            .btn-secondary-action,
+            .btn-print-action {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .students-table-topbar {
+                align-items: stretch;
+            }
+
+            .students-table-search-wrap {
+                max-width: 100%;
+                width: 100%;
+            }
+
+            .students-count-badge {
+                margin-right: 0;
+            }
+
+            .attendance-kpis {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @@media (max-width: 576px) {
+            .lecture-info-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @@media (max-width: 480px) {
+            .attendance-kpis {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @@media print {
+            @@page {
+                size: A4 landscape;
+                margin: 8mm;
+            }
+
+            html,
+            body {
+                margin: 0 !important;
+                padding: 0 !important;
+                background: #ffffff !important;
+                color: #111827 !important;
+                direction: rtl !important;
+                overflow: visible !important;
+                font-family: Arial, Tahoma, sans-serif !important;
+            }
+
+                body * {
+                    visibility: hidden !important;
+                }
+
+            #attendancePrintableContent,
+            #attendancePrintableContent * {
+                visibility: visible !important;
+            }
+
+            #attendancePrintableContent {
+                display: block !important;
+                position: absolute !important;
+                top: 0 !important;
+                right: 0 !important;
+                left: 0 !important;
+                width: 100% !important;
+                background: #ffffff !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+
+            .attendance-report-page,
+            #qdratSidebar,
+            #qdratTopbar,
+            aside,
+            header,
+            nav,
+            .sidebar,
+            .navbar,
+            .top-actions {
+                display: none !important;
+            }
+
+            .print-page {
+                width: 100% !important;
+                background: #ffffff !important;
+                color: #111827 !important;
+                direction: rtl !important;
+            }
+
+            .print-header {
+                display: flex !important;
+                align-items: flex-start !important;
+                justify-content: space-between !important;
+                gap: 12px !important;
+                border-bottom: 2px solid #1B5EAE !important;
+                padding-bottom: 8px !important;
+                margin-bottom: 10px !important;
+            }
+
+            .print-title {
+                font-size: 18px !important;
+                font-weight: 900 !important;
+                color: #0D1B2A !important;
+                margin-bottom: 4px !important;
+            }
+
+            .print-subtitle {
+                font-size: 11px !important;
+                font-weight: 700 !important;
+                color: #334155 !important;
+                line-height: 1.7 !important;
+            }
+
+            .print-date {
+                font-size: 10px !important;
+                color: #475569 !important;
+                white-space: nowrap !important;
+                text-align: left !important;
+                direction: ltr !important;
+            }
+
+            .print-info-grid {
+                display: grid !important;
+                grid-template-columns: repeat(4, 1fr) !important;
+                gap: 6px !important;
+                margin-bottom: 8px !important;
+            }
+
+            .print-info-item {
+                border: 1px solid #CBD5E1 !important;
+                border-radius: 6px !important;
+                padding: 5px 7px !important;
+                background: #F8FAFC !important;
+            }
+
+            .print-info-label {
+                font-size: 9px !important;
+                color: #64748B !important;
+                font-weight: 800 !important;
+                margin-bottom: 2px !important;
+            }
+
+            .print-info-value {
+                font-size: 10px !important;
+                color: #0F172A !important;
+                font-weight: 900 !important;
+                line-height: 1.5 !important;
+            }
+
+            .print-kpis {
+                display: grid !important;
+                grid-template-columns: repeat(6, 1fr) !important;
+                gap: 5px !important;
+                margin-bottom: 8px !important;
+            }
+
+            .print-kpi {
+                border: 1px solid #CBD5E1 !important;
+                border-radius: 6px !important;
+                padding: 5px !important;
+                text-align: center !important;
+                background: #ffffff !important;
+            }
+
+            .print-kpi-label {
+                font-size: 8px !important;
+                color: #64748B !important;
+                font-weight: 800 !important;
+                margin-bottom: 2px !important;
+            }
+
+            .print-kpi-value {
+                font-size: 12px !important;
+                color: #0D1B2A !important;
+                font-weight: 900 !important;
+            }
+
+            .print-table {
+                width: 100% !important;
+                border-collapse: collapse !important;
+                table-layout: fixed !important;
+                page-break-inside: auto !important;
+            }
+
+                .print-table thead {
+                    display: table-header-group !important;
+                }
+
+                .print-table tr {
+                    page-break-inside: avoid !important;
+                    page-break-after: auto !important;
+                }
+
+                .print-table th {
+                    background: #E8F1FB !important;
+                    color: #0D1B2A !important;
+                    border: 1px solid #94A3B8 !important;
+                    font-size: 9px !important;
+                    font-weight: 900 !important;
+                    padding: 5px 4px !important;
+                    text-align: center !important;
+                    vertical-align: middle !important;
+                    white-space: normal !important;
+                }
+
+                .print-table td {
+                    border: 1px solid #CBD5E1 !important;
+                    font-size: 9px !important;
+                    font-weight: 700 !important;
+                    padding: 5px 4px !important;
+                    text-align: center !important;
+                    vertical-align: middle !important;
+                    color: #111827 !important;
+                    line-height: 1.4 !important;
+                    word-break: break-word !important;
+                }
+
+                .print-table .student-name-cell {
+                    text-align: right !important;
+                    font-weight: 900 !important;
+                }
+
+            .present-text {
+                color: #065F46 !important;
+                font-weight: 900 !important;
+            }
+
+            .absent-text {
+                color: #9F1239 !important;
+                font-weight: 900 !important;
+            }
+
+            .print-footer {
+                margin-top: 8px !important;
+                display: flex !important;
+                justify-content: space-between !important;
+                font-size: 8px !important;
+                color: #64748B !important;
+                border-top: 1px solid #CBD5E1 !important;
+                padding-top: 5px !important;
+            }
+        }
+    </style>
+}
+
+<div class="attendance-report-page">
+
+    <div class="attendance-report-topbar">
+        <div class="attendance-report-brand">
+            <div class="attendance-report-brand-icon">
+                <i class="bi bi-file-earmark-bar-graph-fill"></i>
+            </div>
+            <div>
+                <div class="attendance-report-brand-title">تقرير حضور المحاضرة</div>
+                <div class="attendance-report-brand-sub">
+                    @Model.LectureTitle - @Model.BatchName - @Model.LectureDate.ToString("yyyy/MM/dd")
+                </div>
+            </div>
+        </div>
+
+        <div class="top-actions">
+            <a asp-area="Admin"
+               asp-controller="Attendance"
+               asp-action="Lectures"
+               asp-route-batchId="@Model.BatchId"
+               class="btn-secondary-action">
+                <i class="bi bi-arrow-left"></i>
+                رجوع لمحاضرات الدفعة
+            </a>
+
+            <button type="button"
+                    class="btn-print-action"
+                    onclick="printAttendanceReport()">
+                <i class="bi bi-printer"></i>
+                طباعة التقرير
+            </button>
+        </div>
+    </div>
+
+    <div class="lecture-info-card">
+        <div class="lecture-info-header">
+            <i class="bi bi-info-circle"></i>
+            بيانات المحاضرة
+        </div>
+
+        <div class="lecture-info-grid">
+            <div class="lecture-info-item">
+                <div class="lecture-info-label">
+                    <i class="bi bi-person-badge"></i>
+                    المدرب
+                </div>
+                <div class="lecture-info-value">@Model.InstructorName</div>
+            </div>
+
+            <div class="lecture-info-item">
+                <div class="lecture-info-label">
+                    <i class="bi bi-people"></i>
+                    الدفعة
+                </div>
+                <div class="lecture-info-value">@Model.BatchName</div>
+            </div>
+
+            <div class="lecture-info-item">
+                <div class="lecture-info-label">
+                    <i class="bi bi-book"></i>
+                    الدورة / المنهج
+                </div>
+                <div class="lecture-info-value">@Model.CourseTitle</div>
+            </div>
+
+            <div class="lecture-info-item">
+                <div class="lecture-info-label">
+                    <i class="bi bi-diagram-3"></i>
+                    المحور
+                </div>
+                <div class="lecture-info-value">@Model.SectionTitle</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="attendance-kpis">
+        <div class="kpi-card kpi-blue">
+            <div class="kpi-ico ico-blue"><i class="bi bi-people"></i></div>
+            <div>
+                <div class="kpi-label">الطلاب</div>
+                <div class="kpi-val">@total</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-emerald">
+            <div class="kpi-ico ico-emerald"><i class="bi bi-check-circle"></i></div>
+            <div>
+                <div class="kpi-label">حاضر</div>
+                <div class="kpi-val">@present</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-rose">
+            <div class="kpi-ico ico-rose"><i class="bi bi-x-circle"></i></div>
+            <div>
+                <div class="kpi-label">غائب</div>
+                <div class="kpi-val">@absent</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-amber">
+            <div class="kpi-ico ico-amber"><i class="bi bi-clock-history"></i></div>
+            <div>
+                <div class="kpi-label">متأخر</div>
+                <div class="kpi-val">@late</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-info">
+            <div class="kpi-ico ico-info"><i class="bi bi-box-arrow-left"></i></div>
+            <div>
+                <div class="kpi-label">إذن مبكر</div>
+                <div class="kpi-val">@early</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-violet">
+            <div class="kpi-ico ico-violet"><i class="bi bi-percent"></i></div>
+            <div>
+                <div class="kpi-label">النسبة</div>
+                <div class="kpi-val">@rate%</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="students-table-card">
+        <div class="students-table-topbar">
+            <div class="table-section-title">
+                <i class="bi bi-table"></i>
+                تفاصيل الطلاب
+            </div>
+
+            <div class="students-table-search-wrap">
+                <i class="bi bi-search"></i>
+                <input type="text"
+                       id="attendanceReportSearch"
+                       placeholder="ابحث في الطالب أو الحالة أو الملاحظات..." />
+            </div>
+
+            <div class="students-count-badge">
+                إجمالي: <strong>@total</strong> طالب
+            </div>
+        </div>
+
+        @if (!studentsList.Any())
+        {
+            <div class="students-empty">
+                <i class="bi bi-inbox"></i>
+                <div class="students-empty-title">لا توجد بيانات حضور لهذه المحاضرة</div>
+                <div class="students-empty-sub">تأكد من تسجيل الحضور أولًا لهذه المحاضرة</div>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive-safe">
+                <table id="attendanceReportTable">
+                    <thead>
+                        <tr>
+                            <th style="text-align:right; width:28%">الطالب</th>
+                            <th style="width:11%">حاضر</th>
+                            <th style="width:11%">متأخر</th>
+                            <th style="width:12%">إذن مبكر</th>
+                            <th style="width:12%">وقت الحضور</th>
+                            <th style="width:12%">وقت الانصراف</th>
+                            <th style="width:14%">ملاحظات</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @foreach (var item in studentsList)
+                        {
+                            <tr>
+                                <td style="text-align:right">
+                                    <div class="student-title-cell">
+                                        <div class="student-avatar">
+                                            <i class="bi bi-person-fill"></i>
+                                        </div>
+                                        <div>
+                                            <div class="student-item-name">@item.StudentName</div>
+                                        </div>
+                                    </div>
+                                </td>
+
+                                <td>
+                                    @if (item.IsPresent)
+                                    {
+                                        <span class="status-pill sp-present">
+                                            <i class="bi bi-check-circle"></i>
+                                            حاضر
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="status-pill sp-absent">
+                                            <i class="bi bi-x-circle"></i>
+                                            غائب
+                                        </span>
+                                    }
+                                </td>
+
+                                <td>
+                                    @if (item.IsLateArrival)
+                                    {
+                                        <span class="status-pill sp-late">
+                                            <i class="bi bi-clock-history"></i>
+                                            متأخر
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="status-pill sp-muted">—</span>
+                                    }
+                                </td>
+
+                                <td>
+                                    @if (item.HasEarlyLeavePermission)
+                                    {
+                                        <span class="status-pill sp-early">
+                                            <i class="bi bi-box-arrow-left"></i>
+                                            بإذن
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="status-pill sp-muted">—</span>
+                                    }
+                                </td>
+
+                                <td>
+                                    <span class="time-chip">
+                                        <i class="bi bi-clock"></i>
+                                        @(item.ActualArrivalTime.HasValue? item.ActualArrivalTime.Value.ToString(@"hh\:mm") : "—")
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="time-chip">
+                                        <i class="bi bi-clock-history"></i>
+                                        @(item.ActualDepartureTime.HasValue? item.ActualDepartureTime.Value.ToString(@"hh\:mm") : "—")
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="notes-chip">
+                                        @(string.IsNullOrWhiteSpace(item.Notes) ? "—" : item.Notes)
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+<div id="attendancePrintableContent">
+    <div class="print-page">
+        <div class="print-header">
+            <div>
+                <div class="print-title">تقرير حضور المحاضرة</div>
+                <div class="print-subtitle">
+                    @Model.LectureTitle<br />
+                    @Model.BatchName - @Model.LectureDate.ToString("yyyy/MM/dd")
+                </div>
+            </div>
+            <div class="print-date">
+                @DateTime.Now.ToString("yyyy/MM/dd HH:mm")
+            </div>
+        </div>
+
+        <div class="print-info-grid">
+            <div class="print-info-item">
+                <div class="print-info-label">المدرب</div>
+                <div class="print-info-value">@Model.InstructorName</div>
+            </div>
+            <div class="print-info-item">
+                <div class="print-info-label">الدفعة</div>
+                <div class="print-info-value">@Model.BatchName</div>
+            </div>
+            <div class="print-info-item">
+                <div class="print-info-label">الدورة / المنهج</div>
+                <div class="print-info-value">@Model.CourseTitle</div>
+            </div>
+            <div class="print-info-item">
+                <div class="print-info-label">المحور</div>
+                <div class="print-info-value">@Model.SectionTitle</div>
+            </div>
+        </div>
+
+        <div class="print-kpis">
+            <div class="print-kpi">
+                <div class="print-kpi-label">إجمالي الطلاب</div>
+                <div class="print-kpi-value">@total</div>
+            </div>
+            <div class="print-kpi">
+                <div class="print-kpi-label">حاضر</div>
+                <div class="print-kpi-value">@present</div>
+            </div>
+            <div class="print-kpi">
+                <div class="print-kpi-label">غائب</div>
+                <div class="print-kpi-value">@absent</div>
+            </div>
+            <div class="print-kpi">
+                <div class="print-kpi-label">متأخر</div>
+                <div class="print-kpi-value">@late</div>
+            </div>
+            <div class="print-kpi">
+                <div class="print-kpi-label">إذن مبكر</div>
+                <div class="print-kpi-value">@early</div>
+            </div>
+            <div class="print-kpi">
+                <div class="print-kpi-label">نسبة الحضور</div>
+                <div class="print-kpi-value">@rate%</div>
+            </div>
+        </div>
+
+        <table class="print-table">
+            <thead>
+                <tr>
+                    <th style="width:5%">#</th>
+                    <th style="width:25%">الطالب</th>
+                    <th style="width:10%">الحضور</th>
+                    <th style="width:10%">التأخر</th>
+                    <th style="width:12%">إذن مبكر</th>
+                    <th style="width:12%">وقت الحضور</th>
+                    <th style="width:12%">وقت الانصراف</th>
+                    <th style="width:14%">ملاحظات</th>
+                </tr>
+            </thead>
+            <tbody>
+                @{
+                    var rowIndex = 1;
+                }
+
+                @foreach (var item in studentsList)
+                {
+                    <tr>
+                        <td>@rowIndex</td>
+                        <td class="student-name-cell">@item.StudentName</td>
+                        <td class="@(item.IsPresent ? "present-text" : "absent-text")">@(item.IsPresent ? "حاضر" : "غائب")</td>
+                        <td>@(item.IsLateArrival ? "متأخر" : "—")</td>
+                        <td>@(item.HasEarlyLeavePermission ? "بإذن" : "—")</td>
+                        <td>@(item.ActualArrivalTime.HasValue? item.ActualArrivalTime.Value.ToString(@"hh\:mm") : "—")</td>
+                        <td>@(item.ActualDepartureTime.HasValue? item.ActualDepartureTime.Value.ToString(@"hh\:mm") : "—")</td>
+                        <td>@(string.IsNullOrWhiteSpace(item.Notes) ? "—" : item.Notes)</td>
+                    </tr>
+
+                    rowIndex++;
+                }
+            </tbody>
+        </table>
+
+        <div class="print-footer">
+            <div>منصة قدرات - تقرير حضور المحاضرة</div>
+            <div>إجمالي السجلات: @total</div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+    <script>
+        var attendanceReportDataTable = null;
+
+        document.addEventListener("DOMContentLoaded", function () {
+            var tableElement = document.getElementById('attendanceReportTable');
+
+            if (tableElement && window.jQuery && $.fn.DataTable) {
+               attendanceReportDataTable = $('#attendanceReportTable').DataTable({
+    language: {
+        url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json"
+    },
+    pageLength: 25,
+    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "الكل"]],
+    order: [[0, "asc"]],
+    responsive: false,
+    scrollX: false,
+    autoWidth: false,
+    stateSave: true,
+    dom: 'lrtip',
+    columnDefs: [
+        { targets: 0, width: "28%" },
+        { targets: 1, width: "11%" },
+        { targets: 2, width: "11%" },
+        { targets: 3, width: "12%" },
+        { targets: 4, width: "12%" },
+        { targets: 5, width: "12%" },
+        { targets: 6, width: "14%" }
+    ]
+});
+
+attendanceReportDataTable.columns.adjust().draw(false);
+
+                $('#attendanceReportSearch').on('input', function () {
+                    attendanceReportDataTable.search($(this).val()).draw();
+                });
+            }
+        });
+
+        function printAttendanceReport() {
+            var printableContent = document.getElementById('attendancePrintableContent');
+
+            if (!printableContent) {
+                alert('لم يتم العثور على نسخة الطباعة داخل الصفحة.');
+                return;
+            }
+
+            window.print();
+        }
+    </script>
+}

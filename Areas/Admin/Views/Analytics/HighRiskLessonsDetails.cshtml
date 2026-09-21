@@ -1,0 +1,423 @@
+@model QdratNew.ViewModels.Admin.Analytics.AdvancedAnalyticsDashboardVM
+@using System.Text.Json
+@{
+    Layout = "~/Areas/Admin/Views/Shared/_AdminLayout.cshtml";
+    ViewData["Title"] = "الدروس عالية الخطورة";
+
+    var allLessons      = Model?.Lessons?.OrderByDescending(x => x.WeakPercentage).ToList()
+                          ?? new List<QdratNew.ViewModels.Admin.Analytics.LessonAnalyticsVM>();
+    var highRiskLessons = allLessons.Where(x => x.WeakPercentage >= 70).ToList();
+    var medRiskLessons  = allLessons.Where(x => x.WeakPercentage >= 50 && x.WeakPercentage < 70).ToList();
+
+    var totalLessons  = allLessons.Count;
+    var highRiskCount = highRiskLessons.Count;
+    var medRiskCount  = medRiskLessons.Count;
+    var avgWeakness   = Math.Round(allLessons.Any() ? allLessons.Average(x => x.WeakPercentage) : 0, 1);
+    var totalAffected = allLessons.Sum(x => x.AffectedStudents);
+
+    var top8         = allLessons.Take(8).ToList();
+    var lessonLabels = JsonSerializer.Serialize(top8.Select(l => l.LessonName.Length > 22 ? l.LessonName[..22] + "…" : l.LessonName).ToList());
+    var lessonPcts   = JsonSerializer.Serialize(top8.Select(l => Math.Round(l.WeakPercentage, 1)).ToList());
+    var lessonAff    = JsonSerializer.Serialize(top8.Select(l => l.AffectedStudents).ToList());
+    var lessonColors = JsonSerializer.Serialize(top8.Select(l => l.WeakPercentage >= 70 ? "#DC2626" : "#D97706").ToList());
+}
+
+<style>
+    :root {
+        --ql-bg:        #F1F5F9;
+        --ql-surface:   #FFFFFF;
+        --ql-border:    #E2E8F0;
+        --ql-danger:    #DC2626;
+        --ql-danger-l:  #FEE2E2;
+        --ql-danger-d:  #991B1B;
+        --ql-warning:   #D97706;
+        --ql-warning-l: #FEF3C7;
+        --ql-warning-d: #92400E;
+        --ql-success:   #059669;
+        --ql-success-l: #D1FAE5;
+        --ql-primary:   #2563EB;
+        --ql-primary-l: #DBEAFE;
+        --ql-indigo:    #4F46E5;
+        --ql-indigo-l:  #EEF2FF;
+        --ql-violet:    #7C3AED;
+        --ql-violet-l:  #EDE9FE;
+        --ql-text:      #0F172A;
+        --ql-muted:     #64748B;
+        --ql-r:         14px;
+        --ql-shadow:    0 4px 24px rgba(15,23,42,.08);
+        --ql-shadow-sm: 0 2px 12px rgba(15,23,42,.05);
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    .qhrl-page { direction:rtl; font-family:'Cairo',sans-serif; background:var(--ql-bg); padding:28px 24px; color:var(--ql-text); }
+
+    .qhrl-breadcrumb { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ql-muted); margin-bottom:18px; flex-wrap:wrap; }
+    .qhrl-breadcrumb a { color:var(--ql-muted); text-decoration:none; }
+    .qhrl-breadcrumb a:hover { color:var(--ql-warning); }
+    .qhrl-breadcrumb .sep { opacity:.4; }
+    .qhrl-breadcrumb .current { color:var(--ql-text); font-weight:700; }
+
+    .qhrl-header { background:linear-gradient(135deg,#78350F 0%,#D97706 50%,#F59E0B 100%); border-radius:20px; padding:28px 30px; color:#fff; position:relative; overflow:hidden; margin-bottom:22px; }
+    .qhrl-header::before { content:''; position:absolute; inset:0; background:radial-gradient(circle at 10% 50%,rgba(255,255,255,.08) 0%,transparent 60%); pointer-events:none; }
+    .qhrl-header::after  { content:''; position:absolute; top:-40px; left:-40px; width:200px; height:200px; border-radius:50%; border:40px solid rgba(255,255,255,.07); pointer-events:none; }
+    .qhrl-ph-row { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; position:relative; z-index:1; }
+    .qhrl-ph-icon { width:52px; height:52px; border-radius:16px; background:rgba(255,255,255,.18); backdrop-filter:blur(6px); display:flex; align-items:center; justify-content:center; font-size:26px; flex-shrink:0; }
+    .qhrl-ph-title { font-size:24px; font-weight:900; margin-bottom:4px; }
+    .qhrl-ph-sub   { font-size:14px; color:rgba(255,255,255,.78); }
+    .qhrl-ph-badge { background:rgba(255,255,255,.18); border-radius:20px; padding:2px 10px; font-size:13px; font-weight:700; display:inline-block; margin-right:8px; }
+    .qhrl-btn-back { display:inline-flex; align-items:center; gap:6px; background:rgba(255,255,255,.18); color:#fff; border:1px solid rgba(255,255,255,.28); border-radius:10px; padding:9px 20px; font-size:14px; font-weight:700; text-decoration:none; }
+    .qhrl-btn-back:hover { background:rgba(255,255,255,.28); color:#fff; }
+
+    .qhrl-filter-bar { background:var(--ql-surface); border-radius:var(--ql-r); border:1px solid var(--ql-border); box-shadow:var(--ql-shadow-sm); padding:16px 22px; margin-bottom:22px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+    .qhrl-filter-label { font-size:13px; font-weight:700; color:var(--ql-muted); white-space:nowrap; display:flex; align-items:center; gap:6px; }
+    .qhrl-filter-bar select { border:1px solid var(--ql-border); border-radius:8px; padding:8px 12px; font-size:14px; font-family:'Cairo',sans-serif; color:var(--ql-text); background:#FAFBFC; min-width:150px; outline:none; }
+    .qhrl-filter-bar select:focus { border-color:var(--ql-warning); box-shadow:0 0 0 3px rgba(217,119,6,.14); }
+    .qhrl-btn-filter { background:var(--ql-warning); color:#fff; border:none; border-radius:8px; padding:9px 20px; font-size:14px; font-weight:700; font-family:'Cairo',sans-serif; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+    .qhrl-btn-filter:hover { background:#B45309; }
+    .qhrl-btn-clear { color:var(--ql-muted); font-size:14px; font-weight:600; text-decoration:none; padding:9px 14px; border-radius:8px; }
+    .qhrl-btn-clear:hover { background:#F1F5F9; color:var(--ql-danger); }
+
+    .qhrl-kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:22px; }
+    @@media(max-width:1199px){ .qhrl-kpi-grid{ grid-template-columns:repeat(2,1fr); } }
+    @@media(max-width:575px)  { .qhrl-kpi-grid{ grid-template-columns:1fr 1fr; } }
+    .qhrl-kpi { background:var(--ql-surface); border-radius:var(--ql-r); border:1px solid var(--ql-border); box-shadow:var(--ql-shadow-sm); padding:22px 20px; position:relative; overflow:hidden; transition:transform .18s,box-shadow .18s; }
+    .qhrl-kpi:hover { transform:translateY(-3px); box-shadow:var(--ql-shadow); }
+    .qhrl-kpi::before { content:''; position:absolute; bottom:0; right:0; left:0; height:3px; border-radius:0 0 var(--ql-r) var(--ql-r); }
+    .qhrl-kpi.k-red::before    { background:var(--ql-danger); }
+    .qhrl-kpi.k-amber::before  { background:var(--ql-warning); }
+    .qhrl-kpi.k-blue::before   { background:var(--ql-primary); }
+    .qhrl-kpi.k-indigo::before { background:var(--ql-indigo); }
+    .qhrl-kpi-icon  { width:42px; height:42px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:21px; margin-bottom:14px; }
+    .qhrl-kpi-value { font-size:32px; font-weight:900; line-height:1; margin-bottom:5px; }
+    .qhrl-kpi-label { font-size:13px; font-weight:700; color:var(--ql-muted); }
+    .qhrl-kpi-sub   { font-size:11px; color:var(--ql-muted); margin-top:3px; }
+
+    /* ── Risk distribution strip ── */
+    .qhrl-risk-strip { background:var(--ql-surface); border-radius:var(--ql-r); border:1px solid var(--ql-border); box-shadow:var(--ql-shadow-sm); padding:14px 22px; margin-bottom:22px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+    .qhrl-risk-label { font-size:12px; font-weight:700; color:var(--ql-muted); white-space:nowrap; }
+    .qhrl-risk-bar { flex:1; min-width:120px; height:8px; border-radius:20px; background:#EEF2F6; overflow:hidden; display:flex; }
+    .qhrl-risk-seg { height:100%; transition:width .5s; }
+    .qhrl-risk-legend { display:flex; gap:14px; flex-wrap:wrap; }
+    .qhrl-risk-item { display:flex; align-items:center; gap:5px; font-size:12px; font-weight:700; }
+    .qhrl-risk-dot  { width:8px; height:8px; border-radius:50%; }
+
+    .qhrl-charts-row { display:grid; grid-template-columns:1fr 280px 1fr; gap:18px; margin-bottom:22px; align-items:start; }
+    @@media(max-width:1199px){ .qhrl-charts-row{ grid-template-columns:1fr 1fr; } }
+    @@media(max-width:767px) { .qhrl-charts-row{ grid-template-columns:1fr; } }
+    .qhrl-card { background:var(--ql-surface); border-radius:var(--ql-r); border:1px solid var(--ql-border); box-shadow:var(--ql-shadow-sm); padding:22px; }
+    .qhrl-card-title { font-size:15px; font-weight:800; display:flex; align-items:center; gap:8px; margin-bottom:4px; }
+    .qhrl-ct-icon { width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+    .qhrl-card-sub { font-size:12px; color:var(--ql-muted); margin-bottom:14px; padding-right:38px; }
+
+    .qhrl-section { background:var(--ql-surface); border-radius:var(--ql-r); border:1px solid var(--ql-border); box-shadow:var(--ql-shadow-sm); overflow:hidden; margin-bottom:60px; }
+    .qhrl-toolbar { padding:18px 22px; border-bottom:1px solid var(--ql-border); display:flex; align-items:center; gap:12px; flex-wrap:wrap; background:#FAFBFC; }
+    .qhrl-sec-title { font-size:16px; font-weight:800; display:flex; align-items:center; gap:8px; margin-left:auto; }
+    .qhrl-sec-title .st-icon { width:32px; height:32px; border-radius:8px; background:var(--ql-warning-l); color:var(--ql-warning); display:flex; align-items:center; justify-content:center; font-size:16px; }
+    .qhrl-search { border:1px solid var(--ql-border); border-radius:8px; padding:8px 14px; font-size:14px; font-family:'Cairo',sans-serif; width:220px; outline:none; background:#fff; }
+    .qhrl-search:focus { border-color:var(--ql-warning); box-shadow:0 0 0 3px rgba(217,119,6,.14); }
+
+    .qhrl-filter-tabs { display:flex; gap:6px; flex-wrap:wrap; }
+    .qhrl-ftab { padding:7px 16px; border-radius:20px; border:1px solid var(--ql-border); font-size:13px; font-weight:700; cursor:pointer; background:#fff; color:var(--ql-muted); transition:all .18s; font-family:'Cairo',sans-serif; }
+    .qhrl-ftab.active { border-color:var(--ql-warning); color:var(--ql-warning); background:var(--ql-warning-l); }
+    .qhrl-ftab.ftab-red.active { border-color:var(--ql-danger); color:var(--ql-danger); background:var(--ql-danger-l); }
+    .qhrl-ftab.ftab-green.active { border-color:var(--ql-success); color:var(--ql-success); background:var(--ql-success-l); }
+
+    .qhrl-table { width:100%; border-collapse:collapse; font-size:14px; }
+    .qhrl-table thead th { background:#F8FAFC; color:var(--ql-muted); font-weight:700; font-size:12px; text-transform:uppercase; letter-spacing:.4px; padding:12px 14px; border-bottom:2px solid var(--ql-border); white-space:nowrap; }
+    .qhrl-table tbody td { padding:13px 14px; border-bottom:1px solid #F1F5F9; vertical-align:middle; }
+    .qhrl-table tbody tr:last-child td { border-bottom:none; }
+    .qhrl-table tbody tr { transition:background .12s; }
+    .qhrl-table tbody tr:hover { background:#FFFBEB; }
+    .qhrl-lesson-icon { width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+    .qhrl-weak-num { font-size:17px; font-weight:900; line-height:1; }
+    .qhrl-prog { height:6px; border-radius:20px; background:#EEF2F6; overflow:hidden; margin-top:5px; }
+    .qhrl-prog-bar { height:100%; border-radius:20px; transition:width .4s; }
+    .qhrl-badge { display:inline-flex; align-items:center; gap:4px; padding:5px 12px; border-radius:20px; font-size:12px; font-weight:700; white-space:nowrap; }
+    .b-red    { background:var(--ql-danger-l);  color:var(--ql-danger-d); }
+    .b-amber  { background:var(--ql-warning-l); color:var(--ql-warning-d); }
+    .b-green  { background:var(--ql-success-l); color:#065F46; }
+    .qhrl-table-footer { padding:14px 22px; border-top:1px solid var(--ql-border); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; background:#FAFBFC; }
+    .qhrl-footer-text { font-size:13px; color:var(--ql-muted); font-weight:600; }
+    .qhrl-footer-text strong { color:var(--ql-text); }
+    .qhrl-empty { padding:60px 20px; text-align:center; color:var(--ql-muted); }
+    .qhrl-empty i { font-size:48px; opacity:.25; display:block; margin-bottom:14px; }
+</style>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+
+<div class="qhrl-page">
+
+    <nav class="qhrl-breadcrumb">
+        <i class="bi bi-house-fill"></i>
+        <a asp-area="Admin" asp-controller="Home" asp-action="Index">لوحة التحكم</a>
+        <span class="sep">‹</span>
+        <a asp-area="Admin" asp-controller="Analytics" asp-action="AdvancedDashboard">التحليلات المتقدمة</a>
+        <span class="sep">‹</span>
+        <span class="current">الدروس عالية الخطورة</span>
+    </nav>
+
+    <div class="qhrl-header">
+        <div class="qhrl-ph-row">
+            <div style="display:flex;align-items:center;gap:16px;">
+                <div class="qhrl-ph-icon"><i class="bi bi-fire"></i></div>
+                <div>
+                    <h1 class="qhrl-ph-title">الدروس عالية الخطورة</h1>
+                    <p class="qhrl-ph-sub">
+                        رصد الدروس ذات نسب الإجابات الخاطئة المرتفعة وتحديد الطلاب المتأثرين
+                        @if (totalLessons > 0) { <span class="qhrl-ph-badge">@totalLessons درس محلَّل</span> }
+                    </p>
+                </div>
+            </div>
+            <a asp-area="Admin" asp-controller="Analytics" asp-action="AdvancedDashboard" class="qhrl-btn-back">
+                <i class="bi bi-arrow-right"></i> رجوع للتحليلات
+            </a>
+        </div>
+    </div>
+
+    <form method="get" asp-area="Admin" asp-controller="Analytics" asp-action="HighRiskLessonsDetails">
+        <div class="qhrl-filter-bar">
+            <span class="qhrl-filter-label"><i class="bi bi-funnel-fill"></i> تصفية:</span>
+            <select name="curriculumId">
+                <option value="">كل المناهج</option>
+                @foreach (var c in Model?.CurriculumsFilter ?? new()) { <option value="@c.Id" selected="@(Model?.SelectedCurriculumId == c.Id)">@c.Name</option> }
+            </select>
+            <select name="batchId">
+                <option value="">كل الدفعات</option>
+                @foreach (var b in Model?.BatchesFilter ?? new()) { <option value="@b.Id" selected="@(Model?.SelectedBatchId == b.Id)">@b.Name</option> }
+            </select>
+            <select name="instructorId">
+                <option value="">كل المدرسين</option>
+                @foreach (var i in Model?.InstructorsFilter ?? new()) { <option value="@i.Id" selected="@(Model?.SelectedInstructorId == i.Id)">@i.Name</option> }
+            </select>
+            <button type="submit" class="qhrl-btn-filter"><i class="bi bi-search"></i> تطبيق</button>
+            @if (Model?.SelectedCurriculumId.HasValue == true || Model?.SelectedBatchId.HasValue == true || Model?.SelectedInstructorId.HasValue == true)
+            {
+                <a asp-area="Admin" asp-controller="Analytics" asp-action="HighRiskLessonsDetails" class="qhrl-btn-clear"><i class="bi bi-x-circle"></i> مسح</a>
+            }
+        </div>
+    </form>
+
+    <div class="qhrl-kpi-grid">
+        <div class="qhrl-kpi k-amber">
+            <div class="qhrl-kpi-icon" style="background:var(--ql-warning-l);color:var(--ql-warning);"><i class="bi bi-book-fill"></i></div>
+            <div class="qhrl-kpi-value" style="color:var(--ql-warning);">@totalLessons</div>
+            <div class="qhrl-kpi-label">إجمالي الدروس الضعيفة</div>
+            <div class="qhrl-kpi-sub">دروس بنسبة خطأ ≥ 50%</div>
+        </div>
+        <div class="qhrl-kpi k-red">
+            <div class="qhrl-kpi-icon" style="background:var(--ql-danger-l);color:var(--ql-danger);"><i class="bi bi-fire"></i></div>
+            <div class="qhrl-kpi-value" style="color:var(--ql-danger);">@highRiskCount</div>
+            <div class="qhrl-kpi-label">خطر عالي جداً</div>
+            <div class="qhrl-kpi-sub">نسبة الخطأ ≥ 70%</div>
+        </div>
+        <div class="qhrl-kpi k-blue">
+            <div class="qhrl-kpi-icon" style="background:var(--ql-primary-l);color:var(--ql-primary);"><i class="bi bi-graph-up-arrow"></i></div>
+            <div class="qhrl-kpi-value" style="color:var(--ql-primary);">@avgWeakness<small style="font-size:18px;">%</small></div>
+            <div class="qhrl-kpi-label">متوسط نسبة الضعف</div>
+            <div class="qhrl-kpi-sub">عبر جميع الدروس</div>
+        </div>
+        <div class="qhrl-kpi k-indigo">
+            <div class="qhrl-kpi-icon" style="background:var(--ql-indigo-l);color:var(--ql-indigo);"><i class="bi bi-people-fill"></i></div>
+            <div class="qhrl-kpi-value" style="color:var(--ql-indigo);">@totalAffected</div>
+            <div class="qhrl-kpi-label">إجمالي الطلاب المتأثرين</div>
+            <div class="qhrl-kpi-sub">طلاب بإجابات خاطئة</div>
+        </div>
+    </div>
+
+    @if (totalLessons > 0)
+    {
+        var highPct = (int)Math.Round(highRiskCount * 100.0 / totalLessons);
+        var medPct  = (int)Math.Round(medRiskCount  * 100.0 / totalLessons);
+        var lowPct  = 100 - highPct - medPct;
+        <div class="qhrl-risk-strip">
+            <span class="qhrl-risk-label">توزيع مستوى الخطورة</span>
+            <div class="qhrl-risk-bar">
+                <div class="qhrl-risk-seg" style="width:@highPct%;background:var(--ql-danger);"></div>
+                <div class="qhrl-risk-seg" style="width:@medPct%;background:var(--ql-warning);"></div>
+                <div class="qhrl-risk-seg" style="width:@lowPct%;background:var(--ql-success);"></div>
+            </div>
+            <div class="qhrl-risk-legend">
+                <div class="qhrl-risk-item"><div class="qhrl-risk-dot" style="background:var(--ql-danger);"></div><span>عالي جداً <span style="color:var(--ql-muted);font-weight:400;">@highPct%</span></span></div>
+                <div class="qhrl-risk-item"><div class="qhrl-risk-dot" style="background:var(--ql-warning);"></div><span>متوسط <span style="color:var(--ql-muted);font-weight:400;">@medPct%</span></span></div>
+                <div class="qhrl-risk-item"><div class="qhrl-risk-dot" style="background:var(--ql-success);"></div><span>منخفض <span style="color:var(--ql-muted);font-weight:400;">@lowPct%</span></span></div>
+            </div>
+        </div>
+    }
+
+    <div class="qhrl-charts-row">
+        <div class="qhrl-card">
+            <div class="qhrl-card-title"><div class="qhrl-ct-icon" style="background:var(--ql-danger-l);color:var(--ql-danger);"><i class="bi bi-bar-chart-fill"></i></div>نسب الضعف — أعلى الدروس</div>
+            <p class="qhrl-card-sub">أعلى 8 دروس مرتبة حسب نسبة الإجابات الخاطئة</p>
+            <div id="chartWeakBar" style="min-height:260px;"></div>
+        </div>
+        <div class="qhrl-card">
+            <div class="qhrl-card-title"><div class="qhrl-ct-icon" style="background:var(--ql-warning-l);color:var(--ql-warning);"><i class="bi bi-pie-chart-fill"></i></div>توزيع مستوى الخطر</div>
+            <p class="qhrl-card-sub">تصنيف الدروس حسب درجة الخطورة</p>
+            <div id="chartRiskDist" style="min-height:260px;"></div>
+        </div>
+        <div class="qhrl-card">
+            <div class="qhrl-card-title"><div class="qhrl-ct-icon" style="background:var(--ql-indigo-l);color:var(--ql-indigo);"><i class="bi bi-people-fill"></i></div>الطلاب المتأثرون لكل درس</div>
+            <p class="qhrl-card-sub">عدد الطلاب الذين أخطأوا في كل درس</p>
+            <div id="chartAffected" style="min-height:260px;"></div>
+        </div>
+    </div>
+
+    <div class="qhrl-section">
+        <div class="qhrl-toolbar">
+            <div class="qhrl-sec-title">
+                <div class="st-icon"><i class="bi bi-book-fill"></i></div>
+                قائمة الدروس الضعيفة
+                @if (totalLessons > 0) { <span class="qhrl-badge b-amber" style="font-size:11px;">@totalLessons درس</span> }
+            </div>
+            <div class="qhrl-filter-tabs">
+                <button class="qhrl-ftab active" onclick="filterLessons('all',this)">الكل</button>
+                <button class="qhrl-ftab ftab-red" onclick="filterLessons('high',this)"><i class="bi bi-circle-fill" style="font-size:8px;"></i> عالي جداً (@highRiskCount)</button>
+                <button class="qhrl-ftab" onclick="filterLessons('medium',this)"><i class="bi bi-circle-fill" style="font-size:8px;"></i> متوسط (@medRiskCount)</button>
+            </div>
+            <input type="text" class="qhrl-search" id="lessonSearch"
+                   placeholder="🔍 ابحث باسم الدرس..." oninput="onLessonSearch(this.value)">
+        </div>
+
+        @if (!allLessons.Any())
+        {
+            <div class="qhrl-empty">
+                <i class="bi bi-check-circle-fill" style="color:#059669;opacity:1;"></i>
+                <div style="font-size:16px;font-weight:700;color:var(--ql-text);margin-bottom:6px;">لا توجد دروس ضعيفة</div>
+                <div style="font-size:14px;">جميع الدروس بمستويات مقبولة</div>
+            </div>
+        }
+        else
+        {
+            <div style="overflow-x:auto;">
+                <table class="qhrl-table">
+                    <thead>
+                        <tr>
+                            <th style="min-width:220px;">الدرس</th>
+                            <th style="min-width:150px;">الدفعة</th>
+                            <th style="min-width:150px;">المدرس</th>
+                            <th style="min-width:110px;">الطلاب المتأثرون</th>
+                            <th style="min-width:160px;">نسبة الضعف</th>
+                            <th style="min-width:110px;">مستوى الخطر</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lessonsBody">
+                        @foreach (var l in allLessons)
+                        {
+                            var risk     = l.WeakPercentage >= 70 ? "high" : "medium";
+                            var badgeCls = l.WeakPercentage >= 70 ? "b-red" : "b-amber";
+                            var badgeTxt = l.WeakPercentage >= 70 ? "خطر عالي" : "متوسط";
+                            var badgeIco = l.WeakPercentage >= 70 ? "bi-fire" : "bi-dash-circle-fill";
+                            var barColor = l.WeakPercentage >= 70 ? "var(--ql-danger)" : "var(--ql-warning)";
+                            var iconBg   = l.WeakPercentage >= 70 ? "var(--ql-danger-l)" : "var(--ql-warning-l)";
+                            var iconClr  = l.WeakPercentage >= 70 ? "var(--ql-danger)" : "var(--ql-warning)";
+                            <tr class="lesson-row" data-risk="@risk" data-name="@l.LessonName.ToLower()">
+                                <td>
+                                    <div style="display:flex;align-items:center;gap:10px;">
+                                        <div class="qhrl-lesson-icon" style="background:@iconBg;color:@iconClr;"><i class="bi bi-book-fill"></i></div>
+                                        <div>
+                                            <div class="lesson-name" style="font-weight:700;font-size:14px;line-height:1.3;">@l.LessonName</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td><span style="font-size:13px;font-weight:600;">@(string.IsNullOrEmpty(l.BatchName) ? "-" : l.BatchName)</span></td>
+                                <td><span style="font-size:13px;font-weight:600;">@(string.IsNullOrEmpty(l.InstructorName) ? "-" : l.InstructorName)</span></td>
+                                <td>
+                                    <div style="display:flex;align-items:center;gap:6px;">
+                                        <i class="bi bi-person-fill" style="color:var(--ql-indigo);font-size:14px;"></i>
+                                        <span style="font-size:15px;font-weight:800;color:var(--ql-indigo);">@l.AffectedStudents</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="qhrl-weak-num" style="color:@barColor;">@Math.Round(l.WeakPercentage, 1)%</div>
+                                    <div class="qhrl-prog"><div class="qhrl-prog-bar" style="width:@l.WeakPercentage%;background:@barColor;"></div></div>
+                                </td>
+                                <td><span class="qhrl-badge @badgeCls"><i class="bi @badgeIco"></i> @badgeTxt</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="qhrl-table-footer">
+                <span class="qhrl-footer-text">إجمالي: <strong>@totalLessons</strong> درس — مرتب تنازلياً حسب نسبة الضعف</span>
+                <span class="qhrl-footer-text" id="lessonFilterInfo"></span>
+            </div>
+        }
+    </div>
+
+</div>
+
+<script>
+/* ── Chart 1: Horizontal Bar — Top weak lessons ── */
+(function(){
+    var labels=@Html.Raw(lessonLabels),pcts=@Html.Raw(lessonPcts),affs=@Html.Raw(lessonAff),colors=@Html.Raw(lessonColors);
+    if(!labels||!labels.length){document.getElementById('chartWeakBar').innerHTML='<div style="padding:60px;text-align:center;color:#94A3B8;">لا توجد بيانات</div>';return;}
+    new ApexCharts(document.getElementById('chartWeakBar'),{
+        chart:{type:'bar',height:260,fontFamily:'Cairo,sans-serif',toolbar:{show:false}},
+        plotOptions:{bar:{horizontal:true,borderRadius:5,distributed:true,dataLabels:{position:'top'}}},
+        series:[{name:'نسبة الضعف %',data:pcts}],
+        xaxis:{categories:labels,max:100,labels:{style:{fontSize:'11px',fontFamily:'Cairo,sans-serif'},formatter:function(v){return v+'%';}}},
+        yaxis:{labels:{style:{fontSize:'11px',fontFamily:'Cairo,sans-serif'}}},
+        colors:colors,legend:{show:false},
+        dataLabels:{enabled:true,formatter:function(v){return v+'%';},style:{fontSize:'11px',fontFamily:'Cairo,sans-serif',colors:['#fff']}},
+        tooltip:{style:{fontFamily:'Cairo,sans-serif'},custom:function(o){return '<div style="padding:8px 12px;font-family:Cairo,sans-serif;direction:rtl;font-size:13px;"><b>'+o.w.globals.labels[o.dataPointIndex]+'</b><br>نسبة الضعف: <b>'+o.series[o.seriesIndex][o.dataPointIndex]+'%</b><br>طلاب متأثرون: <b>'+affs[o.dataPointIndex]+'</b></div>';}},
+        grid:{borderColor:'#E2E8F0'},
+        annotations:{xaxis:[{x:70,borderColor:'#DC2626',borderWidth:1,strokeDashArray:4,label:{text:'حد الخطر العالي 70%',style:{fontFamily:'Cairo,sans-serif',fontSize:'10px',color:'#DC2626'}}},{x:50,borderColor:'#D97706',borderWidth:1,strokeDashArray:4,label:{text:'50%',style:{fontFamily:'Cairo,sans-serif',fontSize:'10px',color:'#D97706'}}}]}
+    }).render();
+})();
+
+/* ── Chart 2: Donut — Risk distribution ── */
+(function(){
+    var h=@highRiskCount,m=@medRiskCount;
+    if(h+m===0){document.getElementById('chartRiskDist').innerHTML='<div style="padding:60px;text-align:center;color:#94A3B8;">لا توجد بيانات</div>';return;}
+    new ApexCharts(document.getElementById('chartRiskDist'),{
+        chart:{type:'donut',height:260,fontFamily:'Cairo,sans-serif',toolbar:{show:false}},
+        series:[h,m],labels:['خطر عالي جداً (≥70%)','متوسط (50-70%)'],
+        colors:['#DC2626','#D97706'],
+        legend:{position:'bottom',fontSize:'12px',fontWeight:600},
+        dataLabels:{style:{fontSize:'12px',fontFamily:'Cairo,sans-serif',fontWeight:'700'}},
+        plotOptions:{pie:{donut:{size:'62%',labels:{show:true,total:{show:true,label:'الدروس الضعيفة',fontSize:'11px',fontWeight:'700',color:'#64748B',formatter:function(w){return w.globals.seriesTotals.reduce(function(a,b){return a+b;},0)+' درس';}}}}}},
+        tooltip:{style:{fontFamily:'Cairo,sans-serif'}}
+    }).render();
+})();
+
+/* ── Chart 3: Column — Affected students per lesson ── */
+(function(){
+    var labels=@Html.Raw(lessonLabels),affs=@Html.Raw(lessonAff),colors=@Html.Raw(lessonColors);
+    if(!labels||!labels.length){document.getElementById('chartAffected').innerHTML='<div style="padding:60px;text-align:center;color:#94A3B8;">لا توجد بيانات</div>';return;}
+    new ApexCharts(document.getElementById('chartAffected'),{
+        chart:{type:'bar',height:260,fontFamily:'Cairo,sans-serif',toolbar:{show:false}},
+        plotOptions:{bar:{borderRadius:5,columnWidth:'60%',distributed:true}},
+        series:[{name:'الطلاب المتأثرون',data:affs}],
+        xaxis:{categories:labels,labels:{style:{fontSize:'10px',fontFamily:'Cairo,sans-serif'},rotate:-35}},
+        yaxis:{labels:{style:{fontSize:'11px',fontFamily:'Cairo,sans-serif'}}},
+        colors:colors,legend:{show:false},
+        dataLabels:{enabled:true,style:{fontSize:'11px',fontFamily:'Cairo,sans-serif'}},
+        tooltip:{style:{fontFamily:'Cairo,sans-serif'},y:{formatter:function(v){return v+' طالب';}}},
+        grid:{borderColor:'#E2E8F0'}
+    }).render();
+})();
+
+/* ── Table filtering ── */
+var curRisk='all', curSearch='';
+function applyLessonFilters(){
+    var rows=document.querySelectorAll('.lesson-row'),visible=0;
+    rows.forEach(function(r){
+        var matchRisk=curRisk==='all'||(curRisk==='high'&&r.dataset.risk==='high')||(curRisk==='medium'&&r.dataset.risk==='medium');
+        var matchSrch=!curSearch||r.dataset.name.includes(curSearch);
+        var show=matchRisk&&matchSrch;
+        r.style.display=show?'':'none';
+        if(show)visible++;
+    });
+    var fi=document.getElementById('lessonFilterInfo');
+    if(fi)fi.textContent=(curRisk!=='all'||curSearch)?('النتائج: '+visible+' درس'):'';
+}
+function filterLessons(risk,btn){
+    curRisk=risk;
+    document.querySelectorAll('.qhrl-ftab').forEach(function(t){t.classList.remove('active');});
+    btn.classList.add('active');
+    applyLessonFilters();
+}
+function onLessonSearch(v){curSearch=v.trim().toLowerCase();applyLessonFilters();}
+</script>

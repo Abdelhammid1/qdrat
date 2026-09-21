@@ -1,0 +1,974 @@
+@model QdratNew.ViewModels.Exam.ExamAssignmentDetailsViewModel
+@using QdratNew.Helpers
+
+@{
+    ViewData["Title"] = "تفاصيل اختبار الدفعة";
+
+    var allQuestions     = Model.Sections?.SelectMany(s => s.Questions ?? new()).ToList() ?? new();
+    var easyCount        = allQuestions.Count(q => q.DifficultyLevel <= 0);
+    var mediumCount      = allQuestions.Count(q => q.DifficultyLevel == 1);
+    var hardCount        = allQuestions.Count(q => q.DifficultyLevel >= 2);
+    var totalQ           = allQuestions.Count;
+    var sectionsCount    = Model.Sections?.Count ?? 0;
+    var curriculumsCount = Model.Curriculums?.Count ?? 0;
+}
+
+@functions {
+    string DiffKey(int d)      => d <= 0 ? "easy"  : d == 1 ? "medium" : "hard";
+    string DiffLabel(int d)    => d <= 0 ? "سهل"   : d == 1 ? "متوسط"  : d > 2 ? "صعب جدًا" : "صعب";
+    string DiffBadge(int d)    => d <= 0 ? "green" : d == 1 ? "yellow" : "red";
+}
+
+<style>
+    :root {
+        --ed-primary:      #4361ee;
+        --ed-primary-soft: #eef0fd;
+        --ed-success:      #2ec4b6;
+        --ed-success-soft: #eaf8f7;
+        --ed-warning:      #f4a261;
+        --ed-warning-soft: #fef3eb;
+        --ed-danger:       #e63946;
+        --ed-danger-soft:  #fdeaea;
+        --ed-purple:       #7b2d8b;
+        --ed-purple-soft:  #f3eaf6;
+        --ed-dark:         #1a1d2e;
+        --ed-surface:      #ffffff;
+        --ed-surface-2:    #f7f8fc;
+        --ed-border:       #e8eaf0;
+        --ed-text:         #1a1d2e;
+        --ed-text-muted:   #6b7280;
+        --ed-radius:       14px;
+        --ed-radius-sm:    8px;
+        --ed-shadow:       0 2px 12px rgba(67,97,238,.08);
+        --ed-shadow-md:    0 8px 32px rgba(67,97,238,.12);
+        --ed-font:         'Cairo', 'Segoe UI', sans-serif;
+        --ed-ease:         cubic-bezier(.4,0,.2,1);
+    }
+
+    .ed-page { direction: rtl; font-family: var(--ed-font); color: var(--ed-text); }
+
+    /* ── Hero ─────────────────────────────────────── */
+    .ed-hero {
+        background: linear-gradient(135deg, var(--ed-primary) 0%, #6b8ef5 100%);
+        border-radius: var(--ed-radius);
+        padding: 28px 32px;
+        margin-bottom: 28px;
+        position: relative;
+        overflow: hidden;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+    }
+    .ed-hero::before {
+        content: '';
+        position: absolute;
+        inset-inline-start: -60px; top: -60px;
+        width: 220px; height: 220px;
+        border-radius: 50%;
+        background: rgba(255,255,255,.07);
+        pointer-events: none;
+    }
+    .ed-hero::after {
+        content: '';
+        position: absolute;
+        inset-inline-start: 40px; bottom: -80px;
+        width: 160px; height: 160px;
+        border-radius: 50%;
+        background: rgba(255,255,255,.05);
+        pointer-events: none;
+    }
+    .ed-hero-content { position: relative; z-index: 1; flex: 1; min-width: 0; }
+    .ed-hero-badge {
+        display: inline-flex; align-items: center; gap: 6px;
+        background: rgba(255,255,255,.2);
+        border: 1px solid rgba(255,255,255,.3);
+        border-radius: 20px;
+        padding: 4px 14px;
+        font-size: .78rem; font-weight: 600;
+        margin-bottom: 10px;
+    }
+    .ed-hero-title {
+        font-size: 1.6rem; font-weight: 800;
+        margin: 0 0 8px; line-height: 1.3;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .ed-hero-meta {
+        font-size: .88rem; opacity: .85;
+        display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    }
+    .ed-hero-meta span { display: flex; align-items: center; gap: 5px; }
+    .ed-hero-actions {
+        display: flex; flex-direction: column; gap: 10px;
+        flex-shrink: 0; position: relative; z-index: 1;
+    }
+    @@media (max-width: 600px) {
+        .ed-hero { flex-direction: column; align-items: flex-start; }
+        .ed-hero-actions { flex-direction: row; }
+        .ed-hero-title { white-space: normal; }
+    }
+
+    /* ── Stats Grid ──────────────────────────────── */
+    .ed-stats {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 16px;
+        margin-bottom: 28px;
+    }
+    @@media (max-width: 900px) { .ed-stats { grid-template-columns: repeat(3,1fr); } }
+    @@media (max-width: 500px) { .ed-stats { grid-template-columns: repeat(2,1fr); } }
+
+    .ed-stat {
+        background: var(--ed-surface);
+        border: 1px solid var(--ed-border);
+        border-radius: var(--ed-radius);
+        padding: 20px 22px;
+        display: flex; align-items: center; gap: 16px;
+        box-shadow: var(--ed-shadow);
+        transition: transform .2s var(--ed-ease), box-shadow .2s var(--ed-ease);
+    }
+    .ed-stat:hover { transform: translateY(-3px); box-shadow: var(--ed-shadow-md); }
+    .ed-stat-icon {
+        width: 52px; height: 52px;
+        border-radius: 12px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.4rem; flex-shrink: 0;
+    }
+    .ed-stat-icon.blue   { background: var(--ed-primary-soft); color: var(--ed-primary); }
+    .ed-stat-icon.teal   { background: var(--ed-success-soft); color: var(--ed-success); }
+    .ed-stat-icon.orange { background: var(--ed-warning-soft); color: var(--ed-warning); }
+    .ed-stat-icon.red    { background: var(--ed-danger-soft);  color: var(--ed-danger);  }
+    .ed-stat-icon.purple { background: var(--ed-purple-soft);  color: var(--ed-purple);  }
+    .ed-stat-val { font-size: 1.7rem; font-weight: 800; line-height: 1; }
+    .ed-stat-lbl { font-size: .8rem;  color: var(--ed-text-muted); margin-top: 3px; }
+
+    /* ── Info Row ────────────────────────────────── */
+    .ed-info-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        margin-bottom: 28px;
+    }
+    @@media (max-width: 700px) { .ed-info-row { grid-template-columns: 1fr; } }
+
+    /* ── Card ────────────────────────────────────── */
+    .ed-card {
+        background: var(--ed-surface);
+        border: 1px solid var(--ed-border);
+        border-radius: var(--ed-radius);
+        box-shadow: var(--ed-shadow);
+        overflow: hidden;
+    }
+    .ed-card-head {
+        padding: 16px 22px;
+        border-bottom: 1px solid var(--ed-border);
+        display: flex; align-items: center; gap: 10px;
+        font-weight: 700; font-size: .95rem;
+    }
+    .ed-card-head .ed-head-icon {
+        width: 34px; height: 34px;
+        border-radius: 8px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1rem;
+    }
+    .ed-card-body { padding: 20px 22px; }
+
+    /* ── Info list ───────────────────────────────── */
+    .ed-info-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+    .ed-info-list li {
+        display: flex; align-items: flex-start;
+        justify-content: space-between; gap: 12px;
+        padding-bottom: 12px;
+        border-bottom: 1px dashed var(--ed-border);
+    }
+    .ed-info-list li:last-child { border-bottom: none; padding-bottom: 0; }
+    .ed-info-label { color: var(--ed-text-muted); font-size: .85rem; flex-shrink: 0; }
+    .ed-info-value { font-weight: 600; font-size: .9rem; text-align: start; }
+
+    /* ── Badges ──────────────────────────────────── */
+    .ed-badge {
+        display: inline-flex; align-items: center; gap: 5px;
+        padding: 4px 12px; border-radius: 20px;
+        font-size: .78rem; font-weight: 700;
+    }
+    .ed-badge.green  { background: var(--ed-success-soft); color: #1a8077; }
+    .ed-badge.yellow { background: var(--ed-warning-soft); color: #b05a00; }
+    .ed-badge.red    { background: var(--ed-danger-soft);  color: #b52a31; }
+    .ed-badge.grey   { background: #f0f0f5; color: #6b7280; }
+    .ed-badge.blue   { background: var(--ed-primary-soft); color: #2c46b8; }
+
+    /* ── Curriculum Pills ────────────────────────── */
+    .ed-pill-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .ed-pill {
+        display: inline-flex; align-items: center; gap: 6px;
+        background: #eef0fd; color: #3730a3;
+        border: 1px solid #c7d2fe;
+        border-radius: 22px; padding: 6px 13px;
+        font-size: .8rem; font-weight: 700;
+    }
+
+    /* ── Reference Code Box ──────────────────────── */
+    .ed-ref-box {
+        background: linear-gradient(135deg, #fff8f0 0%, #fef3eb 100%);
+        border: 2px dashed var(--ed-warning);
+        border-radius: var(--ed-radius-sm);
+        padding: 18px; text-align: center; margin-top: 12px;
+    }
+    .ed-ref-code {
+        font-size: 2rem; font-weight: 900; letter-spacing: 8px;
+        color: var(--ed-primary);
+        font-family: 'Courier New', monospace; direction: ltr;
+    }
+    .ed-ref-label { font-size: .78rem; color: var(--ed-text-muted); margin-top: 4px; }
+
+    /* ── Difficulty Filter ───────────────────────── */
+    .ed-filter-wrap {
+        display: flex; align-items: center;
+        justify-content: space-between; gap: 12px;
+        margin-bottom: 16px; flex-wrap: wrap;
+    }
+    .ed-section-heading {
+        font-size: 1.05rem; font-weight: 800;
+        display: flex; align-items: center; gap: 8px;
+    }
+    .ed-section-heading-icon {
+        width: 34px; height: 34px; border-radius: 8px;
+        background: var(--ed-primary-soft); color: var(--ed-primary);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1rem;
+    }
+    .ed-tabs {
+        display: flex; gap: 6px;
+        background: var(--ed-surface-2);
+        border: 1px solid var(--ed-border);
+        border-radius: 10px; padding: 4px;
+    }
+    .ed-tab {
+        padding: 6px 16px; border-radius: 7px;
+        font-size: .82rem; font-weight: 600;
+        cursor: pointer; transition: all .18s;
+        border: none; background: transparent;
+        color: var(--ed-text-muted); white-space: nowrap;
+        font-family: var(--ed-font);
+    }
+    .ed-tab.active {
+        background: var(--ed-primary); color: #fff;
+        box-shadow: 0 2px 8px rgba(67,97,238,.3);
+    }
+
+    /* ── Section Accordion ───────────────────────── */
+    .ed-section-block {
+        background: var(--ed-surface);
+        border: 1px solid var(--ed-border);
+        border-radius: var(--ed-radius);
+        margin-bottom: 14px; overflow: hidden;
+        box-shadow: var(--ed-shadow);
+    }
+    .ed-section-toggle {
+        display: flex; align-items: center;
+        justify-content: space-between;
+        padding: 16px 22px; cursor: pointer; user-select: none;
+        transition: background .15s; gap: 12px;
+    }
+    .ed-section-toggle:hover { background: var(--ed-surface-2); }
+    .ed-section-toggle-right { display: flex; align-items: center; gap: 12px; }
+    .ed-section-title { font-weight: 700; font-size: .95rem; }
+    .ed-chevron {
+        width: 28px; height: 28px; border-radius: 50%;
+        background: var(--ed-primary-soft); color: var(--ed-primary);
+        display: flex; align-items: center; justify-content: center;
+        font-size: .7rem;
+        transition: transform .25s var(--ed-ease); flex-shrink: 0;
+    }
+    .ed-section-block.open .ed-chevron { transform: rotate(180deg); }
+    .ed-section-body { display: none; border-top: 1px solid var(--ed-border); }
+    .ed-section-block.open .ed-section-body { display: block; }
+    .ed-section-block.diff-hidden { display: none !important; }
+
+    /* ── Questions Table ─────────────────────────── */
+    .ed-qtable { width: 100%; border-collapse: collapse; }
+    .ed-qtable thead { background: var(--ed-surface-2); }
+    .ed-qtable th {
+        padding: 11px 14px; font-size: .8rem; font-weight: 700;
+        color: var(--ed-text-muted); text-align: center;
+        border-bottom: 1px solid var(--ed-border); white-space: nowrap;
+    }
+    .ed-qtable th:first-child { width: 50px; }
+    .ed-qtable th.text-start { text-align: right; }
+    .ed-qtable td {
+        padding: 12px 14px; font-size: .87rem;
+        border-bottom: 1px solid #f0f2f8;
+        vertical-align: middle; text-align: center;
+    }
+    .ed-qtable td.text-start { text-align: right; }
+    .ed-qtable tbody tr:last-child td { border-bottom: none; }
+    .ed-qtable tbody tr:hover { background: #fafbff; }
+    .ed-q-num {
+        width: 28px; height: 28px;
+        background: var(--ed-primary-soft); color: var(--ed-primary);
+        border-radius: 6px; display: inline-flex;
+        align-items: center; justify-content: center;
+        font-weight: 700; font-size: .8rem; margin: auto;
+    }
+    .ed-lesson-chip {
+        display: inline-flex; align-items: center; gap: 4px;
+        background: var(--ed-surface-2); border: 1px solid var(--ed-border);
+        border-radius: 6px; padding: 3px 10px;
+        font-size: .78rem; color: var(--ed-text-muted);
+    }
+    .ed-q-title-wrap {
+        display: flex; align-items: center; gap: 8px;
+        text-align: right;
+    }
+    .ed-q-text {
+        font-weight: 600; color: var(--ed-text);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        max-width: 20ch;
+    }
+
+    /* ── Action Buttons ──────────────────────────── */
+    .ed-btn {
+        display: inline-flex; align-items: center; gap: 7px;
+        padding: 9px 18px; border-radius: 9px;
+        font-size: .85rem; font-weight: 600; font-family: var(--ed-font);
+        cursor: pointer; border: none;
+        transition: all .18s var(--ed-ease);
+        text-decoration: none; white-space: nowrap;
+    }
+    .ed-btn-primary {
+        background: var(--ed-primary); color: #fff;
+        box-shadow: 0 3px 10px rgba(67,97,238,.3);
+    }
+    .ed-btn-primary:hover {
+        background: #3451d1; box-shadow: 0 5px 18px rgba(67,97,238,.4);
+        transform: translateY(-1px); color: #fff; text-decoration: none;
+    }
+    .ed-btn-success {
+        background: #16a34a; color: #fff;
+        box-shadow: 0 3px 10px rgba(22,163,74,.25);
+    }
+    .ed-btn-success:hover {
+        background: #15803d; color: #fff; text-decoration: none;
+        box-shadow: 0 5px 18px rgba(22,163,74,.3); transform: translateY(-1px);
+    }
+    .ed-btn-ghost {
+        background: var(--ed-surface-2); color: var(--ed-text-muted);
+        border: 1px solid var(--ed-border);
+    }
+    .ed-btn-ghost:hover {
+        background: var(--ed-primary-soft); color: var(--ed-primary);
+        border-color: var(--ed-primary); text-decoration: none;
+    }
+    .ed-action-icon {
+        width: 32px; height: 32px; border-radius: 7px;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: .85rem; cursor: pointer; border: 1px solid var(--ed-border);
+        background: var(--ed-surface-2); color: var(--ed-text-muted);
+        transition: all .16s; text-decoration: none;
+    }
+    .ed-action-icon:hover { transform: translateY(-1px); text-decoration: none; }
+    .ed-action-icon.preview:hover { background: var(--ed-primary-soft); color: var(--ed-primary); border-color: var(--ed-primary); }
+    .ed-action-icon.replace:hover { background: #eff6ff; color: #1d4ed8; border-color: #93c5fd; }
+    .ed-action-icon.del:hover     { background: var(--ed-danger-soft); color: var(--ed-danger); border-color: var(--ed-danger); }
+    .ed-action-group { display: flex; gap: 6px; justify-content: center; }
+
+    /* ── Send Panel ──────────────────────────────── */
+    .ed-send-panel {
+        background: var(--ed-surface);
+        border: 1px solid var(--ed-border);
+        border-radius: var(--ed-radius);
+        padding: 22px; text-align: center;
+        box-shadow: var(--ed-shadow);
+        margin-top: 24px;
+    }
+
+    /* ── Alerts ──────────────────────────────────── */
+    .ed-alert {
+        padding: 13px 18px; border-radius: var(--ed-radius-sm);
+        font-size: .88rem; font-weight: 600;
+        display: flex; align-items: center; gap: 10px;
+        margin-bottom: 20px;
+    }
+    .ed-alert.success { background: var(--ed-success-soft); color: #1a8077; border-right: 4px solid var(--ed-success); }
+    .ed-alert.danger  { background: var(--ed-danger-soft);  color: #b52a31; border-right: 4px solid var(--ed-danger); }
+
+    /* ── Empty ───────────────────────────────────── */
+    .ed-empty { text-align: center; padding: 40px 20px; color: var(--ed-text-muted); }
+    .ed-empty-icon { font-size: 2.5rem; margin-bottom: 10px; opacity: .5; }
+    .ed-empty-text { font-size: .9rem; }
+
+    /* ── Footer Bar ──────────────────────────────── */
+    .ed-footer-bar {
+        display: flex; align-items: center; gap: 10px;
+        margin-top: 32px; padding-top: 20px;
+        border-top: 1px solid var(--ed-border);
+    }
+
+    /* ── Modal ───────────────────────────────────── */
+    .ed-modal .modal-content {
+        border-radius: var(--ed-radius);
+        border: 1px solid var(--ed-border); overflow: hidden;
+        box-shadow: 0 24px 70px rgba(15,23,42,.2);
+    }
+    .ed-modal .modal-header {
+        background: #111827; border-bottom: 1px solid #243041; padding: 16px 22px;
+    }
+    .ed-modal .modal-title { font-size: .95rem; font-weight: 800; color: #fff; }
+    .ed-modal .modal-body  { padding: 0 !important; background: #f8fafc !important; min-height: 260px; }
+    .ed-modal .btn-close   { filter: invert(1) brightness(1.7); opacity: 1; }
+    #edPreviewBody { background: #f8fafc !important; color: #0f172a !important; font-size: 15px !important; font-weight: 600 !important; line-height: 1.9 !important; padding: 22px !important; }
+    #edPreviewBody > * { color: #0f172a !important; }
+
+    /* ── Dark mode ───────────────────────────────── */
+    @@media (prefers-color-scheme: dark) {
+        :root {
+            --ed-surface:    #1e2235;
+            --ed-surface-2:  #252a40;
+            --ed-border:     #2e3452;
+            --ed-text:       #e0e3ef;
+            --ed-text-muted: #8b92b0;
+        }
+    }
+</style>
+
+<div class="ed-page">
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="ed-alert success">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+            @TempData["Success"]
+        </div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="ed-alert danger">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            @TempData["Error"]
+        </div>
+    }
+
+    <!-- ── Hero ─────────────────────────────────── -->
+    <div class="ed-hero">
+        <div class="ed-hero-content">
+            <div class="ed-hero-badge">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+                اختبار دفعة
+            </div>
+            <h1 class="ed-hero-title">@Model.Title</h1>
+            <div class="ed-hero-meta">
+                @if (!string.IsNullOrEmpty(Model.BatchName) && Model.BatchName != "-")
+                {
+                    <span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+                        @Model.BatchName
+                    </span>
+                }
+                <span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    @Model.CreatedAt.ToString("yyyy/MM/dd")
+                </span>
+                <span>
+                    @if (Model.IsOnline)
+                    {
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+                        <text>أونلاين</text>
+                    }
+                    else
+                    {
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+                        <text>حضوري داخل المعمل</text>
+                    }
+                </span>
+                @if (Model.IsSentToStudents)
+                {
+                    <span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+                        تم الإرسال للطلاب
+                    </span>
+                }
+            </div>
+        </div>
+        <div class="ed-hero-actions">
+            <a asp-action="Index" class="ed-btn ed-btn-ghost" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+                عودة
+            </a>
+            @if (!Model.IsSentToStudents)
+            {
+                <button type="button" class="ed-btn ed-btn-success" onclick="confirmSend(@Model.AssignmentId)">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                    إرسال للطلاب
+                </button>
+            }
+        </div>
+    </div>
+
+    <!-- ── Stats ────────────────────────────────── -->
+    <div class="ed-stats">
+        <div class="ed-stat">
+            <div class="ed-stat-icon blue">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+            </div>
+            <div>
+                <div class="ed-stat-val">@totalQ</div>
+                <div class="ed-stat-lbl">إجمالي الأسئلة</div>
+            </div>
+        </div>
+        <div class="ed-stat">
+            <div class="ed-stat-icon teal">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+            <div>
+                <div class="ed-stat-val">@Model.DurationMinutes</div>
+                <div class="ed-stat-lbl">المدة (دقيقة)</div>
+            </div>
+        </div>
+        <div class="ed-stat">
+            <div class="ed-stat-icon orange">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+            </div>
+            <div>
+                <div class="ed-stat-val">@Model.StudentCount</div>
+                <div class="ed-stat-lbl">طلاب الدفعة</div>
+            </div>
+        </div>
+        <div class="ed-stat">
+            <div class="ed-stat-icon purple">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+            </div>
+            <div>
+                <div class="ed-stat-val">@sectionsCount</div>
+                <div class="ed-stat-lbl">محاور</div>
+            </div>
+        </div>
+        <div class="ed-stat">
+            <div class="ed-stat-icon red">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+            </div>
+            <div>
+                <div class="ed-stat-val">@(curriculumsCount > 0 ? curriculumsCount : 1)</div>
+                <div class="ed-stat-lbl">منهج</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Info Cards ────────────────────────────── -->
+    <div class="ed-info-row">
+
+        <!-- معلومات الاختبار -->
+        <div class="ed-card">
+            <div class="ed-card-head">
+                <div class="ed-head-icon" style="background:var(--ed-primary-soft);color:var(--ed-primary);">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                </div>
+                معلومات الاختبار
+            </div>
+            <div class="ed-card-body">
+                <ul class="ed-info-list">
+                    <li>
+                        <span class="ed-info-label">الدفعة</span>
+                        <span class="ed-info-value">
+                            <span class="ed-badge blue">
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+                                @Model.BatchName
+                            </span>
+                        </span>
+                    </li>
+                    @if (!string.IsNullOrWhiteSpace(Model.CurriculumTitle) && Model.CurriculumTitle != "-")
+                    {
+                        <li>
+                            <span class="ed-info-label">المنهج</span>
+                            <span class="ed-info-value">@Model.CurriculumTitle</span>
+                        </li>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(Model.SectionTitle) && Model.SectionTitle != "-")
+                    {
+                        <li>
+                            <span class="ed-info-label">المحور</span>
+                            <span class="ed-info-value">@Model.SectionTitle</span>
+                        </li>
+                    }
+                    <li>
+                        <span class="ed-info-label">تاريخ الإنشاء</span>
+                        <span class="ed-info-value">@Model.CreatedAt.ToString("yyyy/MM/dd — HH:mm")</span>
+                    </li>
+                    @if (Model.ScheduledDate.HasValue)
+                    {
+                        <li>
+                            <span class="ed-info-label">موعد الاختبار</span>
+                            <span class="ed-info-value">@Model.ScheduledDate.Value.ToString("yyyy/MM/dd — HH:mm")</span>
+                        </li>
+                    }
+                    <li>
+                        <span class="ed-info-label">حالة الإرسال</span>
+                        <span class="ed-info-value">
+                            @if (Model.IsSentToStudents)
+                            {
+                                <span class="ed-badge green">
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
+                                    تم الإرسال
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="ed-badge grey">
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                    لم يُرسل بعد
+                                </span>
+                            }
+                        </span>
+                    </li>
+                </ul>
+
+                @if (Model.Curriculums != null && Model.Curriculums.Any())
+                {
+                    <div class="ed-pill-list">
+                        @foreach (var c in Model.Curriculums)
+                        {
+                            <span class="ed-pill">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+                                @c.CurriculumTitle — @c.QuestionCount سؤال
+                            </span>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- إعدادات الاختبار -->
+        <div class="ed-card">
+            <div class="ed-card-head">
+                <div class="ed-head-icon" style="background:var(--ed-success-soft);color:var(--ed-success);">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/></svg>
+                </div>
+                إعدادات الاختبار
+            </div>
+            <div class="ed-card-body">
+                <ul class="ed-info-list">
+                    <li>
+                        <span class="ed-info-label">إجمالي الأسئلة</span>
+                        <span class="ed-info-value">@totalQ سؤال</span>
+                    </li>
+                    <li>
+                        <span class="ed-info-label">مدة الاختبار</span>
+                        <span class="ed-info-value">@Model.DurationMinutes دقيقة</span>
+                    </li>
+                    <li>
+                        <span class="ed-info-label">طريقة التقديم</span>
+                        <span class="ed-info-value">
+                            @if (Model.IsOnline)
+                            {
+                                <span class="ed-badge green">
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+                                    أونلاين
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="ed-badge yellow">
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+                                    حضوري داخل المعمل
+                                </span>
+                            }
+                        </span>
+                    </li>
+                    <li>
+                        <span class="ed-info-label">حضور إلزامي</span>
+                        <span class="ed-info-value">
+                            @if (Model.RequireAttendanceBeforeExam)
+                            { <span class="ed-badge yellow">مطلوب</span> }
+                            else
+                            { <span class="ed-badge grey">غير مطلوب</span> }
+                        </span>
+                    </li>
+                    <li>
+                        <span class="ed-info-label">يدوي / تلقائي</span>
+                        <span class="ed-info-value" style="display:flex;gap:6px;">
+                            <span class="ed-badge blue">@Model.ManualCount يدوي</span>
+                            <span class="ed-badge grey">@Model.AutoCount تلقائي</span>
+                        </span>
+                    </li>
+                </ul>
+
+                @if (!Model.IsOnline && !string.IsNullOrEmpty(Model.ReferenceCode))
+                {
+                    <div class="ed-ref-box">
+                        <div style="font-size:.8rem;font-weight:700;color:var(--ed-text-muted);margin-bottom:8px;">
+                            الكود المرجعي لفتح الاختبار
+                        </div>
+                        <div class="ed-ref-code">@Model.ReferenceCode</div>
+                        <div class="ed-ref-label">يُعطى هذا الكود للطلاب داخل المعمل فقط</div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Questions Section ─────────────────────── -->
+    <div style="margin-bottom:28px;">
+
+        <!-- Heading + Difficulty Tabs -->
+        <div class="ed-filter-wrap">
+            <div class="ed-section-heading">
+                <div class="ed-section-heading-icon">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+                </div>
+                أسئلة الاختبار
+                <span class="ed-badge blue" id="ed-vis-count">@totalQ سؤال</span>
+            </div>
+            <div class="ed-tabs">
+                <button class="ed-tab active" onclick="edFilter('all',this)">
+                    الكل
+                    <span style="background:rgba(255,255,255,.25);padding:1px 7px;border-radius:10px;font-size:.75rem;margin-right:3px;">@totalQ</span>
+                </button>
+                <button class="ed-tab" onclick="edFilter('easy',this)">
+                    سهل
+                    <span style="margin-right:3px;font-size:.75rem;opacity:.75;">@easyCount</span>
+                </button>
+                <button class="ed-tab" onclick="edFilter('medium',this)">
+                    متوسط
+                    <span style="margin-right:3px;font-size:.75rem;opacity:.75;">@mediumCount</span>
+                </button>
+                <button class="ed-tab" onclick="edFilter('hard',this)">
+                    صعب
+                    <span style="margin-right:3px;font-size:.75rem;opacity:.75;">@hardCount</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- No results -->
+        <div id="ed-no-results" style="display:none;">
+            <div class="ed-card" style="padding:30px;text-align:center;">
+                <span style="color:var(--ed-text-muted);font-size:.9rem;">لا توجد أسئلة بمستوى الصعوبة المحدد.</span>
+            </div>
+        </div>
+
+        <!-- Sections -->
+        @if (Model.Sections != null && Model.Sections.Any())
+        {
+            int si = 0;
+            foreach (var sec in Model.Sections)
+            {
+                si++;
+                string openCls = si == 1 ? "open" : "";
+                <div class="ed-section-block @openCls" id="edsec-@sec.SectionId" data-section-block>
+                    <div class="ed-section-toggle" onclick="edToggle('edsec-@sec.SectionId')">
+                        <div class="ed-section-toggle-right">
+                            <div class="ed-q-num" style="width:32px;height:32px;font-size:.88rem;">@si</div>
+                            <span class="ed-section-title">@sec.SectionTitle</span>
+                            <span class="ed-badge blue" data-section-q-count="@sec.Questions.Count">@sec.Questions.Count سؤال</span>
+                        </div>
+                        <div class="ed-chevron">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
+                        </div>
+                    </div>
+                    <div class="ed-section-body">
+                        <table class="ed-qtable">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th class="text-start" style="min-width:340px;">نص السؤال</th>
+                                    <th style="min-width:160px;">الدرس</th>
+                                    <th style="width:110px;">الصعوبة</th>
+                                    <th style="width:120px;">الإجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var q in sec.Questions)
+                                {
+                                    string dk  = DiffKey(q.DifficultyLevel);
+                                    string dlb = DiffLabel(q.DifficultyLevel);
+                                    string dbc = DiffBadge(q.DifficultyLevel);
+                                    <tr data-question-row data-diff="@dk">
+                                        <td><div class="ed-q-num">@q.Order</div></td>
+                                        <td class="text-start">
+                                            <div class="ed-q-title-wrap">
+                                                <button type="button" class="ed-action-icon preview flex-shrink-0"
+                                                        onclick="edPreview('@q.QuestionId')" title="معاينة">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                                </button>
+                                                <div class="ed-q-text">@Html.Raw(NumberHelper.ToIndicNumbersSafe(q.Title))</div>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            @if (!string.IsNullOrWhiteSpace(q.LessonTitle))
+                                            {
+                                                <span class="ed-lesson-chip">
+                                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+                                                    @q.LessonTitle
+                                                </span>
+                                            }
+                                            else { <span style="color:#ccc;">—</span> }
+                                        </td>
+                                        <td><span class="ed-badge @dbc">@dlb</span></td>
+                                        <td>
+                                            <div class="ed-action-group">
+                                                <button type="button" class="ed-action-icon preview"
+                                                        onclick="edPreview('@q.QuestionId')" title="معاينة">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                                </button>
+                                                <a class="ed-action-icon replace"
+                                                   asp-action="ReplaceQuestionPage"
+                                                   asp-route-oldId="@q.QuestionId"
+                                                   asp-route-examAssignmentId="@Model.AssignmentId"
+                                                   title="استبدال">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+                                                </a>
+                                                <button type="button" class="ed-action-icon del"
+                                                        onclick="edDeleteQ('@q.QuestionId','@Model.AssignmentId')" title="حذف">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+        }
+        else
+        {
+            <div class="ed-card">
+                <div class="ed-empty">
+                    <div class="ed-empty-icon">📭</div>
+                    <div class="ed-empty-text">لا توجد أسئلة مرتبطة بهذا الاختبار.</div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- ── Send Panel ────────────────────────────── -->
+    @if (!Model.IsSentToStudents)
+    {
+        <div class="ed-send-panel">
+            <button type="button" class="ed-btn ed-btn-success" style="padding:12px 32px;font-size:.95rem;"
+                    onclick="confirmSend(@Model.AssignmentId)">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                إرسال الاختبار لجميع طلاب الدفعة
+            </button>
+        </div>
+    }
+
+    <!-- ── Footer Bar ─────────────────────────────── -->
+    <div class="ed-footer-bar">
+        <a asp-action="Index" class="ed-btn ed-btn-ghost">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+            عودة إلى قائمة الاختبارات
+        </a>
+    </div>
+
+</div>
+
+<!-- ── Question Preview Modal ──────────────────── -->
+<div class="modal fade ed-modal" id="edPreviewModal" tabindex="-1" dir="rtl">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content text-end">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" style="margin-left:6px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    معاينة السؤال
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="edPreviewBody">
+                <div class="ed-empty">
+                    <div class="ed-empty-icon" style="font-size:2rem;">⏳</div>
+                    <div>جارٍ التحميل...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+    /* ── Accordion ─────────────────────────────── */
+    function edToggle(id) {
+        document.getElementById(id)?.classList.toggle('open');
+    }
+
+    /* ── Difficulty Filter ──────────────────────── */
+    function edFilter(filter, btn) {
+        document.querySelectorAll('.ed-tab').forEach(t => t.classList.remove('active'));
+        btn.classList.add('active');
+
+        const rows    = document.querySelectorAll('[data-question-row]');
+        const blocks  = document.querySelectorAll('[data-section-block]');
+        const noRes   = document.getElementById('ed-no-results');
+        const counter = document.getElementById('ed-vis-count');
+        let visible   = 0;
+
+        rows.forEach(r => {
+            const show = filter === 'all' || r.dataset.diff === filter;
+            r.style.display = show ? '' : 'none';
+            if (show) visible++;
+        });
+
+        blocks.forEach(block => {
+            const shown = block.querySelectorAll('[data-question-row]:not([style*="display: none"])').length;
+            block.classList.toggle('diff-hidden', shown === 0);
+            const badge = block.querySelector('[data-section-q-count]');
+            if (badge) badge.textContent = shown + ' سؤال';
+        });
+
+        if (counter) counter.textContent = visible + ' سؤال';
+        if (noRes)   noRes.style.display  = visible === 0 ? 'block' : 'none';
+    }
+
+    /* ── Question Preview ───────────────────────── */
+    function edPreview(id) {
+        const body = document.getElementById('edPreviewBody');
+        body.innerHTML = '<div class="ed-empty"><div class="ed-empty-icon" style="font-size:2rem;">⏳</div><div>جارٍ التحميل...</div></div>';
+        new bootstrap.Modal(document.getElementById('edPreviewModal')).show();
+        fetch(`/Admin/ExamAssignments/PreviewQuestion?id=${id}`)
+            .then(r => { if (!r.ok) throw new Error(); return r.text(); })
+            .then(html => { body.innerHTML = html; })
+            .catch(() => {
+                body.innerHTML = '<div class="ed-empty"><div style="color:#b52a31;font-weight:800;">تعذر تحميل معاينة السؤال</div></div>';
+            });
+    }
+
+    /* ── Delete Question ────────────────────────── */
+    function edDeleteQ(qid, assignmentId) {
+        Swal.fire({
+            title: 'حذف السؤال',
+            text: 'سيتم حذف السؤال من هذا الاختبار فقط.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'نعم، احذف',
+            cancelButtonText: 'إلغاء',
+            confirmButtonColor: '#e63946',
+            cancelButtonColor: '#6b7280',
+            customClass: { popup: 'text-end' }
+        }).then(res => {
+            if (!res.isConfirmed) return;
+            fetch(`/Admin/ExamAssignments/DeleteQuestion?questionId=${qid}&assignmentId=${assignmentId}`)
+                .then(r => { if (!r.ok) throw new Error(); location.reload(); })
+                .catch(() => Swal.fire('خطأ', 'فشل حذف السؤال.', 'error'));
+        });
+    }
+
+    /* ── Send to Students ───────────────────────── */
+    function confirmSend(id) {
+        Swal.fire({
+            title: 'إرسال الاختبار للطلاب؟',
+            html: 'سيتم إرساله لجميع طلاب الدفعة.<br><strong>لا يمكن التراجع بعد الإرسال.</strong>',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'إرسال',
+            cancelButtonText: 'إلغاء',
+            confirmButtonColor: '#16a34a',
+            cancelButtonColor: '#6b7280',
+            customClass: { popup: 'text-end' }
+        }).then(res => {
+            if (res.isConfirmed)
+                window.location.href = `/Admin/ExamAssignments/SendToStudents?assignmentId=${id}`;
+        });
+    }
+</script>
+}

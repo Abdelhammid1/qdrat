@@ -1,0 +1,261 @@
+@model List<QdratNew.ViewModels.Reports.AdminSectionQuestionVm>
+@using QdratNew.Helpers
+
+@{
+    ViewData["Title"] = "تحليل أسئلة المؤشر";
+    int totalQ = Model.Count;
+}
+
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+
+<div class="questions-container" dir="rtl">
+    <div class="page-header">
+        <h2>تحليل أسئلة المؤشر</h2>
+        <p>@Model.First().LessonTitle - @Model.First().SectionTitle</p>
+        <span class="count">عدد الأسئلة: @totalQ</span>
+    </div>
+
+    <div class="questions-grid">
+        @foreach (var item in Model.Select((q, i) => new { q, i }))
+        {
+            var q = item.q;
+            var index = item.i + 1;
+            Func<string, string> convert = s => q.IsQuantitative ? NumberHelper.ToIndicNumbersSafe(s) : s;
+
+            <div class="question-card">
+                <div class="question-header">
+                    <div class="question-number">
+                        سؤال @NumberHelper.ToIndicNumbersSafe(index.ToString())
+                    </div>
+
+                    @if (q.IsCorrect)
+                    {
+                        <span class="badge correct"><i class="fa fa-check"></i> إجابة صحيحة</span>
+                    }
+                    else
+                    {
+                        <span class="badge wrong"><i class="fa fa-times"></i> إجابة خاطئة</span>
+                    }
+                </div>
+
+                <div class="question-title">
+                    @Html.Raw(convert(q.QuestionTitle))
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(q.VerbalPassageContent))
+                {
+                    <div class="passage">
+                        <div class="passage-title">القطعة المرتبطة</div>
+                        <div class="passage-content">@Html.Raw(convert(q.VerbalPassageContent))</div>
+                    </div>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(q.ImageUrl))
+                {
+                    <div class="question-image">
+                        <img src="@Url.Content(q.ImageUrl)" />
+                    </div>
+                }
+
+                @if (q.DisplayType == QdratNew.Enums.QuestionDisplayType.ComparisonText)
+                {
+                    <div class="comparison">
+                        <div class="value">
+                            <span>القيمة الأولى</span>
+                            @Html.Raw(convert(q.ComparisonValue1))
+                        </div>
+                        <div class="value">
+                            <span>القيمة الثانية</span>
+                            @Html.Raw(convert(q.ComparisonValue2))
+                        </div>
+                    </div>
+                }
+
+                <div class="options">
+                    @foreach (var opt in q.Options ?? new List<QdratNew.ViewModels.Homework.QuestionOptionVm>())
+                    {
+                        var css = "option";
+
+                        if (opt.IsCorrect)
+                            css += " correct";
+                        else if (opt.IsSelectedByStudent)
+                            css += " selected";
+
+                        <div class="@css">
+                            @if (!string.IsNullOrWhiteSpace(opt.ImageUrl))
+                            {
+                                <img src="@Url.Content(opt.ImageUrl)" />
+                            }
+                            else
+                            {
+                                <span>@Html.Raw(convert(opt.Text))</span>
+                            }
+
+                            @if (opt.IsCorrect)
+                            {
+                                <i class="fa fa-check icon"></i>
+                            }
+
+                            @if (opt.IsSelectedByStudent && !opt.IsCorrect)
+                            {
+                                <i class="fa fa-times icon"></i>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="answer-summary">
+                    <div>
+                        <strong>إجابة الطالب:</strong>
+                        @(string.IsNullOrWhiteSpace(q.StudentAnswer) ? "متروك" : q.StudentAnswer)
+                    </div>
+                    <div>
+                        <strong>الإجابة الصحيحة:</strong>
+                        @q.CorrectAnswer
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+        background: #f7f9fb;
+        font-family: 'Cairo', sans-serif;
+        direction: rtl;
+        overflow-x: hidden;
+    }
+
+    .questions-container {
+        max-width: 1200px;
+        margin: auto;
+        padding: 0 15px;
+    }
+
+    .page-header {
+        text-align: center;
+        margin-bottom: 32px;
+    }
+
+    .page-header h2 {
+        color: #339999;
+        font-weight: 800;
+    }
+
+    .count {
+        background: #eef7f7;
+        color: #176669;
+        border-radius: 20px;
+        padding: 6px 14px;
+        font-weight: 700;
+        display: inline-block;
+    }
+
+    .questions-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 18px;
+    }
+
+    .question-card {
+        background: #fff;
+        border: 1px solid #e4ecef;
+        border-radius: 12px;
+        padding: 18px;
+        box-shadow: 0 6px 18px rgba(0,0,0,.06);
+    }
+
+    .question-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+
+    .question-number {
+        font-weight: 800;
+        color: #176669;
+    }
+
+    .badge {
+        border-radius: 20px;
+        padding: 6px 10px;
+        color: #fff;
+    }
+
+    .badge.correct {
+        background: #198754;
+    }
+
+    .badge.wrong {
+        background: #dc3545;
+    }
+
+    .question-title {
+        font-weight: 700;
+        line-height: 1.8;
+        margin-bottom: 14px;
+    }
+
+    .passage,
+    .comparison,
+    .answer-summary {
+        background: #f8fbfb;
+        border: 1px solid #edf2f2;
+        border-radius: 10px;
+        padding: 12px;
+        margin-bottom: 12px;
+    }
+
+    .passage-title,
+    .value span {
+        color: #666;
+        font-size: 13px;
+        display: block;
+        margin-bottom: 6px;
+    }
+
+    .question-image img,
+    .option img {
+        max-width: 100%;
+        max-height: 180px;
+        object-fit: contain;
+    }
+
+    .options {
+        display: grid;
+        gap: 8px;
+        margin-bottom: 12px;
+    }
+
+    .option {
+        border: 1px solid #e4ecef;
+        border-radius: 10px;
+        padding: 10px 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        background: #fff;
+    }
+
+    .option.correct {
+        border-color: #198754;
+        background: #e8f7ee;
+    }
+
+    .option.selected {
+        border-color: #dc3545;
+        background: #fff0f0;
+    }
+
+    .icon {
+        flex: 0 0 auto;
+    }
+</style>

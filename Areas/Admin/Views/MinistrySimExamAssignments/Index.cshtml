@@ -1,0 +1,225 @@
+@model QdratNew.ViewModels.Exam.MinistrySimExamAssignmentsOverviewVm
+@using System.Linq
+@{
+    ViewData["Title"] = "إسنادات اختبار معمل القياس";
+    var activeTab = Context.Request.Query["tab"].ToString();
+    if (string.IsNullOrEmpty(activeTab)) activeTab = "batches";
+}
+
+<style>
+    .qdrat-page { direction: rtl; text-align: right; }
+
+    .qdrat-hero {
+        background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 48%, #2563eb 100%);
+        border-radius: 24px; padding: 28px; color: #fff; margin-bottom: 24px;
+        box-shadow: 0 18px 45px rgba(15, 23, 42, .18);
+    }
+
+    .msea-nav-tabs {
+        border: none;
+        gap: 8px;
+        margin-bottom: 20px;
+    }
+
+    .msea-nav-tabs .nav-link {
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        padding: 10px 18px;
+        font-weight: 700;
+        color: #475569;
+        background: #fff;
+    }
+
+    .msea-nav-tabs .nav-link.active {
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+        color: #fff;
+        border-color: transparent;
+    }
+
+    .msea-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 16px;
+    }
+
+    .msea-card {
+        background: #fff; border: 1px solid #e5e7eb; border-radius: 18px;
+        padding: 18px; box-shadow: 0 8px 20px rgba(15, 23, 42, .05);
+    }
+
+    .msea-card .msea-icon {
+        width: 44px; height: 44px; border-radius: 12px;
+        background: #eef2ff; color: #2563eb; display: flex; align-items: center; justify-content: center;
+        font-size: 1.2rem; margin-bottom: 10px;
+    }
+
+    .msea-badge {
+        display: inline-flex; align-items: center; gap: 4px;
+        border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 800;
+        background: #ecfdf5; color: #047857;
+    }
+
+    .msea-exam-chip {
+        display: inline-block; background: #f1f5f9; color: #334155; border-radius: 999px;
+        padding: 3px 10px; font-size: 12px; margin: 2px 3px 0 0;
+    }
+</style>
+
+<div class="container-fluid py-4 qdrat-page">
+
+    <div class="qdrat-hero">
+        <h2 class="mb-1"><i class="bi bi-people-fill ms-2"></i> إسنادات اختبار معمل القياس</h2>
+        <p class="mb-0" style="opacity:.9">تصفّح مَن أُسنِد له كل اختبار — حسب الدفعة، أو طلاب المعهد المُسنَد لهم فرديًا، أو الطلاب الضيوف.</p>
+    </div>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success">@TempData["Success"]</div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger">@TempData["Error"]</div>
+    }
+    @if (TempData["Warning"] != null)
+    {
+        <div class="alert alert-warning">@TempData["Warning"]</div>
+    }
+
+    <ul class="nav msea-nav-tabs" id="mseaTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link @(activeTab == "batches" ? "active" : "")" id="tab-batches-btn" data-bs-toggle="tab" data-bs-target="#tab-batches" type="button" role="tab">
+                <i class="bi bi-collection ms-1"></i> الدفعات (@Model.Batches.Count)
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link @(activeTab == "students" ? "active" : "")" id="tab-students-btn" data-bs-toggle="tab" data-bs-target="#tab-students" type="button" role="tab">
+                <i class="bi bi-person-check ms-1"></i> طلاب المعهد (إسناد فردي) (@Model.InstituteStudents.Count)
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link @(activeTab == "guests" ? "active" : "")" id="tab-guests-btn" data-bs-toggle="tab" data-bs-target="#tab-guests" type="button" role="tab">
+                <i class="bi bi-person-badge ms-1"></i> طلاب ضيوف / زائرين (@Model.Guests.Count)
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+
+        <!-- 📦 تاب الدفعات -->
+        <div class="tab-pane fade @(activeTab == "batches" ? "show active" : "")" id="tab-batches" role="tabpanel">
+            @if (!Model.Batches.Any())
+            {
+                <p class="text-muted">لا توجد دفعات تابعة لدورات بها اختبار محاكاة وزارة حتى الآن.</p>
+            }
+            else
+            {
+                <div class="msea-grid">
+                    @foreach (var batch in Model.Batches)
+                    {
+                        <div class="msea-card">
+                            <div class="msea-icon"><i class="bi bi-collection"></i></div>
+                            <div class="fw-bold fs-6 mb-1">@batch.Name</div>
+                            <div class="text-muted small mb-2">@batch.CourseName</div>
+                            <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+                                <span class="msea-badge"><i class="bi bi-people"></i> @batch.EnrolledStudentsCount طالب</span>
+                                <span class="msea-badge" style="background:#eff6ff;color:#1d4ed8;">
+                                    <i class="bi bi-journal-check"></i> @batch.AssignedExamsCount اختبار مُسنَد
+                                </span>
+                            </div>
+                            <a asp-action="BatchDetails" asp-route-batchId="@batch.BatchId" class="btn btn-outline-primary btn-sm w-100">
+                                <i class="bi bi-eye ms-1"></i> تفاصيل
+                            </a>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <!-- 🎓 تاب طلاب المعهد -->
+        <div class="tab-pane fade @(activeTab == "students" ? "show active" : "")" id="tab-students" role="tabpanel">
+            @if (!Model.InstituteStudents.Any())
+            {
+                <p class="text-muted">لا يوجد طلاب مُسنَد لهم اختبار محاكاة وزارة بشكل فردي حتى الآن.</p>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table align-middle">
+                        <thead>
+                            <tr>
+                                <th>الطالب</th>
+                                <th>الاختبارات المُسنَدة فرديًا</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var s in Model.InstituteStudents)
+                            {
+                                <tr>
+                                    <td class="fw-semibold">@s.FullName</td>
+                                    <td>
+                                        @foreach (var title in s.AssignedExamTitles)
+                                        {
+                                            <span class="msea-exam-chip">@title</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+
+        <!-- 🧑‍💻 تاب الضيوف -->
+        <div class="tab-pane fade @(activeTab == "guests" ? "show active" : "")" id="tab-guests" role="tabpanel">
+
+            <div class="msea-card mb-4" style="max-width:520px;">
+                <div class="fw-bold mb-2"><i class="bi bi-person-plus ms-1"></i> إضافة طالب ضيف جديد</div>
+                <form method="post" asp-action="CreateGuestStudent" class="d-flex flex-wrap gap-2">
+                    @Html.AntiForgeryToken()
+                    <input type="text" name="fullName" class="form-control" placeholder="الاسم الكامل" style="max-width:220px;" required />
+                    <input type="text" name="phoneNumber" class="form-control" placeholder="رقم الهاتف" style="max-width:180px;" />
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        <i class="bi bi-plus-lg ms-1"></i> إضافة
+                    </button>
+                </form>
+            </div>
+
+            @if (!Model.Guests.Any())
+            {
+                <p class="text-muted">لا يوجد طلاب ضيوف/زائرين مُضافين حتى الآن.</p>
+            }
+            else
+            {
+                <div class="msea-grid">
+                    @foreach (var guest in Model.Guests)
+                    {
+                        <div class="msea-card">
+                            <div class="msea-icon" style="background:#fdf4ff;color:#a21caf;"><i class="bi bi-person-badge"></i></div>
+                            <div class="fw-bold fs-6 mb-1">@guest.FullName</div>
+                            <div class="text-muted small mb-2">@(string.IsNullOrEmpty(guest.PhoneNumber) ? "—" : guest.PhoneNumber)</div>
+                            <div class="mb-3">
+                                @if (!guest.AssignedExamTitles.Any())
+                                {
+                                    <span class="text-muted small">لا توجد اختبارات مُسنَدة بعد</span>
+                                }
+                                else
+                                {
+                                    foreach (var title in guest.AssignedExamTitles)
+                                    {
+                                        <span class="msea-exam-chip">@title</span>
+                                    }
+                                }
+                            </div>
+                            <a asp-action="GuestDetails" asp-route-guestId="@guest.GuestId" class="btn btn-outline-primary btn-sm w-100">
+                                <i class="bi bi-eye ms-1"></i> تفاصيل
+                            </a>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+    </div>
+
+</div>

@@ -1,0 +1,81 @@
+@model QdratNew.ViewModels.Students.MinistrySimExamSolveVm
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+@{
+    ViewData["Title"] = "حل الأسئلة - اختبار معمل القياس";
+    Layout = "~/Views/Shared/_QuestionStudentLayout.cshtml";
+}
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger text-center fw-bold mx-3 mt-3">@TempData["ErrorMessage"]</div>
+}
+
+<div class="container-fluid mt-3 px-3 px-md-4">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h4 class="fw-bold m-0" style="color:#4f46e5;">📝 المرحلة @Model.StageNumber — اختبار معمل القياس</h4>
+        <div class="d-flex align-items-center gap-2">
+            <span id="mse-timer" class="mse-timer mse-timer--ok">--:--</span>
+            <form method="post" asp-action="FinishStage" onsubmit="return confirm('بمجرد إنهاء هذه المرحلة لن تتمكن من الرجوع إليها أو تعديل إجاباتك فيها مرة أخرى. هل أنت متأكد؟');">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="examId" value="@Model.MinistrySimExamId" />
+                <input type="hidden" name="stageNumber" value="@Model.StageNumber" />
+                <button type="submit" class="mse-finish-btn">إنهاء المرحلة</button>
+            </form>
+        </div>
+    </div>
+
+    @await Html.PartialAsync("_StageQuestionCard", Model)
+</div>
+
+<style>
+    .mse-timer{display:inline-flex;align-items:center;justify-content:center;min-width:88px;padding:.45rem 1rem;border-radius:50px;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:1.05rem;}
+    .mse-timer--ok{background:#eef2ff;color:#4f46e5;}
+    .mse-timer--warning{background:#fef3c7;color:#b45309;}
+    .mse-timer--danger{background:#fee2e2;color:#dc2626;animation:mse-pulse 1s infinite;}
+    @@keyframes mse-pulse{0%,100%{opacity:1;}50%{opacity:.55;}}
+    .mse-finish-btn{border:1.5px solid #e5e7eb;background:#fff;color:#4b5563;border-radius:50px;font-weight:700;font-size:.85rem;padding:.45rem 1.1rem;cursor:pointer;}
+    .mse-finish-btn:hover{border-color:#dc2626;color:#dc2626;}
+</style>
+
+<script>
+    (function () {
+        var remaining = parseInt('@Model.RemainingSeconds', 10) || 0;
+        var end = Date.now() + remaining * 1000;
+        var el = document.getElementById('mse-timer');
+        if (!el) return;
+
+        function render(diffSeconds) {
+            var m = Math.floor(diffSeconds / 60).toString().padStart(2, '0');
+            var s = Math.floor(diffSeconds % 60).toString().padStart(2, '0');
+            el.textContent = m + ':' + s;
+            el.classList.remove('mse-timer--ok', 'mse-timer--warning', 'mse-timer--danger');
+            if (diffSeconds <= 60) el.classList.add('mse-timer--danger');
+            else if (diffSeconds <= 300) el.classList.add('mse-timer--warning');
+            else el.classList.add('mse-timer--ok');
+        }
+
+        render(remaining);
+
+        var timer = setInterval(function () {
+            var diff = Math.floor((end - Date.now()) / 1000);
+            if (diff <= 0) {
+                clearInterval(timer);
+                render(0);
+                // الحسم النهائي على الخادم — إعادة تحميل الصفحة تجعل الخادم يكتشف انتهاء الوقت وينقل الطالب تلقائيًا
+                window.location.reload();
+                return;
+            }
+            render(diff);
+        }, 1000);
+    })();
+</script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        TranslationGuard.init({
+            attemptType: 6,
+            attemptEntityId: @Model.MinistrySimExamId,
+            antiForgeryToken: '@Antiforgery.GetAndStoreTokens(Context).RequestToken'
+        });
+    });
+</script>

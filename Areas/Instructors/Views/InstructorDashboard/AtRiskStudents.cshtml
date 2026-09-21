@@ -1,0 +1,88 @@
+﻿@model List<QdratNew.ViewModels.Instructor.AtRiskStudentViewModel>
+@{
+    ViewData["Title"] = "الطلاب المعرضون للخطر";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="container mt-4">
+    <h2 class="text-center mb-4 text-danger">⚠️ الطلاب المعرضون للخطر</h2>
+
+    @if (Model != null && Model.Any())
+    {
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover text-center align-middle">
+                <thead class="table-secondary">
+                    <tr>
+                        <th>⚠️</th>
+                        <th>اسم الطالب</th>
+                        <th>الدرجة</th>
+                        <th>الدفعة</th>
+                        <th>تفاصيل</th>
+                        <th>تنبيه</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var student in Model.OrderBy(s => s.Score))
+                    {
+                        var dangerClass = student.Score < 30 ? "table-danger"
+                        : student.Score < 50 ? "table-warning"
+                        : "";
+
+                        <tr class="@dangerClass">
+                            <td>⚠</td>
+                            <td class="fw-bold">@student.StudentName</td>
+                            <td><span class="fw-bold">@student.Score</span></td>
+                            <td>@student.BatchName</td>
+                            <td>
+                                <a href="/Instructors/Students/Details/@student.StudentId"
+                                   class="btn btn-outline-info btn-sm">
+                                    👁 عرض
+                                </a>
+                            </td>
+                            <td>
+                                <button class="btn btn-outline-danger btn-sm send-warning"
+                                        data-student-id="@student.StudentId">
+                                    📣 إرسال
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info text-center">
+            لا يوجد طلاب في حالة خطر حاليًا.
+        </div>
+    }
+
+    <div class="text-center mt-4">
+        <a href="@Url.Action("Index", "InstructorDashboard")" class="btn btn-outline-secondary">
+            🔙 العودة للوحة القيادة
+        </a>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.querySelectorAll(".send-warning").forEach(btn => {
+            btn.addEventListener("click", async () => {
+                const studentId = btn.dataset.studentId;
+                btn.innerText = "⏳ جاري الإرسال...";
+                btn.disabled = true;
+
+                try {
+                    const res = await fetch(`/Instructors/Notifications/SendStudentAlert/${studentId}`, {
+                        method: "POST"
+                    });
+                    const result = await res.text();
+                    btn.innerText = result.includes("✅") ? "✅ تم الإرسال" : "❌ فشل";
+                } catch {
+                    btn.innerText = "❌ خطأ";
+                }
+            });
+        });
+    </script>
+}

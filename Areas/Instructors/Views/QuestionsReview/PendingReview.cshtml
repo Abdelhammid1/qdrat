@@ -1,0 +1,211 @@
+﻿@{
+    ViewData["Title"] = "الأسئلة قيد المراجعة";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+@Html.AntiForgeryToken()
+
+<div class="container-fluid mt-4" dir="rtl">
+    <h2 class="page-title"><i class="fas fa-check-double me-2"></i> الأسئلة قيد المراجعة</h2>
+
+    <div class="row g-3 mb-3">
+        <input type="hidden" id="curriculumId" value="@Model.CurriculumId" />
+
+        <div class="col-md-3">
+            <input type="text" id="titleFilter" class="form-control" placeholder="بحث في عنوان السؤال">
+        </div>
+
+        <div class="col-md-3">
+            <select id="sectionFilter" class="form-select">
+                <option value="">اختر المحور</option>
+            </select>
+        </div>
+
+        <div class="col-md-3">
+            <select id="lessonFilter" class="form-select">
+                <option value="">اختر المؤشر</option>
+            </select>
+        </div>
+
+        <div class="col-md-2">
+            <button id="btnApplyFilters" class="btn btn-primary w-100">تصفية</button>
+        </div>
+    </div>
+
+    <table id="pendingReviewTable" class="table table-bordered table-hover text-center w-100">
+        <thead class="table-dark">
+            <tr>
+                <th>الرقم</th>
+                <th>السؤال</th>
+                <th>القسم</th>
+                <th>المحور</th>
+                <th>التاريخ</th>
+                <th>الاعتماد</th>
+                <th>تعديل</th>
+            </tr>
+        </thead>
+    </table>
+
+    <!-- Modal Preview -->
+    <div class="modal fade" id="questionPreviewModal" tabindex="-1" dir="rtl">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content text-end">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title">معاينة السؤال</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="questionPreviewModalBody"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        let table;
+
+        $(document).ready(function () {
+            const curriculumId = $('#curriculumId').val();
+
+            // تحميل المحاور تلقائيًا
+            if (curriculumId) {
+                loadSections(curriculumId);
+            }
+
+            // تحميل المؤشرات عند تغيير المحور
+            $('#sectionFilter').change(function () {
+                const sectionId = $(this).val();
+                loadLessons(sectionId);
+            });
+
+            // DataTable
+            table = $('#pendingReviewTable').DataTable({
+                processing: true,
+                serverSide: true,
+                ajax: {
+                    url: '/Instructors/QuestionsReview/LoadPendingReviewQuestionsData',
+                    type: 'POST',
+                    data: function (d) {
+                        d.curriculumId = $('#curriculumId').val();
+                        d.sectionId = $('#sectionFilter').val();
+                        d.lessonId = $('#lessonFilter').val();
+                        d.searchTitle = $('#titleFilter').val();
+                    }
+                },
+                columns: [
+                    { data: 'referenceNumber' },
+                            {
+            data: 'title',
+            render: function (data, type, row) {
+                const shortTitle = data.length > 15 ? data.substring(0, 15) + '...' : data;
+                return `
+                    <div class="d-flex justify-content-between align-items-center">
+                        <button class='btn btn-sm btn-qdrat me-2' onclick='showQuestionPreview("${row.id}")'>
+                            <i class='fas fa-eye'></i>
+                        </button>
+                        <span class="fw-bold flex-fill text-end">${shortTitle}</span>
+                    </div>`;
+            }
+        }
+        ,
+                    { data: 'curriculum' },
+                    { data: 'section' },
+                    { data: 'createdAt' },
+                    {
+                        data: 'id',
+                        render: function (id) {
+                            return `<button class="btn btn-sm btn-success" onclick="approveSingleQuestion('${id}')">
+                                        <i class="fas fa-check-circle"></i>
+                                    </button>`;
+                        }
+                    },
+                    {
+                        data: 'id',
+                        render: function (id) {
+                            return `<a href="/Instructors/QuestionsReview/Edit/${id}" class="btn btn-sm btn-warning">
+                                        <i class="fas fa-edit"></i>
+                                    </a>`;
+                        }
+                    }
+                ],
+                language: {
+                    url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json'
+                }
+            });
+
+            // زر التصفية
+            $('#btnApplyFilters').click(function () {
+                table.ajax.reload();
+            });
+        });
+
+        function loadSections(curriculumId) {
+            fetch(`/Instructors/QuestionsReview/GetSectionsByCurriculum?id=${curriculumId}`)
+                .then(res => res.json())
+                .then(sections => {
+                    const sectionSelect = $('#sectionFilter');
+                    sectionSelect.empty().append(`<option value="">اختر المحور</option>`);
+                    sections.forEach(s => {
+                        sectionSelect.append(`<option value="${s.id}">${s.title}</option>`);
+                    });
+                });
+        }
+
+        function loadLessons(sectionId) {
+            fetch(`/Instructors/QuestionsReview/GetLessonsBySection?id=${sectionId}`)
+                .then(res => res.json())
+                .then(lessons => {
+                    const lessonSelect = $('#lessonFilter');
+                    lessonSelect.empty().append(`<option value="">اختر المؤشر</option>`);
+                    lessons.forEach(l => {
+                        lessonSelect.append(`<option value="${l.id}">${l.title}</option>`);
+                    });
+                });
+        }
+
+        function showQuestionPreview(id) {
+            fetch(`/Instructors/QuestionsReview/Preview/${id}`)
+                .then(r => r.text())
+                .then(html => {
+                    $('#questionPreviewModalBody').html(html);
+                    new bootstrap.Modal(document.getElementById('questionPreviewModal')).show();
+                })
+                .catch(err => alert("خطأ في تحميل المعاينة"));
+        }
+
+        function approveSingleQuestion(id) {
+            const token = $('input[name="__RequestVerificationToken"]').val();
+
+            fetch('/Instructors/QuestionsReview/ApproveSingleQuestion', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'RequestVerificationToken': token
+                },
+                body: new URLSearchParams({
+                    selectedId: id,
+                    __RequestVerificationToken: token
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire({
+                        title: 'تم الاعتماد ✅',
+                        text: data.message,
+                        icon: 'success',
+                        confirmButtonText: 'حسنًا'
+                    }).then(() => {
+                        table.ajax.reload();
+                    });
+                } else {
+                    Swal.fire({
+                        title: 'خطأ 🚫',
+                        text: data.message,
+                        icon: 'error',
+                        confirmButtonText: 'موافق'
+                    });
+                }
+            });
+        }
+    </script>
+}

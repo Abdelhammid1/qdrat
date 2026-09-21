@@ -1,0 +1,439 @@
+@model QdratNew.ViewModels.Homework.ReviewLessonViewModel
+@using QdratNew.Helpers
+
+@{
+    ViewData["Title"] = "مراجعة المؤشر - " + Model.LessonTitle;
+}
+
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+
+<div class="review-lesson-container" dir="rtl">
+
+    <div class="rl-header">
+        <div class="rl-breadcrumb">
+            <a href="@Url.Action("Index", "HomeworkManagement", new { area = "Admin" })">
+                <i class="fa fa-home"></i> الواجبات
+            </a>
+            <span class="sep">/</span>
+            <a href="@Url.Action("Details", "HomeworkManagement", new { area = "Admin", id = Model.HomeworkSetId })">
+                @Model.HomeworkSetTitle
+            </a>
+            <span class="sep">/</span>
+            <span>@Model.LessonTitle</span>
+        </div>
+
+        <div class="rl-title-row">
+            <div>
+                <h1 class="rl-title">
+                    <i class="fa fa-book-open"></i>
+                    @Model.LessonTitle
+                </h1>
+                <p class="rl-subtitle">@Model.SectionTitle</p>
+            </div>
+            <div class="rl-stats-pills">
+                <span class="pill total">
+                    <i class="fa fa-users"></i> @Model.TotalStudents طالب
+                </span>
+                <span class="pill questions">
+                    <i class="fa fa-question-circle"></i> @Model.Questions.Count سؤال
+                </span>
+            </div>
+        </div>
+    </div>
+
+    @if (!Model.Questions.Any())
+    {
+        <div class="empty-state">
+            <i class="fa fa-inbox fa-3x"></i>
+            <p>لا توجد أسئلة مرتبطة بهذا المؤشر في هذا الواجب.</p>
+        </div>
+    }
+    else
+    {
+        <div class="questions-grid">
+            @foreach (var item in Model.Questions.Select((q, i) => new { q, i }))
+            {
+                var q = item.q;
+                var index = item.i + 1;
+                Func<string, string> conv = s => q.IsQuantitative ? NumberHelper.ToIndicNumbersSafe(s) : s;
+
+                var rateClass = q.SuccessRate >= 70 ? "good" : q.SuccessRate >= 40 ? "medium" : "bad";
+
+                <div class="q-card">
+                    <div class="q-card-header">
+                        <div class="q-num">سؤال @NumberHelper.ToIndicNumbersSafe(index.ToString())</div>
+                        <div class="q-rate @rateClass">
+                            <i class="fa fa-chart-pie"></i>
+                            نسبة الصحة: @q.SuccessRate%
+                        </div>
+                    </div>
+
+
+                    @if (!string.IsNullOrWhiteSpace(q.VerbalPassageContent))
+                    {
+                        var passageTitle = !string.IsNullOrWhiteSpace(q.VerbalPassageTitle)
+                        ? q.VerbalPassageTitle
+                        : "القطعة المرتبطة";
+
+                        <div class="q-passage">
+                            <div class="passage-label">
+                                <i class="fa fa-file-lines"></i>
+                                @Html.Raw(conv(passageTitle))
+                            </div>
+                            <div class="passage-content">
+                                @Html.Raw(conv(q.VerbalPassageContent))
+                            </div>
+                        </div>
+                    }
+
+
+                    <div class="q-title">@Html.Raw(conv(q.QuestionTitle))</div>
+
+                 
+
+                    @if (!string.IsNullOrWhiteSpace(q.ImageUrl))
+                    {
+                        <div class="q-img-wrap">
+                            <img src="@Url.Content(q.ImageUrl)" alt="صورة السؤال" />
+                        </div>
+                    }
+
+                    @if (q.DisplayType == QdratNew.Enums.QuestionDisplayType.ComparisonText)
+                    {
+                        <div class="q-comparison">
+                            <div class="cmp-val">
+                                <span class="cmp-label">القيمة الأولى</span>
+                                @Html.Raw(conv(q.ComparisonValue1 ?? ""))
+                            </div>
+                            <div class="cmp-val">
+                                <span class="cmp-label">القيمة الثانية</span>
+                                @Html.Raw(conv(q.ComparisonValue2 ?? ""))
+                            </div>
+                        </div>
+                    }
+
+                    <div class="q-options">
+                        @foreach (var opt in q.Options)
+                        {
+                            var optClass = opt.IsCorrect ? "opt correct" : "opt";
+                            <div class="@optClass">
+                                <div class="opt-top">
+                                    <div class="opt-text">
+                                        @if (opt.IsCorrect)
+                                        {
+                                            <i class="fa fa-check-circle text-success"></i>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(opt.ImageUrl))
+                                        {
+                                            <img src="@Url.Content(opt.ImageUrl)" class="opt-img" />
+                                        }
+                                        else
+                                        {
+                                            <span>@Html.Raw(conv(opt.Text))</span>
+                                        }
+                                    </div>
+                                    <div class="opt-count">
+                                        @opt.SelectedCount <small>طالب (@opt.SelectionRate%)</small>
+                                    </div>
+                                </div>
+                                <div class="opt-bar-wrap">
+                                    <div class="opt-bar @(opt.IsCorrect ? "bar-correct" : "bar-wrong")"
+                                         style="width: @(opt.SelectionRate)%"></div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="q-summary">
+                        <div class="summary-item correct">
+                            <i class="fa fa-check"></i>
+                            <strong>@q.CorrectCount</strong> صحيح
+                        </div>
+                        <div class="summary-item wrong">
+                            <i class="fa fa-times"></i>
+                            <strong>@q.WrongCount</strong> خطأ
+                        </div>
+                        <div class="summary-item total">
+                            <i class="fa fa-users"></i>
+                            <strong>@q.TotalAnswered</strong> أجاب
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<style>
+    * { box-sizing: border-box; }
+
+    .review-lesson-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 24px 16px;
+        font-family: 'Cairo', sans-serif;
+        direction: rtl;
+    }
+
+    /* Header */
+    .rl-header {
+        margin-bottom: 32px;
+    }
+
+    .rl-breadcrumb {
+        font-size: 13px;
+        color: #888;
+        margin-bottom: 12px;
+    }
+
+    .rl-breadcrumb a {
+        color: #339999;
+        text-decoration: none;
+    }
+
+    .rl-breadcrumb a:hover { text-decoration: underline; }
+
+    .rl-breadcrumb .sep { margin: 0 6px; }
+
+    .rl-title-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        flex-wrap: wrap;
+    }
+
+    .rl-title {
+        font-size: 1.6rem;
+        font-weight: 800;
+        color: #176669;
+        margin: 0;
+    }
+
+    .rl-subtitle {
+        color: #666;
+        margin: 4px 0 0;
+        font-size: 14px;
+    }
+
+    .rl-stats-pills {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .pill {
+        border-radius: 20px;
+        padding: 7px 16px;
+        font-weight: 700;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .pill.total { background: #eef7f7; color: #176669; }
+    .pill.questions { background: #fff3e0; color: #e65100; }
+
+    /* Empty */
+    .empty-state {
+        text-align: center;
+        color: #aaa;
+        padding: 60px 20px;
+    }
+
+    .empty-state i { display: block; margin-bottom: 12px; }
+
+    /* Grid */
+    .questions-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 20px;
+    }
+
+    /* Card */
+    .q-card {
+        background: #fff;
+        border: 1px solid #e4ecef;
+        border-radius: 14px;
+        padding: 20px;
+        box-shadow: 0 4px 16px rgba(0,0,0,.06);
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    .q-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .q-num {
+        font-weight: 800;
+        color: #176669;
+        font-size: 15px;
+    }
+
+    .q-rate {
+        border-radius: 20px;
+        padding: 5px 12px;
+        font-size: 13px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+    .q-rate.good { background: #e8f7ee; color: #198754; }
+    .q-rate.medium { background: #fff8e1; color: #f57c00; }
+    .q-rate.bad { background: #fff0f0; color: #dc3545; }
+
+    .q-title {
+        font-weight: 700;
+        line-height: 1.8;
+        color: #222;
+    }
+
+    .q-passage {
+        background: #f8fbfb;
+        border: 1px solid #edf2f2;
+        border-radius: 10px;
+        padding: 12px;
+        font-size: 13px;
+    }
+
+    .passage-label {
+        color: #888;
+        font-size: 12px;
+        margin-bottom: 4px;
+    }
+
+    .q-img-wrap img {
+        max-width: 100%;
+        max-height: 180px;
+        object-fit: contain;
+        border-radius: 8px;
+    }
+
+    .q-comparison {
+        display: flex;
+        gap: 12px;
+    }
+
+    .cmp-val {
+        flex: 1;
+        background: #f8fbfb;
+        border: 1px solid #edf2f2;
+        border-radius: 10px;
+        padding: 10px;
+        text-align: center;
+    }
+
+    .cmp-label {
+        display: block;
+        font-size: 12px;
+        color: #888;
+        margin-bottom: 4px;
+    }
+
+    /* Options */
+    .q-options {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .opt {
+        border: 1px solid #e4ecef;
+        border-radius: 10px;
+        padding: 10px 12px;
+        background: #fafafa;
+    }
+
+    .opt.correct {
+        border-color: #198754;
+        background: #f0faf4;
+    }
+
+    .opt-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 8px;
+    }
+
+    .opt-text {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 14px;
+        font-weight: 600;
+        flex: 1;
+    }
+
+    .opt-img {
+        max-width: 60px;
+        max-height: 40px;
+        object-fit: contain;
+    }
+
+    .opt-count {
+        font-size: 13px;
+        color: #555;
+        white-space: nowrap;
+        font-weight: 700;
+    }
+
+    .opt-count small {
+        font-weight: 400;
+        color: #888;
+    }
+
+    .opt-bar-wrap {
+        background: #e9ecef;
+        border-radius: 10px;
+        height: 8px;
+        overflow: hidden;
+    }
+
+    .opt-bar {
+        height: 100%;
+        border-radius: 10px;
+        transition: width .4s ease;
+    }
+
+    .opt-bar.bar-correct { background: #198754; }
+    .opt-bar.bar-wrong { background: #dc3545; }
+
+    /* Summary */
+    .q-summary {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        border-top: 1px solid #f0f0f0;
+        padding-top: 12px;
+    }
+
+    .summary-item {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 13px;
+        border-radius: 8px;
+        padding: 4px 10px;
+    }
+
+    .summary-item.correct { background: #e8f7ee; color: #198754; }
+    .summary-item.wrong { background: #fff0f0; color: #dc3545; }
+    .summary-item.total { background: #eef7f7; color: #176669; }
+
+    @@media (max-width: 600px) {
+        .questions-grid { grid-template-columns: 1fr; }
+        .rl-title-row { flex-direction: column; }
+    }
+</style>

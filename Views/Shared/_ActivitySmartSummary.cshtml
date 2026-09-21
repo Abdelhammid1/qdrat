@@ -1,0 +1,84 @@
+﻿@model QdratNew.ViewModels.Students.StudentActivityLogPageViewModel
+@using QdratNew.Enums
+
+<div class="card shadow-sm border-0 mb-4" style="font-size: 0.85rem;">
+    <div class="card-header bg-light fw-bold text-dark">
+        🧠 تحليلك الذكي
+    </div>
+    <div class="card-body">
+
+        @{
+            var sectionCount = Model.Activities
+            .Select(a => a.SectionTitle)
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Distinct()
+            .Count();
+
+            var topType = Model.Activities
+            .GroupBy(a => a.ActivityType)
+            .OrderByDescending(g => g.Count())
+            .FirstOrDefault()?.Key.ToString() ?? "غير معروف";
+
+            var weakSection = Model.Activities
+            .Where(a => a.WasCorrect == false)
+            .GroupBy(a => a.SectionTitle)
+            .OrderByDescending(g => g.Count())
+            .FirstOrDefault()?.Key ?? "—";
+
+            var tip = Model.AIRecommendations.FirstOrDefault() ?? "لا توجد توصية حالياً.";
+        }
+
+        <ul class="list-unstyled mb-0">
+            <li class="mb-2">
+                <i class="bi bi-diagram-3 text-info me-2"></i>
+                <strong>عدد المحاور:</strong> @sectionCount
+            </li>
+
+            <li class="mb-2">
+                <i class="bi bi-activity text-primary me-2"></i>
+                <strong>أكثر نشاط تم:</strong>
+                @Html.Raw(topType switch {
+                "Homework" => "📘 واجب",
+                                "Exam" => "📝 اختبار",
+                                "Video" => "🎥 فيديو",
+                                "Lesson" => "📚 درس",
+                                _ => "⚙️ غير محدد"
+                                })
+            </li>
+
+            <li class="mb-2">
+                <i class="bi bi-bug text-danger me-2"></i>
+                <strong>المحور الأكثر أخطاء:</strong> @weakSection
+            </li>
+
+            <li class="mb-2">
+                <i class="bi bi-lightbulb text-warning me-2"></i>
+                <strong>توصية:</strong>
+                <div class="text-muted mt-1">
+                    @Html.Raw(tip)
+                </div>
+            </li>
+        </ul>
+        @if (Model.Activities.Any(a => a.WasCorrect == false && !string.IsNullOrWhiteSpace(a.VideoUrl)))
+        {
+            <hr />
+            <div class="mt-3">
+                <h6 class="fw-bold mb-2 text-danger">
+                    🎥 مراجعات للأسئلة التي أخطأت بها:
+                </h6>
+                <ul class="list-unstyled ps-2">
+                    @foreach (var activity in Model.Activities
+                                    .Where(a => a.WasCorrect == false && !string.IsNullOrWhiteSpace(a.VideoUrl)))
+                    {
+                        <li class="mb-1">
+                            <a href="@activity.VideoUrl" target="_blank" class="text-decoration-none text-primary">
+                                🔗 @Html.Raw(activity.ActivityTitle)
+                            </a>
+                        </li>
+                    }
+                </ul>
+            </div>
+        }
+
+    </div>
+</div>

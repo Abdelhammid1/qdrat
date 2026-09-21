@@ -1,0 +1,191 @@
+﻿@model QdratNew.ViewModels.Promo.PromoExamSolveViewModel
+@using QdratNew.Enums
+@using QdratNew.Helpers
+
+@{
+    var q = Model.Question;
+    var selectedAnswer = Model.SelectedAnswer ?? "";
+
+    // 🟦 دالة تحويل الأرقام داخل النصوص فقط بدون التأثير على الوسوم أو CSS
+    string ConvertNumbersSafeHtml(string html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return html;
+
+        return System.Text.RegularExpressions.Regex.Replace(
+            html,
+            @"(?<=^|>)([^<>]+)(?=<|$)",   // يستهدف النص بين الوسوم فقط
+            match => NumberHelper.ToIndicNumbersSafe(match.Value)
+        );
+    }
+}
+
+@if (q == null)
+{
+    <div class="alert alert-warning text-center mt-5">⚠️ لم يتم تحميل السؤال الحالي.</div>
+}
+else
+{
+    <div class="container mt-4" dir="rtl">
+
+        <!-- 🔹 رقم السؤال -->
+        <div class="text-center mb-4">
+            <h5 class="fw-bold text-primary">
+                السؤال @ConvertNumbersSafeHtml(Model.CurrentIndex.ToString())
+                من @ConvertNumbersSafeHtml(Model.Total.ToString())
+            </h5>
+        </div>
+
+        <!-- 🔹 القطعة اللفظية -->
+        @if (q.VerbalPassage != null && !string.IsNullOrWhiteSpace(q.VerbalPassage.Content))
+        {
+            <div class="card border-primary shadow-sm mb-4">
+                <div class="card-header bg-light fw-bold text-primary d-flex align-items-center">
+                    <i class="bi bi-journal-text me-2"></i>
+                    @(string.IsNullOrWhiteSpace(q.VerbalPassage.Title) ? "القطعة اللفظية" : q.VerbalPassage.Title)
+                </div>
+                <div class="card-body bg-white">
+                    <div style="line-height:1.9; text-align:justify; font-size:1.05rem;">
+                        @Html.Raw(q.VerbalPassage.Content) <!-- دون تغيير أو فلترة -->
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- 🔹 نص السؤال -->
+        <div class="card border-info shadow-sm mb-4">
+            <div class="card-header bg-qdrat-light fw-bold question-header">
+                <h4 class="question-content p-2">
+                    @Html.Raw(ConvertNumbersSafeHtml(q.Title ?? ""))
+                </h4>
+            </div>
+
+            <div class="card-body">
+
+                <!-- 🟦 عرض القوالب -->
+                @switch (q.Template)
+                {
+                    case QuestionTemplate.CompareValues:
+                        {
+                            <div class="row mb-3 text-center">
+                                <div class="col-md-6 border-end">
+                                    <strong>القيمة الأولى:</strong>
+                                    <div>@Html.Raw(ConvertNumbersSafeHtml(q.ValueA))</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <strong>القيمة الثانية:</strong>
+                                    <div>@Html.Raw(ConvertNumbersSafeHtml(q.ValueB))</div>
+                                </div>
+                            </div>
+                            break;
+                        }
+
+                    case QuestionTemplate.CompareWithImage:
+                        {
+                            <div class="row mb-3 text-center align-items-center">
+                                <div class="col-md-4">
+                                    <img src="@Url.Content(q.ImageUrl)" class="img-fluid" style="max-height: 150px;" />
+                                </div>
+                                <div class="col-md-4 border-end">
+                                    <strong>القيمة الأولى:</strong>
+                                    <div>@Html.Raw(ConvertNumbersSafeHtml(q.ValueA))</div>
+                                </div>
+                                <div class="col-md-4">
+                                    <strong>القيمة الثانية:</strong>
+                                    <div>@Html.Raw(ConvertNumbersSafeHtml(q.ValueB))</div>
+                                </div>
+                            </div>
+                            break;
+                        }
+
+                    case QuestionTemplate.ImageOptions:
+                    default:
+                        {
+                            if (!string.IsNullOrWhiteSpace(q.ImageUrl))
+                            {
+                                <div class="text-center mb-3">
+                                    <img src="@Url.Content(q.ImageUrl)" class="img-fluid rounded" style="max-height: 200px;" />
+                                </div>
+                            }
+                            break;
+                        }
+                }
+
+                <!-- 🔹 الاختيارات -->
+                <form id="homework-question-form" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="SessionId" value="@Model.SessionId" />
+                    <input type="hidden" name="q" value="@Model.CurrentQuestionId" />
+                    <input type="hidden" name="AllIds" value="@string.Join(",", Model.AllQuestionIds)" />
+
+                    <div class="list-group">
+                        @foreach (var option in q.Options)
+                        {
+                            var isChecked = (selectedAnswer == option.Text);
+
+                            <label class="list-group-item d-flex align-items-center gap-3">
+
+                                <input type="radio"
+                                       name="SelectedOption"
+                                       value="@option.Text"
+                                       class="form-check-input me-2"
+                                       @(isChecked ? "checked" : "") />
+
+                                @if (!string.IsNullOrWhiteSpace(option.ImageUrl))
+                                {
+                                    <img src="@Url.Content(option.ImageUrl)"
+                                         class="img-fluid rounded"
+                                         style="max-height: 80px;" />
+                                }
+                                else
+                                {
+                                    <span class="fw-bold">
+                                        @Html.Raw(ConvertNumbersSafeHtml(option.Text ?? ""))
+                                    </span>
+                                }
+                            </label>
+                        }
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- 🔹 الفوتر الخاص بالتنقل -->
+        <div class="homework-footer d-flex justify-content-between align-items-center p-3 border-top shadow fixed-bottom bg-white">
+            <button type="button" class="btn btn-outline-secondary homework-nav-button"
+                    data-nav="prev" @(Model.CurrentIndex == 1 ? "disabled" : "")>
+                ◀️ السابق
+            </button>
+
+            <button type="button" class="btn btn-primary homework-nav-button"
+                    data-nav="next">
+                @(Model.CurrentIndex == Model.Total ? "إنهاء الاختبار" : "التالي ▶️")
+            </button>
+        </div>
+    </div>
+}
+
+<style>
+    body {
+        padding-bottom: 90px;
+    }
+
+    .bg-qdrat-light {
+        background-color: #f3faf9;
+    }
+
+    .question-header {
+        border-bottom: 1px solid #d9ecea;
+    }
+
+    .question-content {
+        font-size: 1.3rem;
+        color: #333;
+        line-height: 1.9;
+    }
+
+    .list-group-item:hover {
+        background-color: #f9fffa;
+        cursor: pointer;
+    }
+</style>

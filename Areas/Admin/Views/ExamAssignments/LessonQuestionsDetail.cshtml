@@ -1,0 +1,143 @@
+﻿@model QdratNew.ViewModels.Exam.ExamReviewViewModel
+@using QdratNew.Helpers
+
+@{
+    ViewData["Title"] = "تحليل المؤشر - " + Model.ExamTitle;
+    int totalQ = Model.TotalQuestions;
+    int correctCount = Model.Questions.Count(q => q.IsCorrect);
+    int wrongCount = totalQ - correctCount;
+    double percent = totalQ > 0 ? Math.Round(correctCount * 100.0 / totalQ, 1) : 0;
+}
+
+<div class="container py-4">
+
+    <!-- 🧭 عنوان -->
+    <div class="text-center mb-4">
+        <h2 class="fw-bold text-primary">📘 مراجعة أسئلة المؤشر</h2>
+        <h5 class="text-muted">@Model.ExamTitle</h5>
+    </div>
+
+    <!-- 🟩 كروت الإحصائيات -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3 col-6">
+            <div class="card text-center shadow-sm">
+                <div class="card-body">
+                    <h6>إجمالي الأسئلة</h6>
+                    <h3>@NumberHelper.ToIndicNumbersSafe(Model.TotalQuestions.ToString())</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card text-center shadow-sm text-success">
+                <div class="card-body">
+                    <h6>إجابات صحيحة</h6>
+                    <h3>@NumberHelper.ToIndicNumbersSafe(correctCount.ToString())</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card text-center shadow-sm text-danger">
+                <div class="card-body">
+                    <h6>إجابات خاطئة</h6>
+                    <h3>@NumberHelper.ToIndicNumbersSafe(wrongCount.ToString())</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card text-center shadow-sm">
+                <div class="card-body">
+                    <h6>الوقت الكلي</h6>
+                    <h3>@Model.TimeSpentFormatted</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🧠 عرض الأسئلة -->
+    <div class="row g-4">
+        @foreach (var item in Model.Questions.Select((q, i) => new { q, i }))
+        {
+            var q = item.q;
+            var index = item.i + 1;
+            Func<string, string> convert = s => q.IsQuantitative ? NumberHelper.ToIndicNumbersSafe(s) : s;
+
+            <div class="col-md-6">
+                <div class="card shadow-sm mb-3 question-card">
+                    <div class="card-header bg-qdrat text-white fw-bold">
+                        @Html.Raw(convert($"سؤال {NumberHelper.ToIndicNumbersSafe(index.ToString())}: {q.QuestionTitle}"))
+                    </div>
+                    <div class="card-body">
+                        @if (q.Options?.Count > 0)
+                        {
+                            <ul class="list-group mb-3">
+                                @foreach (var opt in q.Options)
+                                {
+                                    var text = opt.Text ?? "";
+                                    var isSelected = text == q.StudentAnswer;
+                                    var isCorrect = text == q.CorrectAnswer;
+                                    var isWrong = isSelected && !isCorrect;
+
+                                    var css = isCorrect ? "list-group-item-success"
+                                    : isWrong ? "list-group-item-danger"
+                                    : "";
+
+                                    <li class="list-group-item d-flex align-items-center @css">
+                                        @if (!string.IsNullOrWhiteSpace(opt.ImageUrl))
+                                        {
+                                            <img src="@Url.Content(opt.ImageUrl)" class="img-fluid me-2" style="max-height:50px;" />
+                                        }
+                                        else
+                                        {
+                                            <span>@Html.Raw(convert(text))</span>
+                                        }
+
+                                        @if (isSelected)
+                                        {
+                                            <span class="badge bg-primary ms-auto">إجابتك</span>
+                                        }
+                                        @if (isCorrect)
+                                        {
+                                            <span class="badge bg-success ms-2">الإجابة الصحيحة</span>
+                                        }
+                                    </li>
+                                }
+                            </ul>
+                        }
+
+                        <p class="fw-bold">
+                            النتيجة:
+                            <span class="@(q.IsCorrect ? "text-success" : "text-danger")">
+                                @(q.IsCorrect ? "✔️ صحيح" : "❌ خطأ")
+                            </span>
+                        </p>
+
+                        <p class="small text-muted">
+                            <strong>الوقت المستغرق:</strong>
+                            @NumberHelper.ToIndicNumbersSafe(Math.Round(q.TimeTakenSeconds).ToString()) ثانية
+                        </p>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    .question-card {
+        border-radius: 10px;
+        transition: all 0.2s ease;
+    }
+
+        .question-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+    .list-group-item-success {
+        background-color: #e1f8e1 !important;
+    }
+
+    .list-group-item-danger {
+        background-color: #ffe2e2 !important;
+    }
+</style>

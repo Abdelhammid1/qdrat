@@ -1,0 +1,349 @@
+﻿@model QdratNew.ViewModels.Students.ExamSolveViewModel
+@{
+    ViewData["Title"] = "بدء اختبار مؤشر الأداء";
+    Layout = "~/Views/Shared/_QuestionStudentLayout.cshtml";
+}
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger text-center fw-bold">
+        @TempData["ErrorMessage"]
+    </div>
+}
+
+<div class="container-fluid mt-3 px-3 px-md-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="fw-bold text-qdrat">📝 الاختبار: @Model.ExamTitle</h4>
+        <div class="fw-bold text-danger" id="timer">
+            الوقت المتبقي: <span id="time-remaining"></span>
+        </div>
+    </div>
+
+    <!-- طبقة التحميل -->
+    <div id="loadingOverlay" style="display:none; position:fixed; inset:0;
+         background:rgba(255,255,255,0.8); z-index:9999;
+         align-items:center; justify-content:center; flex-direction:column; text-align:center;">
+        <div class="spinner-border text-primary" style="width:3rem;height:3rem;" role="status"></div>
+        <p class="mt-3 text-dark fw-bold">جاري تحميل السؤال التالي...</p>
+    </div>
+
+    <!-- الحاوية الرئيسية للأسئلة -->
+    <div id="question-container">
+        @await Html.PartialAsync("_SolveUnifiedExamPartial", Model)
+    </div>
+</div>
+
+<!-- 🔒 شاشة الحماية -->
+<div id="fullscreenOverlay">
+    <h2>🚫 لا يمكنك الخروج من وضع الاختبار</h2>
+    <p>اضغط الزر أدناه للعودة إلى وضع الشاشة الكاملة ومتابعة الاختبار.</p>
+    <button id="returnFullscreenBtn">🔁 العودة للاختبار</button>
+</div>
+
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+@section Scripts {
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            TranslationGuard.init({
+                attemptType: 5,
+                attemptEntityId: @Model.ExamAssignmentId,
+                antiForgeryToken: '@Antiforgery.GetAndStoreTokens(Context).RequestToken'
+            });
+        });
+    </script>
+
+    <style>
+        #fullscreenOverlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.92);
+            color: white;
+            display: none;
+            z-index: 99999;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            text-align: center;
+            font-family: 'Tajawal', sans-serif;
+        }
+
+            #fullscreenOverlay button {
+                background: #0d6efd;
+                color: white;
+                border: none;
+                padding: 12px 28px;
+                font-size: 18px;
+                border-radius: 8px;
+                cursor: pointer;
+                margin-top: 20px;
+            }
+
+                #fullscreenOverlay button:hover {
+                    background: #0b5ed7;
+                }
+    </style>
+
+    <script>
+        // تهيئة مرجع الوقت العالمي للعداد المرئي في الـ partial
+        window.questionStartTime = Date.now();
+
+        document.addEventListener("DOMContentLoaded", () => {
+
+            if (typeof window.startStopwatch === 'function') window.startStopwatch();
+
+            /* ========================= 🕒 العداد الزمني ========================= */
+            let remaining = parseInt('@Model.RemainingSeconds') || 0;
+            const endTime = new Date().getTime() + remaining * 1000;
+            const timerEl = document.getElementById("time-remaining");
+
+            function updateTimer() {
+                const now = new Date().getTime();
+                const diff = Math.floor((endTime - now) / 1000);
+                if (diff <= 0) {
+                    clearInterval(timerInt);
+                    timerEl.innerText = "انتهى الوقت!";
+                    Swal.fire({
+                        icon: "info",
+                        title: "⏰ انتهى الوقت!",
+                        text: "سيتم إنهاء الاختبار الآن...",
+                        showConfirmButton: false,
+                        timer: 2500,
+                        willClose: () => handleForceSubmit()
+                    });
+                    return;
+                }
+                const m = Math.floor(diff / 60), s = diff % 60;
+                timerEl.innerText = `${m.toString().padStart(2,"0")}:${s.toString().padStart(2,"0")}`;
+            }
+            const timerInt = setInterval(updateTimer, 1000);
+            updateTimer();
+
+
+            /* ========================= 🔄 التنقل بين الأسئلة ========================= */
+            const container = document.getElementById("question-container");
+
+            // حفظ تلقائي عند اختيار إجابة
+            document.body.addEventListener("change", async e => {
+                if (!e.target.matches('input[name="SelectedOption"]')) return;
+                const form = document.getElementById("exam-question-form");
+                if (!form) return;
+                const fd = new FormData(form);
+                fd.append("nav", "stay");
+                fd.append("keepReview", "1");
+                await fetch("/Students/PerformanceIndicatorExams/SubmitPerformanceAnswerFetch", {
+                    method: "POST", body: fd
+                });
+            });
+
+            // أزرار التنقل (التالي / السابق / المراجعة)
+            document.body.addEventListener("click", async e => {
+                const btn = e.target.closest(".exam-nav-button, .review-jump");
+                if (!btn) return;
+
+                ignoreNextFullscreenEvent = true;
+
+                e.preventDefault();
+
+
+                const form = btn.closest("form") || document.getElementById("exam-question-form");
+                if (!form) return;
+                const fd = new FormData(form);
+
+                if (btn.classList.contains("review-jump")) {
+                    fd.append("nav", "goto");
+                    fd.append("target", btn.dataset.target);
+                    fd.append("keepReview", "1");
+                } else {
+                    const nav = btn.dataset.nav;
+                    fd.append("nav", nav);
+                    if (nav === "showReview") fd.append("keepReview", "1");
+                }
+
+                try {
+                    const res = await fetch("/Students/PerformanceIndicatorExams/SubmitPerformanceAnswerFetch", {
+                        method: "POST", body: fd
+                    });
+                    const ct = res.headers.get("content-type") || "";
+                    if (res.ok && ct.includes("text/html")) {
+                        const html = await res.text();
+                        container.innerHTML = html;
+                        window.questionStartTime = Date.now();
+                        if (typeof window.startStopwatch === 'function') window.startStopwatch();
+                        if (typeof window.syncOptionStyles === 'function') window.syncOptionStyles();
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                    } else {
+                        const err = await res.json();
+                        Swal.fire({ icon: "error", title: "خطأ", text: err.message || "حدث خطأ أثناء التنقل." });
+                    }
+                } catch {
+                    Swal.fire({ icon: "error", title: "⚠️ فشل الاتصال", text: "تحقق من الإنترنت." });
+                }
+            });
+
+
+                /* ========================= 📤 تسليم الاختبار ========================= */
+        document.body.addEventListener("click", async e => {
+            const btn = e.target.closest("#submitExam");
+            if (!btn) return;
+            ignoreNextFullscreenEvent = true;
+
+            e.preventDefault();
+
+        const finalId = @Model.ExamId;
+
+            // 🟡 الخطوة 1: نحصل على إحصائيات الإجابة من السيرفر
+            const statsRes = await fetch(`/Students/PerformanceIndicatorExams/GetExamProgress?id=${finalId}`, {
+                method: "GET",
+                headers: { "Accept": "application/json" }
+            });
+            const stats = await statsRes.json();
+
+            if (!stats.success) {
+                Swal.fire({ icon: "error", title: "⚠️ خطأ", text: stats.message || "تعذر التحقق من حالة الاختبار." });
+                return;
+            }
+
+            const answered = stats.answeredCount;
+            const total = stats.totalQuestions;
+            const skipped = total - answered;
+
+            // 🟢 الخطوة 2: رسالة التحذير للطالب
+            const confirm = await Swal.fire({
+                title: "📊 تأكيد إنهاء الاختبار",
+                html: `
+                    <div style="font-size:1.1rem;line-height:1.8">
+                        <p>لقد أجبت على <b>${answered}</b> من أصل <b>${total}</b> سؤال.</p>
+                        <p>عدد الأسئلة غير المجابة: <b class="text-danger">${skipped}</b></p>
+                        <p>هل ترغب بإنهاء الاختبار الآن؟</p>
+                    </div>`,
+                icon: "warning",
+                showCancelButton: true,
+                confirmButtonText: "✅ نعم، إنهاء الاختبار",
+                cancelButtonText: "🔁 العودة للأسئلة"
+            });
+
+            if (!confirm.isConfirmed) return; // الطالب اختار الرجوع
+
+            // 🟢 الخطوة 3: تأكيد إضافي نهائي
+            const finalConfirm = await Swal.fire({
+                title: "هل أنت متأكد؟",
+                text: "لن تتمكن من تعديل إجاباتك بعد الإنهاء.",
+                icon: "question",
+                showCancelButton: true,
+                confirmButtonText: "نعم، أرسل الآن",
+                cancelButtonText: "رجوع"
+            });
+
+            if (!finalConfirm.isConfirmed) return;
+
+            // 🟢 الخطوة 4: استدعاء الإنهاء الفعلي
+            const res = await fetch(`/Students/PerformanceIndicatorExams/SubmitFinalPerformanceExam?id=${finalId}`, {
+                method: "POST",
+                headers: { "Accept": "application/json" }
+            });
+            const result = await res.json();
+
+            if (result.success) {
+                Swal.fire({
+                    icon: "success",
+                    title: "🎉 تم إنهاء الاختبار",
+                    text: "سيتم تحويلك الآن إلى صفحة النتيجة.",
+                    showConfirmButton: false,
+                    timer: 2500
+                }).then(() => { exitFullScreen(); window.location.href = result.redirectUrl; });
+            } else {
+        Swal.fire({
+            icon: "error",
+            title: "❌ فشل الإنهاء",
+            html: `
+                <div style="text-align:right; direction:rtl; font-size:14px;">
+                    <b>الرسالة:</b> ${result.message ?? "—"} <br><br>
+                    <b>السبب الداخلي:</b> ${result.inner ?? "—"} <br><br>
+                    <b>Stack:</b> <div style="font-size:12px; color:#555; max-height:150px; overflow:auto; direction:ltr;">${result.stack ?? "—"}</div>
+                </div>
+            `,
+            confirmButtonText: "موافق"
+        });
+                    }
+        });
+
+
+            /* ========================= 🕐 تسليم إجباري ========================= */
+            async function handleForceSubmit(id) {
+                const finalId = id || @Model.ExamAssignmentId;
+                const res = await fetch(`/Students/PerformanceIndicatorExams/SubmitFinalPerformanceExam?id=${finalId}&forceSubmit=true`, {
+                    method: "POST", headers: { "Accept": "application/json" }
+                });
+                const result = await res.json();
+                exitFullScreen();
+                window.location.href = result.redirectUrl;
+            }
+
+
+            /* ========================= 🧱 وضع الشاشة الكاملة ========================= */
+            const overlay = document.getElementById("fullscreenOverlay");
+            const returnBtn = document.getElementById("returnFullscreenBtn");
+
+
+            let ignoreNextFullscreenEvent = false;
+
+                  document.addEventListener("fullscreenchange", () => {
+
+            // لو الحدث جاء من زر تنقّل — تجاهله
+            if (ignoreNextFullscreenEvent) {
+                ignoreNextFullscreenEvent = false;
+                return;
+            }
+
+            // خروج حقيقي من fullscreen
+            const isFull = !!document.fullscreenElement;
+            overlay.style.display = isFull ? "none" : "flex";
+        });
+
+
+            returnBtn.addEventListener("click", e => {
+                e.preventDefault();
+                const elem = document.documentElement;
+                overlay.style.display = "none";
+                if (elem.requestFullscreen) elem.requestFullscreen();
+                else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
+                else if (elem.msRequestFullscreen) elem.msRequestFullscreen();
+            });
+
+            // أول تفاعل = تفعيل fullscreen
+            function enableFullScreen() {
+                const elem = document.documentElement;
+                if (!document.fullscreenElement) {
+                    if (elem.requestFullscreen) elem.requestFullscreen();
+                    else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
+                    else if (elem.msRequestFullscreen) elem.msRequestFullscreen();
+                }
+                document.removeEventListener("click", enableFullScreen);
+            }
+            document.addEventListener("click", enableFullScreen);
+
+            // منع مغادرة الصفحة
+            window.onbeforeunload = () => "⚠️ لا يمكنك مغادرة صفحة الاختبار الآن.";
+            window.exitFullScreen = () => {
+                window.onbeforeunload = null;
+                overlay.style.display = "none";
+                if (document.exitFullscreen) document.exitFullscreen();
+                else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+                else if (document.msExitFullscreen) document.msExitFullscreen();
+            };
+
+            // منع النسخ والفحص
+            document.addEventListener("contextmenu", e => e.preventDefault());
+            document.addEventListener("keydown", e => {
+                if ((e.ctrlKey && ["c","u","s","p"].includes(e.key.toLowerCase())) ||
+                    (e.ctrlKey && e.shiftKey && e.key.toLowerCase()=="i") || e.key=="F12")
+                    { e.preventDefault(); e.stopPropagation(); }
+            });
+        });
+    </script>
+
+
+}

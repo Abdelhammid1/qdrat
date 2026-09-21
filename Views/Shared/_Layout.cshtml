@@ -1,0 +1,367 @@
+@inject QdratNew.Interfaces.IUserAccountDropdownService AccountDropdownService
+@inject QdratNew.Services.Interfaces.IUserContextService UserContext
+@using QdratNew.Helpers
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="utf-8" />
+    <title>@(ViewData["Title"] ?? "لوحة المدرب") - معهد قدرات للتدريب</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- Bootstrap RTL -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css" rel="stylesheet" />
+
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+
+    <!-- Arabic Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+
+    <!-- DataTables -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css" />
+    <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.1/css/buttons.dataTables.min.css" />
+
+    <!-- SweetAlert -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+
+    <!-- Project CSS -->
+    <link href="~/css/homework-report.css" rel="stylesheet" asp-append-version="true" />
+    <link href="~/css/stitch-report.css" rel="stylesheet" asp-append-version="true" />
+    <link href="~/css/site.css" rel="stylesheet" asp-append-version="true" />
+
+    @RenderSection("Styles", required: false)
+
+    <style>
+        /* ===================================================
+           قدرات — Light Theme للمدربين
+           =================================================== */
+        :root {
+            --inst-bg:              #F1F5F9;
+            --inst-card-bg:         #FFFFFF;
+            --inst-border:          #E2E8F0;
+            --inst-text:            #1E293B;
+            --inst-text-secondary:  #64748B;
+            --inst-primary:         #4CA6A8;
+            --inst-primary-light:   #E8F5F5;
+            --inst-primary-hover:   #3B8F91;
+            --inst-success:         #22C55E;
+            --inst-danger:          #EF4444;
+            --inst-font:            'Cairo', 'Tajawal', sans-serif;
+            --sidebar-width:        260px;
+            --topbar-height:        68px;
+            --shadow-sm:            0 1px 3px rgba(0,0,0,.08);
+            --shadow-md:            0 4px 12px rgba(0,0,0,.08);
+            --shadow-lg:            0 10px 30px rgba(0,0,0,.10);
+            --radius:               12px;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; }
+
+        html, body {
+            width: 100%;
+            min-height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+            background-color: var(--inst-bg);
+            color: var(--inst-text);
+            font-family: var(--inst-font);
+        }
+
+        body { direction: rtl; }
+
+        a { text-decoration: none; }
+
+        /* ── Content shell ── */
+        .instructor-content {
+            min-height: 100vh;
+            margin-right: var(--sidebar-width);
+            background: var(--inst-bg);
+            transition: margin-right .3s ease;
+        }
+
+        /* ── Top Bar ── */
+        .instructor-topbar {
+            height: var(--topbar-height);
+            background: #FFFFFF;
+            padding: 0 24px;
+            border-bottom: 1px solid var(--inst-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            position: sticky;
+            top: 0;
+            z-index: 1020;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .topbar-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .topbar-page-title {
+            font-weight: 700;
+            font-size: 16px;
+            color: var(--inst-text);
+            line-height: 1.2;
+        }
+
+        .topbar-page-sub {
+            font-size: 11.5px;
+            color: var(--inst-text-secondary);
+        }
+
+        .topbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        /* Role switch */
+        .role-switch-select {
+            min-width: 150px;
+            background-color: #F8FAFC;
+            color: var(--inst-text);
+            border: 1px solid var(--inst-border);
+            border-radius: 10px;
+            font-size: 13px;
+            font-family: var(--inst-font);
+            padding: 6px 10px;
+        }
+
+        .role-switch-select:focus {
+            border-color: var(--inst-primary);
+            box-shadow: 0 0 0 .2rem rgba(76,166,168,.18);
+            outline: none;
+        }
+
+        /* Avatar */
+        .topbar-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid var(--inst-primary);
+        }
+
+        /* Logout */
+        .btn-topbar-logout {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: linear-gradient(135deg, #4CA6A8, #22C55E);
+            border: none;
+            color: #fff;
+            font-weight: 700;
+            border-radius: 10px;
+            padding: 8px 16px;
+            font-size: 13px;
+            font-family: var(--inst-font);
+            transition: opacity .2s;
+        }
+
+        .btn-topbar-logout:hover { opacity: .9; color: #fff; }
+
+        /* Mobile toggle */
+        .sidebar-toggle-btn {
+            display: none;
+            align-items: center;
+            gap: 6px;
+            background: none;
+            border: 1px solid var(--inst-border);
+            border-radius: 8px;
+            padding: 7px 11px;
+            cursor: pointer;
+            color: var(--inst-text);
+            font-family: var(--inst-font);
+        }
+
+        /* ── Main area ── */
+        .instructor-main {
+            padding: 24px;
+            min-height: calc(100vh - var(--topbar-height));
+        }
+
+        /* Pages that own their own padding (e.g. .dash) cancel the parent padding */
+        .instructor-main:has(> .dash) { padding: 0; }
+
+        /* ── Override light cards ── */
+        .card {
+            background: var(--inst-card-bg) !important;
+            border-color: var(--inst-border) !important;
+            color: var(--inst-text) !important;
+        }
+
+        /* ── DataTables light ── */
+        .dataTables_wrapper .dataTables_filter input,
+        .dataTables_wrapper .dataTables_length select {
+            background: #fff;
+            border: 1px solid var(--inst-border);
+            border-radius: 8px;
+            padding: 4px 8px;
+            font-family: var(--inst-font);
+            color: var(--inst-text);
+        }
+
+        .dataTables_wrapper,
+        .dataTables_wrapper label,
+        .dataTables_wrapper .dataTables_info {
+            color: var(--inst-text-secondary);
+        }
+
+        table.dataTable thead th {
+            background: var(--inst-bg);
+            color: var(--inst-text);
+            border-bottom: 2px solid var(--inst-border);
+        }
+
+        table.dataTable tbody tr:hover td { background: var(--inst-primary-light); }
+
+        /* ── Mobile overlay ── */
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,.4);
+            z-index: 1029;
+        }
+
+        /* ── Responsive ── */
+        @@media (max-width: 992px) {
+            :root { --sidebar-width: 240px; }
+        }
+
+        @@media (max-width: 768px) {
+            .instructor-content { margin-right: 0; }
+
+            .sidebar-toggle-btn { display: flex; }
+
+            .sidebar-overlay.show { display: block; }
+
+            .instructor-main { padding: 16px; }
+
+            .instructor-topbar { padding: 0 14px; }
+        }
+    </style>
+</head>
+
+<body>
+    @await Html.PartialAsync("~/Views/Shared/_ImpersonationBanner.cshtml")
+
+    <!-- Overlay (mobile only) -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+    @Html.Partial("_InstructorSidebar")
+
+    <div class="instructor-content" id="instructorContent">
+
+        @{
+            try
+            {
+                var account = await AccountDropdownService.GetDropdownViewModelAsync(User);
+
+                if (account != null)
+                {
+                    <div class="instructor-topbar">
+
+                        <div class="topbar-left">
+                            <button class="sidebar-toggle-btn" onclick="toggleSidebar()" aria-label="القائمة">
+                                <i class="fas fa-bars"></i>
+                            </button>
+                            <div>
+                                <div class="topbar-page-title">@(ViewData["Title"] ?? "لوحة التحكم")</div>
+                                <div class="topbar-page-sub">منصة قدرات للتعلم الذكي</div>
+                            </div>
+                        </div>
+
+                        <div class="topbar-actions">
+
+                            @if (UserContext.HasMultipleRoles)
+                            {
+                                <form asp-area="Identity"
+                                      asp-page="/Account/SwitchRole"
+                                      method="post"
+                                      class="m-0">
+                                    @Html.AntiForgeryToken()
+                                    <select name="role"
+                                            class="form-select form-select-sm role-switch-select"
+                                            onchange="this.form.submit()">
+                                        @foreach (var role in UserContext.AvailableRoles)
+                                        {
+                                            <option value="@role" selected="@(role == UserContext.ActiveRole)">
+                                                @(RoleNamesHelper.RoleDisplay.ContainsKey(role)
+                                                    ? RoleNamesHelper.RoleDisplay[role]
+                                                    : role)
+                                            </option>
+                                        }
+                                    </select>
+                                </form>
+                            }
+
+                            <img src="@account.ProfileImageUrl"
+                                 alt="صورة المدرب"
+                                 class="topbar-avatar" />
+
+                            <a asp-area="Identity"
+                               asp-page="/Account/Logout"
+                               asp-route-returnUrl="/"
+                               class="btn-topbar-logout">
+                                <i class="fas fa-sign-out-alt"></i>
+                                خروج
+                            </a>
+                        </div>
+                    </div>
+                }
+            }
+            catch
+            {
+                <div class="instructor-topbar">
+                    <span class="fw-bold text-danger">⚠️ تعذر تحميل بيانات الحساب</span>
+                </div>
+            }
+        }
+
+        <main class="instructor-main">
+            @RenderBody()
+        </main>
+    </div>
+
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <!-- DataTables -->
+    <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+    <!-- Bootstrap -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- SweetAlert -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        function toggleSidebar() {
+            document.getElementById('instructorSidebar').classList.toggle('sidebar-open');
+            document.getElementById('sidebarOverlay').classList.toggle('show');
+        }
+
+        function closeSidebar() {
+            document.getElementById('instructorSidebar').classList.remove('sidebar-open');
+            document.getElementById('sidebarOverlay').classList.remove('show');
+        }
+    </script>
+
+    @RenderSection("Scripts", required: false)
+</body>
+</html>

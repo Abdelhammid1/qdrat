@@ -1,0 +1,2429 @@
+﻿@model QdratNew.ViewModels.Analytics.AnalyticsShellVM
+@using QdratNew.Extensions
+@using QdratNew.ViewModels.Admin.Shared
+
+@{
+    ViewData["Title"] = "لوحة التحليلات الذكية";
+    var now = DateTime.Now.ToString("dd/MM/yyyy — HH:mm");
+}
+@{
+    var allStudents = Model?.Students ?? new List<QdratNew.ViewModels.Admin.Analytics.StudentAnalyticsVM>();
+    var excellentCount = allStudents.Count(s => s.Priority == "Low" || (s.ExamScore >= 70 && s.HomeworkScore >= 70));
+    var mediumCount = allStudents.Count(s => s.Priority == "Medium");
+    var weakCount = allStudents.Count(s => s.Priority == "High");
+}
+
+
+@{
+    var criticalStudents = allStudents.Where(s => s.Priority == "High").OrderBy(s => s.ExamScore).ToList();
+}
+
+@{
+    var highRiskLessons = (Model?.Lessons ?? new List<QdratNew.ViewModels.Admin.Analytics.LessonAnalyticsVM>())
+        .Where(l => l.WeakPercentage >= 70)
+        .OrderByDescending(l => l.WeakPercentage)
+        .ToList();
+}
+
+
+@* ===================== STYLES ===================== *@
+<style>
+    :root {
+        --q-bg: #f0f2f5;
+        --q-surface: #ffffff;
+        --q-border: #e5e7eb;
+        --q-primary: #1e40af;
+        --q-primary-light: #dbeafe;
+        --q-success: #16a34a;
+        --q-success-light: #dcfce7;
+        --q-warning: #d97706;
+        --q-warning-light: #fef3c7;
+        --q-danger: #dc2626;
+        --q-danger-light: #fee2e2;
+        --q-info: #0891b2;
+        --q-info-light: #cffafe;
+        --q-violet: #7c3aed;
+        --q-violet-light: #ede9fe;
+        --q-text: #111827;
+        --q-muted: #6b7280;
+        --q-radius: 16px;
+        --q-radius-sm: 10px;
+        --q-shadow: 0 4px 20px rgba(0,0,0,.07);
+        --q-shadow-sm: 0 2px 10px rgba(0,0,0,.05);
+    }
+
+    *, *::before, *::after {
+        box-sizing: border-box;
+    }
+
+    body {
+        background: var(--q-bg);
+        font-family: 'Cairo';
+        color: var(--q-text);
+    }
+
+    .qd-page {
+        direction: rtl;
+    }
+
+    /* ── Header ── */
+    .qd-header {
+        background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 60%, #1e40af 100%);
+        border-radius: 22px;
+        padding: 28px 32px;
+        color: #fff;
+        position: relative;
+        overflow: hidden;
+    }
+
+        .qd-header::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            pointer-events: none;
+        }
+
+    .qd-header-title {
+        font-size: 24px;
+        font-weight: 800;
+        margin: 0 0 4px;
+    }
+
+    .qd-header-sub {
+        color: #93c5fd;
+        font-size: 16px;
+        margin: 0;
+    }
+
+    .qd-header-meta {
+        color: #94a3b8;
+        font-size: 14px;
+        margin-top: 6px;
+    }
+
+    /* ── Filter Bar ── */
+    .qd-filter-bar {
+        background: var(--q-surface);
+        border-radius: var(--q-radius);
+        padding: 16px 20px;
+        border: 1px solid var(--q-border);
+        box-shadow: var(--q-shadow-sm);
+    }
+
+        .qd-filter-bar .form-select,
+        .qd-filter-bar .btn {
+            border-radius: var(--q-radius-sm);
+            font-size: 15px;
+            height: 38px;
+            border-color: var(--q-border);
+        }
+
+            .qd-filter-bar .form-select:focus {
+                box-shadow: 0 0 0 3px rgba(30,64,175,.15);
+                border-color: var(--q-primary);
+            }
+
+    .qd-filter-label {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--q-muted);
+        margin-bottom: 6px;
+    }
+
+    .btn-filter-apply {
+        background: var(--q-primary);
+        color: #fff;
+        border: none;
+        font-weight: 700;
+        padding: 0 22px;
+        height: 38px;
+        border-radius: var(--q-radius-sm);
+        white-space: nowrap;
+        transition: background .2s;
+    }
+
+        .btn-filter-apply:hover {
+            background: #1d4ed8;
+            color: #fff;
+        }
+
+    .btn-filter-reset {
+        background: transparent;
+        color: var(--q-muted);
+        border: 1px solid var(--q-border);
+        font-weight: 600;
+        padding: 0 16px;
+        height: 38px;
+        border-radius: var(--q-radius-sm);
+        white-space: nowrap;
+        transition: .2s;
+    }
+
+        .btn-filter-reset:hover {
+            background: #f3f4f6;
+            color: var(--q-text);
+        }
+
+    /* ── Decision Panel ── */
+    .qd-decision {
+        border-radius: var(--q-radius);
+        padding: 20px 24px;
+        border: 1.5px solid;
+        display: flex;
+        align-items: flex-start;
+        gap: 16px;
+    }
+
+    .qd-decision-icon {
+        width: 52px;
+        height: 52px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 26px;
+        flex-shrink: 0;
+    }
+
+    .qd-decision-title {
+        font-size: 13px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .5px;
+        opacity: .7;
+    }
+
+    .qd-decision-status {
+        font-size: 22px;
+        font-weight: 800;
+        margin: 2px 0 4px;
+    }
+
+    .qd-decision-msg {
+        font-size: 15px;
+        opacity: .85;
+        margin: 0 0 6px;
+    }
+
+    .qd-decision-action {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 14px;
+        font-weight: 700;
+        background: rgba(0,0,0,.06);
+        border-radius: 8px;
+        padding: 4px 10px;
+    }
+
+    /* ── KPI Cards ── */
+    .qd-kpi {
+        background: var(--q-surface);
+        border-radius: var(--q-radius);
+        padding: 20px;
+        border: 1px solid var(--q-border);
+        box-shadow: var(--q-shadow-sm);
+        height: 100%;
+        transition: transform .18s, box-shadow .18s;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .qd-card-link {
+        display: block;
+        height: 100%;
+        color: inherit;
+        text-decoration: none;
+    }
+
+        .qd-card-link:hover {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .qd-kpi:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--q-shadow);
+        }
+
+        .qd-kpi::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 4px;
+            height: 100%;
+            border-radius: 0 var(--q-radius) var(--q-radius) 0;
+        }
+
+        .qd-kpi.kpi-danger::after {
+            background: var(--q-danger);
+        }
+
+        .qd-kpi.kpi-warning::after {
+            background: var(--q-warning);
+        }
+
+        .qd-kpi.kpi-success::after {
+            background: var(--q-success);
+        }
+
+        .qd-kpi.kpi-primary::after {
+            background: var(--q-primary);
+        }
+
+        .qd-kpi.kpi-info::after {
+            background: var(--q-info);
+        }
+
+        .qd-kpi.kpi-violet::after {
+            background: var(--q-violet);
+        }
+
+    .qd-kpi-open {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        margin-top: 10px;
+        color: var(--q-muted);
+        font-size: 12px;
+        font-weight: 800;
+    }
+
+    .qd-kpi-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        margin-bottom: 14px;
+    }
+
+    .qd-kpi-value {
+        font-size: 28px;
+        font-weight: 800;
+        line-height: 1;
+        margin-bottom: 4px;
+    }
+
+    .qd-kpi-label {
+        font-size: 15px;
+        color: var(--q-muted);
+        font-weight: 600;
+        margin-bottom: 8px;
+    }
+
+    .qd-kpi-sub {
+        font-size: 13px;
+        color: var(--q-muted);
+    }
+
+    .qd-kpi-trend {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        font-size: 13px;
+        font-weight: 700;
+        border-radius: 6px;
+        padding: 2px 7px;
+    }
+
+    /* ── Section Headers ── */
+    .qd-section-title {
+        font-size: 16px;
+        font-weight: 800;
+        color: var(--q-text);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 4px;
+    }
+
+        .qd-section-title .icon-wrap {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+    .qd-section-sub {
+        font-size: 14px;
+        color: var(--q-muted);
+        margin-bottom: 16px;
+        margin-right: 42px;
+    }
+
+    /* ── Card Box ── */
+    .card-box {
+        background: var(--q-surface);
+        border-radius: var(--q-radius);
+        padding: 24px;
+        border: 1px solid var(--q-border);
+        box-shadow: var(--q-shadow-sm);
+    }
+
+    /* ── Tables ── */
+    .qd-table-wrap {
+        border-radius: var(--q-radius-sm);
+        overflow: hidden;
+        border: 1px solid var(--q-border);
+    }
+
+    .qd-table {
+        margin: 0;
+        font-size: 15px;
+    }
+
+        .qd-table thead th {
+            background: #f8fafc;
+            color: var(--q-muted);
+            font-weight: 700;
+            font-size: 13px;
+            letter-spacing: .4px;
+            text-transform: uppercase;
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--q-border);
+            white-space: nowrap;
+        }
+
+        .qd-table tbody td {
+            padding: 11px 14px;
+            vertical-align: middle;
+            border-bottom: 1px solid #f3f4f6;
+        }
+
+        .qd-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .qd-table tbody tr:hover {
+            background: #fafbfc;
+        }
+
+    /* ── Badges ── */
+    .qd-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .badge-danger {
+        background: var(--q-danger-light);
+        color: #991b1b;
+    }
+
+    .badge-warning {
+        background: var(--q-warning-light);
+        color: #92400e;
+    }
+
+    .badge-success {
+        background: var(--q-success-light);
+        color: #14532d;
+    }
+
+    .badge-primary {
+        background: var(--q-primary-light);
+        color: #1e3a8a;
+    }
+
+    .badge-info {
+        background: var(--q-info-light);
+        color: #164e63;
+    }
+
+    .badge-violet {
+        background: var(--q-violet-light);
+        color: #4c1d95;
+    }
+
+    /* ── Progress ── */
+    .qd-progress {
+        height: 8px;
+        border-radius: 20px;
+        background: #edf0f3;
+        overflow: hidden;
+    }
+
+    .qd-progress-bar {
+        height: 100%;
+        border-radius: 20px;
+        transition: width .4s;
+    }
+
+    /* ── Charts ── */
+    .chart-box {
+        position: relative;
+        height: 300px;
+    }
+
+    /* ── AI Insight Card ── */
+    .qd-ai-card {
+        background: linear-gradient(135deg, #faf5ff, #ede9fe);
+        border: 1px solid #ddd6fe;
+        border-radius: var(--q-radius);
+        padding: 18px;
+    }
+
+    .qd-ai-title {
+        font-size: 14px;
+        font-weight: 800;
+        color: var(--q-violet);
+        text-transform: uppercase;
+        letter-spacing: .5px;
+        margin-bottom: 6px;
+    }
+
+    .qd-ai-headline {
+        font-size: 15px;
+        font-weight: 700;
+        color: #3b0764;
+        margin-bottom: 6px;
+    }
+
+    .qd-ai-body {
+        font-size: 15px;
+        color: #4c1d95;
+        margin: 0;
+    }
+
+    .qd-ai-action {
+        margin-top: 10px;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        background: var(--q-violet);
+        color: #fff;
+        border-radius: 8px;
+        padding: 5px 12px;
+        font-size: 14px;
+        font-weight: 700;
+    }
+
+    .qd-ai-priority {
+        font-size: 13px;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 6px;
+        background: #7c3aed22;
+        color: var(--q-violet);
+        margin-right: 8px;
+    }
+
+    /* ── Empty State ── */
+    .qd-empty {
+        padding: 40px 20px;
+        text-align: center;
+        color: var(--q-muted);
+        background: #fafafa;
+        border-radius: var(--q-radius-sm);
+    }
+
+        .qd-empty i {
+            font-size: 36px;
+            opacity: .35;
+            display: block;
+            margin-bottom: 10px;
+        }
+
+    .qd-empty-title {
+        font-weight: 700;
+        font-size: 16px;
+        color: var(--q-text);
+        margin-bottom: 4px;
+    }
+
+    .qd-empty-sub {
+        font-size: 14px;
+    }
+
+    /* ── Pagination ── */
+    .qd-pager {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+        .qd-pager a, .qd-pager span {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 700;
+            border: 1px solid var(--q-border);
+            color: var(--q-muted);
+            text-decoration: none;
+            transition: .18s;
+        }
+
+            .qd-pager a:hover {
+                background: var(--q-primary-light);
+                color: var(--q-primary);
+                border-color: var(--q-primary);
+            }
+
+            .qd-pager span.active {
+                background: var(--q-primary);
+                color: #fff;
+                border-color: var(--q-primary);
+            }
+
+            .qd-pager span.disabled {
+                opacity: .4;
+                pointer-events: none;
+            }
+
+    /* ── Loading overlay ── */
+    .qd-loading {
+        background: var(--q-surface);
+        border-radius: var(--q-radius);
+        padding: 60px 20px;
+        text-align: center;
+        box-shadow: var(--q-shadow-sm);
+    }
+
+        .qd-loading .spinner-border {
+            width: 36px;
+            height: 36px;
+            border-width: 3px;
+            color: var(--q-primary);
+        }
+
+    /* ── Responsive ── */
+    @@media (max-width: 991px) {
+        .qd-header {
+            padding: 20px;
+        }
+
+        .qd-header-title {
+            font-size: 18px;
+        }
+
+        .qd-filter-bar .d-flex {
+            flex-wrap: wrap;
+        }
+    }
+
+    @@media (max-width: 767px) {
+        .chart-box {
+            height: 240px;
+        }
+
+        .qd-kpi-value {
+            font-size: 22px;
+        }
+
+        .qd-decision {
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .table-responsive {
+            border-radius: var(--q-radius-sm);
+        }
+    }
+
+    /* ─── Clickable KPI Cards ─── */
+    .qd-kpi-clickable { cursor: pointer; }
+    .qd-kpi-clickable:hover { border-color: #93c5fd; }
+
+    /* ─── Analytics Offcanvas ─── */
+    .qd-offcanvas { width: 480px !important; }
+    .qd-offcanvas .offcanvas-header { padding: 18px 20px; color: #fff; direction: rtl; }
+    .qd-offcanvas .offcanvas-header .btn-close { filter: invert(1); opacity: .85; }
+    .qd-offcanvas .offcanvas-body { padding: 0; direction: rtl; display: flex; flex-direction: column; overflow: hidden; background: var(--q-bg); }
+    .qd-oc-summary { padding: 12px 14px; background: var(--q-surface); border-bottom: 1px solid var(--q-border); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; flex-shrink: 0; }
+    .qd-oc-list { padding: 12px; overflow-y: auto; flex: 1; }
+    .qd-oc-footer { padding: 12px 14px; background: var(--q-surface); border-top: 1px solid var(--q-border); display: flex; gap: 8px; flex-wrap: wrap; flex-shrink: 0; align-items: center; }
+    .qd-oc-item { background: var(--q-surface); border: 1px solid var(--q-border); border-radius: var(--q-radius-sm); padding: 12px 14px; margin-bottom: 8px; transition: box-shadow .15s, border-color .15s; }
+    .qd-oc-item:last-child { margin-bottom: 0; }
+    .qd-oc-item:hover { box-shadow: var(--q-shadow-sm); border-color: #93c5fd; }
+    .qd-oc-item-title { font-size: 14px; font-weight: 800; color: var(--q-text); margin-bottom: 4px; }
+    .qd-oc-item-sub { font-size: 12px; color: var(--q-muted); margin-bottom: 2px; }
+    .qd-oc-item-stats { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+    .qd-nav-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: var(--q-radius-sm); font-size: 13px; font-weight: 700; text-decoration: none; transition: all .15s; border: 1px solid var(--q-border); white-space: nowrap; }
+    .qd-nav-btn-primary { background: var(--q-primary); color: #fff !important; border-color: var(--q-primary); }
+    .qd-nav-btn-primary:hover { background: #1d4ed8; }
+    .qd-nav-btn-secondary { background: transparent; color: var(--q-muted); }
+    .qd-nav-btn-secondary:hover { background: var(--q-primary-light); color: var(--q-primary) !important; border-color: #93c5fd; }
+    .qd-nav-btn-ghost { background: #f3f4f6; color: var(--q-muted); border-color: var(--q-border); }
+    .qd-nav-btn-ghost:hover { background: #e5e7eb; color: var(--q-text); }
+    .qd-nav-ms-auto { margin-right: auto; }
+    @@media(max-width:576px) { .qd-offcanvas { width: 100% !important; } }
+</style>
+
+@* ===================== GOOGLE FONT ===================== *@
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+@* ===================== PAGE ===================== *@
+<div class="container-fluid qd-page py-4 px-3 px-lg-4">
+
+    @* ── 1. Page Header ── *@
+    <div class="qd-header mb-4">
+        <div class="row align-items-center g-3">
+            <div class="col-lg-6">
+                <div class="d-flex align-items-center gap-3 mb-2">
+                    <div style="background:rgba(255,255,255,.12);border-radius:14px;width:48px;height:48px;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;">
+                        <i class="bi bi-graph-up-arrow"></i>
+                    </div>
+                    <div>
+                        <h1 class="qd-header-title">لوحة التحليلات الذكية</h1>
+                        <p class="qd-header-sub">محرك القرارات — أداء الطلاب، الدفعات، المدربين، والدروس الضعيفة</p>
+                    </div>
+                </div>
+                <div class="qd-header-meta">
+                    <i class="bi bi-clock me-1"></i> آخر تحديث: @now
+                </div>
+                @if (User.IsInRole("Owner") || User.IsInRole("Developer"))
+                {
+                    <div class="mt-3">
+                        <a asp-area="Admin"
+                           asp-controller="DecisionLab"
+                           asp-action="Index"
+                           asp-route-batchId="@Model.SelectedBatchId"
+                           asp-route-curriculumId="@Model.SelectedCurriculumId"
+                           class="btn btn-sm btn-light fw-bold">
+                            <i class="bi bi-flask me-1"></i>
+                            فتح مختبر القرار
+                        </a>
+                    </div>
+                }
+            </div>
+            <div class="col-lg-6">
+                @* Filter Bar *@
+                <div class="qd-filter-bar">
+                    <form id="advancedDashboardFilters"
+                          method="get"
+                          asp-area="Admin"
+                          asp-controller="Analytics"
+                          asp-action="AdvancedDashboard">
+                        <div class="row g-2 align-items-end">
+                            <div class="col-12 col-sm-4">
+                                <div class="qd-filter-label"><i class="bi bi-book me-1"></i>المنهج</div>
+                                <select id="curriculumId" name="curriculumId" class="form-select form-select-sm">
+                                    <option value="">كل المناهج</option>
+                                    @foreach (var item in Model.CurriculumsFilter)
+                                    {
+                                        <option value="@item.Id" selected="@(Model.SelectedCurriculumId == item.Id)">@item.Name</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-12 col-sm-4">
+                                <div class="qd-filter-label"><i class="bi bi-people me-1"></i>الدفعة</div>
+                                <select id="batchId" name="batchId" class="form-select form-select-sm">
+                                    <option value="">كل الدفعات</option>
+                                    @foreach (var item in Model.BatchesFilter)
+                                    {
+                                        <option value="@item.Id" selected="@(Model.SelectedBatchId == item.Id)">@item.Name</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-12 col-sm-4">
+                                <div class="qd-filter-label"><i class="bi bi-person-badge me-1"></i>المدرب</div>
+                                <select id="instructorId" name="instructorId" class="form-select form-select-sm">
+                                    <option value="">كل المدربين</option>
+                                    @foreach (var item in Model.InstructorsFilter)
+                                    {
+                                        <option value="@item.Id" selected="@(Model.SelectedInstructorId == item.Id)">@item.Name</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-12">
+                                <div class="d-flex gap-2 justify-content-end mt-1">
+                                    <button type="button" class="btn-filter-reset" onclick="resetFilters()">
+                                        <i class="bi bi-x-circle me-1"></i> إعادة تعيين
+                                    </button>
+                                    <button type="submit" class="btn-filter-apply">
+                                        <i class="bi bi-funnel-fill me-1"></i> تطبيق الفلتر
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── 2. Dynamic content — loaded via AJAX (decision panel + KPIs + charts) ── *@
+    <div id="advancedDashboardContent">
+        @* Skeleton shown while AJAX loads *@
+        <div id="dashboardSkeleton">
+            <div class="skeleton-decision mb-4"
+                 style="height:90px;background:#fff;border-radius:16px;border:1px solid #e5e7eb;
+                        display:flex;align-items:center;gap:16px;padding:20px;">
+                <div class="skeleton" style="width:44px;height:44px;border-radius:12px;flex-shrink:0;"></div>
+                <div style="flex:1;">
+                    <div class="skeleton" style="height:14px;width:30%;border-radius:6px;margin-bottom:10px;"></div>
+                    <div class="skeleton" style="height:20px;width:50%;border-radius:6px;margin-bottom:8px;"></div>
+                    <div class="skeleton" style="height:12px;width:70%;border-radius:6px;"></div>
+                </div>
+            </div>
+            <div class="row g-3 mb-4">
+                @for (int i = 0; i < 6; i++)
+                {
+                    <div class="col-6 col-md-4 col-xl-2">
+                        <div style="background:#fff;border-radius:16px;padding:20px;border:1px solid #e5e7eb;height:130px;">
+                            <div class="skeleton" style="width:40px;height:40px;border-radius:10px;margin-bottom:12px;"></div>
+                            <div class="skeleton" style="height:28px;width:55%;border-radius:6px;margin-bottom:8px;"></div>
+                            <div class="skeleton" style="height:12px;width:80%;border-radius:6px;"></div>
+                        </div>
+                    </div>
+                }
+            </div>
+            <div class="row g-3">
+                @for (int i = 0; i < 3; i++)
+                {
+                    <div class="col-md-4">
+                        <div style="background:#fff;border-radius:16px;padding:24px;border:1px solid #e5e7eb;height:220px;">
+                            <div class="skeleton" style="height:16px;width:45%;border-radius:6px;margin-bottom:16px;"></div>
+                            <div class="skeleton" style="height:140px;border-radius:10px;"></div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    @* ── 6. إعادة تصنيف صعوبة الأسئلة (Professional Redesign) ── *@
+    @Html.AntiForgeryToken()
+
+    <style>
+    /* ── Recalibration Card ── */
+    .rc-card {
+        background: #fff;
+        border: 1px solid #E2E8F0;
+        border-radius: 20px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(15,23,42,.06);
+        margin-top: 24px;
+    }
+
+    .rc-card-toggle {
+        width: 100%;
+        border: none;
+        background: none;
+        padding: 20px 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        cursor: pointer;
+        font-family: inherit;
+        text-align: right;
+        transition: background .15s;
+    }
+    .rc-card-toggle:hover { background: #FAFBFF; }
+
+    .rc-toggle-left { display: flex; align-items: center; gap: 14px; }
+
+    .rc-toggle-icon {
+        width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
+        background: linear-gradient(135deg, #6D28D9, #7C3AED);
+        display: flex; align-items: center; justify-content: center;
+        color: #fff; font-size: 20px;
+        box-shadow: 0 4px 12px rgba(109,40,217,.30);
+    }
+
+    .rc-toggle-title { font-size: 16px; font-weight: 800; color: #0F172A; }
+    .rc-toggle-sub   { font-size: 13px; color: #64748B; margin-top: 2px; font-weight: 500; }
+
+    .rc-chevron {
+        width: 32px; height: 32px; border-radius: 8px;
+        background: #F1F5F9; display: flex; align-items: center; justify-content: center;
+        color: #64748B; font-size: 14px; transition: transform .25s, background .15s; flex-shrink: 0;
+    }
+    .rc-card.is-open .rc-chevron { transform: rotate(180deg); background: #EDE9FE; color: #7C3AED; }
+
+    .rc-body { display: none; border-top: 1px solid #F1F5F9; }
+    .rc-card.is-open .rc-body { display: block; }
+    .rc-body-inner { padding: 28px 24px; }
+
+    /* Section sub-label */
+    .rc-section-label {
+        display: flex; align-items: center; gap: 8px;
+        font-size: 12px; font-weight: 800; text-transform: uppercase;
+        letter-spacing: .7px; color: #94A3B8; margin-bottom: 16px;
+    }
+    .rc-section-label::after { content: ''; flex: 1; height: 1px; background: #E2E8F0; }
+
+    /* Difficulty zones visual bar */
+    .rc-zone-bar {
+        height: 10px; border-radius: 20px; overflow: hidden;
+        display: flex; margin-bottom: 6px; gap: 2px;
+        transition: all .3s;
+    }
+    .rc-zone-bar-seg { height: 100%; border-radius: 20px; transition: flex .3s; }
+
+    /* Difficulty inputs grid */
+    .rc-zones-grid {
+        display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 8px;
+    }
+    @@media (max-width: 768px) { .rc-zones-grid { grid-template-columns: repeat(2, 1fr); } }
+
+    .rc-zone-input {
+        border-radius: 14px; overflow: hidden;
+        border: 2px solid var(--zc, #E2E8F0);
+        background: var(--zb, #F8FAFC);
+        transition: border-color .2s, box-shadow .2s;
+    }
+    .rc-zone-input:focus-within {
+        border-color: var(--zc, #7C3AED);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--zc, #7C3AED) 15%, transparent);
+    }
+
+    .rc-zone-header {
+        padding: 10px 13px 8px;
+        display: flex; align-items: center; gap: 7px;
+    }
+    .rc-zone-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--zc, #CBD5E1); flex-shrink: 0; }
+    .rc-zone-name { font-size: 13px; font-weight: 800; color: var(--zc, #475569); }
+
+    .rc-zone-body { padding: 0 13px 12px; }
+
+    .rc-zone-input-wrap {
+        display: flex; align-items: center; gap: 0;
+        background: #fff; border-radius: 10px; overflow: hidden;
+        border: 1.5px solid #E2E8F0;
+    }
+    .rc-zone-input-wrap input[type="number"] {
+        flex: 1; border: none; outline: none; padding: 8px 10px;
+        font-family: inherit; font-size: 16px; font-weight: 800;
+        color: #0F172A; background: transparent; min-width: 0;
+        text-align: center;
+    }
+    .rc-zone-input-wrap .rc-pct { padding: 8px 10px 8px 6px; font-size: 13px; font-weight: 700; color: #94A3B8; }
+
+    .rc-zone-range-label { font-size: 11px; color: #94A3B8; font-weight: 600; margin-top: 6px; text-align: center; }
+
+    .rc-zone-readonly {
+        padding: 9px 10px; text-align: center;
+        font-size: 13px; font-weight: 700; color: #64748B;
+        background: #F8FAFC; border-radius: 10px; border: 1.5px solid #E2E8F0;
+    }
+
+    .rc-validation-msg {
+        font-size: 12px; color: #EF4444; font-weight: 600;
+        margin-top: 8px; display: none; align-items: center; gap: 5px;
+    }
+    .rc-validation-msg.visible { display: flex; }
+
+    /* Date range */
+    .rc-date-grid {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    }
+    @@media (max-width: 640px) { .rc-date-grid { grid-template-columns: 1fr; } }
+
+    .rc-date-field { }
+    .rc-date-label {
+        font-size: 12px; font-weight: 700; color: #475569;
+        margin-bottom: 6px; display: block;
+    }
+    .rc-date-input {
+        width: 100%; border: 1.5px solid #E2E8F0; border-radius: 10px;
+        padding: 9px 13px; font-family: inherit; font-size: 13px;
+        color: #0F172A; background: #fff; outline: none; transition: border-color .15s, box-shadow .15s;
+    }
+    .rc-date-input:focus { border-color: #3B82F6; box-shadow: 0 0 0 3px rgba(59,130,246,.12); }
+
+    /* Action buttons */
+    .rc-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+    .rc-btn {
+        display: inline-flex; align-items: center; gap: 7px;
+        padding: 10px 22px; border-radius: 10px;
+        font-family: inherit; font-size: 13px; font-weight: 800;
+        cursor: pointer; border: none; transition: all .18s; white-space: nowrap;
+    }
+    .rc-btn-preview {
+        background: #EEF2FF; color: #4338CA; border: 1.5px solid #C7D2FE;
+    }
+    .rc-btn-preview:hover { background: #E0E7FF; border-color: #A5B4FC; }
+    .rc-btn-preview:disabled { opacity: .45; cursor: not-allowed; }
+
+    .rc-btn-apply {
+        background: linear-gradient(135deg, #6D28D9, #7C3AED);
+        color: #fff; border: none;
+        box-shadow: 0 4px 14px rgba(109,40,217,.32);
+    }
+    .rc-btn-apply:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(109,40,217,.42); }
+    .rc-btn-apply:disabled { opacity: .45; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    .rc-spinner {
+        display: none; align-items: center; gap: 8px;
+        font-size: 13px; color: #64748B; font-weight: 600;
+    }
+    .rc-spinner.active { display: flex; }
+    .rc-spin-dot {
+        width: 18px; height: 18px; border-radius: 50%;
+        border: 2.5px solid #E2E8F0; border-top-color: #7C3AED;
+        animation: rcSpin .7s linear infinite;
+    }
+    @@keyframes rcSpin { to { transform: rotate(360deg); } }
+
+    /* Result area */
+    #rcResultArea { margin-top: 20px; }
+
+    .rc-result-card {
+        border-radius: 16px; padding: 20px;
+        border: 1.5px solid; animation: rcFadeIn .3s ease;
+    }
+    @@keyframes rcFadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    .rc-result-header {
+        display: flex; align-items: center; gap: 10px; margin-bottom: 18px; flex-wrap: wrap;
+    }
+    .rc-result-icon { font-size: 22px; }
+    .rc-result-title { font-size: 15px; font-weight: 800; }
+    .rc-result-meta { margin-right: auto; font-size: 12px; color: #64748B; }
+
+    .rc-stat-grid {
+        display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 16px;
+    }
+    @@media (max-width: 768px) { .rc-stat-grid { grid-template-columns: repeat(3, 1fr); } }
+    @@media (max-width: 480px) { .rc-stat-grid { grid-template-columns: repeat(2, 1fr); } }
+
+    .rc-stat-chip {
+        border-radius: 12px; padding: 12px 8px; text-align: center;
+        border: 1px solid transparent;
+    }
+    .rc-stat-chip-val { font-size: 22px; font-weight: 900; line-height: 1; }
+    .rc-stat-chip-lbl { font-size: 10px; font-weight: 600; margin-top: 4px; opacity: .8; }
+
+    .rc-changed-table-wrap { border-radius: 10px; overflow: hidden; border: 1px solid #E2E8F0; }
+    .rc-changed-table-title {
+        padding: 10px 14px; font-size: 13px; font-weight: 700; color: #334155;
+        background: #F8FAFC; border-bottom: 1px solid #E2E8F0;
+        display: flex; align-items: center; gap: 6px;
+    }
+    .rc-diff-badge {
+        display: inline-flex; align-items: center; gap: 3px;
+        padding: 2px 7px; border-radius: 20px; font-size: 11px; font-weight: 700; border: 1px solid;
+    }
+
+    .rc-error-box {
+        padding: 14px 18px; border-radius: 12px;
+        background: #FFF1F2; border: 1.5px solid #FECDD3; color: #9F1239;
+        font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 9px;
+    }
+    </style>
+
+    @* ── توزيع الأسئلة حسب الصعوبة ── *@
+    <style>
+    .dist-legend-row {
+        display: flex; align-items: center; gap: 10px; padding: 9px 13px;
+        border-radius: 12px; margin-bottom: 7px; border: 1.5px solid transparent;
+        transition: transform .15s;
+    }
+    .dist-legend-row:hover { transform: translateX(-2px); }
+    .dist-legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .dist-legend-label { flex: 1; font-size: 13px; font-weight: 700; }
+    .dist-legend-count { font-size: 18px; font-weight: 900; line-height: 1; }
+    .dist-legend-pct { font-size: 11px; font-weight: 600; opacity: .7; min-width: 34px; text-align: left; }
+
+    .dist-table-wrap { border-radius: 12px; overflow: hidden; border: 1px solid #E2E8F0; margin-top: 20px; }
+    .dist-table-wrap table { width: 100%; border-collapse: collapse; font-family: inherit; font-size: 12px; }
+    .dist-table-wrap thead tr { background: #F8FAFC; border-bottom: 1px solid #E2E8F0; }
+    .dist-table-wrap thead th { padding: 9px 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: #64748B; font-size: 11px; }
+    .dist-table-wrap tbody tr { border-top: 1px solid #F1F5F9; }
+    .dist-table-wrap tbody tr:nth-child(even) { background: #FAFBFF; }
+    .dist-table-wrap td { padding: 9px 12px; font-weight: 600; }
+
+    @@media (max-width: 640px) {
+        #distChartArea { grid-template-columns: 1fr !important; justify-items: center; }
+    }
+    </style>
+
+    <div class="rc-card" id="distCard" style="margin-top:24px;">
+        <button type="button" class="rc-card-toggle" onclick="toggleDistCard()" aria-expanded="false">
+            <div class="rc-toggle-left">
+                <div class="rc-toggle-icon" style="background:linear-gradient(135deg,#0EA5E9,#2563EB);">
+                    <i class="bi bi-pie-chart-fill"></i>
+                </div>
+                <div>
+                    <div class="rc-toggle-title">توزيع الأسئلة حسب الصعوبة</div>
+                    <div class="rc-toggle-sub">التوزيع الحالي في قاعدة البيانات — لكل منهج على حدة</div>
+                </div>
+            </div>
+            <div class="rc-chevron" id="distChevron"><i class="bi bi-chevron-down"></i></div>
+        </button>
+
+        <div class="rc-body" id="distPanelBody">
+            <div class="rc-body-inner">
+
+                <div class="rc-section-label"><i class="bi bi-book"></i> اختر المنهج</div>
+
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;flex-wrap:wrap;">
+                    <div style="flex:1;min-width:200px;max-width:340px;">
+                        <select id="distCurriculumSelect" class="rc-date-input" style="width:100%;cursor:pointer;" onchange="loadDistribution()">
+                            <option value="">كل المناهج</option>
+                            @foreach (var c in Model.CurriculumsFilter)
+                            {
+                                <option value="@c.Id">@c.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <button type="button" class="rc-btn rc-btn-preview" onclick="loadDistribution()" id="distRefreshBtn" style="flex-shrink:0;">
+                        <i class="bi bi-arrow-clockwise"></i> تحديث
+                    </button>
+                    <div class="rc-spinner" id="distSpinner">
+                        <div class="rc-spin-dot" style="border-top-color:#2563EB;"></div>
+                        جاري التحميل…
+                    </div>
+                </div>
+
+                <div id="distContent">
+                    <div style="text-align:center;padding:40px 20px;color:#94A3B8;">
+                        <i class="bi bi-pie-chart" style="font-size:36px;display:block;margin-bottom:10px;opacity:.4;"></i>
+                        <span style="font-size:13px;">اضغط <strong>تحديث</strong> أو اختر منهجاً لعرض التوزيع</span>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <div class="rc-card" id="difficultyRecalibrationCard">
+
+        <button type="button" class="rc-card-toggle" onclick="toggleRecalibPanel()" aria-expanded="false">
+            <div class="rc-toggle-left">
+                <div class="rc-toggle-icon"><i class="bi bi-sliders"></i></div>
+                <div>
+                    <div class="rc-toggle-title">إعادة تصنيف صعوبة الأسئلة</div>
+                    <div class="rc-toggle-sub">تحديث مستوى الصعوبة بناءً على أداء الطلاب الفعلي</div>
+                </div>
+            </div>
+            <div class="rc-chevron" id="recalibChevron"><i class="bi bi-chevron-down"></i></div>
+        </button>
+
+        <div class="rc-body" id="recalibPanelBody">
+            <div class="rc-body-inner">
+
+                @* ── Visual zone bar ── *@
+                <div class="rc-zone-bar" id="rcZoneBar">
+                    <div class="rc-zone-bar-seg" id="rcBarVH" style="flex:15;background:linear-gradient(135deg,#6D28D9,#7C3AED);border-radius:20px 0 0 20px;"></div>
+                    <div class="rc-zone-bar-seg" id="rcBarH"  style="flex:34;background:linear-gradient(135deg,#DC2626,#EF4444);"></div>
+                    <div class="rc-zone-bar-seg" id="rcBarM"  style="flex:30;background:linear-gradient(135deg,#D97706,#F59E0B);"></div>
+                    <div class="rc-zone-bar-seg" id="rcBarE"  style="flex:21;background:linear-gradient(135deg,#059669,#10B981);border-radius:0 20px 20px 0;"></div>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:10px;color:#94A3B8;font-weight:600;margin-bottom:20px;">
+                    <span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>
+                </div>
+
+                @* ── Section: معايير التصنيف ── *@
+                <div class="rc-section-label"><i class="bi bi-sliders2"></i> معايير التصنيف — النسبة من أجاب صحيحاً</div>
+
+                <div class="rc-zones-grid">
+
+                    <div class="rc-zone-input" style="--zc:#7C3AED;--zb:#F5F3FF;">
+                        <div class="rc-zone-header">
+                            <div class="rc-zone-dot"></div>
+                            <span class="rc-zone-name">صعب جداً</span>
+                        </div>
+                        <div class="rc-zone-body">
+                            <div class="rc-zone-input-wrap">
+                                <input type="number" id="rcVeryHardMax" value="15" min="1" max="98" step="1"
+                                       oninput="rcUpdateBar()" />
+                                <span class="rc-pct">%</span>
+                            </div>
+                            <div class="rc-zone-range-label" id="rcVHRange">0% — 15%</div>
+                        </div>
+                    </div>
+
+                    <div class="rc-zone-input" style="--zc:#DC2626;--zb:#FFF1F2;">
+                        <div class="rc-zone-header">
+                            <div class="rc-zone-dot"></div>
+                            <span class="rc-zone-name">صعب</span>
+                        </div>
+                        <div class="rc-zone-body">
+                            <div class="rc-zone-input-wrap">
+                                <input type="number" id="rcHardMax" value="49" min="2" max="98" step="1"
+                                       oninput="rcUpdateBar()" />
+                                <span class="rc-pct">%</span>
+                            </div>
+                            <div class="rc-zone-range-label" id="rcHRange">16% — 49%</div>
+                        </div>
+                    </div>
+
+                    <div class="rc-zone-input" style="--zc:#D97706;--zb:#FFFBEB;">
+                        <div class="rc-zone-header">
+                            <div class="rc-zone-dot"></div>
+                            <span class="rc-zone-name">متوسط</span>
+                        </div>
+                        <div class="rc-zone-body">
+                            <div class="rc-zone-input-wrap">
+                                <input type="number" id="rcMediumMax" value="79" min="3" max="99" step="1"
+                                       oninput="rcUpdateBar()" />
+                                <span class="rc-pct">%</span>
+                            </div>
+                            <div class="rc-zone-range-label" id="rcMRange">50% — 79%</div>
+                        </div>
+                    </div>
+
+                    <div class="rc-zone-input" style="--zc:#059669;--zb:#F0FDF4;">
+                        <div class="rc-zone-header">
+                            <div class="rc-zone-dot"></div>
+                            <span class="rc-zone-name">سهل</span>
+                        </div>
+                        <div class="rc-zone-body">
+                            <div class="rc-zone-readonly" id="rcEasyRange">80% — 100%</div>
+                            <div class="rc-zone-range-label" style="color:#059669;">يُحسب تلقائياً</div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="rc-validation-msg" id="rcValidationMsg">
+                    <i class="bi bi-exclamation-circle-fill"></i>
+                    <span id="rcValidationText">تأكد من أن النسب بترتيب تصاعدي صحيح.</span>
+                </div>
+
+                @* ── Section: المنهج المستهدف ── *@
+                <div class="rc-section-label" style="margin-top:24px;">
+                    <i class="bi bi-book"></i>
+                    المنهج المستهدف
+                    <span style="font-size:11px;text-transform:none;letter-spacing:0;color:#94A3B8;font-weight:500;">(اختياري — فارغ = كل المناهج)</span>
+                </div>
+
+                <div style="max-width:340px;margin-bottom:24px;">
+                    <select id="rcCurriculumId" class="rc-date-input" style="width:100%;cursor:pointer;">
+                        <option value="">كل المناهج</option>
+                        @foreach (var c in Model.CurriculumsFilter)
+                        {
+                            <option value="@c.Id">@c.Name</option>
+                        }
+                    </select>
+                </div>
+
+                @* ── Section: نطاق التاريخ ── *@
+                <div class="rc-section-label" style="margin-top:24px;">
+                    <i class="bi bi-calendar2-range"></i>
+                    نطاق التاريخ
+                    <span style="font-size:11px;text-transform:none;letter-spacing:0;color:#94A3B8;font-weight:500;">(اختياري — فارغ = كل المحاولات)</span>
+                </div>
+
+                <div class="rc-date-grid" style="max-width:480px;margin-bottom:24px;">
+                    <div class="rc-date-field">
+                        <label class="rc-date-label" for="rcFromDate">من تاريخ</label>
+                        <input type="date" id="rcFromDate" class="rc-date-input" />
+                    </div>
+                    <div class="rc-date-field">
+                        <label class="rc-date-label" for="rcToDate">إلى تاريخ</label>
+                        <input type="date" id="rcToDate" class="rc-date-input" />
+                    </div>
+                </div>
+
+                @* ── Action Buttons ── *@
+                <div class="rc-actions">
+                    <button type="button" class="rc-btn rc-btn-preview" onclick="runRecalibration(false)" id="rcPreviewBtn">
+                        <i class="bi bi-eye"></i> معاينة التغييرات
+                    </button>
+                    <button type="button" class="rc-btn rc-btn-apply" onclick="runRecalibration(true)" id="rcApplyBtn">
+                        <i class="bi bi-check2-circle"></i> تطبيق وحفظ
+                    </button>
+                    <div class="rc-spinner" id="rcSpinner">
+                        <div class="rc-spin-dot"></div>
+                        جاري الحساب…
+                    </div>
+                </div>
+
+                @* ── Result Area ── *@
+                <div id="rcResultArea"></div>
+
+            </div>
+        </div>
+    </div>
+
+</div>
+
+@section Scripts {
+<script>
+    // ══════════════════════════════════════════════════════════════════
+    //  توزيع الأسئلة — Distribution Card
+    // ══════════════════════════════════════════════════════════════════
+
+    let distChart = null;
+    let distLoaded = false;
+
+    function toggleDistCard() {
+        const card = document.getElementById('distCard');
+        card.classList.toggle('is-open');
+        if (card.classList.contains('is-open') && !distLoaded) {
+            loadDistribution();
+        }
+    }
+
+    async function loadDistribution() {
+        const curriculumId = document.getElementById('distCurriculumSelect').value;
+        const base = '@Url.Action("GetQuestionDistribution","AnalyticsDashboard", new { area = "Admin" })';
+        const url  = curriculumId ? `${base}?curriculumId=${curriculumId}` : base;
+
+        document.getElementById('distSpinner').classList.add('active');
+        document.getElementById('distRefreshBtn').disabled = true;
+
+        try {
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error();
+            const json = await resp.json();
+            if (!json.success) throw new Error();
+            renderDistribution(json.data, curriculumId);
+            distLoaded = true;
+        } catch {
+            document.getElementById('distContent').innerHTML =
+                `<div class="rc-error-box mt-2"><i class="bi bi-exclamation-circle-fill" style="flex-shrink:0;"></i> تعذّر تحميل البيانات.</div>`;
+        } finally {
+            document.getElementById('distSpinner').classList.remove('active');
+            document.getElementById('distRefreshBtn').disabled = false;
+        }
+    }
+
+    function renderDistribution(data, curriculumId) {
+        const el = document.getElementById('distContent');
+
+        if (!data || data.length === 0) {
+            el.innerHTML = '<div style="text-align:center;padding:32px;color:#94A3B8;font-size:13px;">لا توجد بيانات لهذا المنهج.</div>';
+            return;
+        }
+
+        // تجميع الإجماليات (PropertyNamingPolicy = null → PascalCase)
+        let easy = 0, medium = 0, hard = 0, veryHard = 0, total = 0;
+        data.forEach(d => {
+            easy     += d.EasyCount;
+            medium   += d.MediumCount;
+            hard     += d.HardCount;
+            veryHard += d.VeryHardCount;
+            total    += d.Total;
+        });
+
+        const pct = v => total > 0 ? Math.round(v / total * 100) : 0;
+
+        const levels = [
+            { label: 'سهل',       count: easy,     color: '#10B981', bg: '#F0FDF4', border: '#A7F3D0' },
+            { label: 'متوسط',     count: medium,   color: '#F59E0B', bg: '#FFFBEB', border: '#FDE68A' },
+            { label: 'صعب',       count: hard,     color: '#EF4444', bg: '#FFF1F2', border: '#FECDD3' },
+            { label: 'صعب جداً',  count: veryHard, color: '#7C3AED', bg: '#F5F3FF', border: '#C4B5FD' },
+        ];
+
+        const legendHtml = levels.map(l => `
+            <div class="dist-legend-row" style="background:${l.bg};border-color:${l.border};">
+                <div class="dist-legend-dot" style="background:${l.color};"></div>
+                <div class="dist-legend-label" style="color:${l.color};">${l.label}</div>
+                <div class="dist-legend-count" style="color:${l.color};">${l.count.toLocaleString()}</div>
+                <div class="dist-legend-pct" style="color:${l.color};">${pct(l.count)}%</div>
+            </div>`).join('');
+
+        // جدول تفصيلي عند عرض كل المناهج
+        let detailTable = '';
+        if (!curriculumId && data.length > 1) {
+            const rows = data.map((d, i) => `
+                <tr>
+                    <td style="color:#334155;max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${d.CurriculumTitle}">${d.CurriculumTitle}</td>
+                    <td style="text-align:center;color:#10B981;">${d.EasyCount}</td>
+                    <td style="text-align:center;color:#F59E0B;">${d.MediumCount}</td>
+                    <td style="text-align:center;color:#EF4444;">${d.HardCount}</td>
+                    <td style="text-align:center;color:#7C3AED;">${d.VeryHardCount}</td>
+                    <td style="text-align:center;color:#475569;font-weight:700;">${d.Total}</td>
+                </tr>`).join('');
+
+            detailTable = `
+            <div class="dist-table-wrap">
+                <div style="padding:10px 14px;font-size:13px;font-weight:700;color:#334155;background:#F8FAFC;border-bottom:1px solid #E2E8F0;display:flex;align-items:center;gap:6px;">
+                    <i class="bi bi-list-ul"></i> توزيع تفصيلي لكل منهج
+                </div>
+                <div style="max-height:300px;overflow-y:auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="text-align:right;">المنهج</th>
+                                <th style="text-align:center;color:#10B981;">سهل</th>
+                                <th style="text-align:center;color:#F59E0B;">متوسط</th>
+                                <th style="text-align:center;color:#EF4444;">صعب</th>
+                                <th style="text-align:center;color:#7C3AED;">صعب جداً</th>
+                                <th style="text-align:center;">الإجمالي</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+            </div>`;
+        }
+
+        el.innerHTML = `
+        <div>
+            <div id="distChartArea" style="display:grid;grid-template-columns:200px 1fr;gap:24px;align-items:center;margin-bottom:4px;">
+                <div style="position:relative;width:180px;height:180px;margin:auto;">
+                    <canvas id="distDonutChart" width="180" height="180"></canvas>
+                    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;">
+                        <div style="font-size:22px;font-weight:900;color:#0F172A;line-height:1;">${total.toLocaleString()}</div>
+                        <div style="font-size:11px;font-weight:600;color:#94A3B8;margin-top:2px;">سؤال</div>
+                    </div>
+                </div>
+                <div>${legendHtml}</div>
+            </div>
+            ${detailTable}
+        </div>`;
+
+        // بناء/تحديث الرسم البياني
+        const ctx = document.getElementById('distDonutChart').getContext('2d');
+        if (distChart) distChart.destroy();
+        distChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['سهل', 'متوسط', 'صعب', 'صعب جداً'],
+                datasets: [{
+                    data: [easy, medium, hard, veryHard],
+                    backgroundColor: ['#10B981', '#F59E0B', '#EF4444', '#7C3AED'],
+                    borderColor: '#fff',
+                    borderWidth: 3,
+                    hoverOffset: 8
+                }]
+            },
+            options: {
+                cutout: '68%',
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        rtl: true,
+                        callbacks: {
+                            label: ctx => {
+                                const v = ctx.parsed;
+                                const p = total > 0 ? Math.round(v / total * 100) : 0;
+                                return `  ${v.toLocaleString()} سؤال (${p}%)`;
+                            }
+                        }
+                    }
+                },
+                animation: { duration: 500, easing: 'easeInOutQuart' }
+            }
+        });
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    //  إعادة التصنيف — Recalibration Panel
+    // ══════════════════════════════════════════════════════════════════
+
+    // ══ تبديل ظهور البانيل ══
+    function toggleRecalibPanel() {
+        const card = document.getElementById('difficultyRecalibrationCard');
+        card.classList.toggle('is-open');
+    }
+
+    // ══ تحديث الشريط البصري والنطاقات ══
+    function rcUpdateBar() {
+        const vh = parseFloat(document.getElementById('rcVeryHardMax').value) || 15;
+        const h  = parseFloat(document.getElementById('rcHardMax').value)     || 49;
+        const m  = parseFloat(document.getElementById('rcMediumMax').value)   || 79;
+        const e  = 100 - m;
+
+        document.getElementById('rcBarVH').style.flex = vh;
+        document.getElementById('rcBarH').style.flex  = Math.max(h - vh, 0);
+        document.getElementById('rcBarM').style.flex  = Math.max(m - h, 0);
+        document.getElementById('rcBarE').style.flex  = Math.max(e, 0);
+
+        document.getElementById('rcVHRange').textContent = `0% — ${vh}%`;
+        document.getElementById('rcHRange').textContent  = `${vh+1}% — ${h}%`;
+        document.getElementById('rcMRange').textContent  = `${h+1}% — ${m}%`;
+        document.getElementById('rcEasyRange').textContent = `${m+1}% — 100%`;
+
+        const isValid = vh < h && h < m && m < 100;
+        const msg = document.getElementById('rcValidationMsg');
+        msg.classList.toggle('visible', !isValid);
+    }
+
+    // ══ بناء الـ payload ══
+    function buildPayload() {
+        const curriculumRaw = document.getElementById('rcCurriculumId')?.value;
+        return {
+            veryHardMaxPercent : parseFloat(document.getElementById('rcVeryHardMax').value) || 15,
+            hardMaxPercent     : parseFloat(document.getElementById('rcHardMax').value)     || 49,
+            mediumMaxPercent   : parseFloat(document.getElementById('rcMediumMax').value)   || 79,
+            fromDate           : document.getElementById('rcFromDate').value || null,
+            toDate             : document.getElementById('rcToDate').value   || null,
+            curriculumId       : curriculumRaw ? parseInt(curriculumRaw) : null
+        };
+    }
+
+    // تهيئة الشريط عند التحميل
+    document.addEventListener('DOMContentLoaded', function() { rcUpdateBar(); });
+
+    // ══ تشغيل المعاينة أو التطبيق ══
+    async function runRecalibration(apply) {
+        const payload   = buildPayload();
+        const actionUrl = apply
+            ? '@Url.Action("ApplyDifficultyRecalibration","AnalyticsDashboard", new { area = "Admin" })'
+            : '@Url.Action("PreviewDifficultyRecalibration","AnalyticsDashboard", new { area = "Admin" })';
+
+        // تحقق من صحة القيم
+        if (payload.veryHardMaxPercent >= payload.hardMaxPercent ||
+            payload.hardMaxPercent     >= payload.mediumMaxPercent ||
+            payload.mediumMaxPercent   >= 100) {
+            showRcAlert('تأكد من أن النسب بترتيب تصاعدي صحيح وأن المتوسط أقل من 100%.', 'danger');
+            return;
+        }
+
+        if (apply && !confirm('سيتم تحديث مستوى الصعوبة لكل الأسئلة في قاعدة البيانات. هل تريد المتابعة؟')) return;
+
+        setRcLoading(true);
+        document.getElementById('rcResultArea').style.display = 'none';
+
+        try {
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+            const resp  = await fetch(actionUrl, {
+                method  : 'POST',
+                headers : {
+                    'Content-Type'            : 'application/json',
+                    'RequestVerificationToken': token
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                showRcAlert(err.message ?? 'حدث خطأ في الخادم.', 'danger');
+                return;
+            }
+
+            const json = await resp.json();
+            if (!json.success) { showRcAlert(json.message ?? 'فشلت العملية.', 'danger'); return; }
+
+            renderRcResult(json.data, apply);
+        } catch (e) {
+            showRcAlert('تعذّر الاتصال بالخادم.', 'danger');
+        } finally {
+            setRcLoading(false);
+        }
+    }
+
+    function setRcLoading(on) {
+        document.getElementById('rcSpinner').classList.toggle('active', on);
+        document.getElementById('rcPreviewBtn').disabled = on;
+        document.getElementById('rcApplyBtn').disabled   = on;
+    }
+
+    function showRcAlert(msg, type) {
+        const area = document.getElementById('rcResultArea');
+        const isError = type === 'danger' || type === 'error';
+        area.innerHTML = `<div class="rc-error-box mt-3">
+            <i class="bi bi-exclamation-circle-fill" style="font-size:18px;flex-shrink:0"></i>
+            <span>${msg}</span>
+        </div>`;
+    }
+
+    // ══ عرض النتائج ══
+    function renderRcResult(d, applied) {
+        const diffLabel = {
+            0: '<span class="badge bg-success">سهل</span>',
+            1: '<span class="badge bg-warning text-dark">متوسط</span>',
+            2: '<span class="badge bg-danger">صعب</span>',
+            3: '<span class="badge" style="background:#7c3aed;">صعب جداً</span>'
+        };
+
+        const dateRange = (d.fromDate || d.toDate)
+            ? `<span class="me-3"><i class="bi bi-calendar2 me-1"></i>${d.fromDate ? d.fromDate.substring(0,10) : '—'} → ${d.toDate ? d.toDate.substring(0,10) : '—'}</span>`
+            : '<span class="me-3"><i class="bi bi-calendar2 me-1"></i>كل المحاولات</span>';
+
+        const headerColor = applied ? 'var(--q-success)' : 'var(--q-primary)';
+        const headerIcon  = applied ? 'bi-check2-all' : 'bi-eye';
+        const headerTitle = applied ? 'تم تطبيق إعادة التصنيف بنجاح' : 'معاينة إعادة التصنيف';
+
+        // بطاقات الإحصاء
+        const chips = [
+            { val: d.totalQuestions, lbl: 'إجمالي الأسئلة',   bg: '#F1F5F9', color: '#334155', border: '#CBD5E1' },
+            { val: d.updatedCount,   lbl: 'سيتغير تصنيفها',   bg: '#F5F3FF', color: '#6D28D9', border: '#C4B5FD' },
+            { val: d.veryHardCount,  lbl: `صعب جداً 0–${d.veryHardMaxPercent}%`, bg: '#F5F3FF', color: '#7C3AED', border: '#C4B5FD' },
+            { val: d.hardCount,      lbl: `صعب ${d.veryHardMaxPercent+1}–${d.hardMaxPercent}%`, bg: '#FFF1F2', color: '#DC2626', border: '#FECDD3' },
+            { val: d.mediumCount,    lbl: `متوسط ${d.hardMaxPercent+1}–${d.mediumMaxPercent}%`, bg: '#FFFBEB', color: '#D97706', border: '#FDE68A' },
+            { val: d.easyCount,      lbl: `سهل ${d.mediumMaxPercent+1}–100%`, bg: '#F0FDF4', color: '#059669', border: '#A7F3D0' }
+        ];
+
+        const statCards = `<div class="rc-stat-grid">${chips.map(c => `
+            <div class="rc-stat-chip" style="background:${c.bg};border-color:${c.border};">
+                <div class="rc-stat-chip-val" style="color:${c.color};">${c.val}</div>
+                <div class="rc-stat-chip-lbl" style="color:${c.color};">${c.lbl}</div>
+            </div>`).join('')}</div>`;
+
+        // جدول التغييرات
+        let tableHtml = '';
+        if (d.changedItems && d.changedItems.length > 0) {
+            const diffBadge = {
+                0: `<span class="rc-diff-badge" style="background:#F0FDF4;color:#059669;border-color:#A7F3D0;">سهل</span>`,
+                1: `<span class="rc-diff-badge" style="background:#FFFBEB;color:#D97706;border-color:#FDE68A;">متوسط</span>`,
+                2: `<span class="rc-diff-badge" style="background:#FFF1F2;color:#DC2626;border-color:#FECDD3;">صعب</span>`,
+                3: `<span class="rc-diff-badge" style="background:#F5F3FF;color:#7C3AED;border-color:#C4B5FD;">صعب جداً</span>`
+            };
+            const rows = d.changedItems.map(item => `
+                <tr style="font-size:12px;">
+                    <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:9px 12px;color:#334155;font-weight:600;"
+                        title="${item.questionTitle}">${item.questionTitle}</td>
+                    <td style="text-align:center;padding:9px 12px;">${diffBadge[item.oldDifficulty] ?? item.oldDifficulty}</td>
+                    <td style="text-align:center;padding:9px 6px;color:#94A3B8;"><i class="bi bi-arrow-left"></i></td>
+                    <td style="text-align:center;padding:9px 12px;">${diffBadge[item.newDifficulty] ?? item.newDifficulty}</td>
+                    <td style="text-align:center;padding:9px 12px;font-weight:800;color:#2563EB;">${item.successRate}%</td>
+                    <td style="text-align:center;padding:9px 12px;color:#64748B;">${item.uniqueStudents}</td>
+                </tr>`).join('');
+
+            tableHtml = `
+            <div class="rc-changed-table-wrap">
+                <div class="rc-changed-table-title">
+                    <i class="bi bi-list-check"></i>
+                    الأسئلة المتغيرة (${d.changedItems.length} سؤال)
+                </div>
+                <div style="max-height:340px;overflow-y:auto;">
+                    <table style="width:100%;border-collapse:collapse;font-family:inherit;">
+                        <thead>
+                            <tr style="background:#F8FAFC;font-size:11px;color:#64748B;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #E2E8F0;">
+                                <th style="padding:9px 12px;text-align:right;">السؤال</th>
+                                <th style="padding:9px 12px;text-align:center;">التصنيف القديم</th>
+                                <th style="width:28px;"></th>
+                                <th style="padding:9px 12px;text-align:center;">التصنيف الجديد</th>
+                                <th style="padding:9px 12px;text-align:center;">نسبة النجاح</th>
+                                <th style="padding:9px 12px;text-align:center;">الطلاب</th>
+                            </tr>
+                        </thead>
+                        <tbody style="border-top:1px solid #E2E8F0;">${rows}</tbody>
+                    </table>
+                </div>
+            </div>`;
+        }
+
+        const rc = document.getElementById('rcResultArea');
+        rc.innerHTML = `
+        <div class="rc-result-card mt-4" style="border-color:${headerColor};background:${applied ? '#F0FDF4' : '#EFF6FF'};">
+            <div class="rc-result-header">
+                <span class="rc-result-icon" style="color:${headerColor};">
+                    <i class="bi ${headerIcon}"></i>
+                </span>
+                <span class="rc-result-title" style="color:${headerColor};">${headerTitle}</span>
+                <span class="rc-result-meta">
+                    <i class="bi bi-calendar2 me-1"></i>${dateRange.replace(/<[^>]+>/g,'')}
+                </span>
+            </div>
+            ${statCards}
+            <div style="font-size:12px;color:#64748B;margin-bottom:16px;">
+                <i class="bi bi-info-circle me-1"></i>
+                ${d.skippedNoData} سؤال بدون محاولات — لم يُصنَّف
+            </div>
+            ${tableHtml}
+        </div>`;
+    }
+</script>
+}
+
+@* Offcanvas panels moved to _AdvancedDashboardContent.cshtml (loaded via AJAX) *@
+@if (false) {
+<div class="offcanvas offcanvas-end qd-offcanvas" tabindex="-1" id="batchesOffcanvas" aria-labelledby="batchesOffcanvasLabel" data-bs-scroll="true">
+    <div class="offcanvas-header" style="background:linear-gradient(135deg,#1e3a8a,#1e40af)">
+        <div>
+            <h5 class="offcanvas-title" id="batchesOffcanvasLabel" style="font-size:17px;font-weight:800">
+                <i class="bi bi-layers-fill me-2"></i> إجمالي الدفعات
+            </h5>
+            <div style="font-size:13px;opacity:.8;margin-top:3px">@(Model?.TotalBatches ?? 0) دفعة نشطة في النظام</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        <div class="qd-oc-summary">
+            <span class="qd-badge badge-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>خطر عالي: @(Model?.RiskHigh ?? 0)</span>
+            <span class="qd-badge badge-warning"><i class="bi bi-dash-circle-fill me-1"></i>متوسط: @(Model?.RiskMedium ?? 0)</span>
+            <span class="qd-badge badge-success"><i class="bi bi-check-circle-fill me-1"></i>جيد: @(Model?.RiskLow ?? 0)</span>
+        </div>
+        <div class="qd-oc-list">
+            @if (Model?.Batches == null || !Model.Batches.Any())
+            {
+                <div class="qd-empty">
+                    <i class="bi bi-layers"></i>
+                    <div class="qd-empty-title">لا توجد دفعات</div>
+                    <div class="qd-empty-sub">لم يتم إضافة دفعات بعد</div>
+                </div>
+            }
+            else
+            {
+                @foreach (var batch in Model.Batches)
+                {
+                    var bRisk = batch.RiskLevel == "High" ? "badge-danger" : batch.RiskLevel == "Medium" ? "badge-warning" : "badge-success";
+                    var bRiskLabel = batch.RiskLevel == "High" ? "خطر عالي" : batch.RiskLevel == "Medium" ? "متوسط" : "جيد";
+                    Model.DecisionStatusMap.TryGetValue(batch.BatchId, out var batchDecision);
+                    <div class="qd-oc-item">
+                        <div class="qd-oc-item-title d-flex align-items-center gap-2 flex-wrap">
+                            @batch.BatchName
+                            @if (batchDecision != null && batchDecision.StatusLabel != "لا قرار")
+                            {
+                                <span class="badge bg-@batchDecision.StatusCssClass"
+                                      style="font-size:10px;font-weight:700;">
+                                    @batchDecision.StatusLabel
+                                </span>
+                            }
+                            @if (batchDecision?.HasActiveInterventionTask == true
+                                 && batchDecision.LatestDecisionAt.HasValue)
+                            {
+                                var daysSince = (int)(DateTime.Now - batchDecision.LatestDecisionAt.Value).TotalDays;
+                                <span class="badge"
+                                      style="background:#ede9fe;color:#5b21b6;font-size:10px;font-weight:700;">
+                                    <i class="fas fa-bolt me-1"></i>تدخل جارٍ منذ @daysSince يوم
+                                </span>
+                            }
+                        </div>
+                        @if (!string.IsNullOrEmpty(batch.CourseName))
+                        {
+                            <div class="qd-oc-item-sub"><i class="bi bi-book me-1"></i>@batch.CourseName</div>
+                        }
+                        <div class="qd-oc-item-stats">
+                            <span class="qd-badge @bRisk">@bRiskLabel</span>
+                            <span class="qd-badge badge-primary"><i class="bi bi-people-fill me-1"></i>@batch.StudentsCount طالب</span>
+                            @if (batch.WeakLessonsCount > 0)
+                            {
+                                <span class="qd-badge badge-warning"><i class="bi bi-exclamation-diamond me-1"></i>@batch.WeakLessonsCount درس ضعيف</span>
+                            }
+                            @if (batch.AffectedStudents > 0)
+                            {
+                                <span class="qd-badge badge-danger"><i class="bi bi-person-fill-exclamation me-1"></i>@batch.AffectedStudents متأثر</span>
+                            }
+                        </div>
+                        @if ((batch.RiskLevel == "High" || batch.RiskLevel == "Medium") && (User.IsInRole("Owner") || User.IsInRole("Developer")))
+                        {
+                            var batchBridgeCtx = new AnalyticsDecisionBridgeContext
+                            {
+                                BatchId      = batch.BatchId,
+                                CurriculumId = Model.SelectedCurriculumId,
+                                InstructorId = Model.SelectedInstructorId,
+                                SourceMetric = batch.RiskLevel == "High" ? "high-risk-batch" : "medium-risk-batch",
+                                SourcePage   = "AdvancedDashboard",
+                                ReturnUrl    = Url.Action("AdvancedDashboard", "Analytics", new
+                                {
+                                    area         = "Admin",
+                                    curriculumId = Model.SelectedCurriculumId,
+                                    batchId      = Model.SelectedBatchId,
+                                    instructorId = Model.SelectedInstructorId
+                                }) ?? ""
+                            };
+                            var btnColor = batch.RiskLevel == "High" ? "var(--q-danger)" : "var(--q-warning)";
+                            <div class="mt-2 d-flex gap-2 flex-wrap">
+                                <a href="@Url.ToDecisionLabUrl(batchBridgeCtx)"
+                                   class="qd-nav-btn"
+                                   style="font-size:12px;padding:4px 10px;background:@btnColor;color:#fff;border-color:@btnColor;text-decoration:none;">
+                                    <i class="bi bi-lightning-charge-fill"></i> اتخذ قراراً لهذه الدفعة
+                                </a>
+                                <a href="@Url.ToBatchAnalysisUrl(batchBridgeCtx)"
+                                   class="qd-nav-btn qd-nav-btn-secondary"
+                                   style="font-size:12px;padding:4px 10px;text-decoration:none;">
+                                    <i class="bi bi-bar-chart-line"></i> تحليل الدفعة
+                                </a>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+        <div class="qd-oc-footer">
+            <button type="button" class="qd-nav-btn qd-nav-btn-ghost" data-bs-dismiss="offcanvas">
+                <i class="bi bi-x-lg"></i> إغلاق
+            </button>
+            <a class="qd-nav-btn qd-nav-btn-secondary"
+               asp-area="Admin" asp-controller="Analytics" asp-action="MetricDecisionDetails" asp-route-metric="total-batches"
+               asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId">
+                <i class="bi bi-graph-up"></i> تحليل القرار
+            </a>
+            <a class="qd-nav-btn qd-nav-btn-primary"
+               asp-area="Admin" asp-controller="Analytics" asp-action="AdvancedDashboard"
+               asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId">
+                <i class="bi bi-bar-chart-fill"></i> لوحة التحليلات
+            </a>
+        </div>
+    </div>
+</div>
+
+@* ═══════════════════════════════════════════════════════════════════
+   OFFCANVAS 2 — المدربون النشطون
+   ═══════════════════════════════════════════════════════════════════ *@
+<div class="offcanvas offcanvas-end qd-offcanvas" tabindex="-1" id="instructorsOffcanvas" aria-labelledby="instructorsOffcanvasLabel" data-bs-scroll="true">
+    <div class="offcanvas-header" style="background:linear-gradient(135deg,#164e63,#0891b2)">
+        <div>
+            <h5 class="offcanvas-title" id="instructorsOffcanvasLabel" style="font-size:17px;font-weight:800">
+                <i class="bi bi-person-badge-fill me-2"></i> المدربون النشطون
+            </h5>
+            <div style="font-size:13px;opacity:.8;margin-top:3px">@(Model?.TotalInstructors ?? 0) مدرب مرتبط بدفعات</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        <div class="qd-oc-summary">
+            <span style="font-size:13px;color:var(--q-muted);font-weight:700;">
+                <i class="bi bi-info-circle me-1"></i>
+                متوسط الأداء عبر جميع المدربين
+            </span>
+        </div>
+        <div class="qd-oc-list">
+            @if (Model?.Instructors == null || !Model.Instructors.Any())
+            {
+                <div class="qd-empty">
+                    <i class="bi bi-person-badge"></i>
+                    <div class="qd-empty-title">لا يوجد مدربون</div>
+                    <div class="qd-empty-sub">لم يتم تعيين مدربين بعد</div>
+                </div>
+            }
+            else
+            {
+                @foreach (var instr in Model.Instructors)
+                {
+                    var iRisk = instr.RiskLevel == "High" ? "badge-danger" : instr.RiskLevel == "Medium" ? "badge-warning" : "badge-success";
+                    var iRiskLabel = instr.RiskLevel == "High" ? "خطر عالي" : instr.RiskLevel == "Medium" ? "متوسط" : "جيد";
+                    var scoreColor = instr.AvgScore >= 70 ? "var(--q-success)" : instr.AvgScore >= 50 ? "var(--q-warning)" : "var(--q-danger)";
+                    <div class="qd-oc-item">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                            <div>
+                                <div class="qd-oc-item-title">@instr.InstructorName</div>
+                                <div class="qd-oc-item-sub">
+                                    <i class="bi bi-layers me-1"></i>@instr.BatchesCount دفعة
+                                </div>
+                            </div>
+                            <div style="font-size:22px;font-weight:900;color:@scoreColor;flex-shrink:0">@Math.Round(instr.AvgScore)%</div>
+                        </div>
+                        <div class="qd-oc-item-stats">
+                            <span class="qd-badge @iRisk">@iRiskLabel</span>
+                            @if (instr.WeakLessonsCount > 0)
+                            {
+                                <span class="qd-badge badge-warning"><i class="bi bi-exclamation-diamond me-1"></i>@instr.WeakLessonsCount درس ضعيف</span>
+                            }
+                            else
+                            {
+                                <span class="qd-badge badge-success"><i class="bi bi-check2-circle me-1"></i>لا دروس ضعيفة</span>
+                            }
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+        <div class="qd-oc-footer">
+            <button type="button" class="qd-nav-btn qd-nav-btn-ghost" data-bs-dismiss="offcanvas">
+                <i class="bi bi-x-lg"></i> إغلاق
+            </button>
+            <a class="qd-nav-btn qd-nav-btn-secondary"
+               asp-area="Admin" asp-controller="Analytics" asp-action="MetricDecisionDetails" asp-route-metric="total-instructors"
+               asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId">
+                <i class="bi bi-graph-up"></i> تحليل القرار
+            </a>
+            <a class="qd-nav-btn qd-nav-btn-primary"
+               asp-area="Admin" asp-controller="Analytics" asp-action="AdvancedDashboard"
+               asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId">
+                <i class="bi bi-bar-chart-fill"></i> لوحة التحليلات
+            </a>
+        </div>
+    </div>
+</div>
+
+@* ═══════════════════════════════════════════════════════════════════
+   OFFCANVAS 3 — الطلاب المحللون
+   ═══════════════════════════════════════════════════════════════════ *@
+
+<div class="offcanvas offcanvas-end qd-offcanvas" tabindex="-1" id="studentsAnalyticsOffcanvas" aria-labelledby="studentsAnalyticsOffcanvasLabel" data-bs-scroll="true">
+    <div class="offcanvas-header" style="background:linear-gradient(135deg,#92400e,#d97706)">
+        <div>
+            <h5 class="offcanvas-title" id="studentsAnalyticsOffcanvasLabel" style="font-size:17px;font-weight:800">
+                <i class="bi bi-people-fill me-2"></i> الطلاب المحللون
+            </h5>
+            <div style="font-size:13px;opacity:.8;margin-top:3px">@allStudents.Count طالب لديهم مؤشرات أداء</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        <div class="qd-oc-summary">
+            <span class="qd-badge badge-success"><i class="bi bi-star-fill me-1"></i>ممتاز: @excellentCount</span>
+            <span class="qd-badge badge-warning"><i class="bi bi-dash-circle me-1"></i>متوسط: @mediumCount</span>
+            <span class="qd-badge badge-danger"><i class="bi bi-arrow-down-circle-fill me-1"></i>ضعيف: @weakCount</span>
+        </div>
+        <div class="qd-oc-list">
+            @if (!allStudents.Any())
+            {
+                <div class="qd-empty">
+                    <i class="bi bi-people"></i>
+                    <div class="qd-empty-title">لا يوجد طلاب محللون</div>
+                    <div class="qd-empty-sub">لم يتم تسجيل محاولات بعد</div>
+                </div>
+            }
+            else
+            {
+                @foreach (var st in allStudents.OrderBy(s => s.ExamScore))
+                {
+                    var stPriorityBadge = st.Priority == "High" ? "badge-danger" : st.Priority == "Medium" ? "badge-warning" : "badge-success";
+                    var stPriorityLabel = st.Priority == "High" ? "أولوية عالية" : st.Priority == "Medium" ? "متوسط" : "جيد";
+                    var examColor = st.ExamScore >= 70 ? "var(--q-success)" : st.ExamScore >= 50 ? "var(--q-warning)" : "var(--q-danger)";
+                    <div class="qd-oc-item">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                            <div style="flex:1;min-width:0">
+                                <div class="qd-oc-item-title">@st.StudentName</div>
+                                @if (!string.IsNullOrEmpty(st.WeakReason))
+                                {
+                                    <div class="qd-oc-item-sub"><i class="bi bi-exclamation-circle me-1"></i>@st.WeakReason</div>
+                                }
+                            </div>
+                            <div style="font-size:20px;font-weight:900;color:@examColor;flex-shrink:0">@Math.Round(st.ExamScore)%</div>
+                        </div>
+                        <div class="qd-oc-item-stats">
+                            <span class="qd-badge @stPriorityBadge">@stPriorityLabel</span>
+                            <span class="qd-badge badge-primary"><i class="bi bi-journal-check me-1"></i>واجبات: @Math.Round(st.HomeworkScore)%</span>
+                            <span class="qd-badge badge-info"><i class="bi bi-calendar2-check me-1"></i>حضور: @Math.Round(st.Attendance)%</span>
+                        </div>
+                        @if (st.BatchId.HasValue && (User.IsInRole("Owner") || User.IsInRole("Developer")))
+                        {
+                            var stBridgeCtx = new AnalyticsDecisionBridgeContext
+                            {
+                                BatchId      = st.BatchId,
+                                CurriculumId = Model.SelectedCurriculumId,
+                                SourceMetric = "student-weak-" + st.Priority.ToLower(),
+                                SourcePage   = "AdvancedDashboard",
+                                ReturnUrl    = Url.Action("AdvancedDashboard", "Analytics", new { area = "Admin", curriculumId = Model.SelectedCurriculumId, batchId = Model.SelectedBatchId, instructorId = Model.SelectedInstructorId }) ?? ""
+                            };
+                            <div class="mt-2">
+                                <a href="@Url.ToDecisionLabUrl(stBridgeCtx)"
+                                   class="qd-nav-btn"
+                                   style="font-size:11px;padding:3px 9px;background:var(--q-primary);color:#fff;border-color:var(--q-primary);text-decoration:none;">
+                                    <i class="bi bi-lightning-charge-fill"></i> اتخذ قراراً للدفعة
+                                </a>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+        <div class="qd-oc-footer">
+            <button type="button" class="qd-nav-btn qd-nav-btn-ghost" data-bs-dismiss="offcanvas">
+                <i class="bi bi-x-lg"></i> إغلاق
+            </button>
+            <a class="qd-nav-btn qd-nav-btn-secondary"
+               asp-area="Admin" asp-controller="Analytics" asp-action="MetricDecisionDetails" asp-route-metric="analyzed-students"
+               asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId">
+                <i class="bi bi-graph-up"></i> تحليل القرار
+            </a>
+            <a class="qd-nav-btn qd-nav-btn-primary"
+               asp-area="Admin" asp-controller="Analytics" asp-action="AnalyzedStudentsDetails"
+               asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId">
+                <i class="bi bi-people-fill"></i> تفاصيل الطلاب
+            </a>
+        </div>
+    </div>
+</div>
+
+@* ═══════════════════════════════════════════════════════════════════
+   OFFCANVAS 4 — حالات أولوية عالية
+   ═══════════════════════════════════════════════════════════════════ *@
+
+<div class="offcanvas offcanvas-end qd-offcanvas" tabindex="-1" id="criticalOffcanvas" aria-labelledby="criticalOffcanvasLabel" data-bs-scroll="true">
+    <div class="offcanvas-header" style="background:linear-gradient(135deg,#7f1d1d,#dc2626)">
+        <div>
+            <h5 class="offcanvas-title" id="criticalOffcanvasLabel" style="font-size:17px;font-weight:800">
+                <i class="bi bi-person-fill-exclamation me-2"></i> حالات أولوية عالية
+            </h5>
+            <div style="font-size:13px;opacity:.8;margin-top:3px">@(Model?.CriticalCases ?? 0) حالة تحتاج تدخل فوري</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        <div class="qd-oc-summary">
+            <div style="font-size:13px;color:var(--q-danger);font-weight:700;display:flex;align-items:center;gap:6px">
+                <i class="bi bi-lightning-charge-fill"></i>
+                هؤلاء الطلاب يتطلبون متابعة فورية من المدرب
+            </div>
+        </div>
+        <div class="qd-oc-list">
+            @if (!criticalStudents.Any())
+            {
+                <div class="qd-empty">
+                    <i class="bi bi-shield-check" style="color:var(--q-success);opacity:.6"></i>
+                    <div class="qd-empty-title" style="color:var(--q-success)">لا توجد حالات حرجة</div>
+                    <div class="qd-empty-sub">جميع الطلاب في وضع مقبول</div>
+                </div>
+            }
+            else
+            {
+                @foreach (var cs in criticalStudents)
+                {
+                    var examCol = cs.ExamScore >= 50 ? "var(--q-warning)" : "var(--q-danger)";
+                    <div class="qd-oc-item" style="border-right:4px solid var(--q-danger)">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                            <div style="flex:1;min-width:0">
+                                <div class="qd-oc-item-title">@cs.StudentName</div>
+                                @if (!string.IsNullOrEmpty(cs.WeakReason))
+                                {
+                                    <div class="qd-oc-item-sub"><i class="bi bi-exclamation-circle me-1" style="color:var(--q-danger)"></i>@cs.WeakReason</div>
+                                }
+                            </div>
+                            <div style="font-size:20px;font-weight:900;color:@examCol;flex-shrink:0">@Math.Round(cs.ExamScore)%</div>
+                        </div>
+                        <div class="qd-oc-item-stats">
+                            <span class="qd-badge badge-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>أولوية عالية</span>
+                            <span class="qd-badge badge-warning"><i class="bi bi-journal-check me-1"></i>واجبات: @Math.Round(cs.HomeworkScore)%</span>
+                            <span class="qd-badge badge-info"><i class="bi bi-calendar2-check me-1"></i>حضور: @Math.Round(cs.Attendance)%</span>
+                        </div>
+                        @if (!string.IsNullOrEmpty(cs.ActionRequired))
+                        {
+                            <div style="margin-top:8px;padding:6px 10px;background:var(--q-danger-light);border-radius:6px;font-size:12px;font-weight:700;color:#991b1b">
+                                <i class="bi bi-lightning-charge-fill me-1"></i>@cs.ActionRequired
+                            </div>
+                        }
+                        @if (cs.BatchId.HasValue && (User.IsInRole("Owner") || User.IsInRole("Developer")))
+                        {
+                            var csBridgeCtx = new AnalyticsDecisionBridgeContext
+                            {
+                                BatchId      = cs.BatchId,
+                                CurriculumId = Model.SelectedCurriculumId,
+                                SourceMetric = "critical-student",
+                                SourcePage   = "AdvancedDashboard",
+                                ReturnUrl    = Url.Action("AdvancedDashboard", "Analytics", new { area = "Admin", curriculumId = Model.SelectedCurriculumId, batchId = Model.SelectedBatchId, instructorId = Model.SelectedInstructorId }) ?? ""
+                            };
+                            <div class="mt-2 d-flex gap-2 flex-wrap">
+                                <a href="@Url.ToDecisionLabUrl(csBridgeCtx)"
+                                   class="qd-nav-btn"
+                                   style="font-size:11px;padding:3px 9px;background:var(--q-danger);color:#fff;border-color:var(--q-danger);text-decoration:none;">
+                                    <i class="bi bi-lightning-charge-fill"></i> اتخذ قراراً فورياً
+                                </a>
+                                <a href="@Url.ToBatchAnalysisUrl(csBridgeCtx)"
+                                   class="qd-nav-btn qd-nav-btn-secondary"
+                                   style="font-size:11px;padding:3px 9px;text-decoration:none;">
+                                    <i class="bi bi-bar-chart-line"></i> تحليل الدفعة
+                                </a>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+        <div class="qd-oc-footer">
+            <button type="button" class="qd-nav-btn qd-nav-btn-ghost" data-bs-dismiss="offcanvas">
+                <i class="bi bi-x-lg"></i> إغلاق
+            </button>
+            <a class="qd-nav-btn qd-nav-btn-secondary"
+               asp-area="Admin" asp-controller="Analytics" asp-action="MetricDecisionDetails" asp-route-metric="critical-cases"
+               asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId">
+                <i class="bi bi-graph-up"></i> تحليل القرار
+            </a>
+            <a class="qd-nav-btn qd-nav-btn-primary"
+               asp-area="Admin" asp-controller="Analytics" asp-action="CriticalStudentsDetails"
+               asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId">
+                <i class="bi bi-person-fill-exclamation"></i> تفاصيل الحالات
+            </a>
+        </div>
+    </div>
+</div>
+
+@* ═══════════════════════════════════════════════════════════════════
+   OFFCANVAS 5 — دروس عالية الخطورة
+   ═══════════════════════════════════════════════════════════════════ *@
+
+<div class="offcanvas offcanvas-end qd-offcanvas" tabindex="-1" id="highRiskOffcanvas" aria-labelledby="highRiskOffcanvasLabel" data-bs-scroll="true">
+    <div class="offcanvas-header" style="background:linear-gradient(135deg,#7f1d1d,#b91c1c)">
+        <div>
+            <h5 class="offcanvas-title" id="highRiskOffcanvasLabel" style="font-size:17px;font-weight:800">
+                <i class="bi bi-exclamation-diamond-fill me-2"></i> دروس عالية الخطورة
+            </h5>
+            <div style="font-size:13px;opacity:.8;margin-top:3px">@(Model?.HighRiskCount ?? 0) درس بنسبة ضعف ≥ 70%</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        <div class="qd-oc-summary">
+            <span class="qd-badge badge-danger"><i class="bi bi-exclamation-diamond-fill me-1"></i>خطر عالي ≥ 70%: @highRiskLessons.Count(l => l.WeakPercentage >= 70)</span>
+            <span class="qd-badge badge-warning"><i class="bi bi-exclamation-triangle me-1"></i>متوسط 50–69%: @(Model?.Lessons?.Count(l => l.WeakPercentage >= 50 && l.WeakPercentage < 70) ?? 0)</span>
+        </div>
+        <div class="qd-oc-list">
+            @if (!highRiskLessons.Any())
+            {
+                <div class="qd-empty">
+                    <i class="bi bi-shield-check" style="color:var(--q-success);opacity:.6"></i>
+                    <div class="qd-empty-title" style="color:var(--q-success)">لا توجد دروس عالية الخطورة</div>
+                    <div class="qd-empty-sub">جميع الدروس ضمن النسب المقبولة</div>
+                </div>
+            }
+            else
+            {
+                @foreach (var lesson in highRiskLessons)
+                {
+                    var weakColor = lesson.WeakPercentage >= 85 ? "var(--q-danger)" : "var(--q-warning)";
+                    var weakBadge = lesson.WeakPercentage >= 85 ? "badge-danger" : "badge-warning";
+                    <div class="qd-oc-item" style="border-right:4px solid @weakColor">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                            <div style="flex:1;min-width:0">
+                                <div class="qd-oc-item-title">@lesson.LessonName</div>
+                                <div class="qd-oc-item-sub">
+                                    @if (!string.IsNullOrEmpty(lesson.BatchName)) { <span><i class="bi bi-layers me-1"></i>@lesson.BatchName</span> }
+                                    @if (!string.IsNullOrEmpty(lesson.InstructorName)) { <span class="ms-2"><i class="bi bi-person-badge me-1"></i>@lesson.InstructorName</span> }
+                                </div>
+                            </div>
+                            <div style="font-size:20px;font-weight:900;color:@weakColor;flex-shrink:0">@Math.Round(lesson.WeakPercentage)%</div>
+                        </div>
+                        <div class="qd-oc-item-stats">
+                            <span class="qd-badge @weakBadge"><i class="bi bi-arrow-down-circle-fill me-1"></i>نسبة الضعف: @Math.Round(lesson.WeakPercentage)%</span>
+                            @if (lesson.AffectedStudents > 0)
+                            {
+                                <span class="qd-badge badge-primary"><i class="bi bi-people-fill me-1"></i>@lesson.AffectedStudents طالب متأثر</span>
+                            }
+                            @if (lesson.TotalAttempts > 0)
+                            {
+                                <span class="qd-badge badge-info"><i class="bi bi-clipboard-data me-1"></i>@lesson.TotalAttempts محاولة</span>
+                            }
+                        </div>
+                        @if (lesson.BatchId.HasValue && (User.IsInRole("Owner") || User.IsInRole("Developer")))
+                        {
+                            var lessonBridgeCtx = new AnalyticsDecisionBridgeContext
+                            {
+                                BatchId      = lesson.BatchId,
+                                CurriculumId = Model.SelectedCurriculumId,
+                                SourceMetric = "high-risk-lesson",
+                                SourcePage   = "AdvancedDashboard",
+                                ReturnUrl    = Url.Action("AdvancedDashboard", "Analytics", new { area = "Admin", curriculumId = Model.SelectedCurriculumId, batchId = Model.SelectedBatchId, instructorId = Model.SelectedInstructorId }) ?? ""
+                            };
+                            var lessonBtnColor = lesson.WeakPercentage >= 85 ? "var(--q-danger)" : "var(--q-warning)";
+                            <div class="mt-2 d-flex gap-2 flex-wrap">
+                                <a href="@Url.ToDecisionLabUrl(lessonBridgeCtx)"
+                                   class="qd-nav-btn"
+                                   style="font-size:11px;padding:3px 9px;background:@lessonBtnColor;color:#fff;border-color:@lessonBtnColor;text-decoration:none;">
+                                    <i class="bi bi-lightning-charge-fill"></i> اتخذ قراراً للدفعة
+                                </a>
+                                <a href="@Url.ToBatchAnalysisUrl(lessonBridgeCtx)"
+                                   class="qd-nav-btn qd-nav-btn-secondary"
+                                   style="font-size:11px;padding:3px 9px;text-decoration:none;">
+                                    <i class="bi bi-bar-chart-line"></i> تحليل الدفعة
+                                </a>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+        <div class="qd-oc-footer">
+            <button type="button" class="qd-nav-btn qd-nav-btn-ghost" data-bs-dismiss="offcanvas">
+                <i class="bi bi-x-lg"></i> إغلاق
+            </button>
+            <a class="qd-nav-btn qd-nav-btn-secondary"
+               asp-area="Admin" asp-controller="Analytics" asp-action="MetricDecisionDetails" asp-route-metric="high-risk-lessons"
+               asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId">
+                <i class="bi bi-graph-up"></i> تحليل القرار
+            </a>
+            <a class="qd-nav-btn qd-nav-btn-primary"
+               asp-area="Admin" asp-controller="Analytics" asp-action="AdvancedDashboard"
+               asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId">
+                <i class="bi bi-bar-chart-fill"></i> لوحة التحليلات
+            </a>
+        </div>
+    </div>
+</div>
+
+} @* end @if (false) — offcanvas placeholder *@
+
+@* ===================== SCRIPTS ===================== *@
+<script>
+    /* ── Chart instances ── */
+    let riskChartInstance       = null;
+    let lessonChartInstance     = null;
+    let criticalChartInstance   = null;
+    let radarChartInstance      = null;
+    let instructorChartInstance = null;
+    let studentDistInstance     = null;
+    let batchRiskInstance       = null;
+
+    /* ── Boot ── */
+    document.addEventListener("DOMContentLoaded", function () {
+        /* Auto-load dashboard content via AJAX on page load */
+        loadAdvancedDashboard(1);
+
+        /* tooltips */
+        document.querySelectorAll('[data-bs-toggle-tooltip="tooltip"]').forEach(el => {
+            new bootstrap.Tooltip(el, { trigger: 'hover', placement: el.dataset.bsPlacement || 'top' });
+        });
+
+        /* offcanvas focus */
+        document.querySelectorAll('.offcanvas').forEach(oc => {
+            oc.addEventListener('shown.bs.offcanvas', () => {
+                const f = oc.querySelector('input, button, a, [tabindex="0"]');
+                if (f) f.focus();
+            });
+        });
+
+        /* pagination links */
+        document.addEventListener("click", function (e) {
+            const pageLink = e.target.closest("[data-dashboard-page]");
+            if (!pageLink) return;
+            e.preventDefault();
+            loadAdvancedDashboard(pageLink.getAttribute("data-dashboard-page"));
+        });
+    });
+
+    /* ── Offcanvas search ── */
+    function filterOcList(input, listId) {
+        const q = input.value.trim().toLowerCase();
+        document.querySelectorAll(`#${listId} .qd-oc-item-v2`).forEach(item => {
+            const text = (item.dataset.searchText || item.textContent).toLowerCase();
+            item.hidden = q.length > 0 && !text.includes(q);
+        });
+    }
+
+    /* ── Reset filters ── */
+    function resetFilters() {
+        ['curriculumId','batchId','instructorId'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = "";
+        });
+        window.location.href = new URL(window.location.origin + "/Admin/Analytics/AdvancedDashboard").toString();
+    }
+
+    /* ── AJAX load ── */
+    async function loadAdvancedDashboard(page) {
+        const content      = document.getElementById("advancedDashboardContent");
+        const curriculumId = document.getElementById("curriculumId")?.value  || "";
+        const batchId      = document.getElementById("batchId")?.value       || "";
+        const instructorId = document.getElementById("instructorId")?.value  || "";
+
+        const url =
+            `/Admin/Analytics/AdvancedDashboardData` +
+            `?curriculumId=${encodeURIComponent(curriculumId)}` +
+            `&batchId=${encodeURIComponent(batchId)}` +
+            `&instructorId=${encodeURIComponent(instructorId)}` +
+            `&page=${encodeURIComponent(page)}`;
+
+        content.innerHTML = `
+            <div class="row g-3 p-2">
+                ${[1,2,3].map(() => `
+                    <div class="col-md-4">
+                        <div style="background:#fff;border-radius:16px;padding:20px;border:1px solid #e5e7eb;">
+                            <div class="skeleton" style="height:18px;width:55%;border-radius:6px;margin-bottom:12px;"></div>
+                            <div class="skeleton" style="height:36px;width:38%;border-radius:6px;margin-bottom:14px;"></div>
+                            <div class="skeleton" style="height:7px;border-radius:20px;"></div>
+                        </div>
+                    </div>`).join('')}
+            </div>`;
+
+        try {
+            const response = await fetch(url, { method:"GET", headers:{"X-Requested-With":"XMLHttpRequest"} });
+            if (!response.ok) {
+                content.innerHTML = `<div class="alert alert-danger border-0 rounded-3 m-2"><i class="bi bi-x-octagon-fill me-2"></i>فشل تحميل بيانات التحليل. يرجى المحاولة مرة أخرى.</div>`;
+                return;
+            }
+            content.innerHTML = await response.text();
+            initializeAdvancedDashboardCharts();
+        } catch (error) {
+            console.error(error);
+            content.innerHTML = `<div class="alert alert-danger border-0 rounded-3 m-2"><i class="bi bi-wifi-off me-2"></i>حدث خطأ أثناء الاتصال بالخادم.</div>`;
+        }
+    }
+
+    /* ── Helpers ── */
+    function parseJsonElement(id, fallback) {
+        const el = document.getElementById(id);
+        if (!el) return fallback;
+        try { return JSON.parse(el.textContent || ""); } catch { return fallback; }
+    }
+
+    function hasData(arr) { return Array.isArray(arr) && arr.reduce((a, b) => a + Number(b || 0), 0) > 0; }
+    function destroyChart(c) { if (c) c.destroy(); }
+
+    function emptyState(title, sub) {
+        return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:20px;text-align:center;color:#9ca3af;">
+                    <i class="bi bi-bar-chart-line" style="font-size:28px;opacity:.4;margin-bottom:8px;"></i>
+                    <div style="font-weight:800;color:#374151;font-size:14px;">${title}</div>
+                    <div style="font-size:12px;margin-top:3px;">${sub}</div>
+                </div>`;
+    }
+
+    function initializeAdvancedDashboardCharts() {
+        /* ── Chart.js Defaults (داخل الدالة لضمان تحميل Chart.js) ── */
+        if (typeof Chart !== 'undefined') {
+            Chart.defaults.font.family                     = "'Tajawal','Cairo',Tahoma,Arial,sans-serif";
+            Chart.defaults.font.size                       = 12;
+            Chart.defaults.color                           = "#6b7280";
+            Chart.defaults.plugins.tooltip.padding         = 10;
+            Chart.defaults.plugins.tooltip.backgroundColor = "rgba(15,23,42,.92)";
+            Chart.defaults.plugins.tooltip.cornerRadius    = 8;
+            Chart.defaults.plugins.tooltip.titleFont       = { weight:"700", size:13 };
+            Chart.defaults.plugins.tooltip.bodyFont        = { size:12 };
+        } else {
+            console.warn("Chart.js not loaded yet, retrying...");
+            setTimeout(initializeAdvancedDashboardCharts, 300);
+            return;
+        }
+
+        destroyChart(riskChartInstance);
+        destroyChart(lessonChartInstance);
+        destroyChart(criticalChartInstance);
+        destroyChart(radarChartInstance);
+        destroyChart(instructorChartInstance);
+        destroyChart(studentDistInstance);
+        destroyChart(batchRiskInstance);
+        riskChartInstance = lessonChartInstance = criticalChartInstance =
+        radarChartInstance = instructorChartInstance = studentDistInstance = batchRiskInstance = null;
+
+        const riskData         = parseJsonElement("riskDataJson",          []);
+        const lessonNames      = parseJsonElement("lessonNamesJson",        []);
+        const lessonValues     = parseJsonElement("lessonValuesJson",       []);
+        const criticalLabels   = parseJsonElement("criticalLabelsJson",     []);
+        const criticalExams    = parseJsonElement("criticalExamsJson",      []);
+        const criticalHomework = parseJsonElement("criticalHomeworkJson",   []);
+        const criticalAttend   = parseJsonElement("criticalAttendanceJson", []);
+        const instrNames       = parseJsonElement("instructorNamesJson",    []);
+        const instrScores      = parseJsonElement("instructorScoresJson",   []);
+        const studentDist      = parseJsonElement("studentDistJson",        []);
+        const perfAvg          = parseJsonElement("performanceAvgJson",     []);
+
+        // 1. Radar
+        const radarEl = document.getElementById("performanceRadarChart");
+        if (radarEl) {
+            if (hasData(perfAvg)) {
+                radarChartInstance = new Chart(radarEl, {
+                    type: "radar",
+                    data: {
+                        labels: ["الاختبارات","الواجبات","الحضور"],
+                        datasets: [{
+                            label: "الأداء الفعلي", data: perfAvg,
+                            backgroundColor: "rgba(30,64,175,.15)", borderColor: "#1e40af",
+                            borderWidth: 2.5, pointBackgroundColor: "#1e40af", pointBorderColor: "#fff",
+                            pointBorderWidth: 2, pointRadius: 5, pointHoverRadius: 7, fill: true
+                        },{
+                            label: "حد القبول 70%", data: [70,70,70],
+                            backgroundColor: "rgba(220,38,38,.06)", borderColor: "rgba(220,38,38,.4)",
+                            borderWidth: 1.5, borderDash: [5,4], pointRadius: 0, fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false, animation: { duration: 800 },
+                        scales: { r: { min:0, max:100, ticks:{ stepSize:25, callback: v=>v+"%" }, grid:{ color:"rgba(0,0,0,.07)" }, angleLines:{ color:"rgba(0,0,0,.07)" }, pointLabels:{ font:{ size:12, weight:"700" }, color:"#374151" } } },
+                        plugins: { legend:{ position:"bottom", labels:{ usePointStyle:true, pointStyle:"circle", padding:16 } }, tooltip:{ callbacks:{ label: ctx=>` ${ctx.dataset.label}: ${ctx.raw}%` } } }
+                    }
+                });
+            } else {
+                radarEl.closest('.qdn-chart-body').innerHTML = emptyState("لا توجد بيانات كافية","سيظهر المخطط بعد توفر بيانات الأداء");
+            }
+        }
+
+        // 2. Risk Doughnut
+        const riskEl = document.getElementById("riskChart");
+        if (riskEl) {
+            if (hasData(riskData)) {
+                riskChartInstance = new Chart(riskEl, {
+                    type: "doughnut",
+                    data: { labels:["خطر عالي","متوسط","جيد"], datasets:[{ data:riskData, backgroundColor:["#dc2626","#d97706","#16a34a"], borderWidth:0, hoverOffset:8 }] },
+                    options: {
+                        responsive:true, maintainAspectRatio:false, cutout:"70%",
+                        animation:{ animateScale:true, animateRotate:true, duration:900 },
+                        plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label: ctx=>` ${ctx.label}: ${ctx.raw} دفعة` } } }
+                    }
+                });
+            } else {
+                riskEl.closest('.qdn-chart-body').innerHTML = emptyState("لا توجد بيانات","سيظهر المخطط بعد توفر بيانات الدفعات");
+            }
+        }
+
+        // 3. Student Distribution
+        const studEl = document.getElementById("studentDistChart");
+        if (studEl) {
+            if (hasData(studentDist)) {
+                studentDistInstance = new Chart(studEl, {
+                    type: "doughnut",
+                    data: { labels:["ممتاز","متوسط","ضعيف"], datasets:[{ data:studentDist, backgroundColor:["#16a34a","#d97706","#dc2626"], borderWidth:0, hoverOffset:8 }] },
+                    options: {
+                        responsive:true, maintainAspectRatio:false, cutout:"70%",
+                        animation:{ animateScale:true, animateRotate:true, duration:900 },
+                        plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label: ctx=>` ${ctx.label}: ${ctx.raw} طالب` } } }
+                    }
+                });
+            } else {
+                studEl.closest('.qdn-chart-body').innerHTML = emptyState("لا توجد بيانات طلاب","سيظهر المخطط بعد توفر بيانات الأداء");
+            }
+        }
+
+        // 4. Instructor Bar
+        const instrEl = document.getElementById("instructorBarChart");
+        if (instrEl) {
+            if (instrNames.length > 0) {
+                const instrColors = instrScores.map(v => v>=80?"#16a34a":v>=60?"#d97706":"#dc2626");
+                instructorChartInstance = new Chart(instrEl, {
+                    type:"bar",
+                    data:{ labels:instrNames, datasets:[{ label:"متوسط الأداء %", data:instrScores, backgroundColor:instrColors.map(c=>c+"cc"), borderColor:instrColors, borderWidth:0, borderRadius:6, borderSkipped:false }] },
+                    options:{
+                        indexAxis:"y", responsive:true, maintainAspectRatio:false, animation:{ duration:700, delay: ctx=>ctx.dataIndex*60 },
+                        plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label: ctx=>` ${ctx.dataset.label}: ${ctx.raw}%` } } },
+                        scales:{ x:{ beginAtZero:true, max:100, grid:{ color:"#f3f4f6" }, ticks:{ callback: v=>v+"%" } }, y:{ grid:{ display:false } } }
+                    }
+                });
+            } else {
+                instrEl.closest('.qdn-chart-body').innerHTML = emptyState("لا توجد بيانات مدربين","سيظهر المخطط بعد تعيين مدربين");
+            }
+        }
+
+        // 4.b Batch Risk Doughnut
+        const batchRiskEl = document.getElementById("batchRiskChart");
+        if (batchRiskEl) {
+            if (hasData(riskData)) {
+                batchRiskInstance = new Chart(batchRiskEl, {
+                    type: "doughnut",
+                    data: { labels:["خطر عالي","متوسط","جيد"], datasets:[{ data:riskData, backgroundColor:["#dc2626","#d97706","#16a34a"], borderWidth:0, hoverOffset:8 }] },
+                    options: {
+                        responsive:true, maintainAspectRatio:false, cutout:"65%",
+                        animation:{ animateScale:true, duration:900 },
+                        plugins:{ legend:{ position:"bottom", labels:{ usePointStyle:true, pointStyle:"circle", padding:14 } }, tooltip:{ callbacks:{ label: ctx=>` ${ctx.label}: ${ctx.raw} دفعة` } } }
+                    }
+                });
+            } else {
+                batchRiskEl.closest('.qdn-chart-body').innerHTML = emptyState("لا توجد بيانات","سيظهر المخطط بعد توفر بيانات الدفعات");
+            }
+        }
+
+        // 5. Weak Lessons Bar
+        const lessonEl = document.getElementById("lessonWeakChart");
+        if (lessonEl) {
+            if (lessonNames.length > 0) {
+                const colors = lessonValues.map(v => v>=70?"#dc2626":v>=50?"#d97706":"#16a34a");
+                lessonChartInstance = new Chart(lessonEl, {
+                    type:"bar",
+                    data:{ labels:lessonNames, datasets:[{ label:"نسبة الضعف %", data:lessonValues, backgroundColor:colors.map(c=>c+"cc"), borderColor:colors, borderWidth:0, borderRadius:5, borderSkipped:false }] },
+                    options:{
+                        responsive:true, maintainAspectRatio:false, animation:{ duration:700, easing:"easeOutQuart" },
+                        plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label: ctx=>` نسبة الضعف: ${ctx.raw}%` } } },
+                        scales:{ y:{ beginAtZero:true, max:100, grid:{ color:"#f3f4f6" }, ticks:{ callback: v=>v+"%" } }, x:{ grid:{ display:false }, ticks:{ maxRotation:30, font:{ size:10 } } } }
+                    }
+                });
+            } else {
+                lessonEl.closest('.qdn-chart-body').innerHTML = emptyState("لا توجد دروس ضعيفة","سيظهر التحليل بعد توفر بيانات المحاولات");
+            }
+        }
+
+        // 6. Critical Students Bar
+        const critEl = document.getElementById("criticalChart");
+        if (critEl) {
+            if (criticalLabels.length > 0) {
+                criticalChartInstance = new Chart(critEl, {
+                    type:"bar",
+                    data:{
+                        labels:criticalLabels,
+                        datasets:[
+                            { label:"الحضور",     data:criticalAttend,   backgroundColor:"rgba(30,64,175,.7)",  borderRadius:4, borderSkipped:false },
+                            { label:"الواجبات",   data:criticalHomework, backgroundColor:"rgba(8,145,178,.7)",  borderRadius:4, borderSkipped:false },
+                            { label:"الاختبارات", data:criticalExams,    backgroundColor:"rgba(220,38,38,.7)",  borderRadius:4, borderSkipped:false }
+                        ]
+                    },
+                    options:{
+                        indexAxis:"y", responsive:true, maintainAspectRatio:false, animation:{ duration:700, delay: ctx=>ctx.dataIndex*80 },
+                        plugins:{ legend:{ position:"top", labels:{ usePointStyle:true, pointStyle:"circle", padding:14 } }, tooltip:{ rtl:true, textDirection:"rtl", callbacks:{ label: item=>` ${item.dataset.label}: ${item.raw}%` } } },
+                        scales:{ x:{ beginAtZero:true, max:100, grid:{ color:"#f3f4f6" }, ticks:{ callback: v=>v+"%" } }, y:{ grid:{ display:false } } }
+                    }
+                });
+            } else {
+                critEl.closest('.qdn-chart-body').innerHTML = emptyState("لا توجد بيانات طلاب حرجين","سيظهر التحليل بعد تسجيل محاولات الطلاب");
+            }
+        }
+    }
+</script>

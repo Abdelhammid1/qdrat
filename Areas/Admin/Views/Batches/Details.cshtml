@@ -1,0 +1,2919 @@
+﻿@model QdratNew.ViewModels.Batch.BatchDetailsDashboardViewModel
+
+@{
+    ViewData["Title"] = "تفاصيل الدفعة";
+    Layout = "~/Areas/Admin/Views/Shared/_AdminLayout.cshtml";
+
+    var ringCircumference = 251.2;
+    var safeHealthScore = Model.HealthScore < 0 ? 0 : Model.HealthScore > 100 ? 100 : Model.HealthScore;
+    var ringOffset = ringCircumference * (1 - (safeHealthScore / 100.0));
+}
+
+<div class="batch-details-page" dir="rtl">
+
+    <nav class="batch-topnav">
+        <div class="nav-brand">
+            <span class="nav-logo">قدرات</span>
+            <div class="nav-sep"></div>
+            <div class="nav-breadcrumb">
+                <a asp-area="Admin" asp-controller="Home" asp-action="Index">لوحة التحكم</a>
+                <span>›</span>
+                <a asp-area="Admin" asp-controller="Batches" asp-action="Index">الدفعات</a>
+                <span>›</span>
+                <span class="current">@Model.Name</span>
+            </div>
+        </div>
+
+        <div class="nav-actions">
+            <a class="nav-btn" asp-area="Admin" asp-controller="Batches" asp-action="BatchStudents" asp-route-batchId="@Model.Id">👥 الطلاب</a>
+            <button type="button" class="nav-btn">⬇ تصدير PDF</button>
+            <button type="button" class="nav-btn">✉ إرسال التقرير</button>
+            <a class="nav-btn primary" asp-area="Admin" asp-controller="Batches" asp-action="Edit" asp-route-id="@Model.Id">⚙ إعدادات الدفعة</a>
+        </div>
+    </nav>
+
+    <div class="batch-page">
+
+        <section class="batch-hero batch-fade d1">
+            <div class="hero-content">
+                <div class="hero-left">
+                    <div class="hero-avatar">@Model.AvatarText</div>
+
+                    <div class="hero-info">
+                        <h1>@Model.Name</h1>
+
+                        <div class="hero-meta">
+                            <span class="hero-tag active">● @Model.StatusText</span>
+                            <span class="hero-tag info">@Model.StudentsCount طالب</span>
+                            <span class="hero-tag info">@Model.InstructorsCount مدربين</span>
+                            <span class="hero-tag neutral">الدورة: @Model.CourseName</span>
+                            <span class="hero-tag neutral">الفرع: @Model.BranchName</span>
+                            <span class="hero-tag neutral">بدأت: @Model.StartDate.ToString("yyyy/MM/dd")</span>
+                            <span class="hero-tag neutral">تنتهي: @Model.EndDate.ToString("yyyy/MM/dd")</span>
+                            <span class="hero-tag neutral">@Model.StageText</span>
+                        </div>
+
+                        <p class="hero-desc">@Model.Description</p>
+
+                        <div class="hero-actions">
+                            <a class="hbtn outline"
+                               asp-area="Admin"
+                               asp-controller="Batches"
+                               asp-action="BatchStudents"
+                               asp-route-batchId="@Model.Id">👥 عرض الطلاب</a>
+
+                            <a class="hbtn outline"
+                               asp-area="Admin"
+                               asp-controller="Analytics"
+                               asp-action="BatchPerformanceDetails"
+                               asp-route-batchId="@Model.Id">📊 تقرير مفصل</a>
+
+                            <button type="button" class="hbtn solid-blue"
+                                    onclick="openModal('modalBatchMessage')">✉ مراسلة الدفعة</button>
+
+                            <button type="button" class="hbtn solid-amber"
+                                    onclick="openModal('modalFollowUp')">⚠ إشعار متابعة</button>
+
+                            <button type="button" class="hbtn solid-red"
+                                    onclick="openModal('modalUrgentAlert')">🚨 إجراء عاجل</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="health-ring-wrap">
+                <div class="health-ring">
+                    <svg viewBox="0 0 100 100" aria-hidden="true">
+                        <circle class="ring-bg" cx="50" cy="50" r="40"></circle>
+                        <circle class="ring-fill"
+                                cx="50"
+                                cy="50"
+                                r="40"
+                                stroke="@(safeHealthScore >= 85 ? "#059669" : safeHealthScore >= 70 ? "#2563eb" : safeHealthScore >= 55 ? "#d97706" : "#dc2626")"
+                                stroke-dasharray="251.2"
+                                stroke-dashoffset="@ringOffset.ToString("0.##")"></circle>
+                    </svg>
+                    <div class="ring-val">
+                        @safeHealthScore.ToString("0")
+                        <small>%</small>
+                    </div>
+                </div>
+
+                <div class="health-label">
+                    مؤشر صحة الدفعة
+                    <span class="@Model.HealthCssClass">@Model.HealthLabel</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="kpi-strip">
+            <article class="kpi-card b batch-fade d1">
+                <div class="kpi-icon b">👥</div>
+                <div class="kpi-val">@Model.StudentsCount</div>
+                <div class="kpi-label">إجمالي الطلاب</div>
+                <div class="kpi-delta eq">حسب الطلاب المرتبطين بالدفعة</div>
+            </article>
+
+            <article class="kpi-card g batch-fade d2">
+                <div class="kpi-icon g">✅</div>
+                <div class="kpi-val">@Model.AttendancePercent.ToString("0")<sup>%</sup></div>
+                <div class="kpi-label">متوسط نسبة الحضور</div>
+                <div class="kpi-delta @(Model.AttendancePercent >= 85 ? "up" : "dn")">@Model.AttendanceDeltaText</div>
+            </article>
+
+            <article class="kpi-card a batch-fade d3">
+                <div class="kpi-icon a">📝</div>
+                <div class="kpi-val">@Model.HomeworkSubmissionPercent.ToString("0")<sup>%</sup></div>
+                <div class="kpi-label">نسبة تسليم الواجبات</div>
+                <div class="kpi-delta @(Model.HomeworkSubmissionPercent >= 90 ? "up" : "dn")">@Model.HomeworkDeltaText</div>
+            </article>
+
+            <article class="kpi-card g batch-fade d4">
+                <div class="kpi-icon g">🏆</div>
+                <div class="kpi-val">@Model.ExamAverageScore.ToString("0")<sup>%</sup></div>
+                <div class="kpi-label">متوسط درجات الاختبارات</div>
+                <div class="kpi-delta @(Model.ExamAverageScore >= 80 ? "up" : "dn")">@Model.ExamDeltaText</div>
+            </article>
+
+            <article class="kpi-card t batch-fade d5">
+                <div class="kpi-icon t">📚</div>
+                <div class="kpi-val">@Model.CompletedLessonsCount<sup>/@Model.TotalLessonsCount</sup></div>
+                <div class="kpi-label">دروس مكتملة</div>
+                <div class="kpi-delta up">@Model.CourseProgressPercent.ToString("0")% من مدة الدفعة</div>
+            </article>
+
+            <article class="kpi-card p batch-fade d6">
+                <div class="kpi-icon p">⏱</div>
+                <div class="kpi-val">@Model.DaysRemaining</div>
+                <div class="kpi-label">يوم متبقٍ في الدفعة</div>
+                <div class="kpi-delta eq">الانتهاء: @Model.EndDate.ToString("yyyy/MM/dd")</div>
+            </article>
+        </section>
+
+        <section class="main-grid">
+
+            <div class="left-stack">
+
+                <section class="dash-card batch-fade d2">
+                    <div class="card-head">
+                        <div class="ch-left">
+                            <div class="ch-accent teal"></div>
+                            <div>
+                                <div class="ch-title">تقدم الدروس والوحدات</div>
+                                <div class="ch-sub">@Model.CompletedLessonsCount درس مرتبط بمحاضرات الدفعة</div>
+                            </div>
+                        </div>
+                        <button type="button" class="card-link">عرض المنهج الكامل ←</button>
+                    </div>
+
+                    <div class="lessons-grid">
+                        @if (Model.Lessons.Any())
+                        {
+                            foreach (var lesson in Model.Lessons)
+                            {
+                                var safeLessonAttendance = lesson.AttendancePercent < 0 ? 0 : lesson.AttendancePercent > 100 ? 100 : lesson.AttendancePercent;
+
+                                <div class="lesson-cell @lesson.CssClass">
+                                    <span class="lc-badge">@lesson.StatusText</span>
+                                    <div class="lc-num">الدرس @lesson.Number.ToString("00")</div>
+                                    <div class="lc-title">@lesson.Title</div>
+                                    <div class="lc-bar">
+                                        <div class="lc-bar-fill" style="width:@safeLessonAttendance.ToString("0")%"></div>
+                                    </div>
+                                    <div class="lc-meta">
+                                        <span>@safeLessonAttendance.ToString("0")% حضور</span>
+                                        <span>@(lesson.HasHomework ? "✓ واجب" : "—")</span>
+                                    </div>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="empty full">لا توجد دروس مرتبطة بمحاضرات هذه الدفعة حتى الآن.</div>
+                        }
+                    </div>
+                </section>
+
+                <section class="dash-card batch-fade d3">
+                    <div class="card-head">
+                        <div class="ch-left">
+                            <div class="ch-accent amber"></div>
+                            <div>
+                                <div class="ch-title">الواجبات المنزلية</div>
+                                <div class="ch-sub">@Model.Homeworks.Count واجب ظاهر في التقرير</div>
+                            </div>
+                        </div>
+                        <a class="card-link" asp-area="Admin" asp-controller="HomeworkManagement" asp-action="Index">إدارة الواجبات ←</a>
+                    </div>
+
+                    <div class="table-wrap">
+                        <table class="hw-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:32%">الواجب</th>
+                                    <th>الحالة</th>
+                                    <th>التسليم</th>
+                                    <th>لم يسلموا</th>
+                                    <th>متوسط الدرجة</th>
+                                    <th>الإجراء</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (Model.Homeworks.Any())
+                                {
+                                    foreach (var hw in Model.Homeworks)
+                                    {
+                                        var safeSubmission = hw.SubmissionPercent < 0 ? 0 : hw.SubmissionPercent > 100 ? 100 : hw.SubmissionPercent;
+                                        var submissionColor = safeSubmission >= 80 ? "var(--green)" : safeSubmission >= 60 ? "var(--amber)" : "var(--red)";
+
+                                        <tr class="@(hw.StatusCssClass == "soon" ? "row-soon" : hw.StatusCssClass == "open" ? "row-open" : "")">
+                                            <td>
+                                                <div class="hw-title">@hw.Title</div>
+                                                <div class="hw-sub">
+                                                    إرسال: @hw.CreatedAt.ToString("yyyy/MM/dd")
+                                                    @if (hw.EndAt.HasValue)
+                                                    {
+                                                        <span> • يغلق: @hw.EndAt.Value.ToString("yyyy/MM/dd")</span>
+                                                    }
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span class="hw-status @hw.StatusCssClass">● @hw.StatusText</span>
+                                            </td>
+                                            <td>
+                                                <div class="hw-prog">
+                                                    <div class="hw-prog-bar">
+                                                        <div class="hw-prog-fill" style="width:@safeSubmission.ToString("0")%;background:@submissionColor"></div>
+                                                    </div>
+                                                    <span class="fw7">@safeSubmission.ToString("0")%</span>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span class="hw-missing @hw.MissingCssClass">@hw.MissingCount طالب</span>
+                                            </td>
+                                            <td class="fw7">
+                                                @hw.AverageScore.ToString("0")<span class="txt-blue">/100</span>
+                                            </td>
+                                            <td>
+                                                <a class="card-link small-link"
+                                                   asp-area="Admin"
+                                                   asp-controller="Batches"
+                                                   asp-action="HomeworkSetDetail"
+                                                   asp-route-homeworkSetId="@hw.HomeworkSetId"
+                                                   asp-route-batchId="@Model.Id">عرض ←</a>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                                else
+                                {
+                                    <tr>
+                                        <td colspan="6" class="empty">لا توجد واجبات مرتبطة بهذه الدفعة.</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section class="dash-card batch-fade d4">
+                    <div class="card-head">
+                        <div class="ch-left">
+                            <div class="ch-accent blue"></div>
+                            <div>
+                                <div class="ch-title">المدربون المرتبطون بالدفعة</div>
+                                <div class="ch-sub">@Model.Instructors.Count مدربين ظهروا من محاضرات الدفعة</div>
+                            </div>
+                        </div>
+                        <a class="card-link" asp-area="Admin" asp-controller="Instructors" asp-action="Index">إدارة المدربين ←</a>
+                    </div>
+
+                    <div class="instructor-grid">
+                        @if (Model.Instructors.Any())
+                        {
+                            foreach (var instructor in Model.Instructors)
+                            {
+                                var safeActivity = instructor.ActivityScore < 0 ? 0 : instructor.ActivityScore > 100 ? 100 : instructor.ActivityScore;
+
+                                <div class="inst-card">
+                                    <div class="inst-av">@instructor.AvatarText</div>
+                                    <div class="inst-name">@instructor.FullName</div>
+                                    <div class="inst-role">@instructor.Specialization</div>
+
+                                    <div class="inst-stats">
+                                        <div class="inst-stat-row">
+                                            <span class="inst-stat-label">محاضرات هذا الأسبوع</span>
+                                            <span class="inst-stat-val txt-green">@instructor.LecturesThisWeek</span>
+                                        </div>
+                                        <div class="inst-stat-row">
+                                            <span class="inst-stat-label">واجبات الدفعة</span>
+                                            <span class="inst-stat-val">@instructor.HomeworksCount</span>
+                                        </div>
+                                        <div class="inst-stat-row">
+                                            <span class="inst-stat-label">اختبارات</span>
+                                            <span class="inst-stat-val">@instructor.ExamsCount</span>
+                                        </div>
+                                        <div class="inst-stat-row">
+                                            <span class="inst-stat-label">مشاركة الطلاب</span>
+                                            <span class="inst-stat-val txt-green">@instructor.StudentParticipationPercent.ToString("0")%</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="inst-activity-bar">
+                                        <div class="inst-activity-fill" style="width:@safeActivity.ToString("0")%;background:@instructor.ActivityCssColor"></div>
+                                    </div>
+                                    <div class="inst-score-label">
+                                        <span>مؤشر النشاط</span>
+                                        <span class="fw8">@safeActivity.ToString("0") / 100</span>
+                                    </div>
+
+                                    <a class="inst-perf-btn"
+                                       asp-area="Admin"
+                                       asp-controller="Batches"
+                                       asp-action="InstructorBatchPerformance"
+                                       asp-route-instructorId="@instructor.InstructorId"
+                                       asp-route-batchId="@Model.Id">
+                                        📊 مراجعة أداء المدرب
+                                    </a>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="empty full">لا توجد محاضرات مرتبطة بمدربين في هذه الدفعة.</div>
+                        }
+                    </div>
+                </section>
+
+            </div>
+
+            <aside class="right-stack">
+
+                <section class="dash-card batch-fade d2">
+                    <div class="card-head">
+                        <div class="ch-left">
+                            <div class="ch-accent ink"></div>
+                            <div>
+                                <div class="ch-title">التشخيص الذكي للدفعة</div>
+                                <div class="ch-sub">نقاط القوة، الضعف، الفرص، المخاطر</div>
+                            </div>
+                        </div>
+                        <span class="ch-badge neutral">@Model.DiagnosisItems.Count عناصر</span>
+                    </div>
+
+                    <div class="diag-section">
+                        @if (Model.DiagnosisItems.Any())
+                        {
+                            foreach (var item in Model.DiagnosisItems)
+                            {
+                                <div class="diag-item">
+                                    <div class="diag-icon @item.CssClass">@item.Icon</div>
+                                    <div>
+                                        <div class="diag-title">@item.Title</div>
+                                        <div class="diag-body">@item.Body</div>
+                                    </div>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="empty">لا توجد عناصر تشخيصية حالياً.</div>
+                        }
+                    </div>
+                </section>
+
+                <section class="dash-card batch-fade d3">
+                    <div class="card-head">
+                        <div class="ch-left">
+                            <div class="ch-accent green"></div>
+                            <div>
+                                <div class="ch-title">سجل الحضور — @DateTime.Today.ToString("MMMM yyyy")</div>
+                                <div class="ch-sub">نسبة حضور الدفعة اليومية</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="att-month">
+                        <div class="att-week-labels">
+                            <div class="att-wl">أح</div>
+                            <div class="att-wl">إث</div>
+                            <div class="att-wl">ثل</div>
+                            <div class="att-wl">أر</div>
+                            <div class="att-wl">خم</div>
+                            <div class="att-wl">جم</div>
+                            <div class="att-wl">سب</div>
+                        </div>
+
+                        <div class="att-grid-cal">
+                            @if (Model.AttendanceCalendar.Any())
+                            {
+                                foreach (var day in Model.AttendanceCalendar)
+                                {
+                                    <div class="att-day @day.CssClass" title="@day.Percent.ToString("0")%">
+                                        @(day.HasLecture? day.Percent.ToString("0") : "—")
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="empty full">لا توجد بيانات حضور لهذا الشهر.</div>
+                            }
+                        </div>
+
+                        <div class="att-legend">
+                            <span><i style="background:var(--green-lt)"></i>+80%</span>
+                            <span><i style="background:var(--amber-lt)"></i>60-80%</span>
+                            <span><i style="background:var(--red-lt)"></i>أقل من 60%</span>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="dash-card batch-fade d4">
+                    <div class="card-head">
+                        <div class="ch-left">
+                            <div class="ch-accent purple"></div>
+                            <div>
+                                <div class="ch-title">مؤشرات الأداء الإجمالية</div>
+                                <div class="ch-sub">مقارنة بالهدف المطلوب</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card-body">
+                        @if (Model.ProgressBars.Any())
+                        {
+                            foreach (var item in Model.ProgressBars)
+                            {
+                                var safeValue = item.Value < 0 ? 0 : item.Value > 100 ? 100 : item.Value;
+
+                                <div class="prog-item">
+                                    <div class="prog-head">
+                                        <span>@item.Label</span>
+                                        <b>@safeValue.ToString("0")% <span>/ هدف @item.Target.ToString("0")%</span></b>
+                                    </div>
+                                    <div class="prog-track">
+                                        <div class="prog-fill" style="width:@safeValue.ToString("0")%;background:@item.CssColor"></div>
+                                    </div>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="empty">لا توجد مؤشرات أداء كافية.</div>
+                        }
+                    </div>
+                </section>
+
+                <section class="dash-card batch-fade d5">
+                    <div class="card-head">
+                        <div class="ch-left">
+                            <div class="ch-accent teal"></div>
+                            <div>
+                                <div class="ch-title">كثافة النشاط الأسبوعي</div>
+                                <div class="ch-sub">محاضرات + واجبات + اختبارات</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="heatmap-wrap">
+                        <div class="hm-days">
+                            <div class="hm-day">أح</div>
+                            <div class="hm-day">إث</div>
+                            <div class="hm-day">ثل</div>
+                            <div class="hm-day">أر</div>
+                            <div class="hm-day">خم</div>
+                            <div class="hm-day">جم</div>
+                            <div class="hm-day">سب</div>
+                        </div>
+
+                        @if (Model.HeatmapWeeks.Any())
+                        {
+                            foreach (var week in Model.HeatmapWeeks)
+                            {
+                                <div class="hm-row">
+                                    @foreach (var day in week.Days)
+                                    {
+                                        <div class="hm-cell" style="@day.CssStyle">@day.ActivityCount</div>
+                                    }
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="empty">لا توجد بيانات نشاط أسبوعية.</div>
+                        }
+                    </div>
+                </section>
+
+            </aside>
+        </section>
+
+        <section class="full-section batch-fade d5">
+            <div class="sec-label">
+                <div class="sec-label-line"></div>
+                <div>
+                    <h2>تحليل أداء الطلاب</h2>
+                    <p>أعلى 5 طلاب — أدنى 5 طلاب مع مؤشرات التدخل</p>
+                </div>
+            </div>
+
+            <div class="students-split">
+
+                <section class="student-card top">
+                    <div class="card-head">
+                        <div class="ch-left">
+                            <div class="ch-accent green"></div>
+                            <div>
+                                <div class="ch-title">⭐ المتفوقون</div>
+                                <div class="ch-sub">أعلى 5 بناءً على متوسط الاختبارات والحضور والتسليم</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (Model.TopStudents.Any())
+                    {
+                        foreach (var student in Model.TopStudents)
+                        {
+                            <div class="student-row">
+                                <div class="st-rank">@student.Rank</div>
+                                <div class="st-avatar top-avatar">@student.AvatarText</div>
+                                <div class="st-info">
+                                    <div class="st-name">@student.FullName</div>
+                                    <div class="st-detail">حضور @student.AttendancePercent.ToString("0")% • تسليم @student.HomeworkSubmissionPercent.ToString("0")%</div>
+                                </div>
+                                <span class="st-trend @student.TrendCssClass">@student.TrendText</span>
+                                <div class="st-score">@student.AverageScore.ToString("0")<small>متوسط</small></div>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="empty">لا توجد بيانات كافية.</div>
+                    }
+                </section>
+
+                <section class="student-card bottom">
+                    <div class="card-head">
+                        <div class="ch-left">
+                            <div class="ch-accent red"></div>
+                            <div>
+                                <div class="ch-title">🚨 يحتاجون متابعة</div>
+                                <div class="ch-sub">أدنى 5 مع تفاصيل مشكلة كل طالب</div>
+                            </div>
+                        </div>
+                        <span class="ch-badge danger">تدخل عاجل</span>
+                    </div>
+
+                    @if (Model.RiskStudents.Any())
+                    {
+                        foreach (var student in Model.RiskStudents)
+                        {
+                            <div class="student-row @(student.AverageScore < 60 ? "risk-row" : "")">
+                                <div class="st-rank">⚠</div>
+                                <div class="st-avatar risk-avatar">@student.AvatarText</div>
+                                <div class="st-info">
+                                    <div class="st-name">@student.FullName</div>
+                                    <div class="problem-flags">
+                                        @if (student.Flags.Any())
+                                        {
+                                            foreach (var flag in student.Flags)
+                                            {
+                                                <span class="pflag">@flag</span>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <span class="pflag neutral">لا توجد تفاصيل كافية</span>
+                                        }
+                                    </div>
+                                </div>
+                                <span class="st-trend @student.TrendCssClass">@student.TrendText</span>
+                                <div class="st-score">@student.AverageScore.ToString("0")<small>متوسط</small></div>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="empty">لا توجد بيانات كافية.</div>
+                    }
+                </section>
+            </div>
+        </section>
+    </div>
+</div>
+
+<style>
+    .batch-details-page {
+        --font: 'Cairo', 'Tahoma', sans-serif;
+        --ink: #0d1117;
+        --ink-2: #1c2434;
+        --ink-3: #374151;
+        --mute: #6b7280;
+        --mute-2: #9ca3af;
+        --mute-3: #d1d5db;
+        --bg: #f4f6fb;
+        --bg-2: #eef1f8;
+        --surface: #ffffff;
+        --border: #e5e8f0;
+        --green: #059669;
+        --green-lt: #d1fae5;
+        --green-dk: #064e3b;
+        --blue: #2563eb;
+        --blue-lt: #dbeafe;
+        --blue-dk: #1e3a8a;
+        --amber: #d97706;
+        --amber-lt: #fef3c7;
+        --amber-dk: #78350f;
+        --red: #dc2626;
+        --red-lt: #fee2e2;
+        --red-dk: #7f1d1d;
+        --purple: #7c3aed;
+        --purple-lt: #ede9fe;
+        --purple-dk: #3b0764;
+        --teal: #0891b2;
+        --teal-lt: #cffafe;
+        --radius: 12px;
+        --radius-lg: 18px;
+        --shadow: 0 2px 16px rgba(13, 17, 23, .07);
+        --shadow-sm: 0 1px 6px rgba(13, 17, 23, .05);
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: var(--font);
+        font-size: 14px;
+        line-height: 1.6;
+    }
+
+        .batch-details-page *,
+        .batch-details-page *::before,
+        .batch-details-page *::after {
+            box-sizing: border-box;
+        }
+
+        .batch-details-page a {
+            text-decoration: none;
+        }
+
+    @@keyframes batchFadeUp {
+        from {
+            opacity: 0;
+            transform: translateY(14px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .batch-details-page .batch-fade {
+        opacity: 1 !important;
+        animation: batchFadeUp .45s ease both;
+    }
+
+    .batch-details-page .d1 {
+        animation-delay: .05s;
+    }
+
+    .batch-details-page .d2 {
+        animation-delay: .10s;
+    }
+
+    .batch-details-page .d3 {
+        animation-delay: .15s;
+    }
+
+    .batch-details-page .d4 {
+        animation-delay: .20s;
+    }
+
+    .batch-details-page .d5 {
+        animation-delay: .25s;
+    }
+
+    .batch-details-page .d6 {
+        animation-delay: .30s;
+    }
+
+    .batch-details-page .d7 {
+        animation-delay: .35s;
+    }
+
+    .batch-topnav {
+        background: var(--ink);
+        padding: 0 28px;
+        min-height: 54px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        border-bottom: 1px solid rgba(255, 255, 255, .06);
+    }
+
+    .nav-brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+    }
+
+    .nav-logo {
+        font-size: 18px;
+        font-weight: 800;
+        color: #fff;
+        white-space: nowrap;
+    }
+
+    .nav-sep {
+        width: 1px;
+        height: 18px;
+        background: rgba(255, 255, 255, .15);
+        flex-shrink: 0;
+    }
+
+    .nav-breadcrumb {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12.5px;
+        color: rgba(255, 255, 255, .5);
+        flex-wrap: wrap;
+    }
+
+        .nav-breadcrumb a {
+            color: rgba(255, 255, 255, .55);
+        }
+
+        .nav-breadcrumb .current {
+            color: rgba(255, 255, 255, .9);
+            font-weight: 700;
+        }
+
+    .nav-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .nav-btn {
+        font-family: var(--font);
+        font-size: 12px;
+        font-weight: 700;
+        padding: 7px 14px;
+        border-radius: 9px;
+        border: 1px solid rgba(255, 255, 255, .16);
+        background: transparent;
+        color: rgba(255, 255, 255, .75);
+        cursor: pointer;
+        transition: .15s;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+        .nav-btn:hover {
+            background: rgba(255, 255, 255, .08);
+            color: #fff;
+        }
+
+        .nav-btn.primary {
+            background: var(--blue);
+            color: #fff;
+            border-color: var(--blue);
+        }
+
+    .batch-page {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 28px 28px 60px;
+    }
+
+    .batch-hero {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 28px 32px;
+        margin-bottom: 20px;
+        box-shadow: var(--shadow);
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 32px;
+        align-items: center;
+        position: relative;
+        overflow: hidden;
+    }
+
+        .batch-hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 340px;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(37, 99, 235, .04));
+            pointer-events: none;
+        }
+
+    .hero-content {
+        position: relative;
+        z-index: 1;
+        min-width: 0;
+    }
+
+    .hero-left {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        min-width: 0;
+    }
+
+    .hero-avatar {
+        width: 72px;
+        height: 72px;
+        border-radius: 18px;
+        background: linear-gradient(135deg, #1e3a8a, #2563eb);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 26px;
+        font-weight: 800;
+        color: #fff;
+        flex-shrink: 0;
+        box-shadow: 0 8px 24px rgba(37, 99, 235, .25);
+    }
+
+    .hero-info {
+        min-width: 0;
+    }
+
+        .hero-info h1 {
+            font-size: 26px;
+            font-weight: 800;
+            color: var(--ink);
+            line-height: 1.2;
+            margin: 0;
+        }
+
+    .hero-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+    }
+
+    .hero-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11.5px;
+        padding: 3px 10px;
+        border-radius: 20px;
+        border: 1px solid;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+        .hero-tag.active {
+            background: var(--green-lt);
+            color: var(--green-dk);
+            border-color: rgba(5, 150, 105, .25);
+        }
+
+        .hero-tag.info {
+            background: var(--blue-lt);
+            color: var(--blue-dk);
+            border-color: rgba(37, 99, 235, .2);
+        }
+
+        .hero-tag.neutral {
+            background: var(--bg-2);
+            color: var(--ink-3);
+            border-color: var(--border);
+        }
+
+    .hero-desc {
+        font-size: 13px;
+        color: var(--mute);
+        margin: 8px 0 0;
+        max-width: 760px;
+        line-height: 1.7;
+    }
+
+    .hero-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 14px;
+        flex-wrap: wrap;
+    }
+
+    .hbtn {
+        font-family: var(--font);
+        font-size: 12px;
+        font-weight: 700;
+        padding: 7px 16px;
+        border-radius: 9px;
+        border: 1px solid;
+        cursor: pointer;
+        transition: .15s;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+        .hbtn.outline {
+            background: var(--surface);
+            border-color: var(--border);
+            color: var(--ink-3);
+        }
+
+            .hbtn.outline:hover {
+                border-color: var(--blue);
+                color: var(--blue);
+                background: var(--blue-lt);
+            }
+
+        .hbtn.solid-blue {
+            background: var(--blue);
+            border-color: var(--blue);
+            color: #fff;
+        }
+
+        .hbtn.solid-amber {
+            background: var(--amber);
+            border-color: var(--amber);
+            color: #fff;
+        }
+
+        .hbtn.solid-red {
+            background: var(--red);
+            border-color: var(--red);
+            color: #fff;
+        }
+
+    .health-ring-wrap {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        min-width: 120px;
+    }
+
+    .health-ring {
+        position: relative;
+        width: 100px;
+        height: 100px;
+    }
+
+        .health-ring svg {
+            transform: rotate(-90deg);
+            width: 100%;
+            height: 100%;
+        }
+
+    .ring-bg {
+        fill: none;
+        stroke: var(--bg-2);
+        stroke-width: 8;
+    }
+
+    .ring-fill {
+        fill: none;
+        stroke-width: 8;
+        stroke-linecap: round;
+        transition: stroke-dashoffset .8s ease;
+    }
+
+    .ring-val {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        font-size: 22px;
+        font-weight: 800;
+        color: var(--ink);
+        line-height: 1;
+    }
+
+        .ring-val small {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--mute);
+        }
+
+    .health-label {
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--mute);
+        text-align: center;
+    }
+
+        .health-label span {
+            display: block;
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+            .health-label span.ex {
+                color: var(--green);
+            }
+
+            .health-label span.gd {
+                color: var(--blue);
+            }
+
+            .health-label span.wn {
+                color: var(--amber);
+            }
+
+            .health-label span.dg {
+                color: var(--red);
+            }
+
+    .kpi-strip {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 24px;
+    }
+
+    .kpi-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 16px 18px;
+        box-shadow: var(--shadow-sm);
+        cursor: default;
+        transition: .2s;
+        position: relative;
+        overflow: hidden;
+        min-height: 140px;
+    }
+
+        .kpi-card::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+        }
+
+        .kpi-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+        }
+
+        .kpi-card.g::after {
+            background: var(--green);
+        }
+
+        .kpi-card.b::after {
+            background: var(--blue);
+        }
+
+        .kpi-card.a::after {
+            background: var(--amber);
+        }
+
+        .kpi-card.r::after {
+            background: var(--red);
+        }
+
+        .kpi-card.p::after {
+            background: var(--purple);
+        }
+
+        .kpi-card.t::after {
+            background: var(--teal);
+        }
+
+    .kpi-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 9px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 15px;
+        margin-bottom: 10px;
+    }
+
+        .kpi-icon.g {
+            background: var(--green-lt);
+        }
+
+        .kpi-icon.b {
+            background: var(--blue-lt);
+        }
+
+        .kpi-icon.a {
+            background: var(--amber-lt);
+        }
+
+        .kpi-icon.r {
+            background: var(--red-lt);
+        }
+
+        .kpi-icon.p {
+            background: var(--purple-lt);
+        }
+
+        .kpi-icon.t {
+            background: var(--teal-lt);
+        }
+
+    .kpi-val {
+        font-size: 28px;
+        font-weight: 800;
+        color: var(--ink);
+        letter-spacing: -.8px;
+        line-height: 1;
+    }
+
+        .kpi-val sup {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--mute);
+        }
+
+    .kpi-label {
+        font-size: 11.5px;
+        color: var(--mute);
+        margin-top: 7px;
+        font-weight: 700;
+    }
+
+    .kpi-delta {
+        font-size: 10.5px;
+        margin-top: 6px;
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        font-weight: 700;
+    }
+
+        .kpi-delta.up {
+            color: var(--green);
+        }
+
+        .kpi-delta.dn {
+            color: var(--red);
+        }
+
+        .kpi-delta.eq {
+            color: var(--mute-2);
+        }
+
+    .main-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 380px;
+        gap: 18px;
+    }
+
+    .left-stack,
+    .right-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        min-width: 0;
+    }
+
+    .dash-card,
+    .student-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-sm);
+        overflow: hidden;
+    }
+
+    .card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 20px 13px;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .ch-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+    }
+
+    .ch-accent {
+        width: 4px;
+        height: 20px;
+        border-radius: 2px;
+        flex-shrink: 0;
+    }
+
+        .ch-accent.teal {
+            background: var(--teal);
+        }
+
+        .ch-accent.amber {
+            background: var(--amber);
+        }
+
+        .ch-accent.blue {
+            background: var(--blue);
+        }
+
+        .ch-accent.ink {
+            background: var(--ink);
+        }
+
+        .ch-accent.green {
+            background: var(--green);
+        }
+
+        .ch-accent.purple {
+            background: var(--purple);
+        }
+
+        .ch-accent.red {
+            background: var(--red);
+        }
+
+    .ch-title {
+        font-size: 13.5px;
+        font-weight: 800;
+        color: var(--ink);
+    }
+
+    .ch-sub {
+        font-size: 11px;
+        color: var(--mute);
+        margin-top: 1px;
+    }
+
+    .ch-badge {
+        font-size: 10.5px;
+        font-weight: 800;
+        padding: 3px 9px;
+        border-radius: 20px;
+        border: 1px solid;
+        white-space: nowrap;
+    }
+
+        .ch-badge.neutral {
+            background: var(--bg-2);
+            color: var(--ink-3);
+            border-color: var(--border);
+        }
+
+        .ch-badge.danger {
+            background: var(--red-lt);
+            color: var(--red-dk);
+            border-color: rgba(220, 38, 38, .2);
+        }
+
+    .card-link {
+        font-size: 11.5px;
+        color: var(--blue);
+        font-weight: 700;
+        cursor: pointer;
+        background: none;
+        border: none;
+        font-family: var(--font);
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        white-space: nowrap;
+    }
+
+    .small-link {
+        font-size: 11px;
+    }
+
+    .card-link:hover {
+        text-decoration: underline;
+    }
+
+    .card-body {
+        padding: 16px 20px;
+    }
+
+    .lessons-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+        padding: 16px 20px;
+    }
+
+    .lesson-cell {
+        border-radius: 10px;
+        border: 1.5px solid;
+        padding: 10px 12px;
+        cursor: default;
+        transition: .15s;
+        position: relative;
+        min-height: 104px;
+    }
+
+        .lesson-cell:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .lesson-cell.done {
+            background: #f0fdf4;
+            border-color: rgba(5, 150, 105, .3);
+        }
+
+        .lesson-cell.running {
+            background: #eff6ff;
+            border-color: rgba(37, 99, 235, .35);
+        }
+
+        .lesson-cell.pending {
+            background: var(--bg-2);
+            border-color: var(--border);
+        }
+
+        .lesson-cell.low {
+            background: #fffbeb;
+            border-color: rgba(217, 119, 6, .3);
+        }
+
+    .lc-num {
+        font-size: 9.5px;
+        font-weight: 800;
+        color: var(--mute-2);
+        margin-bottom: 4px;
+    }
+
+    .lc-title {
+        font-size: 11.5px;
+        font-weight: 800;
+        color: var(--ink);
+        line-height: 1.35;
+        margin-bottom: 6px;
+        padding-left: 44px;
+    }
+
+    .lesson-cell.pending .lc-title {
+        color: var(--mute);
+    }
+
+    .lc-bar {
+        height: 3px;
+        border-radius: 2px;
+        background: var(--mute-3);
+        overflow: hidden;
+        margin-bottom: 4px;
+    }
+
+    .lc-bar-fill {
+        height: 100%;
+        border-radius: 2px;
+        transition: width .7s ease;
+    }
+
+    .lesson-cell.done .lc-bar-fill {
+        background: var(--green);
+    }
+
+    .lesson-cell.running .lc-bar-fill {
+        background: var(--blue);
+    }
+
+    .lesson-cell.low .lc-bar-fill {
+        background: var(--amber);
+    }
+
+    .lesson-cell.pending .lc-bar-fill {
+        background: var(--mute-3);
+    }
+
+    .lc-meta {
+        font-size: 10px;
+        color: var(--mute);
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    .lc-badge {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        font-size: 9px;
+        font-weight: 800;
+        padding: 2px 6px;
+        border-radius: 4px;
+        background: var(--bg-2);
+        color: var(--mute);
+    }
+
+    .lesson-cell.done .lc-badge {
+        background: var(--green-lt);
+        color: var(--green-dk);
+    }
+
+    .lesson-cell.running .lc-badge {
+        background: var(--blue-lt);
+        color: var(--blue-dk);
+    }
+
+    .lesson-cell.low .lc-badge {
+        background: var(--amber-lt);
+        color: var(--amber-dk);
+    }
+
+    .table-wrap {
+        width: 100%;
+        overflow-x: auto;
+    }
+
+    .hw-table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 760px;
+    }
+
+        .hw-table th {
+            text-align: right;
+            font-size: 10.5px;
+            font-weight: 800;
+            color: var(--mute);
+            padding: 9px 20px;
+            background: var(--bg-2);
+            border-bottom: 1px solid var(--border);
+            letter-spacing: .03em;
+        }
+
+        .hw-table td {
+            padding: 12px 20px;
+            border-bottom: 1px solid var(--border);
+            font-size: 12.5px;
+            color: var(--ink-3);
+            vertical-align: middle;
+        }
+
+        .hw-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .hw-table tr:hover td {
+            background: var(--bg-2);
+        }
+
+    .row-soon {
+        background: #fffcf5;
+    }
+
+    .row-open {
+        background: #eff6ff;
+    }
+
+    .hw-title {
+        font-weight: 800;
+        color: var(--ink);
+        font-size: 13px;
+    }
+
+    .hw-sub {
+        font-size: 10.5px;
+        color: var(--mute);
+        margin-top: 2px;
+    }
+
+    .hw-prog {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .hw-prog-bar {
+        flex: 1;
+        max-width: 90px;
+        min-width: 70px;
+        height: 5px;
+        border-radius: 3px;
+        background: var(--mute-3);
+        overflow: hidden;
+    }
+
+    .hw-prog-fill {
+        height: 100%;
+        border-radius: 3px;
+        transition: width .7s ease;
+    }
+
+    .hw-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 10.5px;
+        font-weight: 800;
+        padding: 3px 9px;
+        border-radius: 20px;
+        border: 1px solid;
+        white-space: nowrap;
+    }
+
+        .hw-status.open {
+            background: var(--green-lt);
+            color: var(--green-dk);
+            border-color: rgba(5, 150, 105, .2);
+        }
+
+        .hw-status.closed {
+            background: var(--bg-2);
+            color: var(--mute);
+            border-color: var(--border);
+        }
+
+        .hw-status.late {
+            background: var(--red-lt);
+            color: var(--red-dk);
+            border-color: rgba(220, 38, 38, .2);
+        }
+
+        .hw-status.soon {
+            background: var(--amber-lt);
+            color: var(--amber-dk);
+            border-color: rgba(217, 119, 6, .2);
+        }
+
+    .hw-missing {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        font-size: 11px;
+        font-weight: 800;
+        padding: 2px 8px;
+        border-radius: 6px;
+        white-space: nowrap;
+    }
+
+        .hw-missing.none {
+            color: var(--green);
+            background: var(--green-lt);
+        }
+
+        .hw-missing.few {
+            color: var(--amber-dk);
+            background: var(--amber-lt);
+        }
+
+        .hw-missing.many {
+            color: var(--red-dk);
+            background: var(--red-lt);
+        }
+
+    .instructor-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        padding: 16px 20px;
+    }
+
+    .inst-card {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 16px;
+        cursor: default;
+        transition: .15s;
+        background: var(--bg-2);
+    }
+
+        .inst-card:hover {
+            background: var(--surface);
+            box-shadow: var(--shadow);
+            transform: translateY(-1px);
+        }
+
+    .inst-av {
+        width: 48px;
+        height: 48px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        font-weight: 800;
+        margin-bottom: 10px;
+        background: var(--blue-lt);
+        color: var(--blue-dk);
+    }
+
+    .inst-name {
+        font-size: 13px;
+        font-weight: 800;
+        color: var(--ink);
+        margin-bottom: 2px;
+    }
+
+    .inst-role {
+        font-size: 11px;
+        color: var(--mute);
+        margin-bottom: 10px;
+    }
+
+    .inst-stats {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .inst-stat-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+    }
+
+    .inst-stat-label {
+        color: var(--mute);
+    }
+
+    .inst-stat-val {
+        font-weight: 800;
+        color: var(--ink-3);
+    }
+
+    .inst-activity-bar {
+        height: 4px;
+        background: var(--mute-3);
+        border-radius: 2px;
+        margin: 8px 0 4px;
+        overflow: hidden;
+    }
+
+    .inst-activity-fill {
+        height: 100%;
+        border-radius: 2px;
+        transition: width .7s ease;
+    }
+
+    .inst-score-label {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: 10px;
+        color: var(--mute);
+    }
+
+    .inst-perf-btn {
+        display: block;
+        margin-top: 12px;
+        padding: 8px 12px;
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+        color: #fff;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 700;
+        text-align: center;
+        text-decoration: none;
+        transition: opacity .2s, transform .15s;
+    }
+
+    .inst-perf-btn:hover {
+        opacity: .88;
+        transform: translateY(-1px);
+        color: #fff;
+    }
+
+    .diag-section {
+        padding: 14px 18px;
+    }
+
+    .diag-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 11px 0;
+        border-bottom: 1px solid var(--border);
+    }
+
+        .diag-item:last-child {
+            border-bottom: none;
+        }
+
+    .diag-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 9px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        flex-shrink: 0;
+        margin-top: 1px;
+    }
+
+        .diag-icon.str {
+            background: var(--green-lt);
+        }
+
+        .diag-icon.wkn {
+            background: var(--amber-lt);
+        }
+
+        .diag-icon.opp {
+            background: var(--blue-lt);
+        }
+
+        .diag-icon.risk {
+            background: var(--red-lt);
+        }
+
+    .diag-title {
+        font-size: 12.5px;
+        font-weight: 800;
+        color: var(--ink);
+    }
+
+    .diag-body {
+        font-size: 11.5px;
+        color: var(--mute);
+        line-height: 1.65;
+        margin-top: 2px;
+    }
+
+    .att-month {
+        padding: 14px 18px;
+    }
+
+    .att-week-labels {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        margin-bottom: 4px;
+    }
+
+    .att-wl {
+        text-align: center;
+        font-size: 9px;
+        color: var(--mute-2);
+        font-weight: 800;
+    }
+
+    .att-grid-cal {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 3px;
+    }
+
+    .att-day {
+        aspect-ratio: 1;
+        border-radius: 5px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 9.5px;
+        font-weight: 800;
+        cursor: default;
+        transition: .12s;
+    }
+
+        .att-day:hover {
+            transform: scale(1.06);
+        }
+
+        .att-day.high {
+            background: var(--green-lt);
+            color: var(--green-dk);
+        }
+
+        .att-day.mid {
+            background: var(--amber-lt);
+            color: var(--amber-dk);
+        }
+
+        .att-day.low {
+            background: var(--red-lt);
+            color: var(--red-dk);
+        }
+
+        .att-day.no-lecture {
+            background: var(--bg-2);
+            color: var(--mute-2);
+        }
+
+        .att-day.today {
+            outline: 2px solid var(--blue);
+            outline-offset: 1px;
+        }
+
+    .att-legend {
+        display: flex;
+        gap: 12px;
+        margin-top: 10px;
+        font-size: 10px;
+        color: var(--mute);
+        flex-wrap: wrap;
+    }
+
+        .att-legend i {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 2px;
+            margin-left: 3px;
+            vertical-align: -1px;
+        }
+
+    .prog-item {
+        margin-bottom: 12px;
+    }
+
+        .prog-item:last-child {
+            margin-bottom: 0;
+        }
+
+    .prog-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: 11.5px;
+        margin-bottom: 4px;
+    }
+
+        .prog-head span {
+            font-weight: 700;
+            color: var(--ink-3);
+        }
+
+        .prog-head b {
+            font-weight: 800;
+            color: var(--ink);
+        }
+
+            .prog-head b span {
+                color: var(--mute);
+                font-weight: 500;
+            }
+
+    .prog-track {
+        height: 7px;
+        background: var(--bg-2);
+        border-radius: 4px;
+        overflow: hidden;
+        border: 1px solid var(--border);
+    }
+
+    .prog-fill {
+        height: 100%;
+        border-radius: 4px;
+        transition: width .7s ease;
+    }
+
+    .heatmap-wrap {
+        padding: 12px 18px 16px;
+    }
+
+    .hm-days {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 2px;
+    }
+
+    .hm-day {
+        flex: 1;
+        text-align: center;
+        font-size: 9.5px;
+        color: var(--mute-2);
+        font-weight: 800;
+    }
+
+    .hm-row {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 4px;
+    }
+
+    .hm-cell {
+        flex: 1;
+        height: 28px;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        font-weight: 800;
+        cursor: default;
+        transition: .15s;
+    }
+
+        .hm-cell:hover {
+            transform: scale(1.05);
+        }
+
+    .full-section {
+        margin-top: 18px;
+    }
+
+    .sec-label {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+
+    .sec-label-line {
+        width: 4px;
+        height: 20px;
+        border-radius: 2px;
+        background: var(--ink);
+    }
+
+    .sec-label h2 {
+        font-size: 15px;
+        font-weight: 800;
+        color: var(--ink);
+        margin: 0;
+    }
+
+    .sec-label p {
+        font-size: 12px;
+        color: var(--mute);
+        margin: 1px 0 0;
+    }
+
+    .students-split {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+        margin-bottom: 18px;
+    }
+
+    .student-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 11px 18px;
+        border-bottom: 1px solid var(--border);
+        cursor: default;
+        transition: .12s;
+    }
+
+        .student-row:last-child {
+            border-bottom: none;
+        }
+
+        .student-row:hover {
+            background: var(--bg-2);
+        }
+
+    .risk-row {
+        background: #fff5f5;
+    }
+
+    .st-rank {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        font-weight: 800;
+        flex-shrink: 0;
+    }
+
+    .top .st-rank {
+        background: linear-gradient(135deg, #fbbf24, #f59e0b);
+        color: #fff;
+    }
+
+    .bottom .st-rank {
+        background: var(--red-lt);
+        color: var(--red-dk);
+    }
+
+    .st-avatar {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: 800;
+        flex-shrink: 0;
+    }
+
+    .top-avatar {
+        background: var(--green-lt);
+        color: var(--green-dk);
+    }
+
+    .risk-avatar {
+        background: var(--red-lt);
+        color: var(--red-dk);
+    }
+
+    .st-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .st-name {
+        font-size: 13px;
+        font-weight: 800;
+        color: var(--ink);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .st-detail {
+        font-size: 11px;
+        color: var(--mute);
+        margin-top: 1px;
+    }
+
+    .st-score {
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: -.5px;
+        text-align: center;
+        flex-shrink: 0;
+        min-width: 44px;
+    }
+
+    .top .st-score {
+        color: var(--green);
+    }
+
+    .bottom .st-score {
+        color: var(--red);
+    }
+
+    .st-score small {
+        display: block;
+        font-size: 9px;
+        font-weight: 700;
+        color: var(--mute);
+        text-align: center;
+    }
+
+    .st-trend {
+        font-size: 11px;
+        font-weight: 800;
+        padding: 2px 7px;
+        border-radius: 5px;
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+
+        .st-trend.up {
+            background: var(--green-lt);
+            color: var(--green-dk);
+        }
+
+        .st-trend.dn {
+            background: var(--red-lt);
+            color: var(--red-dk);
+        }
+
+        .st-trend.eq {
+            background: var(--bg-2);
+            color: var(--mute);
+        }
+
+    .problem-flags {
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+        margin-top: 3px;
+    }
+
+    .pflag {
+        font-size: 9.5px;
+        font-weight: 800;
+        padding: 1px 6px;
+        border-radius: 4px;
+        border: 1px solid rgba(124, 58, 237, .2);
+        background: var(--purple-lt);
+        color: var(--purple-dk);
+    }
+
+        .pflag.neutral {
+            background: var(--bg-2);
+            color: var(--mute);
+            border-color: var(--border);
+        }
+
+    .empty {
+        text-align: center;
+        color: var(--mute);
+        font-size: 12px;
+        padding: 24px;
+    }
+
+        .empty.full {
+            grid-column: 1 / -1;
+        }
+
+    .txt-green {
+        color: var(--green);
+    }
+
+    .txt-red {
+        color: var(--red);
+    }
+
+    .txt-amber {
+        color: var(--amber);
+    }
+
+    .txt-blue {
+        color: var(--blue);
+    }
+
+    .fw7 {
+        font-weight: 700;
+    }
+
+    .fw8 {
+        font-weight: 800;
+    }
+
+    @@media (max-width: 1200px) {
+        .kpi-strip {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .main-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .students-split {
+            grid-template-columns: 1fr;
+        }
+
+        .instructor-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .batch-page {
+            padding: 16px;
+        }
+
+        .batch-topnav {
+            height: auto;
+            padding: 14px;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .nav-brand {
+            align-items: flex-start;
+        }
+
+        .nav-actions {
+            width: 100%;
+        }
+
+        .batch-hero {
+            grid-template-columns: 1fr;
+            padding: 20px;
+        }
+
+        .hero-left {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .kpi-strip {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .lessons-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .instructor-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .card-head {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+        .student-row {
+            align-items: flex-start;
+            flex-wrap: wrap;
+        }
+    }
+
+    @@media (max-width: 520px) {
+        .kpi-strip {
+            grid-template-columns: 1fr;
+        }
+
+        .lessons-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const fills = document.querySelectorAll('.prog-fill, .inst-activity-fill, .hw-prog-fill, .lc-bar-fill');
+
+        fills.forEach(function (el) {
+            const target = el.style.width;
+            el.style.width = '0';
+            setTimeout(function () {
+                el.style.width = target;
+            }, 250);
+        });
+
+        const ring = document.querySelector('.ring-fill');
+
+        if (ring) {
+            const originalOffset = ring.getAttribute('stroke-dashoffset');
+            ring.setAttribute('stroke-dashoffset', '251.2');
+
+            setTimeout(function () {
+                ring.style.transition = 'stroke-dashoffset .9s ease';
+                ring.setAttribute('stroke-dashoffset', originalOffset);
+            }, 200);
+        }
+    });
+</script>
+
+@* ====================================================
+   MODALS — أزرار البطاقة العلوية
+   ==================================================== *@
+
+@* Toast للنتائج *@
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="bq-toast bq-toast-success" id="bqToastSuccess">
+        <span class="bq-toast-icon">✅</span>
+        <span class="bq-toast-msg">@TempData["SuccessMessage"]</span>
+        <button class="bq-toast-close" onclick="this.parentElement.remove()">✕</button>
+    </div>
+}
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="bq-toast bq-toast-error" id="bqToastError">
+        <span class="bq-toast-icon">❌</span>
+        <span class="bq-toast-msg">@TempData["ErrorMessage"]</span>
+        <button class="bq-toast-close" onclick="this.parentElement.remove()">✕</button>
+    </div>
+}
+
+@* ===== Modal 1: مراسلة الدفعة ===== *@
+<div class="bq-modal-overlay" id="modalBatchMessage" role="dialog" aria-modal="true" aria-labelledby="modalBatchMessageTitle">
+    <div class="bq-modal bq-modal-blue">
+        <div class="bq-modal-header">
+            <div class="bq-modal-icon-wrap blue"><span>✉</span></div>
+            <div>
+                <h2 id="modalBatchMessageTitle" class="bq-modal-title">مراسلة الدفعة</h2>
+                <p class="bq-modal-subtitle">إرسال رسالة لجميع طلاب <strong>@Model.Name</strong> (@Model.StudentsCount طالب)</p>
+            </div>
+            <button class="bq-modal-x" onclick="closeModal('modalBatchMessage')" aria-label="إغلاق">✕</button>
+        </div>
+
+        <form asp-area="Admin" asp-controller="Batches" asp-action="SendBatchMessage" method="post" class="bq-modal-form">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="batchId" value="@Model.Id" />
+
+            <div class="bq-field">
+                <label class="bq-label" for="bmSubject">موضوع الرسالة</label>
+                <input id="bmSubject" name="subject" type="text" class="bq-input"
+                       placeholder="مثال: إعلان هام، تذكير بالمحاضرة..." maxlength="120" required />
+            </div>
+
+            <div class="bq-field">
+                <label class="bq-label" for="bmMessage">نص الرسالة</label>
+                <textarea id="bmMessage" name="message" class="bq-textarea"
+                          rows="4" placeholder="اكتب نص الرسالة هنا..." maxlength="600" required></textarea>
+                <div class="bq-char-counter"><span id="bmMsgCount">0</span>/600</div>
+            </div>
+
+            <div class="bq-recipients-info">
+                <span class="bq-rec-chip">👥 سيستقبلها @Model.StudentsCount طالب</span>
+                <span class="bq-rec-chip">📋 @Model.Name</span>
+            </div>
+
+            <div class="bq-modal-footer">
+                <button type="button" class="bq-btn bq-btn-ghost" onclick="closeModal('modalBatchMessage')">إلغاء</button>
+                <button type="submit" class="bq-btn bq-btn-blue">
+                    <span>✉ إرسال الرسالة</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@* ===== Modal 2: إشعار متابعة ===== *@
+<div class="bq-modal-overlay" id="modalFollowUp" role="dialog" aria-modal="true" aria-labelledby="modalFollowUpTitle">
+    <div class="bq-modal bq-modal-amber">
+        <div class="bq-modal-header">
+            <div class="bq-modal-icon-wrap amber"><span>⚠</span></div>
+            <div>
+                <h2 id="modalFollowUpTitle" class="bq-modal-title">إشعار متابعة</h2>
+                <p class="bq-modal-subtitle">تنبيه متابعة لطلاب <strong>@Model.Name</strong></p>
+            </div>
+            <button class="bq-modal-x" onclick="closeModal('modalFollowUp')" aria-label="إغلاق">✕</button>
+        </div>
+
+        <form asp-area="Admin" asp-controller="Batches" asp-action="SendBatchFollowUpNotification" method="post" class="bq-modal-form">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="batchId" value="@Model.Id" />
+
+            <div class="bq-field">
+                <label class="bq-label">نوع المتابعة</label>
+                <div class="bq-follow-types">
+                    <label class="bq-type-option">
+                        <input type="radio" name="followUpType" value="attendance" checked />
+                        <span class="bq-type-card">
+                            <span class="bq-type-icon">🗓</span>
+                            <span>متابعة الحضور</span>
+                        </span>
+                    </label>
+                    <label class="bq-type-option">
+                        <input type="radio" name="followUpType" value="homework" />
+                        <span class="bq-type-card">
+                            <span class="bq-type-icon">📝</span>
+                            <span>متابعة الواجبات</span>
+                        </span>
+                    </label>
+                    <label class="bq-type-option">
+                        <input type="radio" name="followUpType" value="exam" />
+                        <span class="bq-type-card">
+                            <span class="bq-type-icon">🏆</span>
+                            <span>متابعة الاختبارات</span>
+                        </span>
+                    </label>
+                    <label class="bq-type-option">
+                        <input type="radio" name="followUpType" value="general" />
+                        <span class="bq-type-card">
+                            <span class="bq-type-icon">📌</span>
+                            <span>متابعة عامة</span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="bq-field">
+                <label class="bq-label" for="fuMessage">رسالة المتابعة</label>
+                <textarea id="fuMessage" name="message" class="bq-textarea"
+                          rows="4" placeholder="اكتب رسالة المتابعة هنا..." maxlength="500" required></textarea>
+                <div class="bq-char-counter"><span id="fuMsgCount">0</span>/500</div>
+            </div>
+
+            <div class="bq-kpi-preview">
+                <div class="bq-kpi-item amber">
+                    <span class="bq-kpi-n">@Model.AttendancePercent.ToString("0")%</span>
+                    <span class="bq-kpi-l">نسبة الحضور</span>
+                </div>
+                <div class="bq-kpi-item amber">
+                    <span class="bq-kpi-n">@Model.HomeworkSubmissionPercent.ToString("0")%</span>
+                    <span class="bq-kpi-l">تسليم الواجبات</span>
+                </div>
+                <div class="bq-kpi-item amber">
+                    <span class="bq-kpi-n">@Model.ExamAverageScore.ToString("0")%</span>
+                    <span class="bq-kpi-l">متوسط الاختبارات</span>
+                </div>
+            </div>
+
+            <div class="bq-modal-footer">
+                <button type="button" class="bq-btn bq-btn-ghost" onclick="closeModal('modalFollowUp')">إلغاء</button>
+                <button type="submit" class="bq-btn bq-btn-amber">⚠ إرسال إشعار المتابعة</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@* ===== Modal 3: إجراء عاجل ===== *@
+<div class="bq-modal-overlay" id="modalUrgentAlert" role="dialog" aria-modal="true" aria-labelledby="modalUrgentTitle">
+    <div class="bq-modal bq-modal-red">
+        <div class="bq-modal-header">
+            <div class="bq-modal-icon-wrap red"><span>🚨</span></div>
+            <div>
+                <h2 id="modalUrgentTitle" class="bq-modal-title">إجراء عاجل</h2>
+                <p class="bq-modal-subtitle">تنبيه عاجل وفوري لطلاب <strong>@Model.Name</strong></p>
+            </div>
+            <button class="bq-modal-x" onclick="closeModal('modalUrgentAlert')" aria-label="إغلاق">✕</button>
+        </div>
+
+        <div class="bq-urgent-banner">
+            🚨 سيُرسل هذا الإشعار كتنبيه ذو أولوية عالية لجميع @Model.StudentsCount طالب
+        </div>
+
+        <form asp-area="Admin" asp-controller="Batches" asp-action="SendBatchUrgentAlert" method="post" class="bq-modal-form">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="batchId" value="@Model.Id" />
+
+            <div class="bq-field">
+                <label class="bq-label">سبب الإجراء العاجل</label>
+                <div class="bq-urgent-reasons">
+                    <label class="bq-reason-option">
+                        <input type="radio" name="urgentReason" value="غياب متكرر" checked />
+                        <span class="bq-reason-card">📉 غياب متكرر</span>
+                    </label>
+                    <label class="bq-reason-option">
+                        <input type="radio" name="urgentReason" value="تدني الدرجات" />
+                        <span class="bq-reason-card">⚠ تدني الدرجات</span>
+                    </label>
+                    <label class="bq-reason-option">
+                        <input type="radio" name="urgentReason" value="عدم تسليم الواجبات" />
+                        <span class="bq-reason-card">📝 إهمال الواجبات</span>
+                    </label>
+                    <label class="bq-reason-option">
+                        <input type="radio" name="urgentReason" value="مشكلة سلوكية" />
+                        <span class="bq-reason-card">🔴 مشكلة سلوكية</span>
+                    </label>
+                    <label class="bq-reason-option">
+                        <input type="radio" name="urgentReason" value="تغيير طارئ" />
+                        <span class="bq-reason-card">📢 تغيير طارئ</span>
+                    </label>
+                    <label class="bq-reason-option">
+                        <input type="radio" name="urgentReason" value="أخرى" />
+                        <span class="bq-reason-card">📋 أخرى</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="bq-field">
+                <label class="bq-label" for="uaMessage">تفاصيل الإجراء العاجل</label>
+                <textarea id="uaMessage" name="message" class="bq-textarea bq-textarea-red"
+                          rows="4" placeholder="اكتب تفاصيل الإجراء العاجل المطلوب هنا..." maxlength="500" required></textarea>
+                <div class="bq-char-counter"><span id="uaMsgCount">0</span>/500</div>
+            </div>
+
+            <div class="bq-modal-footer">
+                <button type="button" class="bq-btn bq-btn-ghost" onclick="closeModal('modalUrgentAlert')">إلغاء</button>
+                <button type="submit" class="bq-btn bq-btn-red">🚨 إرسال الإجراء العاجل</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@* ===== CSS للـ Modals ===== *@
+<style>
+    :root {
+        --bq-blue: #2563eb;
+        --bq-blue-light: #eff6ff;
+        --bq-amber: #d97706;
+        --bq-amber-light: #fffbeb;
+        --bq-red: #dc2626;
+        --bq-red-light: #fef2f2;
+        --bq-green: #059669;
+        --bq-green-light: #ecfdf5;
+        --bq-radius: 16px;
+        --bq-shadow: 0 20px 60px rgba(0,0,0,.25);
+    }
+
+    /* Overlay */
+    .bq-modal-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,.55);
+        backdrop-filter: blur(4px);
+        z-index: 9999;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+        animation: bqFadeIn .2s ease;
+    }
+
+    .bq-modal-overlay.is-open {
+        display: flex;
+    }
+
+    @@keyframes bqFadeIn {
+        from { opacity: 0; }
+        to   { opacity: 1; }
+    }
+
+    @@keyframes bqSlideUp {
+        from { opacity: 0; transform: translateY(28px) scale(.97); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* Modal Card */
+    .bq-modal {
+        background: #fff;
+        border-radius: var(--bq-radius);
+        box-shadow: var(--bq-shadow);
+        width: 100%;
+        max-width: 560px;
+        max-height: 90vh;
+        overflow-y: auto;
+        animation: bqSlideUp .28s cubic-bezier(.16,1,.3,1);
+        border-top: 5px solid var(--bq-blue);
+        position: relative;
+    }
+
+    .bq-modal-blue  { border-top-color: var(--bq-blue); }
+    .bq-modal-amber { border-top-color: var(--bq-amber); }
+    .bq-modal-red   { border-top-color: var(--bq-red); }
+
+    /* Header */
+    .bq-modal-header {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+        padding: 22px 22px 0;
+    }
+
+    .bq-modal-icon-wrap {
+        width: 50px;
+        height: 50px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        flex-shrink: 0;
+    }
+
+    .bq-modal-icon-wrap.blue  { background: var(--bq-blue-light);  color: var(--bq-blue); }
+    .bq-modal-icon-wrap.amber { background: var(--bq-amber-light); color: var(--bq-amber); }
+    .bq-modal-icon-wrap.red   { background: var(--bq-red-light);   color: var(--bq-red); }
+
+    .bq-modal-title {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #111827;
+        margin: 0 0 4px;
+        font-family: 'Cairo', 'Tajawal', sans-serif;
+    }
+
+    .bq-modal-subtitle {
+        font-size: .875rem;
+        color: #6b7280;
+        margin: 0;
+        font-family: 'Cairo', 'Tajawal', sans-serif;
+    }
+
+    .bq-modal-subtitle strong { color: #374151; }
+
+    .bq-modal-x {
+        margin-right: auto;
+        margin-left: 0;
+        background: none;
+        border: none;
+        font-size: 1.1rem;
+        color: #9ca3af;
+        cursor: pointer;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background .15s, color .15s;
+        flex-shrink: 0;
+    }
+
+    .bq-modal-x:hover { background: #f3f4f6; color: #374151; }
+
+    /* Form Body */
+    .bq-modal-form { padding: 18px 22px 22px; }
+
+    .bq-field { margin-bottom: 18px; }
+
+    .bq-label {
+        display: block;
+        font-size: .875rem;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 8px;
+        font-family: 'Cairo', 'Tajawal', sans-serif;
+    }
+
+    .bq-input,
+    .bq-textarea {
+        width: 100%;
+        border: 1.5px solid #d1d5db;
+        border-radius: 10px;
+        padding: 10px 14px;
+        font-size: .9rem;
+        font-family: 'Cairo', 'Tajawal', sans-serif;
+        color: #111827;
+        background: #fafafa;
+        transition: border-color .2s, box-shadow .2s;
+        resize: vertical;
+        box-sizing: border-box;
+        direction: rtl;
+    }
+
+    .bq-input:focus,
+    .bq-textarea:focus {
+        outline: none;
+        border-color: var(--bq-blue);
+        box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+        background: #fff;
+    }
+
+    .bq-modal-red .bq-textarea-red:focus {
+        border-color: var(--bq-red);
+        box-shadow: 0 0 0 3px rgba(220,38,38,.12);
+    }
+
+    .bq-modal-amber .bq-input:focus,
+    .bq-modal-amber .bq-textarea:focus {
+        border-color: var(--bq-amber);
+        box-shadow: 0 0 0 3px rgba(217,119,6,.12);
+    }
+
+    .bq-char-counter {
+        text-align: left;
+        font-size: .75rem;
+        color: #9ca3af;
+        margin-top: 4px;
+    }
+
+    /* Recipients Info */
+    .bq-recipients-info {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 6px;
+    }
+
+    .bq-rec-chip {
+        background: var(--bq-blue-light);
+        color: var(--bq-blue);
+        font-size: .8rem;
+        font-weight: 600;
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-family: 'Cairo', 'Tajawal', sans-serif;
+    }
+
+    /* Follow-Up Type Cards */
+    .bq-follow-types {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+
+    .bq-type-option input[type="radio"] { display: none; }
+
+    .bq-type-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        padding: 12px 8px;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: .82rem;
+        font-weight: 600;
+        color: #6b7280;
+        background: #fafafa;
+        transition: border-color .2s, background .2s, color .2s;
+        font-family: 'Cairo', 'Tajawal', sans-serif;
+        text-align: center;
+        user-select: none;
+    }
+
+    .bq-type-icon { font-size: 1.4rem; }
+
+    .bq-type-option input:checked + .bq-type-card {
+        border-color: var(--bq-amber);
+        background: var(--bq-amber-light);
+        color: var(--bq-amber);
+    }
+
+    .bq-type-card:hover { border-color: #d1d5db; background: #f9fafb; }
+
+    /* KPI Preview inside follow-up modal */
+    .bq-kpi-preview {
+        display: flex;
+        gap: 10px;
+        background: var(--bq-amber-light);
+        border-radius: 10px;
+        padding: 12px;
+        margin-bottom: 6px;
+    }
+
+    .bq-kpi-item {
+        flex: 1;
+        text-align: center;
+    }
+
+    .bq-kpi-n {
+        display: block;
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: var(--bq-amber);
+        font-family: 'Cairo', 'Tajawal', sans-serif;
+    }
+
+    .bq-kpi-l {
+        display: block;
+        font-size: .72rem;
+        color: #78350f;
+        margin-top: 2px;
+        font-family: 'Cairo', 'Tajawal', sans-serif;
+    }
+
+    /* Urgent Banner */
+    .bq-urgent-banner {
+        background: var(--bq-red-light);
+        border: 1px solid #fca5a5;
+        border-radius: 10px;
+        padding: 12px 18px;
+        margin: 14px 22px 4px;
+        font-size: .875rem;
+        font-weight: 600;
+        color: #991b1b;
+        font-family: 'Cairo', 'Tajawal', sans-serif;
+        direction: rtl;
+    }
+
+    /* Urgent Reason Cards */
+    .bq-urgent-reasons {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 8px;
+    }
+
+    .bq-reason-option input[type="radio"] { display: none; }
+
+    .bq-reason-card {
+        display: block;
+        padding: 9px 6px;
+        border: 2px solid #e5e7eb;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: .78rem;
+        font-weight: 600;
+        color: #6b7280;
+        background: #fafafa;
+        transition: border-color .2s, background .2s, color .2s;
+        font-family: 'Cairo', 'Tajawal', sans-serif;
+        text-align: center;
+        user-select: none;
+    }
+
+    .bq-reason-option input:checked + .bq-reason-card {
+        border-color: var(--bq-red);
+        background: var(--bq-red-light);
+        color: var(--bq-red);
+    }
+
+    .bq-reason-card:hover { border-color: #d1d5db; background: #f9fafb; }
+
+    /* Footer */
+    .bq-modal-footer {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+        padding-top: 10px;
+        border-top: 1px solid #f3f4f6;
+        margin-top: 16px;
+    }
+
+    .bq-btn {
+        padding: 10px 22px;
+        border-radius: 10px;
+        font-size: .9rem;
+        font-weight: 700;
+        font-family: 'Cairo', 'Tajawal', sans-serif;
+        cursor: pointer;
+        border: none;
+        transition: opacity .2s, transform .1s;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .bq-btn:hover { opacity: .9; }
+    .bq-btn:active { transform: scale(.97); }
+
+    .bq-btn-ghost {
+        background: #f3f4f6;
+        color: #374151;
+    }
+
+    .bq-btn-blue  { background: var(--bq-blue);  color: #fff; }
+    .bq-btn-amber { background: var(--bq-amber); color: #fff; }
+    .bq-btn-red   { background: var(--bq-red);   color: #fff; }
+
+    /* Toast */
+    .bq-toast {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 10000;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 14px 18px;
+        border-radius: 12px;
+        font-size: .9rem;
+        font-weight: 600;
+        font-family: 'Cairo', 'Tajawal', sans-serif;
+        box-shadow: 0 8px 30px rgba(0,0,0,.18);
+        animation: bqSlideUp .3s ease, bqFadeOut 4s 3s forwards;
+        max-width: 380px;
+        direction: rtl;
+    }
+
+    .bq-toast-success { background: var(--bq-green-light); color: #065f46; border: 1px solid #a7f3d0; }
+    .bq-toast-error   { background: var(--bq-red-light);   color: #991b1b; border: 1px solid #fca5a5; }
+
+    .bq-toast-icon { font-size: 1.1rem; }
+    .bq-toast-msg  { flex: 1; }
+
+    .bq-toast-close {
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: inherit;
+        opacity: .6;
+        font-size: .9rem;
+        padding: 2px 6px;
+        border-radius: 6px;
+        transition: opacity .15s;
+    }
+
+    .bq-toast-close:hover { opacity: 1; }
+
+    @@keyframes bqFadeOut {
+        from { opacity: 1; transform: translateY(0); }
+        to   { opacity: 0; transform: translateY(-10px); pointer-events: none; }
+    }
+
+    @@media (max-width: 600px) {
+        .bq-follow-types { grid-template-columns: 1fr 1fr; }
+        .bq-urgent-reasons { grid-template-columns: 1fr 1fr; }
+        .bq-modal { max-width: 100%; }
+    }
+</style>
+
+@* ===== JS للـ Modals ===== *@
+<script>
+    function openModal(id) {
+        var el = document.getElementById(id);
+        if (el) {
+            el.classList.add('is-open');
+            document.body.style.overflow = 'hidden';
+        }
+    }
+
+    function closeModal(id) {
+        var el = document.getElementById(id);
+        if (el) {
+            el.classList.remove('is-open');
+            document.body.style.overflow = '';
+        }
+    }
+
+    // إغلاق عند الضغط خارج المودال
+    document.querySelectorAll('.bq-modal-overlay').forEach(function (overlay) {
+        overlay.addEventListener('click', function (e) {
+            if (e.target === overlay) closeModal(overlay.id);
+        });
+    });
+
+    // إغلاق بـ Escape
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            document.querySelectorAll('.bq-modal-overlay.is-open').forEach(function (el) {
+                closeModal(el.id);
+            });
+        }
+    });
+
+    // عداد الأحرف
+    function bindCounter(textareaId, counterId) {
+        var ta = document.getElementById(textareaId);
+        var cnt = document.getElementById(counterId);
+        if (!ta || !cnt) return;
+        ta.addEventListener('input', function () { cnt.textContent = ta.value.length; });
+    }
+
+    bindCounter('bmMessage', 'bmMsgCount');
+    bindCounter('fuMessage', 'fuMsgCount');
+    bindCounter('uaMessage', 'uaMsgCount');
+
+    // إخفاء الـ Toast تلقائياً
+    setTimeout(function () {
+        ['bqToastSuccess', 'bqToastError'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) el.remove();
+        });
+    }, 6000);
+</script>

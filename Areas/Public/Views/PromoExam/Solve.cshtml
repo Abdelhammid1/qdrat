@@ -1,0 +1,218 @@
+﻿@model QdratNew.Entities.PromoExamAttempt
+@using QdratNew.Enums
+@using QdratNew.Helpers
+
+@{
+    var q = Model.Question;
+    int index = ViewBag.Index ?? 0;
+    Func<string, string> convert = s => NumberHelper.ToIndicNumbersSafe(s);
+}
+
+@if (q == null)
+{
+    <div class="alert alert-warning text-center mt-5">⚠️ لم يتم تحميل السؤال الحالي.</div>
+}
+else
+{
+    <div class="container mt-4" dir="rtl">
+
+        <!-- 🔹 رقم السؤال -->
+        <div class="mb-3 text-center">
+            <h5 class="fw-bold text-qdrat">
+                السؤال @convert((index + 1).ToString())
+            </h5>
+        </div>
+
+        <!-- 🔹 القطعة اللفظية -->
+        @if (q.VerbalPassage != null && !string.IsNullOrWhiteSpace(q.VerbalPassage.Content))
+        {
+            <div class="card border-primary shadow-sm mb-4">
+                <div class="card-header bg-light fw-bold text-primary d-flex align-items-center">
+                    <i class="bi bi-journal-text me-2"></i>
+                    @(string.IsNullOrWhiteSpace(q.VerbalPassage.Title) ? "القطعة اللفظية" : q.VerbalPassage.Title)
+                </div>
+                <div class="card-body bg-white">
+                    <div class="verbal-passage-text" style="line-height:1.9; text-align:justify; font-size:1.05rem;">
+                        @Html.Raw(q.VerbalPassage.Content)
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- 🔹 عرض السؤال -->
+        <div class="card border-info shadow-sm mb-4">
+            <div class="card-header bg-qdrat-light fw-bold">
+                <h4 class="question-content p-1">
+                    @{
+                        var titleHtml = q.Title ?? "";
+                        titleHtml = System.Text.RegularExpressions.Regex.Replace(
+                        titleHtml,
+                        @"\d+",
+                        m => NumberHelper.ToIndicNumbersSafe(m.Value)
+                        );
+                    }
+                    @Html.Raw(titleHtml)
+                </h4>
+            </div>
+
+
+            <div class="card-body">
+
+                <!-- 🟩 عرض السؤال حسب نوع القالب Template -->
+                @switch (q.Template)
+                {
+                    case  QuestionTemplate.CompareValues:
+                        {
+                            <div class="row mb-3 text-center">
+                                <div class="col-md-6 border-end">
+                                    <strong>القيمة الأولى:</strong>
+                                    <div>@Html.Raw(convert(q.ValueA))</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <strong>القيمة الثانية:</strong>
+                                    <div>@Html.Raw(convert(q.ValueB))</div>
+                                </div>
+                            </div>
+                            break;
+                        }
+
+                    case QuestionTemplate.CompareWithImage:
+                        {
+                            <div class="row mb-3 text-center align-items-center">
+                                <div class="col-md-4">
+                                    <img src="@Url.Content(q.ImageUrl)" class="img-fluid" style="max-height: 150px;" />
+                                </div>
+                                <div class="col-md-4 border-end">
+                                    <strong>القيمة الأولى:</strong>
+                                    <div>@Html.Raw(convert(q.ValueA))</div>
+                                </div>
+                                <div class="col-md-4">
+                                    <strong>القيمة الثانية:</strong>
+                                    <div>@Html.Raw(convert(q.ValueB))</div>
+                                </div>
+                            </div>
+                            break;
+                        }
+
+                    case QuestionTemplate.ImageOptions:
+                        {
+                            if (!string.IsNullOrWhiteSpace(q.ImageUrl))
+                            {
+                                <div class="text-center mb-3">
+                                    <img src="@Url.Content(q.ImageUrl)" class="img-fluid rounded" style="max-height: 200px;" />
+                                </div>
+                            }
+                            break;
+                        }
+
+                    default:
+                        {
+                            if (!string.IsNullOrWhiteSpace(q.ImageUrl))
+                            {
+                                <div class="text-center mb-3">
+                                    <img src="@Url.Content(q.ImageUrl)" class="img-fluid rounded" style="max-height: 200px;" />
+                                </div>
+                            }
+                            break;
+                        }
+                }
+
+                <!-- 🔹 عرض الخيارات -->
+                <form asp-action="SubmitAnswer" method="post" id="promo-question-form">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="sessionId" value="@Model.SessionId" />
+                    <input type="hidden" name="questionId" value="@q.Id" />
+                    <input type="hidden" name="nextIndex" value="@(index + 1)" />
+
+                    <div class="list-group">
+                        @foreach (var option in q.Options)
+                        {
+                            var isChecked = (ViewBag.SelectedAnswer != null && ViewBag.SelectedAnswer.ToString() == option.Text);
+
+                            <label class="list-group-item d-flex align-items-center gap-3">
+                                <input type="radio"
+                                       name="selectedAnswer"
+                                       value="@option.Text"
+                                       class="form-check-input me-2"
+                                       @(isChecked ? "checked" : "") />
+
+                                @if (!string.IsNullOrWhiteSpace(option.ImageUrl))
+                                {
+                                    <img src="@Url.Content(option.ImageUrl)" class="img-fluid rounded" style="max-height: 80px;" />
+                                }
+                                else
+                                {
+                                    <span class="fw-bold">@Html.Raw(option.Text)</span>
+                                }
+                            </label>
+                        }
+
+                    </div>
+
+                    <div class="d-flex justify-content-between mt-4">
+                        @if (index > 0)
+                        {
+                            <a asp-action="Solve" asp-route-sessionId="@Model.SessionId" asp-route-index="@(index - 1)"
+                               class="btn btn-outline-secondary px-4">
+                                ◀️ السابق
+                            </a>
+                        }
+
+                        <button type="submit" class="btn btn-primary px-4">
+                            @(index == 19 ? "إنهاء الاختبار" : "التالي ▶️")
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .bg-qdrat-light {
+        background-color: #f3faf9;
+    }
+
+    .question-content {
+        font-size: 1.25rem;
+        color: #333;
+        line-height: 1.8;
+    }
+
+    .list-group-item:hover {
+        background-color: #f7fffa;
+        cursor: pointer;
+    }
+
+    /* 🟩 منع انعكاس الاتجاه داخل الأكواد الرياضية */
+    .question-content * {
+        direction: ltr !important;
+        unicode-bidi: embed !important;
+    }
+
+    /* 🟩 تحسين تنسيق الكسور والبسط والمقام */
+    .question-content sup,
+    .question-content sub {
+        font-size: 0.8em;
+        line-height: 0.9em;
+        position: relative;
+    }
+
+    .question-content sup {
+        top: -0.3em;
+    }
+
+    .question-content sub {
+        bottom: -0.2em;
+    }
+
+    /* 🟩 إذا كان السؤال يحتوي معادلات بلغة HTML فتبقى بمحاذاة طبيعية */
+    .question-content span[style*="position:absolute"],
+    .question-content span[style*="vertical-align"] {
+        display: inline-block;
+        direction: ltr !important;
+    }
+
+
+
+</style>

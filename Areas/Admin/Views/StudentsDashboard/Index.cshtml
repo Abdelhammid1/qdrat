@@ -1,0 +1,189 @@
+﻿@model QdratNew.ViewModels.Students.DashboardStudentStatsViewModel
+
+@{
+    ViewData["Title"] = "📊 لوحة تحكم الطلاب";
+    // Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="container-fluid" dir="rtl">
+    <h2 class="text-primary mb-4"><i class="fas fa-chart-line"></i> لوحة تحكم الطلاب</h2>
+    <div class="alert alert-warning">
+        عدد الطلاب المتعثرين: <strong>@Model.AtRiskStudents.Count</strong>
+    </div>
+
+    <!-- ✅ الفلاتر -->
+    <form method="get" class="row mb-4">
+        <div class="col-md-4">
+            <label class="form-label">اختر الفرع</label>
+            <select name="branchId" class="form-select" onchange="this.form.submit()">
+                <option value="">كل الفروع</option>
+                @foreach (var branch in Model.Branches)
+                {
+                    string selected = (Model.SelectedBranchId?.ToString() == branch.Value) ? "selected" : "";
+                    @Html.Raw($"<option value=\"{branch.Value}\" {selected}>{branch.Text}</option>")
+                }
+            </select>
+
+        </div>
+        <div class="col-md-4">
+            <label class="form-label">اختر الدفعة</label>
+            <select name="batchId" class="form-select" onchange="this.form.submit()">
+                <option value="">كل الدفعات</option>
+                @foreach (var batch in Model.Batches)
+                {
+                    string selected = (Model.SelectedBatchId?.ToString() == batch.Value) ? "selected" : "";
+                    @Html.Raw($"<option value=\"{batch.Value}\" {selected}>{batch.Text}</option>")
+                }
+            </select>
+
+        </div>
+    </form>
+
+    <!-- ✅ البطاقات الإحصائية -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <a href="@Url.Action("List", "StudentsDashboard", new { status = "all" })" class="text-decoration-none">
+                <div class="card text-white bg-primary">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">👨‍🎓 إجمالي الطلاب</h5>
+                        <p class="card-text display-6">@Model.TotalStudents</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3">
+            <a href="@Url.Action("List", "StudentsDashboard", new { status = "active" })" class="text-decoration-none">
+                <div class="card text-white bg-success">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">✅ نشطين</h5>
+                        <p class="card-text display-6">@Model.ActiveStudents</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3">
+            <a href="@Url.Action("List", "StudentsDashboard", new { status = "inactive" })" class="text-decoration-none">
+                <div class="card text-white bg-danger">
+                    <div class="card-body text-center">
+                        <h5 class="card-title">🚫 موقوفين</h5>
+                        <p class="card-text display-6">@Model.InactiveStudents</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-info">
+                <div class="card-body text-center">
+                    <h5 class="card-title">👫 الجنس</h5>
+                    <p class="card-text">
+                        <a href="@Url.Action("List", "StudentsDashboard", new { status = "male" })" class="text-dark text-decoration-underline">
+                            ذكور: @Model.MaleStudents
+                        </a><br />
+                        <a href="@Url.Action("List", "StudentsDashboard", new { status = "female" })" class="text-dark text-decoration-underline">
+                            إناث: @Model.FemaleStudents
+                        </a>
+                    </p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+
+    <!-- ✅ الرسوم البيانية -->
+    <div class="row mb-5">
+        <div class="col-md-6">
+            <canvas id="chartByBranch"></canvas>
+        </div>
+        <div class="col-md-6">
+            <canvas id="chartByLevel"></canvas>
+        </div>
+        <div class="col-md-6 mt-4">
+            <canvas id="chartByGender"></canvas>
+        </div>
+        <div class="col-md-6 mt-4">
+            <canvas id="chartByMonth"></canvas>
+        </div>
+    </div>
+
+    <!-- ✅ الطلاب المتعثرين -->
+    <div class="card border-warning mb-5">
+        <div class="card-header bg-warning text-dark">
+            ⚠️ الطلاب المتعثرين (ضعف في الأداء أو بدون خطة)
+        </div>
+        <div class="card-body">
+            @if (Model.AtRiskStudents.Any())
+            {
+                <ul class="list-group list-group-flush">
+                    @foreach (var student in Model.AtRiskStudents)
+                    {
+                        <li class="list-group-item">@student</li>
+                    }
+                </ul>
+            }
+            else
+            {
+                <p class="text-muted">لا يوجد طلاب متعثرين حاليًا</p>
+            }
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // 🔹 رسم بياني حسب الفروع
+        new Chart(document.getElementById('chartByBranch'), {
+            type: 'bar',
+            data: {
+                labels: @Html.Raw(Json.Serialize(Model.StudentsByBranch.Keys)),
+                datasets: [{
+                    label: 'عدد الطلاب حسب الفرع',
+                    data: @Html.Raw(Json.Serialize(Model.StudentsByBranch.Values)),
+                    backgroundColor: 'rgba(0, 123, 255, 0.7)'
+                }]
+            }
+        });
+
+        // 🔹 حسب المرحلة
+        new Chart(document.getElementById('chartByLevel'), {
+            type: 'bar',
+            data: {
+                labels: @Html.Raw(Json.Serialize(Model.StudentsByLevel.Keys)),
+                datasets: [{
+                    label: 'عدد الطلاب حسب المرحلة',
+                    data: @Html.Raw(Json.Serialize(Model.StudentsByLevel.Values)),
+                    backgroundColor: 'rgba(40, 167, 69, 0.7)'
+                }]
+            }
+        });
+
+        // 🔹 حسب الجنس
+        new Chart(document.getElementById('chartByGender'), {
+            type: 'pie',
+            data: {
+                labels: ['ذكور', 'إناث'],
+                datasets: [{
+                    data: [@Model.MaleStudents, @Model.FemaleStudents],
+                    backgroundColor: ['#36A2EB', '#FF6384']
+                }]
+            }
+        });
+
+        // 🔹 التسجيلات الشهرية
+        new Chart(document.getElementById('chartByMonth'), {
+            type: 'line',
+            data: {
+                labels: @Html.Raw(Json.Serialize(Model.RegistrationsByMonth.Keys)),
+                datasets: [{
+                    label: 'عدد التسجيلات الشهرية',
+                    data: @Html.Raw(Json.Serialize(Model.RegistrationsByMonth.Values)),
+                    borderColor: '#17a2b8',
+                    backgroundColor: 'rgba(23, 162, 184, 0.1)',
+                    fill: true,
+                    tension: 0.3
+                }]
+            }
+        });
+    </script>
+}

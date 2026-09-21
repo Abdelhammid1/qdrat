@@ -1,0 +1,157 @@
+﻿@model QdratNew.Entities.StaticPage
+@{
+    ViewData["Title"] = "✏️ تعديل الصفحة";
+    Layout = "~/Areas/Admin/Views/Shared/_AdminLayout.cshtml";
+}
+
+<div class="container mt-4">
+    <h3 class="fw-bold mb-4 text-primary">
+        <i class="fa-solid fa-pen-to-square me-2"></i> تعديل الصفحة: @Model.Title
+    </h3>
+
+    <form asp-action="EditPage" method="post" enctype="multipart/form-data">
+        <input type="hidden" asp-for="Id" />
+
+        <div class="mb-3">
+            <label asp-for="Title" class="form-label fw-bold">عنوان الصفحة</label>
+            <input asp-for="Title" class="form-control" placeholder="أدخل عنوان الصفحة" />
+        </div>
+
+        <div class="mb-3">
+            <label asp-for="Slug" class="form-label fw-bold">الرابط (Slug)</label>
+            <input asp-for="Slug" class="form-control" placeholder="مثلاً: about" />
+            <small class="text-muted">الرابط سيظهر كـ /Page/slug</small>
+        </div>
+
+        <div class="mb-3">
+            <label asp-for="Content" class="form-label fw-bold">المحتوى</label>
+            <textarea asp-for="Content" id="Content" class="form-control" rows="12"></textarea>
+        </div>
+
+        <!-- 🟢 رفع صورة الغلاف -->
+        <div class="mb-4">
+            <label class="form-label fw-bold">صورة الغلاف</label>
+            <input type="file" name="ImageFile" class="form-control" accept="image/*" />
+
+            @if (!string.IsNullOrEmpty(Model.ImagePath))
+            {
+                <div class="mt-3 text-center">
+                    <img src="@Url.Content(Model.ImagePath)" alt="صورة الغلاف" class="img-thumbnail shadow-sm" style="max-height:200px;">
+                    <p class="small text-muted mt-1">الصورة الحالية</p>
+
+                    <form asp-action="DeletePageImage" method="post" class="d-inline">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <button type="submit" class="btn btn-outline-danger btn-sm mt-2"
+                                onclick="return confirm('هل أنت متأكد من حذف صورة الغلاف الحالية؟');">
+                            🗑️ حذف الصورة
+                        </button>
+                    </form>
+                </div>
+            }
+
+        </div>
+
+        <div class="form-check mb-4">
+            <input asp-for="IsActive" class="form-check-input" />
+            <label asp-for="IsActive" class="form-check-label">نشطة</label>
+        </div>
+
+        <button type="submit" class="btn btn-success px-4">
+            <i class="fa fa-save me-1"></i> حفظ التعديلات
+        </button>
+        <a asp-action="Pages" class="btn btn-secondary">عودة</a>
+    </form>
+
+
+
+</div>
+
+@section Scripts {
+    <script src="~/lib/tinymce/tinymce.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            tinymce.init({
+                selector: '#Content',
+                base_url: '/lib/tinymce',
+                suffix: '.min',
+                directionality: 'rtl',
+                height: 550,
+                language: 'ar',
+                menubar: true,
+                branding: false,
+                icons: 'default',
+                skin: 'oxide',
+                theme: 'silver',
+                plugins: 'advlist autolink link image lists charmap print preview hr anchor pagebreak searchreplace wordcount visualblocks visualchars code fullscreen insertdatetime media table emoticons template paste help',
+                toolbar: 'undo redo | styles | bold italic underline forecolor backcolor | alignright aligncenter alignleft alignjustify | bullist numlist | link image media | table | code fullscreen preview help',
+                content_style: 'body { font-family: Cairo, sans-serif; font-size:16px; direction:rtl; }',
+                relative_urls: false,
+                remove_script_host: false,
+                media_live_embeds: true
+            });
+        });
+    </script>
+
+    <script>
+        function arabicToSlug(text) {
+            const map = {
+                'ا': 'a', 'أ': 'a', 'إ': 'i', 'آ': 'a', 'ء': '', 'ئ': 'e', 'ؤ': 'o',
+                'ب': 'b', 'ت': 't', 'ث': 'th', 'ج': 'j', 'ح': 'h', 'خ': 'kh',
+                'د': 'd', 'ذ': 'th', 'ر': 'r', 'ز': 'z', 'س': 's', 'ش': 'sh',
+                'ص': 's', 'ض': 'd', 'ط': 't', 'ظ': 'z', 'ع': 'a', 'غ': 'gh',
+                'ف': 'f', 'ق': 'q', 'ك': 'k', 'ل': 'l', 'م': 'm', 'ن': 'n',
+                'ه': 'h', 'و': 'w', 'ي': 'y', 'ى': 'a', 'ة': 'h', 'ﻻ': 'la'
+            };
+            return text.trim().toLowerCase()
+                .replace(/[^\u0621-\u064A0-9\s]/g, '')
+                .split('').map(ch => map[ch] || ch).join('')
+                .replace(/\s+/g, '-')
+                .replace(/-+/g, '-')
+                .replace(/^-|-$/g, '');
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const titleInput = document.querySelector('input[name="Title"]');
+            const slugInput = document.querySelector('input[name="Slug"]');
+            const saveBtn = document.querySelector('button[type="submit"]');
+            let feedback = document.createElement('div');
+            slugInput.after(feedback);
+
+            async function checkSlug(slug) {
+                if (!slug || slug.length < 2) {
+                    feedback.innerHTML = "";
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`/Admin/Settings/CheckSlugExists?slug=${encodeURIComponent(slug)}`);
+                    const data = await response.json();
+
+                    if (data.exists && slug !== '@Model.Slug') {
+                        feedback.innerHTML = "<span class='text-danger fw-bold'>⚠️ هذا الرابط مستخدم مسبقًا</span>";
+                        saveBtn.disabled = true;
+                    } else {
+                        feedback.innerHTML = "<span class='text-success fw-bold'>✅ الرابط متاح</span>";
+                        saveBtn.disabled = false;
+                    }
+                } catch {
+                    feedback.innerHTML = "<span class='text-warning fw-bold'>⚠️ فشل التحقق من الرابط</span>";
+                }
+            }
+
+            if (titleInput && slugInput) {
+                titleInput.addEventListener('input', function () {
+                    const slugValue = arabicToSlug(this.value);
+                    slugInput.value = slugValue;
+                    checkSlug(slugValue);
+                });
+
+                slugInput.addEventListener('input', function () {
+                    checkSlug(this.value);
+                });
+            }
+        });
+    </script>
+
+}

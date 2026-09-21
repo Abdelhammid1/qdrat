@@ -1,0 +1,780 @@
+@using Microsoft.AspNetCore.Identity
+@using QdratNew.Entities
+@inject QdratNew.Services.Interfaces.IUserContextService UserContext
+@using QdratNew.Helpers
+
+@inject UserManager<ApplicationUser> UserManager
+
+@{
+    ApplicationUser user = null;
+    string fullName = "الطالب";
+
+    try
+    {
+        if (User?.Identity?.IsAuthenticated ?? false)
+        {
+            user = await UserManager.GetUserAsync(ViewContext.HttpContext.User);
+            if (user != null && !string.IsNullOrWhiteSpace(user.FullName))
+            {
+                fullName = user.FullName;
+            }
+        }
+    }
+    catch
+    {
+        fullName = "الطالب";
+    }
+}
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - منصة قدرات</title>
+    <link rel="icon" type="image/x-icon" href="~/favicon.ico" />
+
+    @RenderSection("Styles", required: false)
+
+    <!-- Bootstrap RTL -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css" rel="stylesheet" />
+
+    <!-- FontAwesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+
+    <!-- Google Fonts - Cairo -->
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+
+    <!-- ملفات CSS المشتركة -->
+    <link href="~/css/student.css" rel="stylesheet" asp-append-version="true" />
+    <link href="~/css/Student-profile.css" rel="stylesheet" asp-append-version="true" />
+    <link href="~/css/qdrat.css" rel="stylesheet" asp-append-version="true" />
+    <link href="~/css/student-interface.css" rel="stylesheet" />
+    <link href="~/css/math-render.css" rel="stylesheet" />
+
+    <style>
+        /* ===== المتغيرات ===== */
+        :root {
+            --primary:        #339999;
+            --primary-dark:   #267a7a;
+            --primary-darker: #1d5e5e;
+            --primary-light:  #e8f5f5;
+            --sidebar-width:  260px;
+            --sidebar-col:    72px;
+            --header-h:       62px;
+            --text-main:      #1e293b;
+            --text-muted:     #64748b;
+            --bg-page:        #f0f4f8;
+            --bg-card:        #ffffff;
+            --border:         #e2e8f0;
+            --shadow-sm:      0 1px 4px rgba(0,0,0,0.08);
+            --radius:         12px;
+            --radius-sm:      8px;
+            --transition:     0.28s ease;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html, body {
+            height: 100%;
+            font-family: 'Cairo', sans-serif;
+            background: var(--bg-page);
+            color: var(--text-main);
+            direction: rtl;
+            overflow-x: hidden;
+        }
+
+        /* ================================================
+           LAYOUT: wrapper → sidebar + main
+           الـ sidebar sticky بدلاً من fixed — يبقى داخل
+           flex flow ويتيح لـ #ql-main ملء العرض تلقائياً
+        ================================================ */
+
+        #ql-wrapper {
+            display: flex;
+            min-height: 100vh;
+            align-items: stretch;
+        }
+
+        /* ===== SIDEBAR ===== */
+        #ql-sidebar {
+            width: var(--sidebar-width);
+            flex-shrink: 0;
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            background: linear-gradient(175deg, var(--primary-darker) 0%, var(--primary-dark) 45%, var(--primary) 100%);
+            z-index: 200;
+            transition: width var(--transition);
+        }
+
+        #ql-sidebar.collapsed { width: var(--sidebar-col); }
+
+        /* Brand */
+        .ql-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 18px 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.12);
+            flex-shrink: 0;
+        }
+
+        .ql-brand-icon {
+            width: 36px; height: 36px;
+            background: rgba(255,255,255,0.18);
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 17px; color: #fff;
+            flex-shrink: 0;
+        }
+
+        .ql-brand-text {
+            font-size: 1.1rem; font-weight: 700; color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            transition: opacity var(--transition), max-width var(--transition);
+            max-width: 200px; opacity: 1;
+        }
+
+        #ql-sidebar.collapsed .ql-brand-text { opacity: 0; max-width: 0; }
+
+        /* Avatar */
+        .ql-avatar-wrap {
+            display: flex; align-items: center; gap: 12px;
+            padding: 16px 14px;
+            border-bottom: 1px solid rgba(255,255,255,0.12);
+            flex-shrink: 0;
+            overflow: hidden;
+        }
+
+        .ql-avatar {
+            width: 42px; height: 42px;
+            border-radius: 50%; object-fit: cover;
+            border: 2px solid rgba(255,255,255,0.45);
+            flex-shrink: 0;
+        }
+
+        .ql-avatar-info {
+            overflow: hidden;
+            transition: opacity var(--transition), max-width var(--transition);
+            max-width: 180px; opacity: 1;
+        }
+
+        #ql-sidebar.collapsed .ql-avatar-info { opacity: 0; max-width: 0; }
+
+        .ql-avatar-name  { font-size: 0.88rem; font-weight: 600; color: #fff; white-space: nowrap; }
+        .ql-avatar-badge { font-size: 0.7rem;  color: rgba(255,255,255,0.72); white-space: nowrap; }
+
+        /* Nav */
+        .ql-nav {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 10px 8px;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255,255,255,0.18) transparent;
+        }
+        .ql-nav::-webkit-scrollbar { width: 3px; }
+        .ql-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+
+        .ql-nav-label {
+            font-size: 0.65rem; font-weight: 700;
+            letter-spacing: .09em; text-transform: uppercase;
+            color: rgba(255,255,255,0.45);
+            padding: 14px 10px 5px;
+            white-space: nowrap;
+            overflow: hidden;
+            transition: opacity var(--transition), max-height var(--transition);
+            max-height: 40px; opacity: 1;
+        }
+
+        #ql-sidebar.collapsed .ql-nav-label { opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; }
+
+        .ql-nav-item {
+            display: flex; align-items: center; gap: 11px;
+            padding: 10px 12px;
+            border-radius: var(--radius-sm);
+            color: rgba(255,255,255,0.82);
+            text-decoration: none;
+            font-size: 0.875rem; font-weight: 500;
+            white-space: nowrap;
+            margin-bottom: 2px;
+            transition: background .18s, color .18s;
+            position: relative;
+        }
+
+        .ql-nav-item:hover  { background: rgba(255,255,255,0.14); color: #fff; text-decoration: none; }
+        .ql-nav-item.active { background: rgba(255,255,255,0.22); color: #fff; font-weight: 600; }
+
+        .ql-nav-icon {
+            width: 22px; text-align: center;
+            font-size: 0.95rem; flex-shrink: 0;
+        }
+
+        .ql-nav-text {
+            overflow: hidden;
+            transition: opacity var(--transition), max-width var(--transition);
+            max-width: 200px; opacity: 1;
+        }
+
+        #ql-sidebar.collapsed .ql-nav-text { opacity: 0; max-width: 0; }
+
+        /* Collapsed: center icons + tooltip */
+        #ql-sidebar.collapsed .ql-nav-item { justify-content: center; padding: 10px 8px; }
+
+        #ql-sidebar.collapsed .ql-nav-item:hover::after {
+            content: attr(data-title);
+            position: absolute;
+            left: calc(100% + 10px);
+            top: 50%; transform: translateY(-50%);
+            background: rgba(15,23,42,0.9);
+            color: #fff; font-size: 0.78rem;
+            padding: 5px 11px; border-radius: 6px;
+            white-space: nowrap; pointer-events: none;
+            z-index: 9999;
+            font-family: 'Cairo', sans-serif;
+        }
+
+        .ql-nav-divider {
+            height: 1px; background: rgba(255,255,255,0.11);
+            margin: 8px 6px;
+        }
+
+        /* Sidebar toggle */
+        .ql-toggle-btn {
+            display: flex; align-items: center; justify-content: center;
+            padding: 13px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            cursor: pointer;
+            color: rgba(255,255,255,0.65);
+            transition: color .2s;
+            flex-shrink: 0;
+        }
+        .ql-toggle-btn:hover { color: #fff; }
+
+        /* ===== MAIN COLUMN ===== */
+        #ql-main {
+            flex: 1;
+            min-width: 0;           /* منع overflow */
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ===== HEADER ===== */
+        #ql-header {
+            position: sticky;
+            top: 0;
+            z-index: 150;
+            height: var(--header-h);
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            box-shadow: var(--shadow-sm);
+            flex-shrink: 0;
+        }
+
+        .ql-header-left  { display: flex; align-items: center; gap: 14px; }
+        .ql-header-right { display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; }
+
+        .ql-mobile-toggle {
+            display: none;
+            background: none; border: none;
+            font-size: 1.15rem; color: var(--text-main);
+            cursor: pointer; padding: 6px; border-radius: 6px;
+            transition: background .15s;
+        }
+        .ql-mobile-toggle:hover { background: var(--primary-light); color: var(--primary-dark); }
+
+        .ql-page-title {
+            font-size: 1rem; font-weight: 600; color: var(--text-main);
+        }
+
+        .ql-role-select {
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 5px 10px;
+            font-size: 0.83rem; font-family: 'Cairo', sans-serif;
+            color: var(--text-main); background: var(--bg-card);
+            cursor: pointer; outline: none;
+            transition: border-color .2s;
+        }
+        .ql-role-select:focus { border-color: var(--primary); }
+
+        .ql-greeting { font-size: 0.88rem; font-weight: 600; color: var(--text-main); white-space: nowrap; }
+        .ql-greeting span { color: var(--primary); }
+
+        .ql-hbtn {
+            width: 36px; height: 36px;
+            border-radius: 50%; border: none;
+            background: var(--primary-light);
+            color: var(--primary-dark);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; font-size: 0.9rem;
+            text-decoration: none;
+            transition: background .2s, transform .15s;
+            flex-shrink: 0;
+        }
+        .ql-hbtn:hover { background: var(--primary); color: #fff; transform: scale(1.07); }
+
+        .ql-notif { position: relative; }
+        .ql-notif-btn { position: relative; }
+        .ql-notif-btn::after { display: none; }
+
+        .ql-notif-count,
+        .ql-nav-badge {
+            min-width: 18px;
+            height: 18px;
+            padding: 0 5px;
+            border-radius: 999px;
+            background: #ef4444;
+            color: #fff;
+            font-size: 0.68rem;
+            font-weight: 800;
+            line-height: 18px;
+            text-align: center;
+            box-shadow: 0 0 0 2px rgba(255,255,255,0.95);
+        }
+
+        .ql-notif-count {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+        }
+
+        .ql-nav-badge {
+            margin-inline-start: auto;
+            flex-shrink: 0;
+            background: #f97316;
+            box-shadow: none;
+        }
+
+        #ql-sidebar.collapsed .ql-nav-badge {
+            position: absolute;
+            top: 4px;
+            left: 8px;
+            margin: 0;
+            min-width: 16px;
+            height: 16px;
+            font-size: 0.6rem;
+            line-height: 16px;
+            padding: 0 4px;
+        }
+
+        .ql-notif-menu {
+            width: min(340px, calc(100vw - 28px));
+            padding: 0;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 16px 38px rgba(15,23,42,0.16);
+            font-family: 'Cairo', sans-serif;
+            text-align: right;
+        }
+
+        .ql-notif-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--border);
+            background: #f8fafc;
+        }
+
+        .ql-notif-head strong { font-size: 0.94rem; color: var(--text-main); }
+        .ql-notif-head span { font-size: 0.72rem; color: #ef4444; font-weight: 700; }
+
+        .ql-notif-list {
+            max-height: 320px;
+            overflow-y: auto;
+        }
+
+        .ql-notif-item {
+            display: flex;
+            gap: 10px;
+            padding: 11px 14px;
+            color: var(--text-main);
+            text-decoration: none;
+            border-bottom: 1px solid #eef2f7;
+            background: #fff;
+        }
+
+        .ql-notif-item:hover {
+            background: var(--primary-light);
+            color: var(--text-main);
+            text-decoration: none;
+        }
+
+        .ql-notif-item.unread { background: #fff7ed; }
+
+        .ql-notif-item-icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: var(--primary-light);
+            color: var(--primary-dark);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 0.82rem;
+        }
+
+        .ql-notif-item-body {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .ql-notif-message {
+            font-size: 0.8rem;
+            line-height: 1.55;
+            white-space: normal;
+        }
+
+        .ql-notif-item small {
+            color: var(--text-muted);
+            font-size: 0.68rem;
+        }
+
+        .ql-notif-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            padding: 24px 14px;
+            color: var(--text-muted);
+            font-size: 0.82rem;
+        }
+
+        .ql-notif-all {
+            display: block;
+            padding: 11px 14px;
+            text-align: center;
+            text-decoration: none;
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: var(--primary-dark);
+            background: #f8fafc;
+            border-top: 1px solid var(--border);
+        }
+
+        .ql-notif-all:hover {
+            color: #fff;
+            background: var(--primary);
+            text-decoration: none;
+        }
+
+        /* ===== CONTENT ===== */
+        .ql-content {
+            flex: 1;
+            padding: 28px;
+            min-width: 0;
+        }
+
+        /* ===== HIGHLIGHT ===== */
+        .highlight-word {
+            color: #d9534f !important;
+            font-weight: bold !important;
+            text-decoration: underline !important;
+            padding: 0 2px;
+        }
+
+        /* ===== MOBILE OVERLAY ===== */
+        #ql-overlay {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.42);
+            z-index: 199;
+            backdrop-filter: blur(2px);
+        }
+        #ql-overlay.active { display: block; }
+
+        /* ================================================
+           RESPONSIVE
+        ================================================ */
+
+        /* Tablet: 768px – 1199px */
+        @@media (min-width: 768px) and (max-width: 1199px) {
+            :root { --sidebar-width: 220px; }
+            .ql-content { padding: 22px 20px; }
+            .ql-greeting { display: none; }
+        }
+
+        /* Mobile: < 768px */
+        @@media (max-width: 767.98px) {
+            #ql-sidebar {
+                position: fixed !important;
+                top: 0; right: 0; bottom: 0;
+                height: 100vh !important;
+                width: var(--sidebar-width) !important;
+                transform: translateX(110%);
+                z-index: 300;
+            }
+
+            #ql-sidebar.mobile-open { transform: translateX(0); }
+
+            #ql-main {
+                width: 100%;
+            }
+
+            #ql-header { padding: 0 14px; }
+
+            .ql-mobile-toggle { display: flex; }
+
+            .ql-page-title { display: none; }
+
+            .ql-greeting { display: none; }
+
+            .ql-content { padding: 16px 14px; }
+        }
+
+        /* Large desktop */
+        @@media (min-width: 1400px) {
+            :root { --sidebar-width: 270px; }
+        }
+    </style>
+</head>
+
+<body>
+@await Html.PartialAsync("~/Views/Shared/_ImpersonationBanner.cshtml")
+    <!-- Mobile Overlay -->
+    <div id="ql-overlay"></div>
+
+    <div id="ql-wrapper">
+
+        <!-- ===== Sidebar ===== -->
+        <aside id="ql-sidebar">
+            <!-- Brand -->
+            <div class="ql-brand">
+                <div class="ql-brand-icon">
+                    <i class="fas fa-graduation-cap"></i>
+                </div>
+                <span class="ql-brand-text">منصة قدرات</span>
+            </div>
+
+            <!-- Avatar -->
+            @Html.Partial("_StudentSidebarUserPartial")
+
+            <!-- Navigation -->
+            @Html.Partial("_StudentMenuPartial")
+
+            <!-- Toggle collapse -->
+            <div class="ql-toggle-btn d-none d-lg-flex" id="ql-toggle-sidebar" title="تصغير القائمة">
+                <i class="fas fa-angles-right" id="ql-toggle-icon"></i>
+            </div>
+        </aside>
+
+        <!-- ===== Main ===== -->
+        <div id="ql-main">
+
+            <!-- Header -->
+            <header id="ql-header">
+                <div class="ql-header-left">
+                    <!-- زر الموبايل -->
+                    <button class="ql-mobile-toggle" id="ql-mobile-btn" aria-label="فتح القائمة">
+                        <i class="fas fa-bars"></i>
+                    </button>
+
+                    <!-- عنوان الصفحة -->
+                    <span class="ql-page-title">@(ViewData["Title"]?.ToString() ?? "لوحة التحكم")</span>
+                </div>
+
+                <div class="ql-header-right">
+
+                    @if (UserContext.HasMultipleRoles)
+                    {
+                        <form method="post" action="/Identity/Account/SwitchRole" class="d-inline">
+                            @Html.AntiForgeryToken()
+                            <select name="role" class="ql-role-select" onchange="this.form.submit()">
+                                @foreach (var role in UserContext.AvailableRoles)
+                                {
+                                    <option value="@role" selected="@(role == UserContext.ActiveRole)">
+                                        @(RoleNamesHelper.RoleDisplay.ContainsKey(role)
+                                            ? RoleNamesHelper.RoleDisplay[role]
+                                            : role)
+                                    </option>
+                                }
+                            </select>
+                        </form>
+                    }
+
+                    <span class="ql-greeting">مرحباً، <span>@fullName</span></span>
+
+                    @await Component.InvokeAsync("StudentNotificationNav", new { display = "Bell" })
+
+                    <a href="/Identity/Account/Logout" class="ql-hbtn" title="تسجيل الخروج">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </a>
+                </div>
+            </header>
+
+            <!-- Content -->
+            <main class="ql-content">
+                @RenderBody()
+            </main>
+        </div>
+    </div>
+
+    <!-- jQuery -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.4/jquery.min.js"></script>
+
+    <!-- Bootstrap -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        (function () {
+            var sidebar    = document.getElementById('ql-sidebar');
+            var toggleBtn  = document.getElementById('ql-toggle-sidebar');
+            var toggleIcon = document.getElementById('ql-toggle-icon');
+            var mobileBtn  = document.getElementById('ql-mobile-btn');
+            var overlay    = document.getElementById('ql-overlay');
+            var STORE_KEY  = 'ql_sb_col';
+
+            /* --- حالة الـ collapse المحفوظة (desktop فقط) --- */
+            function isMobile() { return window.innerWidth < 768; }
+
+            if (!isMobile() && localStorage.getItem(STORE_KEY) === '1') {
+                sidebar.classList.add('collapsed');
+                if (toggleIcon) {
+                    toggleIcon.classList.replace('fa-angles-right', 'fa-angles-left');
+                }
+            }
+
+            /* --- Toggle collapse (desktop) --- */
+            if (toggleBtn) {
+                toggleBtn.addEventListener('click', function () {
+                    if (isMobile()) return;
+                    var col = sidebar.classList.toggle('collapsed');
+                    if (toggleIcon) {
+                        toggleIcon.classList.toggle('fa-angles-right', !col);
+                        toggleIcon.classList.toggle('fa-angles-left',  col);
+                    }
+                    localStorage.setItem(STORE_KEY, col ? '1' : '0');
+                });
+            }
+
+            /* --- Mobile: فتح الشريط --- */
+            if (mobileBtn) {
+                mobileBtn.addEventListener('click', function () {
+                    sidebar.classList.add('mobile-open');
+                    overlay.classList.add('active');
+                    document.body.style.overflow = 'hidden';
+                });
+            }
+
+            function closeMobileSidebar() {
+                sidebar.classList.remove('mobile-open');
+                overlay.classList.remove('active');
+                document.body.style.overflow = '';
+            }
+
+            overlay.addEventListener('click', closeMobileSidebar);
+
+            /* --- إغلاق الـ sidebar عند الضغط على رابط في الموبايل --- */
+            document.querySelectorAll('.ql-nav-item').forEach(function (link) {
+                link.addEventListener('click', function () {
+                    if (isMobile()) closeMobileSidebar();
+                });
+            });
+
+            /* --- Active nav item --- */
+            var currentPath = window.location.pathname.toLowerCase().replace(/\/+$/, '');
+            document.querySelectorAll('.ql-nav-item').forEach(function (link) {
+                var href = (link.getAttribute('href') || '').toLowerCase().replace(/\/+$/, '');
+                if (href && href !== '/' && currentPath.startsWith(href)) {
+                    link.classList.add('active');
+                }
+            });
+
+        })();
+    </script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            document.querySelectorAll(".explanation-toggle").forEach(btn => {
+                btn.addEventListener("click", function () {
+                    const id = this.dataset.id;
+                    const container = document.getElementById("extra-content-" + id);
+                    if (!container) return;
+                    const exp = container.querySelector(".explanation-content");
+                    const vid = container.querySelector(".video-content");
+                    if (container.style.display === "block" && exp.style.display === "block") {
+                        container.style.display = "none";
+                        exp.style.display = "none";
+                        return;
+                    }
+                    container.style.display = "block";
+                    exp.style.display = "block";
+                    vid.style.display = "none";
+                });
+            });
+
+            document.querySelectorAll(".video-toggle").forEach(btn => {
+                btn.addEventListener("click", function () {
+                    const id = this.dataset.id;
+                    const container = document.getElementById("extra-content-" + id);
+                    if (!container) return;
+                    const exp = container.querySelector(".explanation-content");
+                    const vid = container.querySelector(".video-content");
+                    if (container.style.display === "block" && vid.style.display === "block") {
+                        container.style.display = "none";
+                        vid.style.display = "none";
+                        return;
+                    }
+                    container.style.display = "block";
+                    exp.style.display = "none";
+                    vid.style.display = "block";
+                });
+            });
+        });
+    </script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+                new bootstrap.Tooltip(el);
+            });
+        });
+    </script>
+
+    <script>
+        (function () {
+            const pingUrl = '/StudentLiveActivity/Ping';
+            const leaveUrl = '/StudentLiveActivity/Leave';
+
+            function sendStudentHeartbeat() {
+                try {
+                    const formData = new FormData();
+                    formData.append('path', window.location.pathname + window.location.search);
+                    formData.append('title', document.title || '');
+                    fetch(pingUrl, { method: 'POST', body: formData, credentials: 'same-origin', cache: 'no-store' }).catch(function () { });
+                } catch (e) { }
+            }
+
+            function sendStudentLeave() {
+                try {
+                    if (navigator.sendBeacon) { navigator.sendBeacon(leaveUrl); return; }
+                    fetch(leaveUrl, { method: 'POST', credentials: 'same-origin', keepalive: true, cache: 'no-store' }).catch(function () { });
+                } catch (e) { }
+            }
+
+            sendStudentHeartbeat();
+            window.setInterval(sendStudentHeartbeat, 15000);
+            document.addEventListener('visibilitychange', function () {
+                if (document.visibilityState === 'visible') sendStudentHeartbeat();
+            });
+            window.addEventListener('beforeunload', sendStudentLeave);
+        })();
+    </script>
+
+    @RenderSection("Scripts", required: false)
+</body>
+</html>

@@ -1,0 +1,707 @@
+﻿@model QdratNew.ViewModels.Students.StudentAIReportViewModel
+
+<section class="col-md-12 p-3">
+<div class="ai-hero-section p-4 mb-4 rounded text-white text-center" style="background:#339999; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+    <h3 class="fw-bold mb-2"><i class="fas fa-brain"></i> لوحة تحليل الأداء بالذكاء الاصطناعي</h3>
+    <p class="lead">أهلاً <strong>@Model.StudentName</strong>، هذه اللوحة تُمثل نظرة ذكية على مستواك الأكاديمي لمساعدتك في التطور وتحقيق أهدافك 🎯</p>
+</div>
+
+
+
+
+    <!-- ✅ كروت الإحصائيات السريعة -->
+    <div class="row g-4 mb-4 text-center">
+        <!-- ✅ كارت متوسط الأداء -->
+        <!-- ✅ كارت متوسط الأداء (بتعديل ديناميكي) -->
+        <div class="col-md-4">
+            <div class="card border-0 shadow h-100" style="background: #e3f2fd;">
+                <div class="card-body text-center">
+                    <h6 class="text-primary mb-2"><i class="fas fa-chart-line"></i> متوسط الأداء</h6>
+                    <h2 class="fw-bold text-dark">@Model.AverageScore.ToString("0.0")</h2>
+                    <p class="text-muted small mt-2">
+                        🧠 تم حساب هذا المتوسط بناءً على درجاتك في
+                        <strong>@(Model.SectionSummaries?.Count() ?? 0)</strong> محورًا تعليميًا خضعت للتقييم فيها.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- ✅ كارت نسبة النجاح -->
+        <div class="col-md-4">
+            <div class="card border-0 shadow h-100" style="background: #e8f5e9;">
+                <div class="card-body text-center">
+                    <h6 class="text-success mb-2"><i class="fas fa-percentage"></i> نسبة النجاح</h6>
+                    <h2 class="fw-bold text-dark">@Model.SuccessRate.ToString("0.0")%</h2>
+                    <p class="text-muted small mt-2">
+                        📈 تم احتساب هذه النسبة بناءً على أدائك في
+                        <strong>@Model.SectionSummaries?.Count(s => s.AverageScore > 0)</strong> محورًا تعليميًا تم اختبارك فيها فعليًا.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+
+        <div class="col-md-4">
+            <div class="card border-0 shadow h-100" style="background: #fff3e0;">
+                <div class="card-body">
+                    <h6 class="text-warning"><i class="fas fa-user-graduate"></i> مقارنة مع زملائك</h6>
+                    <h2 class="fw-bold text-dark">@Model.Percentile%</h2>
+                    <p class="small mt-2 text-muted">🧠 أفضل من <strong>@Model.Percentile%</strong> من زملائك في الدفعة</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+
+
+
+
+    @if (Model.NextSession != null)
+    {
+        <div class="alert alert-primary shadow-sm text-center my-4">
+            <h5><i class="fas fa-calendar-alt"></i> جلستك القادمة</h5>
+            <p class="mb-1">
+                <strong>📘 المادة:</strong> @Model.NextSession.Subject
+            </p>
+            <p class="mb-1">
+                <strong>📅 التاريخ:</strong> @Model.NextSession.ScheduledDate.ToString("yyyy-MM-dd")
+                <strong>🕐 الوقت:</strong> @(Model.NextSession.StartTime?.ToString(@"hh\:mm") ?? "غير محدد")
+            </p>
+            <p class="mb-0">
+                <strong>🏢 الغرفة:</strong> @Model.NextSession.RoomName
+                @if (Model.NextSession.Instructor != null)
+                {
+                    <span> | 👨‍🏫 <strong>المدرب:</strong> @Model.NextSession.Instructor.FullName</span>
+                }
+            </p>
+        </div>
+    }
+    else
+    {
+        <div class="card mt-4 shadow-sm border-0 bg-light text-center">
+            <div class="card-body">
+                <h5 class="text-info mb-3" style="color:#339999;"><i class="fas fa-clock"></i> لا توجد جلسات علاجية مجدولة حاليًا</h5>
+                <p class="text-muted mb-0" style="color:#339999;">سيتم إشعارك فور تحديد جلسة جديدة مناسبة لك داخل المعهد 🎓</p>
+                <p class="mt-2 small text-secondary" style="color:#339999;">📩 تأكد من تفعيل الإشعارات لمتابعة خطتك التعليمية أولًا بأول.</p>
+            </div>
+        </div>
+    }
+
+
+
+
+
+    <!-- ✅ الرسوم البيانية الذكية -->
+    <div class="row g-4 mb-4">
+
+        <!-- Bar Chart: متوسط الدرجات -->
+        <div class="col-lg-4 col-md-12">
+            <div class="card shadow-sm h-100">
+                <div class="card-header text-center fw-bold bg-primary text-white">
+                    📊 متوسط الدرجات حسب المحاور
+                </div>
+                <div class="card-body">
+                    <canvas id="barChart" style="height: 280px;"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pie Chart: نسبة النجاح -->
+        <div class="col-lg-4 col-md-12">
+            <div class="card shadow-sm h-100">
+                <div class="card-header text-center fw-bold" style="background-color:#339999; color:white;">
+                    🎯 توزيع نسبة النجاح
+                </div>
+                <div class="card-body d-flex align-items-center justify-content-between">
+                    <!-- ✅ الرسم -->
+                    <div style="width: 60%;">
+                        <canvas id="pieChart" style="height: 230px;"></canvas>
+                    </div>
+                    <!-- ✅ الليجند -->
+                    <div style="width: 40%; direction: rtl;">
+                        <ul id="customLegend" class="list-unstyled text-end small pe-2"></ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Line Chart: تطور الأداء الزمني -->
+        <div class="col-lg-4 col-md-12">
+            <div class="card shadow-sm h-100">
+                <div class="card-header text-center fw-bold bg-info text-white">
+                    ⏳ تطور الأداء الزمني
+                </div>
+                <div class="card-body">
+                    <canvas id="progressChart" style="height: 280px;"></canvas>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+
+    <div class="row g-4 mb-4">
+
+        <!-- 🟩 حضور الطالب -->
+        <div class="col-lg-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header text-center bg-success text-white fw-bold">
+                    🧾 نسبة حضور الطالب
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item">
+                            📚 عدد المحاضرات الكلية: <strong>@Model.TotalLectures</strong>
+                        </li>
+
+                        <li class="list-group-item">
+                            ✅ تم حضور: <strong>@Model.AttendedLectures</strong>
+                        </li>
+
+                        <li class="list-group-item">
+                            ⏳ المتبقي: <strong>@Model.MissedLectures</strong>
+                        </li>
+
+                        <li class="list-group-item">
+                            📅 آخر محاضرة:
+                            <strong>@(Model.LastLectureDate?.ToString("yyyy-MM-dd") ?? "لا توجد بيانات")</strong>
+                        </li>
+
+                        <li class="list-group-item">
+                            📊 نسبة الحضور:
+                            <strong class="@((Model.AttendanceRate >= 75) ? "text-success" : "text-danger")">
+                                @Model.AttendanceRate.ToString("0.0")%
+                            </strong>
+                        </li>
+                    </ul>
+
+                    @if (Model.AttendanceRate < 60)
+                    {
+                        <div class="alert alert-warning mt-3">
+                            ⚠️ لوحظ انخفاض في حضورك للجلسات. حاول تحسين ذلك 🙏
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-success mt-3">
+                            ✅ أداء رائع في الحضور 👏 استمر!
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- 🟨 مقارنة الأداء مع زملائك -->
+        <div class="col-lg-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header text-center bg-warning text-white fw-bold">
+                    📊 مقارنة الأداء مع زملائك
+                </div>
+                <div class="card-body text-center">
+                    <div class="row justify-content-center">
+                        <div class="col-6">
+                            <h6>🎓 متوسط درجات زملائك</h6>
+                            <p class="display-6 text-primary">@Model.ClassAverageScore.ToString("0.0")</p>
+                        </div>
+                        <div class="col-6">
+                            <h6>📈 درجتك</h6>
+                            <p class="display-6 text-success">@Model.AverageScore.ToString("0.0")</p>
+                        </div>
+                    </div>
+                    <p class="mt-3 text-muted">
+                        👨‍🏫 أنت أفضل من <strong>@Model.Percentile%</strong> من زملائك في نفس الدورة.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+
+
+
+
+    <div class="card shadow-sm mb-5">
+        <div class="card-header bg-info text-white text-center fw-bold">
+            🤖 التوصيات الذكية الخاصة بك
+        </div>
+        <div class="card-body">
+            <ul class="list-group list-group-flush">
+                @foreach (var item in Model.RemedialRecommendations)
+                {
+                    <li class="list-group-item bg-light mb-3 rounded shadow-sm p-3">
+                        <h6 class="text-primary fw-bold mb-2"><i class="fas fa-puzzle-piece"></i> المحور: @item.SectionTitle</h6>
+                        <p><strong>🧠 التوصية:</strong> @item.RecommendationText</p>
+
+                        @if (item.SuggestedDays > 0)
+                        {
+                            <p class="text-muted"><i class="far fa-clock"></i> المدة المقترحة: <strong>@item.SuggestedDays يومًا</strong></p>
+                        }
+
+                        <div class="alert alert-secondary small mt-2">
+                            <i class="fas fa-robot text-info"></i> المساعد الذكي لاحظ أن الأداء في هذا المحور يحتاج دعمًا خاصًا.
+                        </div>
+
+                        <!-- ✅ الزر الاحترافي -->
+                        <div class="text-center mt-3">
+                            <a asp-controller="StudySessions"
+                               asp-action="Create"
+                               asp-area="Students"
+                               asp-route-sectionId="@item.SectionId"
+                               class="btn btn-lg px-4 fw-bold shadow-sm"
+                               style="background: linear-gradient(to right, #16a085, #1abc9c); color: white; border: none;"
+                               data-bs-toggle="tooltip" title="اضغط لحجز جلسة مذاكرة لهذا المحور">
+                                <i class="fas fa-book-reader me-2"></i> جلسة مذاكرة لهذا المحور
+                            </a>
+                            <p class="small text-muted mt-2">
+                                🧠 جلسة اختيارية للمذاكرة والتفاعل مع المادة العلمية
+                            </p>
+                        </div>
+                    </li>
+                }
+            </ul>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-5">
+        <div class="card-header bg-dark text-white text-center fw-bold">
+            🧠 تحليل الأداء حسب المحاور التعليمية
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-bordered table-hover text-center mb-0">
+                <thead class="table-secondary">
+                    <tr>
+                        <th>📘 المحور</th>
+                        <th>📊 متوسط الدرجة</th>
+                        <th>✅ نسبة النجاح</th>
+                        <th>📈 مستوى الصعوبة</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var s in Model.SectionSummaries)
+                    {
+                        <tr>
+                            <td>@s.SectionTitle</td>
+                            <td>@s.AverageScore</td>
+                            <td>@s.SuccessRate%</td>
+                            <td><span class="badge bg-secondary">@s.DifficultyLevel</span></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+
+
+
+    @if (Model.RemedialSessions != null && Model.RemedialSessions.Any())
+    {
+        <div class="card shadow-sm mb-5 border-0">
+            <div class="card-header text-white text-center fw-bold" style="background: linear-gradient(to right, #117a8b, #1abc9c);">
+                🏥 جلسات الخطة العلاجية داخل المعهد
+            </div>
+            <div class="card-body p-4 bg-light">
+                <p class="text-muted mb-4 text-center">
+                    📊 تم تحديد المحاور التي تحتاج فيها دعمًا إضافيًا. يُرجى الاطلاع على جدول الجلسات التالي والمبادرة بالحضور.
+                </p>
+
+                <div class="table-responsive">
+                    <table class="table table-hover table-bordered text-center shadow-sm bg-white">
+                        <thead class="table-primary text-white">
+                            <tr>
+                                <th>📘 المحور</th>
+                                <th>📅 التاريخ</th>
+                                <th>🕐 الوقت</th>
+                                <th>🏢 الغرفة</th>
+                                <th>💻 الوسائل</th>
+                                <th>🔔 الحالة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var session in Model.RemedialSessions)
+                            {
+                                <tr>
+                                    <td class="fw-bold">@session.SectionTitle</td>
+                                    <td>@session.SessionDate.ToString("yyyy-MM-dd")</td>
+                                    <td>@session.SessionTime</td>
+                                    <td>@session.RoomName</td>
+                                    <td>@session.Resources</td>
+                                    <td>
+                                        @if (!session.IsConfirmed)
+                                        {
+                                            <button class="btn btn-outline-success btn-sm" onclick="confirmAttendance(@session.SessionId)">
+                                                <i class="fas fa-check-circle"></i> تأكيد الحضور
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-success"><i class="fas fa-check-circle"></i> تم التأكيد</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-warning mt-5 text-center shadow-sm">
+            <i class="fas fa-info-circle me-1"></i> لم يتم تحديد جلسات علاجية بعد. سيتم إشعارك فور توفر جدول جديد.
+        </div>
+    }
+
+
+
+    <div class="alert alert-info mt-5 text-center shadow-sm">
+        <h5 class="mb-2">💡 تذكير ذكي من مساعدك:</h5>
+        <p>كل خطوة صغيرة اليوم تقربك من إنجاز كبير غدًا. استمر، فأنت قادر على تحقيق الأفضل بإذن الله! 💪</p>
+    </div>
+
+
+
+
+    @foreach (var item in Model.RemedialRecommendations)
+    {
+        <li class="list-group-item bg-light mb-2 rounded">
+            <h6 class="text-primary fw-bold mb-2"><i class="fas fa-puzzle-piece"></i> المحور: @item.SectionTitle</h6>
+            <p><strong>🧠 التوصية:</strong> @item.RecommendationText</p>
+        </li>
+    }
+
+
+
+
+
+</section>
+
+
+
+
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+
+                setTimeout(() => {
+            if (pieChartInstance) pieChartInstance.update();
+            if (barChartInstance) barChartInstance.update();
+        }, 1000);
+
+        // ✅ بيانات الرسم
+        const sectionLabels = @Html.Raw(Json.Serialize(Model.SectionSummaries.Select(s => s.SectionTitle)));
+        const avgScores = @Html.Raw(Json.Serialize(Model.SectionSummaries.Select(s => s.AverageScore)));
+        const successRates = @Html.Raw(Json.Serialize(Model.SectionSummaries.Select(s => s.SuccessRate)));
+
+        // ✅ تعريف متغيرات جلوبال للرسم البياني
+        let pieChartInstance;
+        let barChartInstance;
+
+
+
+        // حساب المتوسط العام للنجاح
+        const overallSuccessRate = successRates.length > 0
+            ? (successRates.reduce((a, b) => a + b, 0) / successRates.length).toFixed(1)
+            : "0";
+
+        // Doughnut Center Plugin
+            // Doughnut Center Plugin ✅ (احترافي)
+             const centerTextPlugin = {
+            id: 'centerText',
+            beforeDraw: function (chart) {
+                const ctx = chart.ctx;
+                const { width, height } = chart;
+                ctx.save();
+
+                const fontSize = (width / 12).toFixed(2);
+                ctx.font = `${fontSize}px Arial`;
+                ctx.textBaseline = 'middle';
+                ctx.textAlign = 'right'; // ✅ محاذاة لليمين
+                ctx.fillStyle = '#000';
+
+                       const data = chart.data.datasets[0].data;
+        const average = data.length > 0 ? (data.reduce((a, b) => a + b, 0) / data.length).toFixed(1) : "0.0";
+        const text = `${average}%`;
+
+
+                // ✅ ضبط الترحيل أكثر لليمين
+                const textX = width / 2 + 30;
+                const textY = height / 2;
+
+                ctx.fillText(text, textX, textY);
+                ctx.restore();
+            }
+        };
+
+
+        // Pie Chart (doughnut)
+             const pieChart = new Chart(document.getElementById('pieChart'), {
+        type: 'doughnut',
+        data: {
+            labels: sectionLabels,
+            datasets: [{
+                data: successRates,
+                backgroundColor: ['#4e73df', '#1cc88a', '#f6c23e', '#e74a3b', '#36b9cc', '#9b59b6', '#2ecc71', '#FF6384', '#FFCE56', '#4BC0C0'],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            cutout: '70%',
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => `${ctx.label}: ${ctx.parsed.toFixed(1)}%`
+                    }
+                }
+            }
+        },
+            plugins: [centerTextPlugin]
+        });
+
+
+        // ✅ توليد الليجند يدويًا بعد إنشاء الرسم
+        document.getElementById('customLegend').innerHTML = sectionLabels.map((label, i) => {
+            const color = pieChart.data.datasets[0].backgroundColor[i];
+            return `<li class="mb-2"><span style="display:inline-block;width:15px;height:15px;background-color:${color};margin-left:6px;border-radius:3px;"></span>${label}</li>`;
+        }).join('');
+
+
+        // Bar Chart
+        new Chart(document.getElementById('barChart'), {
+            type: 'bar',
+            data: {
+                labels: sectionLabels,
+                datasets: [{
+                    label: 'متوسط الدرجة',
+                    data: avgScores,
+                    backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => `الدرجة: ${ctx.parsed.y.toFixed(1)}`
+                        }
+                    },
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+
+
+                // ✅ بيانات تطور الأداء مع الوقت
+         const progressLabels = @Html.Raw(Json.Serialize(Model.PerformanceTimeline != null ? Model.PerformanceTimeline.Select(x => x.DateLabel) : new List<string>()));
+        const progressScores = @Html.Raw(Json.Serialize(Model.PerformanceTimeline != null ? Model.PerformanceTimeline.Select(x => x.Score) : new List<double>()));
+
+
+        // ✅ رسم خطي لتطور الأداء
+        new Chart(document.getElementById("progressChart"), {
+            type: "line",
+            data: {
+                labels: progressLabels,
+                datasets: [{
+                    label: "متوسط الأداء",
+                    data: progressScores,
+                    fill: false,
+                    borderColor: "#007bff",
+                    tension: 0.3,
+                    pointBackgroundColor: "#007bff",
+                }]
+            },
+            options: {
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => `الدرجة: ${ctx.parsed.y.toFixed(1)}`
+                        }
+                    }
+                }
+            }
+        });
+
+
+
+
+
+        // ✅ إعادة تحديث الرسم البياني بعد أي حدث (مثل Modal)
+        setTimeout(() => {
+            if (pieChartInstance) pieChartInstance.update();
+            if (barChartInstance) barChartInstance.update();
+        }, 1500);
+
+        // ✅ زر حفظ التفاعل - سأبدأ أو أحتاج دعم
+        function saveInteraction(actionType) {
+            fetch('/Students/StudentProgress/SaveInteraction', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    studentId: @Model.StudentID,
+                    actionType: actionType,
+                    actionTaken: actionType
+                })
+            })
+            .then(res => res.json())
+            .then(result => {
+                showToast(result.success ? "✅" : "❌", result.message, result.success ? "success" : "danger");
+            })
+            .catch(err => {
+                console.error(err);
+                showToast("❌", "خطأ أثناء حفظ التفاعل", "danger");
+            });
+        }
+
+
+
+                function confirmAttendance(sessionId) {
+            fetch('/Students/StudentProgress/ConfirmRemedialSession', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sessionId: sessionId })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showToast("✅", data.message, "success");
+                    location.reload();
+                } else {
+                    showToast("❌", data.message, "danger");
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                showToast("❌", "حدث خطأ أثناء تأكيد الجلسة", "danger");
+            });
+        }
+
+        // ✅ إرسال تعليق ذكي
+        let commentCount = 0;
+
+        function submitCommentInteraction() {
+            const comment = document.querySelector("textarea[name='Comment']").value.trim();
+            if (!comment) {
+                showToast("⚠️", "يرجى كتابة تعليق أولًا", "warning");
+                return;
+            }
+
+            if (commentCount >= 2) {
+                const modal = new bootstrap.Modal(document.getElementById('limitReachedModal'));
+                modal.show();
+                return;
+            }
+
+            fetch('/Students/StudentProgress/SaveInteraction', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    studentId: @Model.StudentID,
+                    comment: comment,
+                    actionType: "نفذ الخطة",
+                    actionTaken: "Comment"
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    commentCount++;
+                    document.getElementById("modalCommentText").innerText = comment;
+                    document.getElementById("modalMessageCount").innerText = `${commentCount} من 2`;
+
+                    const modal = new bootstrap.Modal(document.getElementById('confirmationModal'));
+                    modal.show();
+
+                    if (commentCount >= 2) {
+                        document.getElementById("addAnotherBtn").style.display = "none";
+                        setTimeout(() => {
+                            modal.hide();
+                            const finalModal = new bootstrap.Modal(document.getElementById('finalModal'));
+                            finalModal.show();
+                            document.querySelector("textarea[name='Comment']").parentElement.style.display = "none";
+                        }, 1500);
+                    }
+
+                    document.querySelector("textarea[name='Comment']").value = "";
+                } else {
+                    showToast("❌", data.message || "حدث خطأ", "danger");
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                showToast("❌", "فشل الاتصال بالسيرفر", "danger");
+            });
+        }
+
+        // ✅ إشعار Bootstrap أنيق
+        function showToast(icon, message, type = "info") {
+            const toast = document.createElement("div");
+            toast.className = `toast align-items-center text-bg-${type} border-0 show`;
+            toast.setAttribute("role", "alert");
+            toast.innerHTML = `
+                <div class="d-flex">
+                    <div class="toast-body">${icon} ${message}</div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                </div>
+            `;
+            const toastContainer = document.createElement("div");
+            toastContainer.className = "toast-container position-fixed bottom-0 end-0 p-3";
+            toastContainer.appendChild(toast);
+            document.body.appendChild(toastContainer);
+
+            setTimeout(() => {
+                toast.remove();
+                toastContainer.remove();
+            }, 5000);
+        }
+
+        // ✅ إعادة إظهار النموذج عند الضغط على إضافة تعليق جديد
+        function showNewCommentForm() {
+            document.querySelector("textarea[name='Comment']").value = "";
+            document.getElementById("commentSection").style.display = "block";
+        }
+
+    </script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+        });
+    </script>
+
+
+
+
+
+}
+
+
+
+
+
+
+
+
+

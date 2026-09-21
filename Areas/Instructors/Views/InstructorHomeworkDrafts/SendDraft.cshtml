@@ -1,0 +1,149 @@
+@model QdratNew.ViewModels.Partner.HomeworkDraft.SendHomeworkDraftVM
+
+@{
+    ViewData["Title"] = "إرسال الواجب";
+}
+
+@section Styles {
+    <link href="~/css/instructor/instructor-drafts.css" rel="stylesheet" asp-append-version="true" />
+}
+
+<div class="instructor-page">
+
+    <div class="hw-page-header">
+        <h3 class="hw-page-title">
+            <i class="fas fa-paper-plane"></i>
+            إرسال الواجب
+        </h3>
+        <a asp-action="Index" class="hw-back-btn ms-auto">
+            <i class="fas fa-arrow-right"></i> رجوع
+        </a>
+    </div>
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show">
+            <i class="fas fa-triangle-exclamation me-2"></i>
+            @TempData["Error"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show">
+            <i class="fas fa-circle-check me-2"></i>
+            @TempData["Success"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <div class="draft-form-card">
+
+        <form method="post">
+            @Html.AntiForgeryToken()
+            <input type="hidden" asp-for="DraftId" />
+
+            <div asp-validation-summary="All" class="alert alert-danger"></div>
+
+            @if (!Model.Batches.Any())
+            {
+                <div class="alert alert-warning">
+                    <i class="fas fa-circle-exclamation me-2"></i>
+                    لا توجد دفعات مرتبطة بصلاحياتك لهذه المسودة.
+                </div>
+            }
+            else
+            {
+                <div class="mb-4">
+                    <label asp-for="BatchIds" class="draft-field-label">
+                        الدفعات <span class="text-danger">*</span>
+                    </label>
+                    <select asp-for="BatchIds"
+                            asp-items="Model.Batches"
+                            class="form-select"
+                            multiple
+                            size="5">
+                    </select>
+                    <div class="form-text text-muted mt-1">
+                        <i class="fas fa-info-circle me-1"></i>
+                        اضغط Ctrl + نقرة لاختيار أكثر من دفعة.
+                    </div>
+                    <span asp-validation-for="BatchIds" class="text-danger small"></span>
+                </div>
+            }
+
+            @if (Model.Lectures.Any())
+            {
+                <div class="mb-4">
+                    <label asp-for="LectureId" class="draft-field-label">
+                        المحاضرة المرتبطة
+                        <span class="text-muted small fw-normal">(اختياري)</span>
+                    </label>
+                    <select asp-for="LectureId" class="form-select" id="lectureSelect">
+                        <option value="">-- بدون ارتباط بمحاضرة --</option>
+                        @foreach (var lecture in Model.Lectures)
+                        {
+                            <option value="@lecture.Value">@lecture.Text</option>
+                        }
+                    </select>
+                    <div class="form-text text-muted mt-1">
+                        اختيار محاضرة يعبئ وقت الإرسال تلقائياً بساعة بعد بدء المحاضرة.
+                    </div>
+                </div>
+            }
+
+            <div class="mb-4">
+                <label asp-for="StartAt" class="draft-field-label">
+                    وقت الإرسال للطلاب
+                    <span class="text-muted small fw-normal">(اختياري — إذا ترك فارغاً يرسل فوراً)</span>
+                </label>
+                <input asp-for="StartAt" type="datetime-local" class="form-control" id="startAtInput" />
+                <span asp-validation-for="StartAt" class="text-danger small"></span>
+            </div>
+
+            <div class="mb-4">
+                <label asp-for="EndAt" class="draft-field-label">
+                    نهاية الواجب <span class="text-danger">*</span>
+                </label>
+                <input asp-for="EndAt" type="datetime-local" class="form-control" />
+                <span asp-validation-for="EndAt" class="text-danger small"></span>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit"
+                        class="btn btn-success px-4"
+                        @(Model.Batches.Any() ? "" : "disabled")>
+                    <i class="fas fa-paper-plane me-1"></i> إرسال الواجب
+                </button>
+                <a asp-action="Index" class="btn btn-outline-secondary px-4">رجوع</a>
+            </div>
+
+        </form>
+    </div>
+
+</div>
+
+@if (Model.LectureDates.Any())
+{
+    <script>
+        const lectureDates = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.LectureDates));
+        const lectureSelect = document.getElementById('lectureSelect');
+        const startAtInput = document.getElementById('startAtInput');
+
+        if (lectureSelect && startAtInput) {
+            lectureSelect.addEventListener('change', function () {
+                const lectureId = parseInt(this.value);
+                if (!Number.isNaN(lectureId) && lectureDates[lectureId]) {
+                    startAtInput.value = lectureDates[lectureId];
+                } else {
+                    startAtInput.value = '';
+                }
+            });
+        }
+    </script>
+}
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

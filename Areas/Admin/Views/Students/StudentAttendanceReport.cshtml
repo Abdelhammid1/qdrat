@@ -1,0 +1,129 @@
+@model IEnumerable<QdratNew.ViewModels.Students.StudentAttendanceRowVm>
+@{
+    ViewData["Title"] = $"سجل الحضور: {ViewBag.StudentName}";
+    Layout = "~/Areas/Admin/Views/Shared/_AdminLayout.cshtml";
+    int    sid     = ViewBag.StudentId;
+    string name    = ViewBag.StudentName;
+    int    total   = ViewBag.TotalLec;
+    int    present = ViewBag.PresentCount;
+    int    absent  = total - present;
+    double pct     = total > 0 ? Math.Round((double)present / total * 100, 1) : 0;
+    string pctColor = pct >= 80 ? "#059669" : pct >= 60 ? "#d97706" : "#dc2626";
+    var rows = Model.ToList();
+}
+
+<div class="sr-page" dir="rtl">
+
+    <nav class="sr-nav">
+        <a class="sr-back" asp-area="Admin" asp-controller="Students"
+           asp-action="GeneralReport" asp-route-id="@sid">← التقرير العام</a>
+        <div class="sr-sep"></div>
+        <div class="sr-crumb">
+            <a asp-area="Admin" asp-controller="Students" asp-action="Details" asp-route-id="@sid">@name</a>
+            <span>›</span><span>الحضور والغياب</span>
+        </div>
+    </nav>
+
+    <div class="sr-body">
+
+        <div class="sr-hero blue">
+            <div class="sr-hero-icon">🗓</div>
+            <div class="sr-hero-info">
+                <h1>الحضور والغياب</h1>
+                <div class="sr-hero-name">@name</div>
+            </div>
+            <div class="sr-hero-kpis">
+                <div class="sr-hkpi">
+                    <span class="sr-hkpi-n" style="color:#6ee7b7">@present</span>
+                    <span class="sr-hkpi-l">حاضر</span>
+                </div>
+                <div class="sr-hkpi">
+                    <span class="sr-hkpi-n" style="color:#fca5a5">@absent</span>
+                    <span class="sr-hkpi-l">غائب</span>
+                </div>
+                <div class="sr-hkpi">
+                    <span class="sr-hkpi-n" style="color:@pctColor">@pct.ToString("0")%</span>
+                    <span class="sr-hkpi-l">نسبة الحضور</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="sr-bar-card">
+            <div class="sr-bar-label">
+                <span>نسبة الحضور الكلية</span>
+                <span style="color:@pctColor;font-weight:800">@pct.ToString("0")%</span>
+            </div>
+            <div class="sr-bar">
+                <div class="sr-bar-fill" style="width:@(Math.Min(100,pct).ToString("0"))%;background:@pctColor"></div>
+            </div>
+        </div>
+
+        @if (!rows.Any())
+        {
+            <div class="sr-empty">لا توجد سجلات حضور لهذا الطالب.</div>
+        }
+        else
+        {
+            <div class="sr-card">
+                <div class="sr-card-head">
+                    <span class="sr-card-title">📋 تفاصيل المحاضرات (@total محاضرة)</span>
+                    <div class="sr-filters">
+                        <button class="sr-filter active" onclick="srFilter('all',this)">الكل</button>
+                        <button class="sr-filter" onclick="srFilter('present',this)">حاضر</button>
+                        <button class="sr-filter" onclick="srFilter('absent',this)">غائب</button>
+                    </div>
+                </div>
+                <div class="sr-table-wrap">
+                    <table class="sr-table" id="srTable">
+                        <thead>
+                            <tr><th>#</th><th>المحاضرة</th><th>الدفعة</th><th>الدورة</th><th>التاريخ</th><th>الحالة</th><th>الدفعة</th></tr>
+                        </thead>
+                        <tbody>
+                            @{ int n = 0; }
+                            @foreach (var r in rows)
+                            {
+                                n++;
+                                <tr data-status="@(r.IsPresent ? "present" : "absent")">
+                                    <td class="sr-num">@n</td>
+                                    <td class="sr-fw">@r.LectureTitle</td>
+                                    <td>@r.BatchName</td>
+                                    <td class="sr-mute">@r.CourseName</td>
+                                    <td class="sr-mute">@r.LectureDate.ToString("yyyy/MM/dd")</td>
+                                    <td>
+                                        <span class="sr-badge @(r.IsPresent ? "badge-green" : "badge-red")">
+                                            @(r.IsPresent ? "✅ حاضر" : "❌ غائب")
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <a class="sr-link"
+                                           asp-area="Admin" asp-controller="Batches"
+                                           asp-action="Details" asp-route-id="@r.BatchId">
+                                            فتح الدفعة ←
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+
+    </div>
+</div>
+
+@await Html.PartialAsync("_StudentReportSharedStyle")
+
+<script>
+    function srFilter(type, btn) {
+        document.querySelectorAll('.sr-filter').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.querySelectorAll('#srTable tbody tr').forEach(row => {
+            row.style.display = (type === 'all' || row.dataset.status === type) ? '' : 'none';
+        });
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+        const fill = document.querySelector('.sr-bar-fill');
+        if (fill) { const w = fill.style.width; fill.style.width = '0'; setTimeout(() => fill.style.width = w, 200); }
+    });
+</script>

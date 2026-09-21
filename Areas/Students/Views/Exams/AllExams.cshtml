@@ -1,0 +1,255 @@
+﻿@model List<QdratNew.ViewModels.Exam.ExamListVm>
+@{
+    ViewData["Title"] = "📘 كل الاختبارات";
+    var exams = Model ?? new();
+}
+
+<div class="container mt-4" dir="rtl">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-bold text-qdrat">
+            <i class="fa-solid fa-list-check me-2"></i> جميع الاختبارات
+        </h3>
+
+        <a asp-action="ExamDashboard" asp-controller="Exams" asp-area="Students"
+           class="btn btn-outline-qdrat rounded-pill px-4">
+            <i class="fa-solid fa-arrow-right ms-2"></i> عودة للوحة الاختبارات
+        </a>
+    </div>
+
+    <div class="card shadow-sm border-0 rounded-4">
+        <div class="card-header bg-qdrat text-white fw-bold text-center py-3">
+            📝 قائمة الاختبارات
+        </div>
+
+        <div class="card-body table-responsive">
+
+            @if (!exams.Any())
+            {
+                <div class="alert alert-info text-center fw-bold py-4 rounded-3">
+                    📭 لا توجد اختبارات متاحة حاليًا
+                </div>
+            }
+            else
+            {
+                <table id="examsTable" class="table table-striped align-middle text-center">
+                    <thead class="table-light">
+                        <tr>
+                            <th>النوع</th>
+                            <th>العنوان</th>
+
+                            <th class="d-none d-md-table-cell">تاريخ الإرسال</th>
+                            <th class="d-none d-md-table-cell">وقت البدء</th>
+                            <th class="d-none d-md-table-cell">وقت الانتهاء</th>
+
+                            <th>النتيجة</th>
+                            <th class="d-none d-md-table-cell">الحالة</th>
+
+                            <th>التحكم</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @foreach (var exam in exams)
+                        {
+                            var score = Math.Round((double)exam.Score, 1);
+
+                            <tr>
+
+                                <!-- النوع -->
+                                <td data-label="النوع">
+                                    @if (exam.IsIndividual)
+                                    {
+                                        <span class="badge bg-purple px-3 py-2">فردي</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-info px-3 py-2">دفعة</span>
+                                    }
+                            </td>
+
+                            <!-- العنوان -->
+                            <td data-label="العنوان" class="fw-bold">@exam.Title</td>
+
+                            <!-- تاريخ الإرسال -->
+                            <td class="d-none d-md-table-cell" data-label="تاريخ الإرسال">
+                                @exam.AssignedAt.ToString("yyyy/MM/dd HH:mm")
+                            </td>
+
+                            <!-- وقت البدء -->
+                            <td class="d-none d-md-table-cell" data-label="وقت البدء">
+                                @(exam.ScheduledDate?.ToString("HH:mm") ?? "—")
+                            </td>
+
+                            <!-- وقت النهاية -->
+                            <td class="d-none d-md-table-cell" data-label="وقت الانتهاء">
+                                @(exam.EndAt != null
+                                                            ? exam.EndAt.Value.ToString("HH:mm")
+                                                            : exam.ScheduledDate != null
+                                                            ? exam.ScheduledDate.Value.AddMinutes(exam.DurationMinutes).ToString("HH:mm")
+                                                            : "—")
+                        </td>
+
+
+                                <!-- النتيجة -->
+                                <td data-label="النتيجة">
+                            @if (exam.IsSubmitted)
+                                    {
+                                        var color = score switch
+                                        {
+                                            >= 85 => "bg-success",
+                                            >= 60 => "bg-info",
+                                            >= 40 => "bg-warning text-dark",
+                                            _ => "bg-danger"
+                                        };
+
+                                        <span class="badge @color fs-6 px-3">@score%</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">—</span>
+                                    }
+                                </td>
+
+                                <!-- الحالة -->
+                                <td class="d-none d-md-table-cell" data-label="الحالة">
+                                    @{
+                                        var cls = exam.StatusText switch
+                                        {
+                                            "متاح الآن" => "bg-info",
+                                            "انتهى وقته" => "bg-secondary",
+                                            "تم الحل" => "bg-success",
+                                            "قادِم" => "bg-warning text-dark",
+                                            _ => "bg-light text-dark"
+                                        };
+                                    }
+                                    <span class="badge @cls px-3 py-2">@exam.StatusText</span>
+                                </td>
+
+                                <!-- التحكم -->
+                                <td data-label="التحكم">
+                                    @if (exam.StatusText == "تم الحل")
+                                    {
+                                        <a asp-action="ExamResult"
+                                           asp-route-id="@exam.ExamAssignmentId"
+                                           class="btn btn-sm btn-outline-qdrat rounded-pill px-3">
+                                            <i class="fa-solid fa-chart-line me-1"></i> النتيجة
+                                        </a>
+
+                                        <a asp-action="ExamReport"
+                                           asp-route-examAssignmentId="@exam.ExamAssignmentId"
+                                           class="btn btn-sm btn-outline-qdrat rounded-pill px-3 mt-1 mt-md-0">
+                                            <i class="fa-solid fa-file-lines me-1"></i> تقرير
+                                        </a>
+                                    }
+                                    else if (exam.StatusText == "متاح الآن")
+                                    {
+                                        @if (exam.IsIndividual)
+                                        {
+                                            <a asp-action="StartIndividualExam"
+                                               asp-route-examAssignmentId="@exam.ExamAssignmentId"
+                                               class="btn btn-sm btn-qdrat px-4 rounded-pill">
+                                                <i class="fa-solid fa-play me-1"></i> ابدأ
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            <a asp-action="StartExam"
+                                               asp-route-examAssignmentId="@exam.ExamAssignmentId"
+                                               class="btn btn-sm btn-qdrat px-4 rounded-pill">
+                                                <i class="fa-solid fa-play me-1"></i> ابدأ
+                                            </a>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" disabled>
+                                            <i class="fa-solid fa-hourglass-half me-1"></i> @exam.StatusText
+                                        </button>
+                                    }
+                                </td>
+
+                            </tr>
+                        }
+                    </tbody>
+
+                </table>
+            }
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            $('#examsTable').DataTable({
+                language: { url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json" },
+                pageLength: 15,
+                order: [[3, "desc"]] // ترتيب حسب وقت البدء
+            });
+        });
+    </script>
+}
+
+<style>
+    .text-qdrat {
+        color: #1ba098 !important;
+    }
+
+    .bg-qdrat {
+        background-color: #1ba098 !important;
+    }
+
+    .btn-qdrat {
+        background-color: #1ba098 !important;
+        border-color: #1ba098 !important;
+        color: white !important;
+    }
+
+    .btn-outline-qdrat {
+        border-color: #1ba098 !important;
+        color: #1ba098 !important;
+    }
+
+        .btn-outline-qdrat:hover {
+            background-color: #1ba098 !important;
+            color: white !important;
+        }
+
+    .bg-purple {
+        background-color: #6f42c1 !important;
+        color: white !important;
+    }
+
+    /* 📱 نسخة الجوال */
+    @@media (max-width: 768px) {
+        table thead
+
+    {
+        display: none !important;
+    }
+
+    table tbody tr {
+        display: block !important;
+        margin-bottom: 1rem;
+        border: 1px solid #e3e3e3;
+        padding: 12px;
+        border-radius: 10px;
+        background: white;
+    }
+
+    table tbody td {
+        display: flex !important;
+        justify-content: space-between !important;
+        padding: 6px 0 !important;
+        border: none !important;
+    }
+
+        table tbody td::before {
+            content: attr(data-label);
+            font-weight: bold;
+            color: #1ba098;
+        }
+
+    }
+</style>

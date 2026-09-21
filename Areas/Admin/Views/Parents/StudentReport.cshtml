@@ -1,0 +1,525 @@
+@model QdratNew.ViewModels.Parent.ParentStudentReportViewModel
+@using QdratNew.Enums
+@{
+    ViewData["Title"] = $"تقرير {Model.StudentName}";
+    double overallAvg = 0;
+    int totalActivities = Model.HomeworkTotal + Model.PlacementExams.Count + Model.KpiExams.Count + Model.GeneralExams.Count;
+    if (totalActivities > 0)
+    {
+        var allScores = Model.HomeworkRecords.Concat(Model.PlacementExams)
+            .Concat(Model.KpiExams).Concat(Model.GeneralExams)
+            .Select(r => r.Score).ToList();
+        overallAvg = allScores.Any() ? Math.Round(allScores.Average(), 1) : 0;
+    }
+
+    string LevelFromScore(double s) => s >= 90 ? "ممتاز" : s >= 75 ? "جيد جداً" : s >= 60 ? "جيد" : s >= 50 ? "مقبول" : "قيد التطوير";
+    string BadgeClass(double s) => s >= 75 ? "success" : s >= 50 ? "warning" : "danger";
+    string FillClass(double s)  => s >= 75 ? "fill-s"  : s >= 50 ? "fill-w"  : "fill-d";
+}
+
+@section Styles {
+<style>
+:root {
+    --rp-primary:       #7c3aed;
+    --rp-primary-dark:  #5b21b6;
+    --rp-primary-light: #ede9fe;
+    --rp-success:       #10b981;
+    --rp-warning:       #f59e0b;
+    --rp-danger:        #ef4444;
+    --rp-info:          #3b82f6;
+    --rp-teal:          #06b6d4;
+    --rp-surface:       #ffffff;
+    --rp-surface-2:     #f8fafc;
+    --rp-border:        #e2e8f0;
+    --rp-text-1:        #0f172a;
+    --rp-text-2:        #475569;
+    --rp-text-3:        #94a3b8;
+    --rp-shadow-sm:     0 1px 3px rgba(0,0,0,.06);
+    --rp-shadow-md:     0 4px 16px rgba(0,0,0,.08);
+    --rp-radius:        14px;
+    --rp-radius-sm:     8px;
+    --rp-transition:    0.22s cubic-bezier(.4,0,.2,1);
+}
+
+.report-page { font-family: 'Cairo', sans-serif; }
+
+/* ── Report Hero ── */
+.report-hero {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 40%, #1d4ed8 75%, #7c3aed 100%);
+    border-radius: var(--rp-radius);
+    padding: 2rem 2rem 2.5rem;
+    margin-bottom: -1.5rem;
+    position: relative;
+    overflow: hidden;
+    color: #fff;
+}
+.report-hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: url("data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M0 0h40v40H0zM40 40h40v40H40z'/%3E%3C/g%3E%3C/svg%3E");
+}
+.report-hero-inner {
+    position: relative; z-index: 1;
+    display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;
+}
+.report-student-avatar {
+    width: 72px; height: 72px; border-radius: 50%; flex-shrink: 0;
+    background: rgba(255,255,255,.2); border: 3px solid rgba(255,255,255,.4);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.8rem; font-weight: 800;
+}
+.report-student-info { flex: 1; min-width: 200px; }
+.report-student-info h1 { font-size: 1.5rem; font-weight: 800; margin: 0 0 .4rem; }
+.report-chips { display: flex; flex-wrap: wrap; gap: .5rem; }
+.rchip {
+    display: inline-flex; align-items: center; gap: .3rem;
+    background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.2);
+    border-radius: 50px; padding: .2rem .7rem; font-size: .78rem;
+    backdrop-filter: blur(6px);
+}
+
+.report-parent-tag {
+    background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2);
+    border-radius: var(--rp-radius-sm); padding: .85rem 1.2rem;
+    display: flex; align-items: center; gap: .6rem; font-size: .85rem;
+}
+
+/* ── Elevated KPI cards ── */
+.kpi-row {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(170px,1fr));
+    gap: 1rem; margin-bottom: 2rem;
+    position: relative; z-index: 1; padding: 0 .5rem;
+}
+.kpi-card {
+    background: var(--rp-surface);
+    border-radius: var(--rp-radius);
+    box-shadow: var(--rp-shadow-md);
+    padding: 1.3rem;
+    border-top: 3px solid transparent;
+    transition: transform var(--rp-transition);
+}
+.kpi-card:hover { transform: translateY(-3px); }
+.kpi-card.kp-purple { border-top-color: var(--rp-primary); }
+.kpi-card.kp-green  { border-top-color: var(--rp-success); }
+.kpi-card.kp-blue   { border-top-color: var(--rp-info); }
+.kpi-card.kp-amber  { border-top-color: var(--rp-warning); }
+.kpi-card.kp-teal   { border-top-color: var(--rp-teal); }
+
+.kpi-label { font-size: .75rem; color: var(--rp-text-3); font-weight: 600; margin-bottom: .4rem; }
+.kpi-value { font-size: 2rem; font-weight: 900; color: var(--rp-text-1); line-height: 1; }
+.kpi-sub   { font-size: .78rem; color: var(--rp-text-2); margin-top: .3rem; }
+
+/* ── Section tabs ── */
+.section-tabs {
+    display: flex; gap: .4rem; flex-wrap: wrap;
+    margin-bottom: 1.5rem; border-bottom: 2px solid var(--rp-border);
+    padding-bottom: 0;
+}
+.stab {
+    padding: .65rem 1.2rem; border-radius: var(--rp-radius-sm) var(--rp-radius-sm) 0 0;
+    font-size: .86rem; font-weight: 700; cursor: pointer; border: none;
+    background: transparent; color: var(--rp-text-2);
+    border-bottom: 3px solid transparent; margin-bottom: -2px;
+    transition: all var(--rp-transition); display: flex; align-items: center; gap: .4rem;
+}
+.stab:hover { color: var(--rp-primary); background: var(--rp-primary-light); }
+.stab.active { color: var(--rp-primary); border-bottom-color: var(--rp-primary); background: var(--rp-primary-light); }
+.stab .tab-count { background: var(--rp-primary-light); color: var(--rp-primary); border-radius: 50px; padding: .1rem .5rem; font-size: .72rem; }
+.stab.active .tab-count { background: var(--rp-primary); color: #fff; }
+
+/* ── Section content ── */
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ── Score table ── */
+.score-table {
+    width: 100%; border-collapse: collapse;
+    background: var(--rp-surface);
+    border: 1px solid var(--rp-border);
+    border-radius: var(--rp-radius); overflow: hidden;
+    box-shadow: var(--rp-shadow-sm);
+}
+.score-table thead tr {
+    background: linear-gradient(to left, var(--rp-surface-2), #f1f5f9);
+    border-bottom: 2px solid var(--rp-border);
+}
+.score-table thead th {
+    padding: .85rem 1rem; font-size: .78rem; font-weight: 700;
+    color: var(--rp-text-2); text-align: right; white-space: nowrap;
+}
+.score-table tbody tr {
+    border-bottom: 1px solid var(--rp-border);
+    transition: background var(--rp-transition);
+}
+.score-table tbody tr:last-child { border-bottom: none; }
+.score-table tbody tr:hover { background: #f8f7ff; }
+.score-table td { padding: .85rem 1rem; font-size: .88rem; vertical-align: middle; }
+
+/* ── Score badge ── */
+.score-badge {
+    display: inline-flex; align-items: center; gap: .3rem;
+    padding: .3rem .75rem; border-radius: 50px; font-size: .82rem; font-weight: 800;
+}
+.badge-success { background: #d1fae5; color: #065f46; }
+.badge-warning { background: #fef3c7; color: #92400e; }
+.badge-danger  { background: #fee2e2; color: #991b1b; }
+.badge-info    { background: #dbeafe; color: #1d4ed8; }
+
+/* ── Score bar inline ── */
+.mini-bar { width: 80px; height: 6px; border-radius: 10px; background: #e2e8f0; display: inline-block; overflow: hidden; vertical-align: middle; margin-left: .5rem; }
+.mini-bar-fill { height: 100%; border-radius: 10px; }
+.fill-s { background: var(--rp-success); }
+.fill-w { background: var(--rp-warning); }
+.fill-d { background: var(--rp-danger); }
+
+/* ── Level pill ── */
+.level-pill {
+    display: inline-block; padding: .18rem .6rem; border-radius: 50px;
+    font-size: .72rem; font-weight: 700;
+}
+.lp-success { background: #d1fae5; color: #065f46; }
+.lp-info    { background: #dbeafe; color: #1d4ed8; }
+.lp-warning { background: #fef3c7; color: #92400e; }
+.lp-secondary { background: #f1f5f9; color: #475569; }
+.lp-danger  { background: #fee2e2; color: #991b1b; }
+
+/* ── Empty section ── */
+.empty-section {
+    text-align: center; padding: 3rem 2rem;
+    border: 2px dashed var(--rp-border); border-radius: var(--rp-radius);
+    color: var(--rp-text-3);
+}
+.empty-section .ei { font-size: 2.5rem; margin-bottom: .6rem; }
+
+/* ── Back bar ── */
+.back-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 1rem; flex-wrap: wrap; gap: .5rem;
+}
+.btn-back {
+    display: inline-flex; align-items: center; gap: .4rem;
+    color: var(--rp-text-2); text-decoration: none; font-size: .88rem; font-weight: 600;
+    border: 1px solid var(--rp-border); border-radius: 50px;
+    padding: .4rem 1rem; background: var(--rp-surface);
+    transition: all var(--rp-transition);
+}
+.btn-back:hover { background: var(--rp-primary-light); color: var(--rp-primary); border-color: var(--rp-primary-light); }
+
+.btn-print {
+    display: inline-flex; align-items: center; gap: .4rem;
+    color: #fff; text-decoration: none; font-size: .88rem; font-weight: 700;
+    background: linear-gradient(135deg, var(--rp-primary), var(--rp-primary-dark));
+    border-radius: 50px; padding: .4rem 1rem;
+    box-shadow: 0 3px 10px rgba(124,58,237,.3);
+    border: none; cursor: pointer; transition: all var(--rp-transition);
+}
+.btn-print:hover { opacity: .9; transform: translateY(-1px); }
+
+/* ── Progress ring ── */
+.ring-wrap {
+    display: flex; flex-direction: column; align-items: center; gap: .3rem;
+}
+.ring-svg { transform: rotate(-90deg); }
+.ring-bg   { fill: none; stroke: #e2e8f0; stroke-width: 6; }
+.ring-fill { fill: none; stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset 1s ease; }
+.ring-label { font-size: 1.3rem; font-weight: 900; fill: var(--rp-text-1); dominant-baseline: middle; text-anchor: middle; }
+.ring-sub   { font-size: .68rem; fill: var(--rp-text-3); dominant-baseline: middle; text-anchor: middle; }
+
+@@media print {
+    .back-bar, .section-tabs, .no-print { display: none !important; }
+    .tab-panel { display: block !important; margin-bottom: 2rem; }
+    .score-table { box-shadow: none; border: 1px solid #ccc; }
+    .report-hero { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+</style>
+}
+
+<div class="report-page">
+
+    {{!-- Back bar --}}
+    <div class="back-bar no-print">
+        <a asp-action="Details" asp-route-id="@Model.ParentID" class="btn-back">
+            <i class="fas fa-arrow-right"></i> العودة إلى وليّ الأمر
+        </a>
+        <button onclick="window.print()" class="btn-print">
+            <i class="fas fa-print"></i> طباعة التقرير
+        </button>
+    </div>
+
+   @*  {{!-- Hero --}} *@
+    <div class="report-hero">
+        <div class="report-hero-inner">
+            <div class="report-student-avatar">@Model.StudentName[0]</div>
+            <div class="report-student-info">
+                <h1>@Model.StudentName</h1>
+                <div class="report-chips">
+                    @if (!string.IsNullOrEmpty(Model.StudentLevel))
+                    { <span class="rchip"><i class="fas fa-chart-bar"></i> @Model.StudentLevel</span> }
+                    @if (!string.IsNullOrEmpty(Model.School))
+                    { <span class="rchip"><i class="fas fa-school"></i> @Model.School</span> }
+                    <span class="rchip"><i class="fas fa-calendar-alt"></i> @Model.Age سنة</span>
+                    <span class="rchip" style="background:rgba(16,185,129,.25)">@Model.EnrollmentStatus</span>
+                </div>
+            </div>
+            <div class="report-parent-tag">
+                <span style="font-size:1.3rem">👨‍👩‍👧</span>
+                <div>
+                    <div style="font-size:.75rem;opacity:.7">وليّ الأمر</div>
+                    <div style="font-weight:700">@Model.ParentName</div>
+                    <div style="font-size:.75rem;opacity:.7">@Model.RelationToStudent</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* {{!-- KPI Cards --}} *@
+    <div class="kpi-row">
+        <div class="kpi-card kp-purple">
+            <div class="kpi-label">المتوسط العام</div>
+            <div class="kpi-value" style="color:var(--rp-primary)">@overallAvg<span style="font-size:1rem">%</span></div>
+            <div class="kpi-sub">من @totalActivities نشاط</div>
+        </div>
+        <div class="kpi-card kp-green">
+            <div class="kpi-label">متوسط الواجبات</div>
+            <div class="kpi-value" style="color:var(--rp-success)">@Model.HomeworkAvgScore<span style="font-size:1rem">%</span></div>
+            <div class="kpi-sub">@Model.HomeworkPassed/@Model.HomeworkTotal ناجح</div>
+        </div>
+        <div class="kpi-card kp-blue">
+            <div class="kpi-label">آخر تحديد مستوى</div>
+            @if (Model.LatestPlacement != null)
+            {
+                <div class="kpi-value" style="color:var(--rp-info)">@Model.LatestPlacement.Score<span style="font-size:1rem">%</span></div>
+                <div class="kpi-sub">@Model.LatestPlacement.Level</div>
+            }
+            else
+            {
+                <div class="kpi-value" style="color:var(--rp-text-3);font-size:1.2rem">لا يوجد</div>
+                <div class="kpi-sub">لم يُجر اختبار</div>
+            }
+        </div>
+        <div class="kpi-card kp-amber">
+            <div class="kpi-label">آخر مؤشر أداء</div>
+            @if (Model.LatestKpi != null)
+            {
+                <div class="kpi-value" style="color:var(--rp-warning)">@Model.LatestKpi.Score<span style="font-size:1rem">%</span></div>
+                <div class="kpi-sub">@Model.LatestKpi.Level</div>
+            }
+            else
+            {
+                <div class="kpi-value" style="color:var(--rp-text-3);font-size:1.2rem">لا يوجد</div>
+                <div class="kpi-sub">لم يُجر اختبار</div>
+            }
+        </div>
+        <div class="kpi-card kp-teal">
+            <div class="kpi-label">متوسط الاختبارات</div>
+            <div class="kpi-value" style="color:var(--rp-teal)">@(Model.GeneralExams.Any() ? Model.GeneralExamsAvg.ToString("0.0") : "—")<span style="font-size:1rem">@(Model.GeneralExams.Any() ? "%" : "")</span></div>
+            <div class="kpi-sub">@Model.GeneralExams.Count اختبار</div>
+        </div>
+    </div>
+
+    @* {{!-- Tabs --}} *@
+    <div class="section-tabs no-print">
+        <button class="stab active" onclick="showTab('hw', this)">
+            <i class="fas fa-clipboard-check"></i> الواجبات
+            <span class="tab-count">@Model.HomeworkTotal</span>
+        </button>
+        <button class="stab" onclick="showTab('placement', this)">
+            <i class="fas fa-crosshairs"></i> تحديد المستوى
+            <span class="tab-count">@Model.PlacementExams.Count</span>
+        </button>
+        <button class="stab" onclick="showTab('kpi', this)">
+            <i class="fas fa-chart-pie"></i> مؤشرات الأداء
+            <span class="tab-count">@Model.KpiExams.Count</span>
+        </button>
+        <button class="stab" onclick="showTab('general', this)">
+            <i class="fas fa-school"></i> اختبارات أخرى
+            <span class="tab-count">@Model.GeneralExams.Count</span>
+        </button>
+    </div>
+
+    @* {{!-- Tab: Homework --}} *@
+    <div class="tab-panel active" id="tab-hw">
+        @if (!Model.HomeworkRecords.Any())
+        {
+            <div class="empty-section"><div class="ei">📋</div><p>لا توجد واجبات مسجّلة لهذا الطالب</p></div>
+        }
+        else
+        {
+            <table class="score-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>التاريخ</th>
+                        <th>الدرجة</th>
+                        <th>المستوى</th>
+                        <th>المنهج</th>
+                        <th>المحور</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var (r, i) in Model.HomeworkRecords.Select((r, i) => (r, i)))
+                    {
+                        <tr>
+                            <td style="color:var(--rp-text-3);font-size:.8rem">@(i + 1)</td>
+                            <td style="color:var(--rp-text-2);font-size:.82rem">@r.ExamDate.ToString("d MMM yyyy", new System.Globalization.CultureInfo("ar-EG"))</td>
+                            <td>
+                                <span class="score-badge badge-@BadgeClass(r.Score)">@r.Score%</span>
+                                <span class="mini-bar"><span class="mini-bar-fill @FillClass(r.Score)" style="width:@r.Score%"></span></span>
+                            </td>
+                            <td>
+                                <span class="level-pill lp-@BadgeClass(r.Score)">@r.Level</span>
+                            </td>
+                            <td style="color:var(--rp-text-2);font-size:.83rem">@(r.CurriculumName ?? "—")</td>
+                            <td style="color:var(--rp-text-2);font-size:.83rem">@(r.SectionName ?? "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+
+    @* {{!-- Tab: Placement --}} *@
+    <div class="tab-panel" id="tab-placement">
+        @if (!Model.PlacementExams.Any())
+        {
+            <div class="empty-section"><div class="ei">🎯</div><p>لم يُجرَ اختبار تحديد مستوى لهذا الطالب</p></div>
+        }
+        else
+        {
+            <table class="score-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>التاريخ</th>
+                        <th>الدرجة</th>
+                        <th>المستوى المحدَّد</th>
+                        <th>المنهج</th>
+                        <th>النوع</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var (r, i) in Model.PlacementExams.Select((r, i) => (r, i)))
+                    {
+                        <tr>
+                            <td style="color:var(--rp-text-3);font-size:.8rem">@(i + 1)</td>
+                            <td style="color:var(--rp-text-2);font-size:.82rem">@r.ExamDate.ToString("d MMM yyyy", new System.Globalization.CultureInfo("ar-EG"))</td>
+                            <td>
+                                <span class="score-badge badge-@BadgeClass(r.Score)">@r.Score%</span>
+                                <span class="mini-bar"><span class="mini-bar-fill @FillClass(r.Score)" style="width:@r.Score%"></span></span>
+                            </td>
+                            <td>
+                                <span class="level-pill lp-@BadgeClass(r.Score)">@r.Level</span>
+                            </td>
+                            <td style="color:var(--rp-text-2);font-size:.83rem">@(r.CurriculumName ?? "—")</td>
+                            <td style="color:var(--rp-text-3);font-size:.78rem">اختبار تحديد مستوى</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+
+    @* {{!-- Tab: KPI --}} *@
+    <div class="tab-panel" id="tab-kpi">
+        @if (!Model.KpiExams.Any())
+        {
+            <div class="empty-section"><div class="ei">📊</div><p>لا توجد اختبارات مؤشرات أداء مسجّلة</p></div>
+        }
+        else
+        {
+            <table class="score-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>التاريخ</th>
+                        <th>الدرجة</th>
+                        <th>التقييم</th>
+                        <th>المنهج</th>
+                        <th>نوع الاختبار</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var (r, i) in Model.KpiExams.Select((r, i) => (r, i)))
+                    {
+                        <tr>
+                            <td style="color:var(--rp-text-3);font-size:.8rem">@(i + 1)</td>
+                            <td style="color:var(--rp-text-2);font-size:.82rem">@r.ExamDate.ToString("d MMM yyyy", new System.Globalization.CultureInfo("ar-EG"))</td>
+                            <td>
+                                <span class="score-badge badge-@BadgeClass(r.Score)">@r.Score%</span>
+                                <span class="mini-bar"><span class="mini-bar-fill @FillClass(r.Score)" style="width:@r.Score%"></span></span>
+                            </td>
+                            <td>
+                                <span class="level-pill lp-@BadgeClass(r.Score)">@r.Level</span>
+                            </td>
+                            <td style="color:var(--rp-text-2);font-size:.83rem">@(r.CurriculumName ?? "—")</td>
+                            <td>
+                                @if (r.ExamType.HasValue)
+                                {
+                                    <span class="score-badge badge-info" style="font-size:.72rem">
+                                        @(r.ExamType == ExamType.PerformanceScale ? "مقياس مؤشرات الأداء" : r.ExamType.ToString())
+                                    </span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+
+    @* {{!-- Tab: General --}} *@
+    <div class="tab-panel" id="tab-general">
+        @if (!Model.GeneralExams.Any())
+        {
+            <div class="empty-section"><div class="ei">📝</div><p>لا توجد اختبارات أخرى مسجّلة</p></div>
+        }
+        else
+        {
+            <table class="score-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>التاريخ</th>
+                        <th>الدرجة</th>
+                        <th>المستوى</th>
+                        <th>المنهج</th>
+                        <th>نوع النشاط</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var (r, i) in Model.GeneralExams.Select((r, i) => (r, i)))
+                    {
+                        var actLabel = r.ActivityType switch {
+                            PerformanceActivityType.FinalExam    => "اختبار نهائي",
+                            PerformanceActivityType.RemedialQuiz => "اختبار علاجي",
+                            _                                    => "أخرى"
+                        };
+                        <tr>
+                            <td style="color:var(--rp-text-3);font-size:.8rem">@(i + 1)</td>
+                            <td style="color:var(--rp-text-2);font-size:.82rem">@r.ExamDate.ToString("d MMM yyyy", new System.Globalization.CultureInfo("ar-EG"))</td>
+                            <td>
+                                <span class="score-badge badge-@BadgeClass(r.Score)">@r.Score%</span>
+                                <span class="mini-bar"><span class="mini-bar-fill @FillClass(r.Score)" style="width:@r.Score%"></span></span>
+                            </td>
+                            <td><span class="level-pill lp-@BadgeClass(r.Score)">@r.Level</span></td>
+                            <td style="color:var(--rp-text-2);font-size:.83rem">@(r.CurriculumName ?? "—")</td>
+                            <td style="color:var(--rp-text-3);font-size:.78rem">@actLabel</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+
+</div>
+
+@section Scripts {
+<script>
+    function showTab(name, el) {
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.stab').forEach(b => b.classList.remove('active'));
+        document.getElementById('tab-' + name).classList.add('active');
+        el.classList.add('active');
+    }
+</script>
+}

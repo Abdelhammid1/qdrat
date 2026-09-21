@@ -1,0 +1,856 @@
+@model List<QdratNew.ViewModels.Students.StudentNotificationViewModel>
+@using QdratNew.Helpers
+@using QdratNew.Enums
+
+@{
+    ViewData["Title"] = "الإشعارات";
+    var unreadCount = Model.Count(n => !n.IsRead);
+    var totalCount  = Model.Count;
+}
+
+@section Styles {
+<style>
+/* ── Notifications Page ────────────────────────────── */
+:root {
+    --np-primary:   #339999;
+    --np-pri-dk:    #267a7a;
+    --np-pri-lt:    #e8f5f5;
+    --np-border:    #e8edf2;
+    --np-bg:        #f4f7fa;
+    --np-card:      #ffffff;
+    --np-text:      #1e293b;
+    --np-muted:     #64748b;
+    --np-radius:    14px;
+    --np-shadow:    0 2px 12px rgba(0,0,0,0.07);
+    --np-trans:     0.22s ease;
+}
+
+/* Category colours */
+--np-cat-general:  #339999;
+--np-cat-homework: #f59e0b;
+--np-cat-exam:     #6366f1;
+--np-cat-mentor:   #8b5cf6;
+--np-cat-remedial: #ef4444;
+--np-cat-important:#f97316;
+--np-cat-reminder: #0ea5e9;
+
+.np-page { width: 100%; max-width: 820px; margin: 0 auto; }
+
+/* ── Page Header ── */
+.np-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 28px;
+}
+
+.np-header-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.np-header-icon {
+    width: 48px; height: 48px;
+    background: linear-gradient(135deg, var(--np-primary), var(--np-pri-dk));
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.25rem; color: #fff;
+    box-shadow: 0 4px 14px rgba(51,153,153,0.35);
+}
+
+.np-header h1 {
+    font-size: 1.35rem; font-weight: 700;
+    color: var(--np-text); margin: 0;
+}
+
+.np-header-sub {
+    font-size: 0.82rem; color: var(--np-muted); margin: 0;
+}
+
+.np-unread-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: var(--np-primary); color: #fff;
+    font-size: 0.8rem; font-weight: 600;
+    padding: 5px 12px; border-radius: 20px;
+}
+
+.np-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.np-mark-all-btn,
+.np-mark-btn {
+    border: 1px solid var(--np-border);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--np-primary);
+    font-family: 'Cairo', sans-serif;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background var(--np-trans), color var(--np-trans), border-color var(--np-trans);
+}
+
+.np-mark-all-btn {
+    padding: 6px 12px;
+    font-size: 0.76rem;
+}
+
+.np-mark-btn {
+    padding: 3px 10px;
+    font-size: 0.7rem;
+}
+
+.np-mark-all-btn:hover,
+.np-mark-btn:hover {
+    background: var(--np-primary);
+    border-color: var(--np-primary);
+    color: #fff;
+}
+
+.np-mark-all-btn:disabled,
+.np-mark-btn:disabled {
+    opacity: .55;
+    cursor: not-allowed;
+}
+
+/* ── Toolbar ── */
+.np-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+}
+
+.np-search-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 200px;
+}
+
+.np-search-wrap .np-search-icon {
+    position: absolute;
+    right: 13px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--np-muted);
+    font-size: 0.9rem;
+    pointer-events: none;
+}
+
+.np-search {
+    width: 100%;
+    padding: 9px 38px 9px 14px;
+    border: 1.5px solid var(--np-border);
+    border-radius: 10px;
+    font-size: 0.88rem;
+    font-family: 'Cairo', sans-serif;
+    background: var(--np-card);
+    color: var(--np-text);
+    outline: none;
+    transition: border-color var(--np-trans);
+}
+.np-search:focus { border-color: var(--np-primary); }
+
+.np-filter-btn {
+    padding: 9px 16px;
+    border: 1.5px solid var(--np-border);
+    border-radius: 10px;
+    font-size: 0.83rem;
+    font-family: 'Cairo', sans-serif;
+    background: var(--np-card);
+    color: var(--np-muted);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all var(--np-trans);
+    font-weight: 500;
+}
+.np-filter-btn:hover,
+.np-filter-btn.active {
+    border-color: var(--np-primary);
+    background: var(--np-pri-lt);
+    color: var(--np-primary);
+}
+
+/* ── Filter Tabs ── */
+.np-tabs {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+
+.np-tab {
+    padding: 3px 11px;
+    border-radius: 20px;
+    border: 1px solid var(--np-border);
+    background: transparent;
+    font-size: 0.75rem;
+    font-family: 'Cairo', sans-serif;
+    font-weight: 600;
+    color: var(--np-muted);
+    cursor: pointer;
+    transition: all var(--np-trans);
+    white-space: nowrap;
+    line-height: 1.8;
+}
+.np-tab:hover  { border-color: var(--np-primary); color: var(--np-primary); background: var(--np-pri-lt); }
+.np-tab.active { background: var(--np-primary); border-color: var(--np-primary); color: #fff; }
+
+/* ── Stats Strip ── */
+.np-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 22px;
+}
+
+.np-stat-card {
+    background: var(--np-card);
+    border-radius: var(--np-radius);
+    padding: 14px 16px;
+    display: flex; align-items: center; gap: 12px;
+    box-shadow: var(--np-shadow);
+    border: 1px solid var(--np-border);
+}
+
+.np-stat-icon {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem; flex-shrink: 0;
+}
+
+.np-stat-card:nth-child(1) .np-stat-icon { background: #e8f5f5; color: #339999; }
+.np-stat-card:nth-child(2) .np-stat-icon { background: #fef3c7; color: #d97706; }
+.np-stat-card:nth-child(3) .np-stat-icon { background: #ede9fe; color: #7c3aed; }
+
+.np-stat-val  { font-size: 1.4rem; font-weight: 700; color: var(--np-text); line-height: 1; }
+.np-stat-lbl  { font-size: 0.75rem; color: var(--np-muted); margin-top: 2px; }
+
+/* ── List ── */
+.np-list { display: flex; flex-direction: column; gap: 8px; }
+
+/* ── Card ── */
+.np-card {
+    background: var(--np-card);
+    border-radius: var(--np-radius);
+    border: 1.5px solid var(--np-border);
+    padding: 16px 18px;
+    display: flex; align-items: flex-start; gap: 14px;
+    text-decoration: none; color: inherit;
+    transition: transform var(--np-trans), box-shadow var(--np-trans), border-color var(--np-trans);
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.np-card::before {
+    content: '';
+    position: absolute;
+    top: 0; right: 0;
+    width: 3px; height: 100%;
+    background: var(--cat-color, var(--np-border));
+    border-radius: 0 var(--np-radius) var(--np-radius) 0;
+    transition: width var(--np-trans);
+}
+
+.np-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.09);
+    border-color: var(--cat-color, var(--np-primary));
+    text-decoration: none;
+    color: inherit;
+}
+
+.np-card.unread {
+    background: #fafffe;
+    border-color: var(--cat-color, var(--np-primary));
+}
+
+.np-card.unread::before { width: 4px; }
+
+/* Category icon */
+.np-cat-icon {
+    width: 42px; height: 42px;
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem; flex-shrink: 0;
+    background: color-mix(in srgb, var(--cat-color, var(--np-primary)) 12%, white);
+    color: var(--cat-color, var(--np-primary));
+}
+
+/* Unread dot */
+.np-dot {
+    width: 8px; height: 8px;
+    background: var(--np-primary);
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 6px;
+    box-shadow: 0 0 0 2px rgba(51,153,153,0.25);
+}
+.np-dot.hidden { visibility: hidden; }
+
+.np-card-body { flex: 1; min-width: 0; }
+
+.np-card-msg {
+    font-size: 0.92rem; font-weight: 500;
+    color: var(--np-text); line-height: 1.65;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.np-card.unread .np-card-msg { font-weight: 600; }
+
+.np-card-footer {
+    display: flex; align-items: center;
+    justify-content: space-between;
+    margin-top: 8px; flex-wrap: wrap; gap: 6px;
+}
+
+.np-time {
+    font-size: 0.75rem; color: var(--np-muted);
+    display: flex; align-items: center; gap: 4px;
+}
+
+.np-badge {
+    font-size: 0.7rem; font-weight: 600;
+    padding: 3px 10px; border-radius: 20px;
+    background: color-mix(in srgb, var(--cat-color, var(--np-primary)) 12%, white);
+    color: var(--cat-color, var(--np-primary));
+    border: 1px solid color-mix(in srgb, var(--cat-color, var(--np-primary)) 20%, white);
+}
+
+.np-arrow {
+    color: var(--np-muted);
+    font-size: 0.8rem;
+    flex-shrink: 0;
+    margin-top: 4px;
+    transition: transform var(--np-trans), color var(--np-trans);
+}
+.np-card:hover .np-arrow { transform: translateX(-4px); color: var(--cat-color, var(--np-primary)); }
+
+/* ── Empty State ── */
+.np-empty {
+    text-align: center;
+    padding: 60px 20px;
+    background: var(--np-card);
+    border-radius: var(--np-radius);
+    border: 1.5px dashed var(--np-border);
+}
+
+.np-empty-icon {
+    width: 80px; height: 80px;
+    background: var(--np-pri-lt);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 20px;
+    font-size: 2rem; color: var(--np-primary);
+}
+
+.np-empty h3 { font-size: 1.1rem; font-weight: 600; color: var(--np-text); margin-bottom: 8px; }
+.np-empty p  { font-size: 0.88rem; color: var(--np-muted); margin: 0; }
+
+/* ── Section label ── */
+.np-section-label {
+    font-size: 0.72rem; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--np-muted);
+    padding: 6px 4px 4px; margin-top: 6px;
+}
+
+/* ── Fade-in ── */
+@@keyframes npFadeUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.np-card { animation: npFadeUp .3s ease both; }
+@for (int i = 0; i < 20; i++) {
+<text>    .np-card:nth-child(@(i+1)) { animation-delay: @(i * 0.04)s; }
+</text>
+}
+
+/* ── Responsive ── */
+@@media (max-width: 600px) {
+    .np-stats { grid-template-columns: repeat(2, 1fr); }
+    .np-stats .np-stat-card:last-child { grid-column: span 2; }
+    .np-header h1 { font-size: 1.1rem; }
+    .np-tabs { gap: 4px; }
+    .np-tab { font-size: 0.74rem; padding: 5px 10px; }
+    .np-cat-icon { width: 36px; height: 36px; font-size: 0.9rem; }
+}
+
+@@media (prefers-color-scheme: dark) {
+    :root {
+        --np-card:   #1e2a35;
+        --np-bg:     #151f28;
+        --np-border: #2d3d4a;
+        --np-text:   #e2e8f0;
+        --np-muted:  #94a3b8;
+        --np-pri-lt: rgba(51,153,153,0.15);
+    }
+    .np-card.unread { background: rgba(51,153,153,0.07); }
+}
+</style>
+}
+
+@{
+    /* دالة مساعدة: لون وأيقونة التصنيف */
+    string CatColor(NotificationCategory cat) => cat switch {
+        NotificationCategory.Homework  => "#f59e0b",
+        NotificationCategory.Exam      => "#6366f1",
+        NotificationCategory.Mentor    => "#8b5cf6",
+        NotificationCategory.Remedial  => "#ef4444",
+        NotificationCategory.Important => "#f97316",
+        NotificationCategory.Reminder  => "#0ea5e9",
+        _                              => "#339999"
+    };
+
+    string CatIcon(NotificationCategory cat) => cat switch {
+        NotificationCategory.Homework  => "fas fa-pen-to-square",
+        NotificationCategory.Exam      => "fas fa-file-lines",
+        NotificationCategory.Mentor    => "fas fa-brain",
+        NotificationCategory.Remedial  => "fas fa-heart-pulse",
+        NotificationCategory.Important => "fas fa-triangle-exclamation",
+        NotificationCategory.Reminder  => "fas fa-clock",
+        _                              => "fas fa-bell"
+    };
+
+    string RelativeTime(DateTime dt) {
+        var diff = DateTime.Now - dt;
+        if (diff.TotalMinutes < 1)   return "الآن";
+        if (diff.TotalMinutes < 60)  return $"منذ {(int)diff.TotalMinutes} دقيقة";
+        if (diff.TotalHours   < 24)  return $"منذ {(int)diff.TotalHours} ساعة";
+        if (diff.TotalDays    < 7)   return $"منذ {(int)diff.TotalDays} أيام";
+        return dt.ToString("d MMM yyyy", new System.Globalization.CultureInfo("ar-SA"));
+    }
+
+    var todayList     = Model.Where(n => n.SentAt.Date == DateTime.Today).ToList();
+    var earlierList   = Model.Where(n => n.SentAt.Date != DateTime.Today).ToList();
+    var importantCount = Model.Count(n => n.Category == NotificationCategory.Important);
+}
+
+<div class="np-page">
+    <form id="npAntiForgeryForm" method="post" style="display:none;">
+        @Html.AntiForgeryToken()
+    </form>
+
+    <!-- Header -->
+    <div class="np-header">
+        <div class="np-header-title">
+            <div class="np-header-icon">
+                <i class="fas fa-bell"></i>
+            </div>
+            <div>
+                <h1>الإشعارات</h1>
+                <p class="np-header-sub">مركز متابعة جميع تنبيهاتك</p>
+            </div>
+        </div>
+        @if (unreadCount > 0)
+        {
+            <span class="np-unread-badge">
+                <i class="fas fa-circle" style="font-size:.45rem;"></i>
+                @unreadCount غير مقروء
+            </span>
+        }
+    </div>
+
+    <!-- Stats -->
+    <div class="np-stats">
+        <div class="np-stat-card">
+            <div class="np-stat-icon"><i class="fas fa-inbox"></i></div>
+            <div>
+                <div class="np-stat-val">@totalCount</div>
+                <div class="np-stat-lbl">إجمالي الإشعارات</div>
+            </div>
+        </div>
+        <div class="np-stat-card">
+            <div class="np-stat-icon"><i class="fas fa-envelope"></i></div>
+            <div>
+                <div class="np-stat-val" id="npUnreadStat">@unreadCount</div>
+                <div class="np-stat-lbl">غير مقروء</div>
+            </div>
+        </div>
+        <div class="np-stat-card">
+            <div class="np-stat-icon"><i class="fas fa-triangle-exclamation"></i></div>
+            <div>
+                <div class="np-stat-val">@importantCount</div>
+                <div class="np-stat-lbl">تنبيهات مهمة</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="np-toolbar">
+        @if (unreadCount > 0)
+        {
+            <button type="button" class="np-mark-all-btn" id="npMarkAllRead">
+                تحديد الكل كمقروء
+            </button>
+        }
+
+        <div class="np-search-wrap">
+            <i class="fas fa-magnifying-glass np-search-icon"></i>
+            <input type="text"
+                   class="np-search"
+                   id="npSearch"
+                   placeholder="ابحث في الإشعارات..."
+                   autocomplete="off" />
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="np-tabs" id="npTabs" role="tablist">
+        <button class="np-tab active" data-filter="all">الكل (@totalCount)</button>
+        <button class="np-tab" data-filter="unread">غير المقروءة (@unreadCount)</button>
+        @{
+            var cats = Model.GroupBy(n => n.Category)
+                            .Select(g => new { Cat = g.Key, Count = g.Count() })
+                            .OrderByDescending(x => x.Count);
+        }
+        @foreach (var item in cats)
+        {
+            <button class="np-tab" data-filter="@item.Cat.ToString().ToLower()">
+                @item.Cat.GetDisplayName() (@item.Count)
+            </button>
+        }
+    </div>
+
+    <!-- Notifications List -->
+    @if (!Model.Any())
+    {
+        <div class="np-empty">
+            <div class="np-empty-icon">
+                <i class="fas fa-bell-slash"></i>
+            </div>
+            <h3>لا توجد إشعارات</h3>
+            <p>ستظهر هنا جميع إشعاراتك الواردة من المنصة.</p>
+        </div>
+    }
+    else
+    {
+        <div id="npList">
+            @if (todayList.Any())
+            {
+                <div class="np-section-label">اليوم</div>
+                <div class="np-list">
+                    @foreach (var notif in todayList)
+                    {
+                        var color = CatColor(notif.Category);
+                        var icon  = CatIcon(notif.Category);
+                        <div role="link" tabindex="0"
+                           class="np-card @(notif.IsRead ? "" : "unread")"
+                           style="--cat-color: @color;"
+                           data-id="@notif.NotificationId"
+                           data-url="@notif.TargetUrl"
+                           data-category="@notif.Category.ToString().ToLower()"
+                           data-read="@(notif.IsRead ? "true" : "false")"
+                           data-msg="@notif.Message.ToLower()">
+
+                            <div class="np-cat-icon">
+                                <i class="@icon"></i>
+                            </div>
+
+                            <div class="np-card-body">
+                                <div class="np-card-msg" title="@notif.Message">
+                                    @notif.Message
+                                </div>
+                                <div class="np-card-footer">
+                                    <span class="np-time">
+                                        <i class="fas fa-clock"></i>
+                                        @RelativeTime(notif.SentAt)
+                                    </span>
+                                    <span class="np-badge">@notif.Category.GetDisplayName()</span>
+                                    @if (!notif.IsRead)
+                                    {
+                                        <button type="button" class="np-mark-btn" data-mark-id="@notif.NotificationId">
+                                            تحديد كمقروء
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="np-dot @(notif.IsRead ? "hidden" : "")"></div>
+
+                            @if (!string.IsNullOrEmpty(notif.TargetUrl))
+                            {
+                                <i class="fas fa-arrow-left np-arrow"></i>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (earlierList.Any())
+            {
+                <div class="np-section-label" style="margin-top:18px;">سابقاً</div>
+                <div class="np-list">
+                    @foreach (var notif in earlierList)
+                    {
+                        var color = CatColor(notif.Category);
+                        var icon  = CatIcon(notif.Category);
+                        <div role="link" tabindex="0"
+                           class="np-card @(notif.IsRead ? "" : "unread")"
+                           style="--cat-color: @color;"
+                           data-id="@notif.NotificationId"
+                           data-url="@notif.TargetUrl"
+                           data-category="@notif.Category.ToString().ToLower()"
+                           data-read="@(notif.IsRead ? "true" : "false")"
+                           data-msg="@notif.Message.ToLower()">
+
+                            <div class="np-cat-icon">
+                                <i class="@icon"></i>
+                            </div>
+
+                            <div class="np-card-body">
+                                <div class="np-card-msg" title="@notif.Message">
+                                    @notif.Message
+                                </div>
+                                <div class="np-card-footer">
+                                    <span class="np-time">
+                                        <i class="fas fa-clock"></i>
+                                        @RelativeTime(notif.SentAt)
+                                    </span>
+                                    <span class="np-badge">@notif.Category.GetDisplayName()</span>
+                                    @if (!notif.IsRead)
+                                    {
+                                        <button type="button" class="np-mark-btn" data-mark-id="@notif.NotificationId">
+                                            تحديد كمقروء
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="np-dot @(notif.IsRead ? "hidden" : "")"></div>
+
+                            @if (!string.IsNullOrEmpty(notif.TargetUrl))
+                            {
+                                <i class="fas fa-arrow-left np-arrow"></i>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <!-- Empty search state -->
+        <div id="npNoResults" class="np-empty" style="display:none;">
+            <div class="np-empty-icon">
+                <i class="fas fa-magnifying-glass"></i>
+            </div>
+            <h3>لا توجد نتائج</h3>
+            <p>لا يوجد إشعار يطابق بحثك أو الفلتر المحدد.</p>
+        </div>
+    }
+
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    var cards      = document.querySelectorAll('.np-card');
+    var searchInput = document.getElementById('npSearch');
+    var tabs        = document.querySelectorAll('.np-tab');
+    var noResults   = document.getElementById('npNoResults');
+    var markAllBtn  = document.getElementById('npMarkAllRead');
+    var unreadStat  = document.getElementById('npUnreadStat');
+    var unreadBadge = document.querySelector('.np-unread-badge');
+    var antiForgery = document.querySelector('#npAntiForgeryForm input[name="__RequestVerificationToken"]');
+    var activeFilter = 'all';
+    var unreadCount = Array.from(cards).filter(function (card) {
+        return card.dataset.read !== 'true';
+    }).length;
+
+    function postForm(url, data) {
+        var body = new URLSearchParams();
+        if (antiForgery) {
+            body.append('__RequestVerificationToken', antiForgery.value);
+        }
+
+        Object.keys(data || {}).forEach(function (key) {
+            body.append(key, data[key]);
+        });
+
+        return fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+            },
+            body: body.toString(),
+            credentials: 'same-origin'
+        });
+    }
+
+    function setUnreadCount(value) {
+        unreadCount = Math.max(0, value);
+        if (unreadStat) {
+            unreadStat.textContent = unreadCount;
+        }
+
+        if (unreadBadge) {
+            unreadBadge.style.display = unreadCount > 0 ? '' : 'none';
+            if (unreadCount > 0) {
+                unreadBadge.innerHTML = '<i class="fas fa-circle" style="font-size:.45rem;"></i> ' + unreadCount + ' غير مقروء';
+            }
+        }
+
+        if (markAllBtn) {
+            markAllBtn.disabled = unreadCount === 0;
+            if (unreadCount === 0) {
+                markAllBtn.textContent = 'تمت قراءة الكل';
+            }
+        }
+    }
+
+    function markCardAsRead(card) {
+        if (!card || card.dataset.read === 'true') return;
+
+        card.dataset.read = 'true';
+        card.classList.remove('unread');
+
+        var dot = card.querySelector('.np-dot');
+        if (dot) {
+            dot.classList.add('hidden');
+        }
+
+        var markButton = card.querySelector('.np-mark-btn');
+        if (markButton) {
+            markButton.remove();
+        }
+
+        setUnreadCount(unreadCount - 1);
+        applyFilters();
+    }
+
+    function markOneAsRead(card) {
+        if (!card || card.dataset.read === 'true') {
+            return Promise.resolve();
+        }
+
+        var id = card.dataset.id;
+        if (!id) {
+            return Promise.resolve();
+        }
+
+        return postForm('/Students/Notifications/MarkAsRead', { id: id })
+            .then(function (response) {
+                if (response.ok) {
+                    markCardAsRead(card);
+                }
+            })
+            .catch(function () { });
+    }
+
+    function applyFilters() {
+        var searchVal = searchInput ? searchInput.value.trim().toLowerCase() : '';
+        var visible   = 0;
+
+        cards.forEach(function (card) {
+            var cat    = card.dataset.category || '';
+            var isRead = card.dataset.read === 'true';
+            var msg    = card.dataset.msg || '';
+
+            var matchFilter =
+                activeFilter === 'all'    ? true :
+                activeFilter === 'unread' ? !isRead :
+                cat === activeFilter;
+
+            var matchSearch = !searchVal || msg.includes(searchVal);
+
+            if (matchFilter && matchSearch) {
+                card.style.display = '';
+                visible++;
+            } else {
+                card.style.display = 'none';
+            }
+        });
+
+        /* section labels */
+        document.querySelectorAll('.np-section-label').forEach(function (lbl) {
+            var next = lbl.nextElementSibling;
+            if (!next) return;
+            var hasVisible = Array.from(next.querySelectorAll('.np-card'))
+                                  .some(function (c) { return c.style.display !== 'none'; });
+            lbl.style.display = hasVisible ? '' : 'none';
+            next.style.display = hasVisible ? '' : 'none';
+        });
+
+        if (noResults) noResults.style.display = visible === 0 ? '' : 'none';
+    }
+
+    cards.forEach(function (card) {
+        card.addEventListener('click', function (event) {
+            if (event.target.closest('.np-mark-btn')) return;
+
+            var targetUrl = card.dataset.url;
+            markOneAsRead(card).finally(function () {
+                if (targetUrl && targetUrl !== '#') {
+                    window.location.href = targetUrl;
+                }
+            });
+        });
+
+        card.addEventListener('keydown', function (event) {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            card.click();
+        });
+    });
+
+    document.querySelectorAll('.np-mark-btn').forEach(function (button) {
+        button.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            var card = button.closest('.np-card');
+            button.disabled = true;
+
+            markOneAsRead(card).finally(function () {
+                button.disabled = false;
+            });
+        });
+    });
+
+    if (markAllBtn) {
+        markAllBtn.addEventListener('click', function () {
+            markAllBtn.disabled = true;
+            markAllBtn.textContent = 'جاري التحديث...';
+
+            postForm('/Students/Notifications/MarkAllAsRead', {})
+                .then(function (response) {
+                    if (!response.ok) return;
+
+                    cards.forEach(markCardAsRead);
+                    setUnreadCount(0);
+                })
+                .catch(function () {
+                    markAllBtn.disabled = false;
+                    markAllBtn.textContent = 'تحديد الكل كمقروء';
+                });
+        });
+    }
+
+    /* Tabs */
+    tabs.forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            tabs.forEach(function (t) { t.classList.remove('active'); });
+            this.classList.add('active');
+            activeFilter = this.dataset.filter;
+            applyFilters();
+        });
+    });
+
+    /* Search */
+    if (searchInput) {
+        searchInput.addEventListener('input', applyFilters);
+    }
+
+})();
+</script>
+}

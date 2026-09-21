@@ -1,0 +1,155 @@
+@model QdratNew.ViewModels.Admin.Analytics.BatchPerformanceDetailsVM
+@* ═══════════════════════════════════════════════════════════════════
+   _BatchActionFooter — شريط الأكشن الثابت في الأسفل
+   الـ POST action (SendBatchGuidanceToInstructors) يكون دائماً مرئياً
+   لأنه الهدف الرئيسي من الصفحة — ليس مدفوناً في المنتصف
+═══════════════════════════════════════════════════════════════════ *@
+@{
+    var isDanger = Model?.RiskLevel?.Contains("خطر") == true;
+}
+<style>
+    .af-bar {
+        position:   fixed;
+        bottom:     0; right: 0; left: 0;
+        height:     var(--footer-h);
+        background: #0f172a;
+        border-top: 2px solid var(--risk);
+        z-index:    999;
+        display:    flex;
+        align-items:center;
+        padding:    0 24px;
+        gap:        20px;
+    }
+    /* Risk indicator dot */
+    .af-dot {
+        width:  10px; height: 10px; border-radius:50%;
+        background:   var(--risk);
+        flex-shrink:  0;
+        animation:    af-pulse 1.8s ease-in-out infinite;
+    }
+    @@keyframes af-pulse { 0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--risk) 60%,transparent)} 50%{box-shadow:0 0 0 8px transparent} }
+
+    /* Decision text */
+    .af-decision {
+        flex:         1;
+        min-width:    0;
+        overflow:     hidden;
+    }
+    .af-verdict-lbl {
+        font-size:  11px; font-weight:800; letter-spacing:.08em;
+        text-transform:uppercase; color:var(--risk); opacity:.8;
+    }
+    .af-verdict-val {
+        font-size:13px; font-weight:800; color:#fff;
+        white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+
+    /* Divider */
+    .af-div { width:1px; height:32px; background:rgba(255,255,255,.1); flex-shrink:0; }
+
+    /* Stats */
+    .af-stats {
+        display:flex; gap:20px; flex-shrink:0;
+    }
+    .af-stat { text-align:center; }
+    .af-stat-val { font-size:16px; font-weight:900; color:#fff; }
+    .af-stat-lbl { font-size:10.5px; color:rgba(255,255,255,.45); font-weight:700; }
+
+    /* CTA button */
+    .af-cta {
+        display:       inline-flex; align-items:center; gap:8px;
+        background:    var(--risk);
+        color:         #fff; border:none;
+        border-radius: var(--r-sm);
+        padding:       11px 24px;
+        font-size:     14px; font-weight:800;
+        cursor:        pointer; font-family:inherit;
+        white-space:   nowrap; flex-shrink:0;
+        transition:    opacity .2s, transform .15s;
+        box-shadow:    0 4px 16px color-mix(in srgb, var(--risk) 40%, transparent);
+    }
+    .af-cta:hover   { opacity:.88; transform:translateY(-1px); color:#fff; }
+    .af-cta:active  { transform:translateY(0); }
+    .af-link {
+        display:       inline-flex; align-items:center; gap:8px;
+        background:    rgba(255,255,255,.08);
+        color:         #fff;
+        border:        1px solid rgba(255,255,255,.18);
+        border-radius: var(--r-sm);
+        padding:       10px 18px;
+        font-size:     13px; font-weight:800;
+        text-decoration:none;
+        white-space:   nowrap; flex-shrink:0;
+        transition:    background .2s, transform .15s;
+    }
+    .af-link:hover { background:rgba(255,255,255,.14); transform:translateY(-1px); color:#fff; }
+
+    @@media (max-width:768px) {
+        .af-stats, .af-div { display:none; }
+        .af-verdict-val   { font-size:12px; }
+        .af-bar           { padding:0 14px; gap:12px; }
+        .af-cta           { padding:9px 14px; font-size:13px; }
+        .af-link span     { display:none; }
+    }
+</style>
+
+<div class="af-bar" role="contentinfo" aria-label="شريط الإجراء">
+
+    <div class="af-dot" aria-hidden="true"></div>
+
+    <div class="af-decision">
+        <div class="af-verdict-lbl">قرار النظام</div>
+        <div class="af-verdict-val">@(Model?.RiskLevel ?? "—") — @(Model?.BatchName ?? "")</div>
+    </div>
+
+    <div class="af-div"></div>
+
+    <div class="af-stats">
+        <div class="af-stat">
+            <div class="af-stat-val">@(Model?.StudentsCount ?? 0)</div>
+            <div class="af-stat-lbl">طالب</div>
+        </div>
+        <div class="af-stat">
+            <div class="af-stat-val" style="color:@(Model?.WeaknessPercentage >= 50 ? "var(--risk)" : "#22c55e");">@(Model?.WeaknessPercentage.ToString("0.#") ?? "0")%</div>
+            <div class="af-stat-lbl">ضعف</div>
+        </div>
+        <div class="af-stat">
+            <div class="af-stat-val">@(Model?.Instructors?.Count ?? 0)</div>
+            <div class="af-stat-lbl">مدرب</div>
+        </div>
+    </div>
+
+    <div class="af-div"></div>
+
+    @if (User.IsInRole("Owner") || User.IsInRole("Developer"))
+    {
+        <a class="af-link"
+       asp-area="Admin"
+           asp-controller="DecisionLab"
+           asp-action="RecommendationPreview"
+           asp-route-batchId="@Model?.BatchId"
+           asp-route-curriculumId="@Model?.CurriculumId"
+           asp-route-sourceArea="Admin"
+           asp-route-sourceController="Analytics"
+           asp-route-sourceAction="BatchPerformanceDetails"
+           asp-route-sourcePage="تحليل أداء الدفعة"
+           asp-route-returnUrl="@($"/Admin/Analytics/BatchPerformanceDetails?batchId={Model?.BatchId}&curriculumId={Model?.CurriculumId}&instructorId={Model?.InstructorId}")">
+        <i class="bi bi-lightbulb-fill"></i>
+        <span>معاينة توصية DecisionLab</span>
+        </a>
+    }
+
+    <form asp-area="Admin"
+          asp-controller="Analytics"
+          asp-action="SendBatchGuidanceToInstructors"
+          method="post"
+          style="display:contents;">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="batchId" value="@Model?.BatchId" />
+        <button type="submit" class="af-cta">
+            <i class="bi bi-send-fill"></i>
+            إرسال توجيه للمدربين
+        </button>
+    </form>
+
+</div>

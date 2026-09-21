@@ -1,0 +1,1130 @@
+﻿@model QdratNew.ViewModels.Homework.StudentHomeworkReviewViewModel
+@inject Microsoft.AspNetCore.Mvc.ViewEngines.ICompositeViewEngine ViewEngine
+
+@{
+    ViewData["Title"] = "مراجعة أسئلة الطالب";
+
+    var totalQuestions = Model.Questions?.Count ?? 0;
+    var answeredQuestions = Model.Questions?.Count(q => !string.IsNullOrWhiteSpace(q.Answer)) ?? 0;
+    var unansweredQuestions = totalQuestions - answeredQuestions;
+    var answeredPercent = totalQuestions > 0 ? Math.Round(answeredQuestions * 100.0 / totalQuestions, 1) : 0;
+}
+
+@section Styles {
+    <style>
+        :root {
+            --q-primary: #4f46e5;
+            --q-primary-lt: #ede9fe;
+            --q-success: #16a34a;
+            --q-success-lt: #dcfce7;
+            --q-danger: #dc2626;
+            --q-danger-lt: #fee2e2;
+            --q-warning: #d97706;
+            --q-warning-lt: #fef3c7;
+            --q-info: #0891b2;
+            --q-info-lt: #cffafe;
+            --q-skip: #6b7280;
+            --q-skip-lt: #f3f4f6;
+            --q-surface: #ffffff;
+            --q-bg: #f5f3ff;
+            --q-border: #e5e7eb;
+            --q-text: #1e1b4b;
+            --q-muted: #6b7280;
+            --q-radius: 16px;
+            --q-shadow: 0 2px 12px rgba(79,70,229,.08);
+            --q-shadow-lg: 0 6px 32px rgba(79,70,229,.13);
+            --q-transition: .2s cubic-bezier(.4,0,.2,1);
+        }
+
+        body {
+            background: var(--q-bg) !important;
+        }
+
+        .qlb-page {
+            direction: rtl;
+            font-family: 'Cairo', 'Tajawal', 'Segoe UI', sans-serif;
+            background: var(--q-bg);
+            padding: 2rem 1rem 4rem;
+            min-height: 100vh;
+        }
+
+        .qlb-shell {
+            max-width: 1320px;
+            margin: 0 auto;
+        }
+
+        .qlb-hero {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 55%, #a855f7 100%);
+            border-radius: var(--q-radius);
+            padding: 2.2rem 2rem;
+            color: #fff;
+            margin-bottom: 2rem;
+            box-shadow: var(--q-shadow-lg);
+            position: relative;
+            overflow: hidden;
+        }
+
+            .qlb-hero::before {
+                content: '';
+                position: absolute;
+                inset: 0;
+                background: radial-gradient(circle at 85% 50%, rgba(255,255,255,.10) 0%, transparent 60%);
+                pointer-events: none;
+            }
+
+        .qlb-hero-inner {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            justify-content: space-between;
+            gap: 1.2rem;
+            align-items: flex-start;
+            flex-wrap: wrap;
+        }
+
+        .qlb-hero-main {
+            min-width: 0;
+            flex: 1;
+        }
+
+        .qlb-hero-icon {
+            width: 56px;
+            height: 56px;
+            background: rgba(255,255,255,.18);
+            border: 1px solid rgba(255,255,255,.25);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.6rem;
+            margin-bottom: .8rem;
+        }
+
+        .qlb-hero h1 {
+            font-size: clamp(1.25rem, 2.8vw, 1.85rem);
+            font-weight: 900;
+            margin: 0 0 .45rem;
+            line-height: 1.4;
+        }
+
+        .qlb-hero-subtitle {
+            font-size: .96rem;
+            opacity: .92;
+            margin: 0;
+            line-height: 1.8;
+        }
+
+        .qlb-hero-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .6rem;
+            margin-top: .95rem;
+        }
+
+        .qlb-hero-pill {
+            background: rgba(255,255,255,.15);
+            border: 1px solid rgba(255,255,255,.22);
+            border-radius: 8px;
+            padding: .32rem .85rem;
+            font-size: .82rem;
+            font-weight: 800;
+            display: inline-flex;
+            align-items: center;
+            gap: .4rem;
+            white-space: nowrap;
+        }
+
+        .qlb-back-btn {
+            background: rgba(255,255,255,.15);
+            border: 1px solid rgba(255,255,255,.25);
+            color: #fff;
+            border-radius: 12px;
+            padding: .65rem 1rem;
+            font-weight: 900;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: .45rem;
+            transition: background .2s, transform .2s;
+        }
+
+            .qlb-back-btn:hover {
+                background: rgba(255,255,255,.24);
+                color: #fff;
+                transform: translateY(-1px);
+                text-decoration: none;
+            }
+
+        .qlb-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .qlb-stat {
+            background: var(--q-surface);
+            border-radius: var(--q-radius);
+            padding: 1.2rem 1rem;
+            box-shadow: var(--q-shadow);
+            border: 1px solid var(--q-border);
+            display: flex;
+            align-items: center;
+            gap: .9rem;
+            transition: transform .2s, box-shadow .2s;
+            min-height: 102px;
+        }
+
+            .qlb-stat:hover {
+                transform: translateY(-2px);
+                box-shadow: var(--q-shadow-lg);
+            }
+
+        .qlb-stat-ico {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+        }
+
+        .ico-blue {
+            background: var(--q-primary-lt);
+            color: var(--q-primary);
+        }
+
+        .ico-green {
+            background: var(--q-success-lt);
+            color: var(--q-success);
+        }
+
+        .ico-red {
+            background: var(--q-danger-lt);
+            color: var(--q-danger);
+        }
+
+        .ico-amber {
+            background: var(--q-warning-lt);
+            color: var(--q-warning);
+        }
+
+        .qlb-stat-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .qlb-stat-lbl {
+            font-size: .75rem;
+            color: var(--q-muted);
+            font-weight: 800;
+            margin-bottom: .28rem;
+        }
+
+        .qlb-stat-val {
+            font-size: 1.7rem;
+            font-weight: 900;
+            color: var(--q-text);
+            line-height: 1.2;
+        }
+
+        .qlb-stat-bar {
+            height: 4px;
+            background: var(--q-border);
+            border-radius: 99px;
+            margin-top: .55rem;
+            overflow: hidden;
+        }
+
+        .qlb-stat-fill {
+            height: 100%;
+            border-radius: 99px;
+            transition: width .8s ease;
+        }
+
+        .fill-g {
+            background: var(--q-success);
+        }
+
+        .fill-r {
+            background: var(--q-danger);
+        }
+
+        .fill-a {
+            background: var(--q-warning);
+        }
+
+        .qlb-alert {
+            background: #fff7ed;
+            color: #9a3412;
+            border: 1px solid #fed7aa;
+            border-right: 5px solid #f97316;
+            border-radius: var(--q-radius);
+            box-shadow: var(--q-shadow);
+            padding: .95rem 1.1rem;
+            margin-bottom: 1.5rem;
+            font-size: .9rem;
+            font-weight: 900;
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+        }
+
+        .qlb-section-head {
+            background: linear-gradient(90deg, var(--q-primary-lt), #ffffff);
+            border: 1px solid var(--q-border);
+            border-right: 5px solid var(--q-primary);
+            border-radius: var(--q-radius);
+            padding: 1rem 1.15rem;
+            margin-bottom: 1rem;
+            box-shadow: var(--q-shadow);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .85rem;
+            flex-wrap: wrap;
+        }
+
+        .qlb-section-title {
+            margin: 0;
+            color: var(--q-text);
+            font-size: 1.02rem;
+            font-weight: 900;
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+        }
+
+        .qlb-section-count {
+            background: var(--q-primary);
+            color: #fff;
+            border-radius: 99px;
+            padding: .25rem .75rem;
+            font-size: .78rem;
+            font-weight: 900;
+            display: inline-flex;
+            align-items: center;
+            gap: .32rem;
+        }
+
+        .qlb-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.25rem;
+        }
+
+        .qlb-card {
+            background: var(--q-surface);
+            border-radius: var(--q-radius);
+            box-shadow: var(--q-shadow);
+            border: 1px solid var(--q-border);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            transition: box-shadow .2s, transform .2s;
+            min-height: 100%;
+        }
+
+            .qlb-card:hover {
+                box-shadow: var(--q-shadow-lg);
+                transform: translateY(-2px);
+            }
+
+        .qlb-card-head {
+            background: linear-gradient(90deg, var(--q-primary-lt), #f5f3ff);
+            border-bottom: 1px solid var(--q-border);
+            padding: .85rem 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: .6rem;
+            flex-wrap: wrap;
+        }
+
+        .qlb-qnum {
+            min-width: 34px;
+            height: 34px;
+            border-radius: 8px;
+            background: var(--q-primary);
+            color: #fff;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: .85rem;
+            font-weight: 900;
+            flex-shrink: 0;
+            padding: 0 .45rem;
+        }
+
+        .qlb-status-badge {
+            font-size: .78rem;
+            font-weight: 900;
+            padding: .24rem .7rem;
+            border-radius: 99px;
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+        }
+
+        .status-answered {
+            background: var(--q-success-lt);
+            color: var(--q-success);
+        }
+
+        .status-unanswered {
+            background: var(--q-danger-lt);
+            color: var(--q-danger);
+        }
+
+        .qlb-question-id {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+            font-size: .75rem;
+            color: var(--q-muted);
+            font-weight: 800;
+            margin-right: auto;
+            max-width: 100%;
+        }
+
+            .qlb-question-id span {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                direction: ltr;
+            }
+
+        .qlb-card-body {
+            padding: 1.1rem;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: .9rem;
+        }
+
+        .qlb-qtitle {
+            font-size: .98rem;
+            color: var(--q-text);
+            line-height: 1.9;
+            font-weight: 900;
+            background: #ffffff;
+            border: 1px solid var(--q-border);
+            border-right: 4px solid var(--q-primary);
+            border-radius: 10px;
+            padding: .9rem 1rem;
+            min-height: 92px;
+        }
+
+            .qlb-qtitle strong {
+                font-weight: 900;
+            }
+
+            .qlb-qtitle img {
+                max-height: 80px;
+                max-width: 100%;
+                border-radius: 6px;
+                vertical-align: middle;
+            }
+
+            .qlb-qtitle p {
+                margin: 0;
+            }
+
+        .qlb-answer-box {
+            border-radius: 10px;
+            padding: .85rem 1rem;
+            border: 1px solid var(--q-border);
+            border-right: 4px solid var(--q-info);
+            background: var(--q-info-lt);
+        }
+
+            .qlb-answer-box.is-empty {
+                background: var(--q-danger-lt);
+                border-color: #fecaca;
+                border-right-color: var(--q-danger);
+            }
+
+        .qlb-answer-label {
+            font-size: .76rem;
+            font-weight: 900;
+            margin-bottom: .45rem;
+            display: flex;
+            align-items: center;
+            gap: .35rem;
+            color: var(--q-info);
+        }
+
+        .qlb-answer-box.is-empty .qlb-answer-label {
+            color: var(--q-danger);
+        }
+
+        .qlb-answer-text {
+            color: var(--q-text);
+            font-size: .9rem;
+            line-height: 1.75;
+            font-weight: 800;
+            word-break: break-word;
+        }
+
+        .qlb-card-foot {
+            background: #fafafa;
+            border-top: 1px solid var(--q-border);
+            padding: .72rem 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            flex-wrap: wrap;
+        }
+
+        .qlb-foot-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: .32rem;
+            font-size: .76rem;
+            font-weight: 900;
+            padding: .22rem .65rem;
+            border-radius: 99px;
+        }
+
+        .fc-primary {
+            background: var(--q-primary-lt);
+            color: var(--q-primary);
+        }
+
+        .fc-success {
+            background: var(--q-success-lt);
+            color: var(--q-success);
+        }
+
+        .fc-danger {
+            background: var(--q-danger-lt);
+            color: var(--q-danger);
+        }
+
+        .fc-muted {
+            background: var(--q-skip-lt);
+            color: var(--q-skip);
+            border: 1px solid var(--q-border);
+        }
+
+        .qlb-actions {
+            margin-right: auto;
+            display: flex;
+            align-items: center;
+            gap: .45rem;
+            flex-wrap: wrap;
+        }
+
+        .qlb-btn {
+            border-radius: 10px;
+            padding: .45rem .8rem;
+            font-size: .78rem;
+            font-weight: 900;
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+            text-decoration: none;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: transform .15s, box-shadow .15s, background .15s;
+        }
+
+            .qlb-btn:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 4px 14px rgba(15, 23, 42, .09);
+                text-decoration: none;
+            }
+
+        .qlb-btn-info {
+            background: var(--q-info-lt);
+            color: var(--q-info);
+            border-color: #67e8f9;
+        }
+
+        .qlb-btn-warning {
+            background: var(--q-warning-lt);
+            color: var(--q-warning);
+            border-color: #fcd34d;
+        }
+
+        .qlb-empty {
+            border: 1px dashed var(--q-border);
+            background: var(--q-skip-lt);
+            color: var(--q-muted);
+            border-radius: 14px;
+            padding: 1.5rem;
+            text-align: center;
+            font-size: .9rem;
+            font-weight: 900;
+        }
+
+        .qlb-modal .modal-content {
+            background: #ffffff !important;
+            border: 1px solid #334155;
+            border-radius: var(--q-radius);
+            color: #0f172a;
+            overflow: hidden;
+            box-shadow: 0 24px 70px rgba(15, 23, 42, 0.35);
+        }
+
+        .qlb-modal .modal-header {
+            background: #111827;
+            border-bottom: 1px solid #334155;
+            padding: 16px 22px;
+        }
+
+        .qlb-modal .modal-title {
+            font-size: 15px;
+            font-weight: 900;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .qlb-modal .modal-body {
+            padding: 0 !important;
+            background: #f8fafc !important;
+        }
+
+        .qlb-modal .btn-close {
+            filter: invert(1) brightness(1.7);
+            opacity: 1;
+        }
+
+        #previewModalBody {
+            background: #f8fafc !important;
+            color: #0f172a !important;
+            font-size: 15px !important;
+            font-weight: 600 !important;
+            line-height: 1.9 !important;
+            padding: 22px !important;
+            min-height: 260px;
+        }
+
+            #previewModalBody > * {
+                color: #0f172a !important;
+            }
+
+            #previewModalBody p,
+            #previewModalBody div,
+            #previewModalBody span,
+            #previewModalBody label,
+            #previewModalBody strong,
+            #previewModalBody small,
+            #previewModalBody li {
+                color: #0f172a !important;
+                font-size: 15px !important;
+                font-weight: 600 !important;
+                line-height: 1.9 !important;
+                opacity: 1 !important;
+            }
+
+            #previewModalBody .card,
+            #previewModalBody .question-card,
+            #previewModalBody .question-preview-card,
+            #previewModalBody .q-card,
+            #previewModalBody .preview-box,
+            #previewModalBody .question-box,
+            #previewModalBody .student-answer-box,
+            #previewModalBody .answer-review-box,
+            #previewModalBody .review-card,
+            #previewModalBody .result-card {
+                background: #ffffff !important;
+                color: #0f172a !important;
+                border: 1px solid #dbe4ef !important;
+                border-radius: 16px !important;
+                box-shadow: 0 10px 24px rgba(15, 23, 42, 0.10) !important;
+                padding: 18px !important;
+            }
+
+            #previewModalBody h1,
+            #previewModalBody h2,
+            #previewModalBody h3,
+            #previewModalBody h4,
+            #previewModalBody h5,
+            #previewModalBody h6,
+            #previewModalBody .question-title,
+            #previewModalBody .q-title,
+            #previewModalBody .title {
+                color: #0f172a !important;
+                font-weight: 900 !important;
+                opacity: 1 !important;
+            }
+
+            #previewModalBody .question-text,
+            #previewModalBody .q-text,
+            #previewModalBody .question-content,
+            #previewModalBody .preview-question-text {
+                color: #0f172a !important;
+                font-size: 16px !important;
+                font-weight: 900 !important;
+                line-height: 1.9 !important;
+                opacity: 1 !important;
+            }
+
+            #previewModalBody .option,
+            #previewModalBody .answer-option,
+            #previewModalBody .choice,
+            #previewModalBody .option-card,
+            #previewModalBody .answer-card,
+            #previewModalBody .q-option,
+            #previewModalBody .list-group-item {
+                background: #ffffff !important;
+                color: #0f172a !important;
+                border: 1px solid #cbd5e1 !important;
+                border-radius: 14px !important;
+                font-weight: 700 !important;
+                opacity: 1 !important;
+                margin-bottom: 8px;
+            }
+
+                #previewModalBody .option *,
+                #previewModalBody .answer-option *,
+                #previewModalBody .choice *,
+                #previewModalBody .option-card *,
+                #previewModalBody .answer-card *,
+                #previewModalBody .q-option *,
+                #previewModalBody .list-group-item * {
+                    color: #0f172a !important;
+                    opacity: 1 !important;
+                }
+
+                #previewModalBody .correct,
+                #previewModalBody .is-correct,
+                #previewModalBody .correct-answer,
+                #previewModalBody .answer-option.correct,
+                #previewModalBody .option-card.correct,
+                #previewModalBody .choice.correct {
+                    background: #dcfce7 !important;
+                    color: #14532d !important;
+                    border: 2px solid #16a34a !important;
+                    font-weight: 900 !important;
+                }
+
+            #previewModalBody .wrong,
+            #previewModalBody .is-wrong,
+            #previewModalBody .wrong-answer,
+            #previewModalBody .student-wrong-answer {
+                background: #fee2e2 !important;
+                color: #991b1b !important;
+                border: 2px solid #dc2626 !important;
+                font-weight: 900 !important;
+            }
+
+            #previewModalBody .badge,
+            #previewModalBody .badge-success,
+            #previewModalBody .bg-success,
+            #previewModalBody .correct-badge {
+                background: #16a34a !important;
+                color: #ffffff !important;
+                border: 1px solid #15803d !important;
+                font-weight: 900 !important;
+                opacity: 1 !important;
+            }
+
+            #previewModalBody .bg-danger,
+            #previewModalBody .badge-danger,
+            #previewModalBody .wrong-badge {
+                background: #dc2626 !important;
+                color: #ffffff !important;
+                border: 1px solid #b91c1c !important;
+                font-weight: 900 !important;
+                opacity: 1 !important;
+            }
+
+            #previewModalBody img {
+                opacity: 1 !important;
+                max-width: 100% !important;
+                height: auto !important;
+                border-radius: 12px;
+            }
+
+            #previewModalBody audio,
+            #previewModalBody video {
+                max-width: 520px !important;
+                width: 100% !important;
+                border-radius: 12px;
+            }
+
+        @@media (max-width: 992px) {
+            .qlb-stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .qlb-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @@media (max-width: 576px) {
+            .qlb-page {
+                padding: 1rem .7rem 3rem;
+            }
+
+            .qlb-hero {
+                padding: 1.5rem 1.1rem;
+            }
+
+            .qlb-stats {
+                grid-template-columns: 1fr;
+            }
+
+            .qlb-card-foot {
+                align-items: stretch;
+            }
+
+            .qlb-foot-chip,
+            .qlb-actions,
+            .qlb-btn {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .qlb-actions {
+                margin-right: 0;
+            }
+
+            .qlb-question-id {
+                width: 100%;
+                margin-right: 0;
+            }
+
+            .qlb-modal .modal-dialog {
+                margin: 8px;
+            }
+
+            #previewModalBody {
+                padding: 14px !important;
+            }
+        }
+    </style>
+}
+
+<div class="qlb-page" dir="rtl">
+    <div class="qlb-shell">
+
+        <!-- Hero -->
+        <div class="qlb-hero">
+            <div class="qlb-hero-inner">
+                <div class="qlb-hero-main">
+                    <div class="qlb-hero-icon">
+                        <i class="fas fa-clipboard-check"></i>
+                    </div>
+
+                    <h1>مراجعة أسئلة الطالب</h1>
+
+                    <p class="qlb-hero-subtitle">
+                        مراجعة إجابات الطالب داخل الواجب، معاينة السؤال بإجابة الطالب، والانتقال لتعديل السؤال من نفس الواجهة.
+                    </p>
+
+                    <div class="qlb-hero-meta">
+                        <span class="qlb-hero-pill">
+                            <i class="fas fa-user-graduate"></i>
+                            @Model.StudentName
+                        </span>
+
+                        <span class="qlb-hero-pill">
+                            <i class="fas fa-layer-group"></i>
+                            رقم الواجب: @Model.HomeworkSetId
+                        </span>
+
+                        <span class="qlb-hero-pill">
+                            <i class="fas fa-eye"></i>
+                            معاينة مباشرة للسؤال والإجابة
+                        </span>
+                    </div>
+                </div>
+
+                <a asp-action="Details"
+                   asp-route-id="@Model.HomeworkSetId"
+                   class="qlb-back-btn">
+                    <i class="fas fa-arrow-right"></i>
+                    رجوع لتفاصيل الواجب
+                </a>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="qlb-stats">
+            <div class="qlb-stat">
+                <div class="qlb-stat-ico ico-blue">
+                    <i class="fas fa-question-circle"></i>
+                </div>
+                <div class="qlb-stat-content">
+                    <div class="qlb-stat-lbl">إجمالي الأسئلة</div>
+                    <div class="qlb-stat-val">@totalQuestions</div>
+                </div>
+            </div>
+
+            <div class="qlb-stat">
+                <div class="qlb-stat-ico ico-green">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <div class="qlb-stat-content">
+                    <div class="qlb-stat-lbl">أسئلة مجابة</div>
+                    <div class="qlb-stat-val" style="color:var(--q-success)">@answeredQuestions</div>
+                    <div class="qlb-stat-bar">
+                        <div class="qlb-stat-fill fill-g" style="width:@answeredPercent%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="qlb-stat">
+                <div class="qlb-stat-ico ico-red">
+                    <i class="fas fa-circle-xmark"></i>
+                </div>
+                <div class="qlb-stat-content">
+                    <div class="qlb-stat-lbl">بدون إجابة</div>
+                    <div class="qlb-stat-val" style="color:var(--q-danger)">@unansweredQuestions</div>
+                    <div class="qlb-stat-bar">
+                        <div class="qlb-stat-fill fill-r" style="width:@(totalQuestions > 0 ? Math.Round(unansweredQuestions * 100.0 / totalQuestions, 1) : 0)%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="qlb-stat">
+                <div class="qlb-stat-ico ico-amber">
+                    <i class="fas fa-chart-pie"></i>
+                </div>
+                <div class="qlb-stat-content">
+                    <div class="qlb-stat-lbl">نسبة الإجابة</div>
+                    <div class="qlb-stat-val" style="color:var(--q-warning)">@answeredPercent%</div>
+                    <div class="qlb-stat-bar">
+                        <div class="qlb-stat-fill fill-a" style="width:@answeredPercent%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (unansweredQuestions > 0)
+        {
+            <div class="qlb-alert">
+                <i class="fas fa-triangle-exclamation"></i>
+                يوجد @unansweredQuestions سؤال بدون إجابة من الطالب داخل هذا الواجب.
+            </div>
+        }
+
+        <!-- Section Header -->
+        <div class="qlb-section-head">
+            <h2 class="qlb-section-title">
+                <i class="fas fa-table-list"></i>
+                أسئلة الطالب داخل الواجب
+            </h2>
+
+            <span class="qlb-section-count">
+                <i class="fas fa-question-circle"></i>
+                @totalQuestions سؤال
+            </span>
+        </div>
+
+        <!-- Questions Grid -->
+        @if (Model.Questions != null && Model.Questions.Any())
+        {
+            <div class="qlb-grid">
+                @foreach (var item in Model.Questions.Select((q, index) => new { q, index }))
+                {
+                    var q = item.q;
+                    var questionIndex = item.index + 1;
+                    var isUnanswered = string.IsNullOrWhiteSpace(q.Answer);
+                    var questionText = q.QuestionText ?? "";
+                    var statusClass = isUnanswered ? "status-unanswered" : "status-answered";
+                    var statusIcon = isUnanswered ? "fa-xmark" : "fa-check";
+                    var statusText = isUnanswered ? "بدون إجابة" : "تمت الإجابة";
+
+                    <div class="qlb-card">
+
+                        <!-- Card Header -->
+                        <div class="qlb-card-head">
+                            <div class="qlb-qnum">
+                                @questionIndex
+                            </div>
+
+                            <span class="qlb-status-badge @statusClass">
+                                <i class="fas @statusIcon"></i>
+                                @statusText
+                            </span>
+
+                            <span class="qlb-question-id" title="@q.QuestionId">
+                                <i class="fas fa-fingerprint"></i>
+                                <span>@q.QuestionId</span>
+                            </span>
+                        </div>
+
+                        <!-- Card Body -->
+                        <div class="qlb-card-body">
+
+                            <!-- Question Text - Bold -->
+                            <div class="qlb-qtitle">
+                                <strong>
+                                    @Html.Raw(questionText)
+                                </strong>
+                            </div>
+
+                            <!-- Student Answer -->
+                            <div class="qlb-answer-box @(isUnanswered ? "is-empty" : "")">
+                                <div class="qlb-answer-label">
+                                    @if (isUnanswered)
+                                    {
+                                        <i class="fas fa-circle-exclamation"></i>
+                                        <span>إجابة الطالب</span>
+                                    }
+                                    else
+                                    {
+                                        <i class="fas fa-user-check"></i>
+                                        <span>إجابة الطالب</span>
+                                    }
+                                </div>
+
+                                <div class="qlb-answer-text">
+                                    @if (isUnanswered)
+                                    {
+                                        <span>لم يقم الطالب بالإجابة على هذا السؤال.</span>
+                                    }
+                                    else
+                                    {
+                                        @Html.Raw(q.Answer)
+                                    }
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <!-- Card Footer -->
+                        <div class="qlb-card-foot">
+                            <span class="qlb-foot-chip fc-primary">
+                                <i class="fas fa-hash"></i>
+                                سؤال رقم: @questionIndex
+                            </span>
+
+                            @if (isUnanswered)
+                            {
+                                <span class="qlb-foot-chip fc-danger">
+                                    <i class="fas fa-xmark"></i>
+                                    بدون إجابة
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="qlb-foot-chip fc-success">
+                                    <i class="fas fa-check"></i>
+                                    تمت الإجابة
+                                </span>
+                            }
+
+                            <div class="qlb-actions">
+                                <button class="qlb-btn qlb-btn-info"
+                                        type="button"
+                                        title="معاينة السؤال"
+                                        onclick="loadQuestionPreview('@q.QuestionId', @Model.StudentId, @Model.HomeworkSetId)">
+                                    <i class="fas fa-eye"></i>
+                                    معاينة
+                                </button>
+
+                                <a asp-area="Admin"
+                                   asp-controller="Questions"
+                                   asp-action="Edit"
+                                   asp-route-id="@q.QuestionId"
+                                   target="_blank"
+                                   class="qlb-btn qlb-btn-warning"
+                                   title="تعديل السؤال">
+                                    <i class="fas fa-pen"></i>
+                                    تعديل السؤال
+                                </a>
+                            </div>
+                        </div>
+
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="qlb-empty">
+                <i class="fas fa-info-circle"></i>
+                لا توجد أسئلة مرتبطة بهذا الواجب.
+            </div>
+        }
+
+    </div>
+</div>
+
+<div class="modal fade qlb-modal" id="previewModal" tabindex="-1" aria-hidden="true" dir="rtl">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content text-end">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-eye" style="color:#60a5fa;"></i>
+                    معاينة السؤال
+                </h5>
+
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body" id="previewModalBody">
+                <div class="qlb-empty">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p>جارٍ التحميل...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function loadQuestionPreview(questionId, studentId, homeworkSetId) {
+            const body = document.getElementById("previewModalBody");
+
+            body.innerHTML = `
+                <div class="qlb-empty">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p>جارٍ التحميل...</p>
+                </div>`;
+
+            const modal = new bootstrap.Modal(document.getElementById("previewModal"));
+            modal.show();
+
+            fetch(`/Admin/HomeworkManagement/PreviewQuestion`
+                + `?id=${questionId}`
+                + `&studentId=${studentId}`
+                + `&homeworkSetId=${homeworkSetId}`)
+                .then(async res => {
+                    if (!res.ok) {
+                        throw new Error("HTTP_" + res.status);
+                    }
+
+                    const html = await res.text();
+
+                    if (html.includes("System.InvalidOperationException") || html.includes("DeveloperExceptionPage")) {
+                        throw new Error("SERVER_EXCEPTION");
+                    }
+
+                    return html;
+                })
+                .then(html => {
+                    body.innerHTML = html;
+                })
+                .catch(error => {
+                    body.innerHTML = `
+                        <div class="qlb-empty">
+                            <i class="fas fa-exclamation-triangle text-danger"></i>
+                            <h5 style="color:#991b1b;font-weight:900;">تعذر تحميل معاينة السؤال</h5>
+                            <p style="color:#475569;font-weight:800;">
+                                يوجد خطأ في صلاحيات أكشن المعاينة أو في تحميل البارشال.
+                            </p>
+                            <div style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:12px;padding:12px;margin-top:14px;font-weight:900;">
+                                تأكد من تسجيل Policy باسم:
+                                <br />
+                                <code>HomeworkManagement:Review</code>
+                            </div>
+                        </div>`;
+
+                    if (typeof Swal !== "undefined") {
+                        Swal.fire('خطأ!', 'تعذر تحميل معاينة السؤال. راجع إعدادات الصلاحيات.', 'error');
+                    }
+                });
+        }
+    </script>
+}

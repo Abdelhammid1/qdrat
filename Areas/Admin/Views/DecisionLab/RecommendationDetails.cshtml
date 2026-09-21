@@ -1,0 +1,1016 @@
+﻿@using System.Text.Encodings.Web
+@using System.Text.Json
+@using System.Text.RegularExpressions
+@model QdratNew.ViewModels.Admin.DecisionLab.DecisionRecommendationDetailsPageViewModel
+<link rel="stylesheet" href="~/css/decision-analytics-ui.css" asp-append-version="true" />
+
+@functions {
+    static string FormatJson(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "{}";
+        try
+        {
+            using var doc = JsonDocument.Parse(value);
+            return JsonSerializer.Serialize(doc.RootElement,
+                new JsonSerializerOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping, WriteIndented = true });
+        }
+        catch { return Regex.Replace(value, @"\\u([0-9a-fA-F]{4})", m => ((char)Convert.ToInt32(m.Groups[1].Value, 16)).ToString()); }
+    }
+    static string Str(JsonElement root, string key) =>
+        root.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
+    static double Dbl(JsonElement root, string key) =>
+        root.TryGetProperty(key, out var v) ? (v.ValueKind == JsonValueKind.Number ? v.GetDouble() : 0) : 0;
+    static int Int(JsonElement root, string key) =>
+        root.TryGetProperty(key, out var v) ? (v.ValueKind == JsonValueKind.Number ? v.GetInt32() : 0) : 0;
+    static bool Bool(JsonElement root, string key, bool def = false) =>
+        root.TryGetProperty(key, out var v) ? (v.ValueKind == JsonValueKind.True) : def;
+}
+
+@{
+    var rec   = Model.Recommendation;
+    var task  = Model.ExistingInterventionTask;
+    bool isApproved = rec.Status == "Approved";
+    bool isPending  = rec.Status == "PendingReview";
+
+    // ── Parse RecommendationJson ──
+    string recTitle = rec.RecommendationType, recPriority = "", recInterventionType = rec.RecommendationType;
+    string recReason = rec.Reason, recSuggestedAction = "", recWarning = "", recCode = "";
+    int    recImpactScore = 0;
+    bool   recRequiresApproval = true, recCanExamDraft = false;
+    try
+    {
+        using var rDoc  = JsonDocument.Parse(rec.RecommendationJson);
+        var rRoot = rDoc.RootElement;
+        recTitle            = Str(rRoot, "Title") is { Length: > 0 } t ? t : rec.RecommendationType;
+        recPriority         = Str(rRoot, "Priority");
+        recInterventionType = Str(rRoot, "InterventionType");
+        recReason           = Str(rRoot, "Reason") is { Length: > 0 } r ? r : rec.Reason;
+        recSuggestedAction  = Str(rRoot, "SuggestedAction");
+        recWarning          = Str(rRoot, "WarningMessage");
+        recCode             = Str(rRoot, "Code");
+        recImpactScore      = Int(rRoot, "ImpactScore");
+        recRequiresApproval = Bool(rRoot, "RequiresApproval", true);
+        recCanExamDraft     = Bool(rRoot, "CanCreateExamDraft");
+    }
+    catch { }
+
+    // ── Parse InputSnapshotJson ──
+    string batchName = "", courseName = "", curriculumTitle = "";
+    int    activeStudents = 0, weakLessonsCount = 0, highRiskQCount = 0;
+    int    sentHomework = 0, sentExams = 0;
+    double attendancePct = 0, hwSubmitPct = 0, hwScorePct = 0;
+    double examPartPct = 0, examScorePct = 0, overallRiskScore = 0;
+    string riskLevel = "", decisionMessage = "";
+    double attRisk = 0, hwRisk = 0, examRisk = 0, weakRisk = 0, qRisk = 0;
+    string attSignal = "", hwSignal = "", examSignal = "", weakSignal = "", qSignal = "";
+    bool   hasSnapshot = false;
+    try
+    {
+        using var sDoc  = JsonDocument.Parse(rec.InputSnapshotJson);
+        var sRoot = sDoc.RootElement;
+        batchName        = Str(sRoot, "BatchName");
+        courseName       = Str(sRoot, "CourseName");
+        curriculumTitle  = Str(sRoot, "CurriculumTitle");
+        activeStudents   = Int(sRoot, "ActiveStudentsCount");
+        weakLessonsCount = Int(sRoot, "WeakLessonsCount");
+        highRiskQCount   = Int(sRoot, "HighRiskQuestionsCount");
+        sentHomework     = Int(sRoot, "SentHomeworkSetsCount");
+        sentExams        = Int(sRoot, "SentExamsCount");
+        attendancePct    = Dbl(sRoot, "AttendancePercent");
+        hwSubmitPct      = Dbl(sRoot, "HomeworkSubmissionPercent");
+        hwScorePct       = Dbl(sRoot, "AverageHomeworkScore");
+        examPartPct      = Dbl(sRoot, "ExamParticipationPercent");
+        examScorePct     = Dbl(sRoot, "AverageExamScore");
+        overallRiskScore = Dbl(sRoot, "RiskScore");
+        riskLevel        = Str(sRoot, "RiskLevel");
+        decisionMessage  = Str(sRoot, "DecisionMessage");
+        if (sRoot.TryGetProperty("RiskBreakdown", out var rb))
+        {
+            attRisk    = Dbl(rb, "AttendanceRiskScore");
+            hwRisk     = Dbl(rb, "HomeworkRiskScore");
+            examRisk   = Dbl(rb, "ExamRiskScore");
+            weakRisk   = Dbl(rb, "WeakLessonRiskScore");
+            qRisk      = Dbl(rb, "QuestionRiskScore");
+            attSignal  = Str(rb, "AttendanceSignal");
+            hwSignal   = Str(rb, "HomeworkSignal");
+            examSignal = Str(rb, "ExamSignal");
+            weakSignal = Str(rb, "WeakLessonSignal");
+            qSignal    = Str(rb, "QuestionSignal");
+        }
+        hasSnapshot = true;
+    }
+    catch { }
+
+    // ── Color helpers ──
+    string PriColor(string p) => p == "عاجل" ? "#dc2626" : p == "مرتفع" ? "#d97706" : p == "متوسط" ? "#ca8a04" : "#16a34a";
+    string PriBg(string p)    => p == "عاجل" ? "#fee2e2" : p == "مرتفع" ? "#fef3c7" : p == "متوسط" ? "#fef9c3" : "#dcfce7";
+    int    PriLevel(string p) => p == "عاجل" ? 4 : p == "مرتفع" ? 3 : p == "متوسط" ? 2 : 1;
+
+    string SColor(string s) => s == "PendingReview" || s == "Pending" ? "#0891b2" : s == "Approved" ? "#16a34a" : s == "Rejected" ? "#dc2626" : "#6b7280";
+    string SBg(string s)    => s == "PendingReview" || s == "Pending" ? "#cffafe" : s == "Approved" ? "#dcfce7" : s == "Rejected" ? "#fee2e2" : "#f3f4f6";
+    string SAr(string s)    => s == "PendingReview" ? "بانتظار المراجعة" : s == "Approved" ? "معتمد" : s == "Rejected" ? "مرفوض" : s;
+    string SIcon(string s)  => s == "PendingReview" ? "fa-clock" : s == "Approved" ? "fa-circle-check" : s == "Rejected" ? "fa-circle-xmark" : "fa-circle";
+    string RLColor(string r) => r == "حرج" ? "#dc2626" : r == "مرتفع" ? "#d97706" : r == "متوسط" ? "#ca8a04" : "#16a34a";
+    string RLBg(string r)    => r == "حرج" ? "#fee2e2" : r == "مرتفع" ? "#fef3c7" : r == "متوسط" ? "#fef9c3" : "#dcfce7";
+    string SignalColor(string sg) => sg is "خطر" or "حرج" ? "#dc2626" : sg is "تحذير" or "مرتفع" ? "#d97706" : sg is "طبيعي" or "منخفض" ? "#16a34a" : "#6b7280";
+
+    string intIcon  = recInterventionType == "DataReview" ? "fa-database" : recInterventionType == "AttendanceFollowUp" ? "fa-user-clock" : recInterventionType == "HomeworkSupport" ? "fa-clipboard-list" : recInterventionType == "ShortRemedialExam" ? "fa-file-pen" : recInterventionType == "InstructorGuidance" ? "fa-chalkboard-user" : recInterventionType == "MixedIntervention" ? "fa-layer-group" : recInterventionType == "MonitorOnly" ? "fa-eye" : "fa-circle-info";
+    string intColor = recInterventionType == "DataReview" ? "#0891b2" : recInterventionType == "AttendanceFollowUp" ? "#d97706" : recInterventionType == "HomeworkSupport" ? "#1e40af" : recInterventionType == "ShortRemedialExam" ? "#7c3aed" : recInterventionType == "InstructorGuidance" ? "#16a34a" : recInterventionType == "MixedIntervention" ? "#dc2626" : "#6b7280";
+    string intLabel = recInterventionType == "DataReview" ? "مراجعة البيانات" : recInterventionType == "AttendanceFollowUp" ? "متابعة الحضور" : recInterventionType == "HomeworkSupport" ? "دعم الواجبات" : recInterventionType == "ShortRemedialExam" ? "اختبار تشخيصي" : recInterventionType == "InstructorGuidance" ? "توجيه المعلم" : recInterventionType == "MixedIntervention" ? "تدخل مختلط" : recInterventionType == "MonitorOnly" ? "مراقبة فقط" : recInterventionType;
+
+    string gaugeColor = recImpactScore >= 75 ? "#dc2626" : recImpactScore >= 50 ? "#d97706" : recImpactScore >= 25 ? "#ca8a04" : "#16a34a";
+    string rGaugeColor = overallRiskScore >= 75 ? "#dc2626" : overallRiskScore >= 50 ? "#d97706" : overallRiskScore >= 25 ? "#ca8a04" : "#16a34a";
+    int    priLevel = PriLevel(recPriority);
+
+    string TSAr(string s) => s == "Pending" ? "معلّق" : s == "Assigned" ? "مُسنَد" : s == "InProgress" ? "قيد التنفيذ" : s == "Completed" ? "مكتملة" : s == "Cancelled" ? "ملغاة" : s;
+    string TSColor(string s) => s == "Completed" ? "#16a34a" : s == "InProgress" ? "#d97706" : s == "Assigned" ? "#0891b2" : s == "Cancelled" ? "#dc2626" : "#6b7280";
+}
+
+<div class="qd-page" dir="rtl">
+
+    
+    <section class="dl-header">
+        <div style="position:relative;z-index:1">
+            <div class="dl-eyebrow mb-1">
+                <i class="fas fa-brain me-1"></i>DecisionLab · تفاصيل التوصية #@rec.Id
+            </div>
+            <h1 class="mb-1">@(recTitle.Length > 0 ? recTitle : "تفاصيل التوصية")</h1>
+            <p class="mb-0">راجع بيانات التوصية ومؤشرات الخطر واتخذ قرارك بالاعتماد والتنفيذ</p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap align-items-center" style="position:relative;z-index:1">
+            @if (rec.BatchId.HasValue)
+            {
+                <a class="btn btn-light btn-sm"
+                   asp-area="Admin" asp-controller="Analytics" asp-action="BatchPerformanceDetails"
+                   asp-route-batchId="@rec.BatchId.Value" asp-route-curriculumId="@rec.CurriculumId">
+                    <i class="fas fa-chart-bar me-1"></i>تحليل الدفعة
+                </a>
+                <a class="btn btn-outline-light btn-sm"
+                   asp-area="Admin" asp-controller="DecisionLab" asp-action="RecommendationPreview"
+                   asp-route-batchId="@rec.BatchId.Value" asp-route-curriculumId="@rec.CurriculumId">
+                    <i class="fas fa-eye me-1"></i>معاينة التوصية
+                </a>
+            }
+            <a class="btn btn-outline-light btn-sm"
+               asp-area="Admin" asp-controller="DecisionLab" asp-action="SavedRecommendations">
+                <i class="fas fa-arrow-right me-1"></i>رجوع
+            </a>
+        </div>
+    </section>
+
+    
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-md-3">
+            <div class="rd-kpi" style="border-top-color:@SColor(rec.Status)">
+                <div class="rd-kpi-icon" style="background:@SBg(rec.Status);color:@SColor(rec.Status)">
+                    <i class="fas @SIcon(rec.Status)"></i>
+                </div>
+                <div class="rd-kpi-label">حالة التوصية</div>
+                <div class="rd-kpi-val" style="color:@SColor(rec.Status)">@SAr(rec.Status)</div>
+            </div>
+        </div>
+        @if (hasSnapshot && riskLevel.Length > 0)
+        {
+            <div class="col-6 col-md-3">
+                <div class="rd-kpi" style="border-top-color:@RLColor(riskLevel)">
+                    <div class="rd-kpi-icon" style="background:@RLBg(riskLevel);color:@RLColor(riskLevel)">
+                        <i class="fas fa-triangle-exclamation"></i>
+                    </div>
+                    <div class="rd-kpi-label">مستوى الخطر</div>
+                    <div class="rd-kpi-val" style="color:@RLColor(riskLevel)">@riskLevel</div>
+                </div>
+            </div>
+        }
+        @if (recImpactScore > 0)
+        {
+            <div class="col-6 col-md-3">
+                <div class="rd-kpi" style="border-top-color:@gaugeColor">
+                    <div class="rd-kpi-icon" style="background:@(gaugeColor + "20");color:@gaugeColor">
+                        <i class="fas fa-gauge-high"></i>
+                    </div>
+                    <div class="rd-kpi-label">درجة الأثر</div>
+                    <div class="rd-kpi-val" style="color:@gaugeColor">@recImpactScore<span style="font-size:14px">%</span></div>
+                </div>
+            </div>
+        }
+        @if (recPriority.Length > 0)
+        {
+            <div class="col-6 col-md-3">
+                <div class="rd-kpi" style="border-top-color:@PriColor(recPriority)">
+                    <div class="rd-kpi-icon" style="background:@PriBg(recPriority);color:@PriColor(recPriority)">
+                        <i class="fas fa-fire"></i>
+                    </div>
+                    <div class="rd-kpi-label">الأولوية</div>
+                    <div class="rd-kpi-val" style="color:@PriColor(recPriority)">@recPriority</div>
+                </div>
+            </div>
+        }
+    </div>
+
+    
+    <div class="row g-3 mb-3">
+
+        
+        <div class="col-lg-8">
+            <div class="dl-recommendation d-flex flex-column gap-3 h-100">
+
+                
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <span class="rd-cat-badge"><i class="fas fa-tag me-1"></i>@rec.SourceType</span>
+                        <span class="rd-engine-badge"><i class="fas fa-microchip me-1"></i>@rec.EngineType</span>
+                        @if (recCode.Length > 0)
+                        {
+                            <code class="rd-code-badge">@recCode</code>
+                        }
+                    </div>
+                    @if (recPriority.Length > 0)
+                    {
+                        <span class="rd-pri-badge" style="background:@PriBg(recPriority);color:@PriColor(recPriority);border-color:@PriColor(recPriority)">
+                            <i class="fas fa-circle-dot me-1"></i>@recPriority
+                        </span>
+                    }
+                </div>
+
+                
+                @if (recPriority.Length > 0)
+                {
+                    <div>
+                        <div class="rd-bar-labels">
+                            <span>منخفض</span><span>متوسط</span><span>مرتفع</span><span>عاجل</span>
+                        </div>
+                        <div class="rd-priority-bar">
+                            @for (int sg = 1; sg <= 4; sg++)
+                            {
+                                var sc = sg == 1 ? "#16a34a" : sg == 2 ? "#ca8a04" : sg == 3 ? "#d97706" : "#dc2626";
+                                var ra = sg == 1 ? "8px 0 0 8px" : sg == 4 ? "0 8px 8px 0" : "0";
+                                <div style="flex:1;height:10px;background:@(priLevel >= sg ? sc : "#e5e7eb");border-radius:@ra;position:relative">
+                                    @if (priLevel == sg)
+                                    {
+                                        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:14px;height:14px;background:#fff;border-radius:50%;border:2px solid currentColor;box-shadow:0 0 0 3px rgba(0,0,0,.12)"></div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+
+                
+                <div class="rd-block">
+                    <div class="rd-block-label"><i class="fas fa-clipboard-question me-1"></i>سبب التوصية</div>
+                    <p class="rd-block-text mb-0">@recReason</p>
+                </div>
+
+                
+                @if (rec.Summary.Length > 0 && rec.Summary != recReason)
+                {
+                    <div class="rd-block">
+                        <div class="rd-block-label"><i class="fas fa-align-right me-1"></i>الملخص</div>
+                        <p class="rd-block-text mb-0">@rec.Summary</p>
+                    </div>
+                }
+
+                
+                @if (intLabel.Length > 0)
+                {
+                    <div class="rd-intervention" style="border-inline-start-color:@intColor">
+                        <div class="rd-int-icon" style="background:@(intColor + "20");color:@intColor">
+                            <i class="fas @intIcon fa-lg"></i>
+                        </div>
+                        <div>
+                            <div class="rd-int-lbl">نوع التدخل</div>
+                            <div class="rd-int-val">@intLabel</div>
+                            <code class="rd-int-code">@recInterventionType</code>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        
+        <div class="col-lg-4">
+            <div class="dl-recommendation d-flex flex-column gap-4 align-items-center">
+
+                
+                @if (recImpactScore > 0)
+                {
+                    <div class="rd-gauge-label">درجة الأثر المتوقع</div>
+                    <div style="position:relative;width:200px;height:120px;flex-shrink:0">
+                        <canvas id="impactGauge" width="200" height="120"></canvas>
+                        <div class="rd-gauge-num" style="color:@gaugeColor">@recImpactScore<span class="rd-gauge-pct">%</span></div>
+                    </div>
+                }
+
+                
+                @if (hasSnapshot && overallRiskScore > 0)
+                {
+                    <div class="rd-gauge-label">درجة الخطر</div>
+                    <div style="position:relative;width:160px;height:96px;flex-shrink:0">
+                        <canvas id="riskGauge" width="160" height="96"></canvas>
+                        <div class="rd-gauge-num rd-gauge-sm" style="color:@rGaugeColor">@((int)overallRiskScore)<span class="rd-gauge-pct">%</span></div>
+                    </div>
+                }
+
+                
+                <div class="w-100 rd-metrics-box">
+                    <div class="rd-meta-row">
+                        <span><i class="fas fa-shield-check text-primary me-1"></i>يتطلب اعتمادًا</span>
+                        <strong style="color:@(recRequiresApproval ? "#dc2626" : "#16a34a")">@(recRequiresApproval ? "نعم" : "لا")</strong>
+                    </div>
+                    <div class="rd-meta-row">
+                        <span><i class="fas fa-calendar-days text-muted me-1"></i>تاريخ الإنشاء</span>
+                        <strong>@rec.CreatedAt.ToString("yyyy/MM/dd")</strong>
+                    </div>
+                    @if (rec.ApprovedAt.HasValue)
+                    {
+                        <div class="rd-meta-row">
+                            <span><i class="fas fa-circle-check text-success me-1"></i>تاريخ الاعتماد</span>
+                            <strong>@rec.ApprovedAt.Value.ToString("yyyy/MM/dd")</strong>
+                        </div>
+                    }
+                    @if (rec.BatchId.HasValue)
+                    {
+                        <div class="rd-meta-row">
+                            <span><i class="fas fa-users text-primary me-1"></i>رقم الدفعة</span>
+                            <a asp-area="Admin" asp-controller="Analytics" asp-action="BatchPerformanceDetails"
+                               asp-route-batchId="@rec.BatchId.Value" asp-route-curriculumId="@rec.CurriculumId"
+                               class="rd-batch-link">@rec.BatchId.Value</a>
+                        </div>
+                    }
+                    @if (activeStudents > 0)
+                    {
+                        <div class="rd-meta-row">
+                            <span><i class="fas fa-user-graduate text-muted me-1"></i>الطلاب النشطون</span>
+                            <strong>@activeStudents</strong>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    
+    @if (hasSnapshot)
+    {
+        <div class="dl-recommendation mb-3">
+            <div class="rd-section-title mb-3">
+                <i class="fas fa-chart-mixed me-2 text-primary"></i>تحليل مؤشرات الخطر
+                @if (batchName.Length > 0)
+                {
+                    <span class="rd-batch-context">@batchName @(courseName.Length > 0 ? "· " + courseName : "") @(curriculumTitle.Length > 0 ? "· " + curriculumTitle : "")</span>
+                }
+            </div>
+
+            
+            <div class="row g-2 mb-4">
+                <div class="col-6 col-md-4 col-lg-2">
+                    <div class="rd-metric-card @(attendancePct < 70 ? "rd-metric-danger" : "rd-metric-ok")">
+                        <div class="rd-metric-icon"><i class="fas fa-user-check"></i></div>
+                        <div class="rd-metric-val">@attendancePct.ToString("0")<span>%</span></div>
+                        <div class="rd-metric-lbl">الحضور</div>
+                        <div class="rd-metric-bar-track">
+                            <div class="rd-metric-bar-fill" style="width:@(attendancePct)%;background:@(attendancePct < 70 ? "#dc2626" : "#16a34a")"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-4 col-lg-2">
+                    <div class="rd-metric-card @(hwSubmitPct < 70 ? "rd-metric-danger" : "rd-metric-ok")">
+                        <div class="rd-metric-icon"><i class="fas fa-clipboard-list"></i></div>
+                        <div class="rd-metric-val">@hwSubmitPct.ToString("0")<span>%</span></div>
+                        <div class="rd-metric-lbl">تسليم الواجبات</div>
+                        <div class="rd-metric-bar-track">
+                            <div class="rd-metric-bar-fill" style="width:@(hwSubmitPct)%;background:@(hwSubmitPct < 70 ? "#dc2626" : "#16a34a")"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-4 col-lg-2">
+                    <div class="rd-metric-card @(hwScorePct < 60 ? "rd-metric-danger" : "rd-metric-ok")">
+                        <div class="rd-metric-icon"><i class="fas fa-star-half-stroke"></i></div>
+                        <div class="rd-metric-val">@hwScorePct.ToString("0")<span>%</span></div>
+                        <div class="rd-metric-lbl">متوسط الواجبات</div>
+                        <div class="rd-metric-bar-track">
+                            <div class="rd-metric-bar-fill" style="width:@(hwScorePct)%;background:@(hwScorePct < 60 ? "#dc2626" : "#16a34a")"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-4 col-lg-2">
+                    <div class="rd-metric-card @(examPartPct < 70 ? "rd-metric-danger" : "rd-metric-ok")">
+                        <div class="rd-metric-icon"><i class="fas fa-file-circle-check"></i></div>
+                        <div class="rd-metric-val">@examPartPct.ToString("0")<span>%</span></div>
+                        <div class="rd-metric-lbl">مشاركة الاختبارات</div>
+                        <div class="rd-metric-bar-track">
+                            <div class="rd-metric-bar-fill" style="width:@(examPartPct)%;background:@(examPartPct < 70 ? "#dc2626" : "#16a34a")"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-4 col-lg-2">
+                    <div class="rd-metric-card @(examScorePct < 60 ? "rd-metric-danger" : "rd-metric-ok")">
+                        <div class="rd-metric-icon"><i class="fas fa-chart-simple"></i></div>
+                        <div class="rd-metric-val">@examScorePct.ToString("0")<span>%</span></div>
+                        <div class="rd-metric-lbl">متوسط الاختبارات</div>
+                        <div class="rd-metric-bar-track">
+                            <div class="rd-metric-bar-fill" style="width:@(examScorePct)%;background:@(examScorePct < 60 ? "#dc2626" : "#16a34a")"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-4 col-lg-2">
+                    <div class="rd-metric-card @(weakLessonsCount + highRiskQCount > 3 ? "rd-metric-danger" : "rd-metric-ok")">
+                        <div class="rd-metric-icon"><i class="fas fa-triangle-exclamation"></i></div>
+                        <div class="rd-metric-val">@(weakLessonsCount + highRiskQCount)</div>
+                        <div class="rd-metric-lbl">نقاط ضعف</div>
+                        <div class="rd-metric-sub">@weakLessonsCount درس · @highRiskQCount سؤال</div>
+                    </div>
+                </div>
+            </div>
+
+            
+            @if (attRisk + hwRisk + examRisk + weakRisk + qRisk > 0)
+            {
+                <div class="rd-section-title mb-2">
+                    <i class="fas fa-signal me-1 text-danger"></i>تفصيل درجات الخطر
+                </div>
+                <div class="rd-risk-bars">
+                    @{
+                        var riskFactors = new[] {
+                            ("الحضور",           attRisk,  attSignal,  "fa-user-check"),
+                            ("الواجبات",          hwRisk,   hwSignal,   "fa-clipboard-list"),
+                            ("الاختبارات",        examRisk, examSignal, "fa-file-pen"),
+                            ("الدروس الضعيفة",    weakRisk, weakSignal, "fa-book-open"),
+                            ("الأسئلة عالية الخطأ", qRisk,  qSignal,   "fa-circle-question")
+                        };
+                    }
+                    @foreach (var (lbl, val, signal, icon) in riskFactors)
+                    {
+                        int pct2 = (int)Math.Min(val, 100);
+                        string barColor = pct2 >= 75 ? "#dc2626" : pct2 >= 50 ? "#d97706" : pct2 >= 25 ? "#ca8a04" : "#16a34a";
+                        <div class="rd-risk-item">
+                            <div class="rd-risk-header">
+                                <div class="rd-risk-meta">
+                                    <i class="fas @icon" style="color:@barColor;width:16px"></i>
+                                    <span class="rd-risk-name">@lbl</span>
+                                    @if (signal.Length > 0)
+                                    {
+                                        <span class="rd-signal-badge" style="background:@(SignalColor(signal) + "20");color:@SignalColor(signal)">@signal</span>
+                                    }
+                                </div>
+                                <strong style="color:@barColor;font-size:14px">@pct2</strong>
+                            </div>
+                            <div class="rd-risk-track">
+                                <div class="rd-risk-fill" style="width:@pct2%;background:@barColor"></div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+
+            
+            @if (decisionMessage.Length > 0)
+            {
+                <div class="rd-decision-msg mt-3">
+                    <i class="fas fa-comment-dots me-2 text-primary"></i>@decisionMessage
+                </div>
+            }
+        </div>
+    }
+
+    
+    @if (recSuggestedAction.Length > 0)
+    {
+        <div class="dl-recommendation mb-3 rd-action-card">
+            <div class="d-flex align-items-start gap-3">
+                <div class="rd-action-icon"><i class="fas fa-bolt fa-lg"></i></div>
+                <div>
+                    <div class="rd-block-label mb-1">الإجراء المقترح</div>
+                    <p class="rd-block-text mb-0">@recSuggestedAction</p>
+                </div>
+            </div>
+        </div>
+    }
+
+    
+    @if (recWarning.Length > 0)
+    {
+        <div class="dl-warning d-flex align-items-center gap-3 mb-3" style="border-radius:16px;padding:18px 20px">
+            <i class="fas fa-triangle-exclamation fa-xl flex-shrink-0"></i>
+            <div style="font-weight:700">@recWarning</div>
+        </div>
+    }
+
+    
+    @if (!string.IsNullOrWhiteSpace(rec.ErrorMessage))
+    {
+        <div class="dl-recommendation mb-3" style="border-inline-start:4px solid #dc2626">
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <i class="fas fa-circle-exclamation text-danger"></i>
+                <span style="font-weight:900;color:#dc2626">خطأ في المعالجة</span>
+            </div>
+            <p style="color:#991b1b;font-weight:700;margin:0">@rec.ErrorMessage</p>
+        </div>
+    }
+
+    
+    @if (isPending)
+    {
+        <div class="dl-recommendation mb-3 rd-approval-card">
+            <div class="d-flex align-items-start justify-content-between flex-wrap gap-3">
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <div style="width:40px;height:40px;background:#cffafe;border-radius:12px;display:flex;align-items:center;justify-content:center">
+                            <i class="fas fa-clock" style="color:#0891b2"></i>
+                        </div>
+                        <h2 class="mb-0" style="font-size:18px;font-weight:900">بانتظار الاعتماد</h2>
+                    </div>
+                    <p style="color:#6b7280;margin:0;line-height:1.8;font-size:14px">
+                        اعتماد هذه التوصية سيُغيّر حالتها فقط دون إرسال أي إجراء للطلاب.
+                        ستظهر بعد الاعتماد مسارات تنفيذ التوصية.
+                    </p>
+                </div>
+                <form method="post"
+                      asp-area="Admin" asp-controller="DecisionLab" asp-action="ApproveRecommendation"
+                      asp-route-id="@rec.Id">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-primary rd-approve-btn">
+                        <i class="fas fa-circle-check me-2"></i>اعتماد التوصية
+                    </button>
+                </form>
+            </div>
+        </div>
+    }
+
+    
+    @if (!isApproved && !isPending)
+    {
+        <div class="dl-warning mb-3 d-flex align-items-center gap-3" style="border-radius:16px;padding:18px 20px">
+            <i class="fas fa-lock fa-xl flex-shrink-0"></i>
+            <span style="font-weight:700">يجب اعتماد التوصية أولًا حتى تظهر مسارات التنفيذ.</span>
+        </div>
+    }
+
+    
+    @if (isApproved)
+    {
+        <div class="dl-recommendation mb-3">
+            <div class="rd-section-title mb-1">
+                <i class="fas fa-rocket me-2 text-primary"></i>مسارات تنفيذ التوصية
+            </div>
+            <p style="color:#6b7280;font-size:13px;margin-bottom:16px">
+                اختر مسار التنفيذ المناسب. أي إجراء يُنشأ كمسودة Draft أولًا ولن يُرسل للطلاب تلقائيًا.
+            </p>
+
+            <div class="rd-exec-grid">
+
+                
+                <div class="rd-exec-card rd-exec-available">
+                    <div class="d-flex align-items-start justify-content-between gap-2 mb-3">
+                        <div class="rd-exec-icon rd-exec-icon-blue">
+                            <i class="fas fa-chalkboard-user fa-lg"></i>
+                        </div>
+                        <span class="rd-exec-badge rd-badge-available">متاح الآن</span>
+                    </div>
+                    <h3 class="rd-exec-title">مهمة للمدرب</h3>
+                    <p class="rd-exec-desc">تدخل داخل المحاضرة القادمة — إعادة شرح مؤشر أو مراجعة أسئلة متكررة الخطأ.</p>
+                    <div class="rd-exec-impact">
+                        <i class="fas fa-bolt me-1"></i>
+                        تحويل التوصية من ملاحظة إدارية إلى إجراء قابل للمتابعة فور إسناده للمدرب.
+                    </div>
+                    @if (task == null && Model.CanCreateInterventionTask)
+                    {
+                        <a class="btn btn-primary mt-auto rd-exec-btn"
+                           asp-area="Admin" asp-controller="DecisionLab" asp-action="CreateInterventionTask"
+                           asp-route-decisionRecommendationId="@rec.Id">
+                            <i class="fas fa-plus me-1"></i>إنشاء مهمة للمدرب
+                        </a>
+                    }
+                    else if (task != null)
+                    {
+                        <div class="rd-task-linked mt-auto">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="fas fa-circle-check text-success"></i>
+                                <span style="font-weight:900;color:#16a34a">تم إنشاء المهمة</span>
+                            </div>
+                            <a class="btn btn-outline-primary btn-sm"
+                               asp-area="Admin" asp-controller="DecisionLab" asp-action="InterventionTaskDetails"
+                               asp-route-id="@task.Id">
+                                <i class="fas fa-eye me-1"></i>عرض المهمة
+                            </a>
+                        </div>
+                    }
+                </div>
+
+                
+                <div class="rd-exec-card rd-exec-soon">
+                    <div class="d-flex align-items-start justify-content-between gap-2 mb-3">
+                        <div class="rd-exec-icon rd-exec-icon-violet">
+                            <i class="fas fa-clipboard-list fa-lg"></i>
+                        </div>
+                        <span class="rd-exec-badge rd-badge-soon">قريبًا</span>
+                    </div>
+                    <h3 class="rd-exec-title">واجب علاجي</h3>
+                    <p class="rd-exec-desc">تدريب إضافي للطلاب على المؤشرات الضعيفة والأسئلة المتكررة الخطأ.</p>
+                    <div class="rd-exec-impact">
+                        <i class="fas fa-bolt me-1"></i>
+                        رفع مستوى الممارسة قبل اختبار قياس مؤشر الأداء.
+                    </div>
+                    <button class="btn btn-outline-secondary mt-auto rd-exec-btn" disabled>
+                        <i class="fas fa-clock me-1"></i>قريبًا
+                    </button>
+                </div>
+
+                
+                <div class="rd-exec-card rd-exec-soon">
+                    <div class="d-flex align-items-start justify-content-between gap-2 mb-3">
+                        <div class="rd-exec-icon rd-exec-icon-amber">
+                            <i class="fas fa-file-pen fa-lg"></i>
+                        </div>
+                        <span class="rd-exec-badge rd-badge-soon">قريبًا</span>
+                    </div>
+                    <h3 class="rd-exec-title">اختبار علاجي قصير</h3>
+                    <p class="rd-exec-desc">قياس سريع لمستوى الدفعة في مؤشرات محددة قبل اختبار قياس مؤشر الأداء.</p>
+                    <div class="rd-exec-impact">
+                        <i class="fas fa-bolt me-1"></i>
+                        اكتشاف الضعف مبكرًا وتقليل دخول الطلاب في خطط علاجية متأخرة.
+                    </div>
+                    <button class="btn btn-outline-secondary mt-auto rd-exec-btn" disabled>
+                        <i class="fas fa-clock me-1"></i>قريبًا
+                    </button>
+                </div>
+
+                
+                <div class="rd-exec-card rd-exec-soon">
+                    <div class="d-flex align-items-start justify-content-between gap-2 mb-3">
+                        <div class="rd-exec-icon rd-exec-icon-red">
+                            <i class="fas fa-layer-group fa-lg"></i>
+                        </div>
+                        <span class="rd-exec-badge rd-badge-soon">قريبًا</span>
+                    </div>
+                    <h3 class="rd-exec-title">خطة تدخل مختلطة</h3>
+                    <p class="rd-exec-desc">مشكلة مركبة — ضعف حضور + ضعف واجبات + ارتفاع أخطاء في مؤشرات.</p>
+                    <div class="rd-exec-impact">
+                        <i class="fas fa-bolt me-1"></i>
+                        تدخل شامل متعدد الأبعاد بدل الاعتماد على إجراء واحد.
+                    </div>
+                    <button class="btn btn-outline-secondary mt-auto rd-exec-btn" disabled>
+                        <i class="fas fa-clock me-1"></i>قريبًا
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+
+    
+    @if (task != null)
+    {
+        <div class="dl-recommendation mb-3">
+            <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-3">
+                <div class="rd-section-title">
+                    <i class="fas fa-list-check me-2 text-primary"></i>مهمة المدرب المرتبطة
+                </div>
+                <a class="btn btn-outline-primary btn-sm"
+                   asp-area="Admin" asp-controller="DecisionLab" asp-action="InterventionTaskDetails"
+                   asp-route-id="@task.Id">
+                    <i class="fas fa-external-link me-1"></i>عرض التفاصيل الكاملة
+                </a>
+            </div>
+
+            
+            <div class="rd-task-timeline mb-4">
+                @{
+                    bool tCreated   = true;
+                    bool tAssigned  = task.AssignedAt.HasValue;
+                    bool tStarted   = task.StartedAt.HasValue;
+                    bool tCompleted = task.CompletedAt.HasValue;
+                }
+                <div class="rd-tl-step @(tCreated ? "rd-tl-done" : "")">
+                    <div class="rd-tl-dot"><i class="fas fa-check"></i></div>
+                    <div class="rd-tl-info">
+                        <div class="rd-tl-label">إنشاء</div>
+                        <div class="rd-tl-date">@task.CreatedAt.ToString("yyyy/MM/dd")</div>
+                    </div>
+                </div>
+                <div class="rd-tl-line @(tAssigned ? "rd-tl-line-done" : "")"></div>
+                <div class="rd-tl-step @(tAssigned ? "rd-tl-done" : "rd-tl-pending")">
+                    <div class="rd-tl-dot">@(tAssigned ? Html.Raw("<i class=\"fas fa-check\"></i>") : (object)"2")</div>
+                    <div class="rd-tl-info">
+                        <div class="rd-tl-label">إسناد</div>
+                        <div class="rd-tl-date">@(task.AssignedAt.HasValue ? task.AssignedAt.Value.ToString("yyyy/MM/dd") : "—")</div>
+                    </div>
+                </div>
+                <div class="rd-tl-line @(tStarted ? "rd-tl-line-done" : "")"></div>
+                <div class="rd-tl-step @(tStarted ? "rd-tl-done" : "rd-tl-pending")">
+                    <div class="rd-tl-dot">@(tStarted ? Html.Raw("<i class=\"fas fa-check\"></i>") : (object)"3")</div>
+                    <div class="rd-tl-info">
+                        <div class="rd-tl-label">بدء التنفيذ</div>
+                        <div class="rd-tl-date">@(task.StartedAt.HasValue ? task.StartedAt.Value.ToString("yyyy/MM/dd") : "—")</div>
+                    </div>
+                </div>
+                <div class="rd-tl-line @(tCompleted ? "rd-tl-line-done" : "")"></div>
+                <div class="rd-tl-step @(tCompleted ? "rd-tl-done" : "rd-tl-pending")">
+                    <div class="rd-tl-dot">@(tCompleted ? Html.Raw("<i class=\"fas fa-check\"></i>") : (object)"4")</div>
+                    <div class="rd-tl-info">
+                        <div class="rd-tl-label">إكمال</div>
+                        <div class="rd-tl-date">@(task.CompletedAt.HasValue ? task.CompletedAt.Value.ToString("yyyy/MM/dd") : "—")</div>
+                    </div>
+                </div>
+            </div>
+
+            
+            <div class="row g-2">
+                @{
+                    var taskFields = new[] {
+                        ("عنوان المهمة",    task.Title,                      "fa-heading"),
+                        ("الحالة",          TSAr(task.Status),                "fa-circle"),
+                        ("نوع المهمة",      task.TaskType,                   "fa-tag"),
+                        ("طريقة التنفيذ",   task.DeliveryMode,               "fa-satellite-dish"),
+                        ("الأولوية",        task.Priority,                   "fa-fire"),
+                        ("المدرب",          task.InstructorName,             "fa-chalkboard-user"),
+                        ("المحاضرة",        task.LectureTitle,               "fa-book-open"),
+                        ("استحقاق",         task.DueDate.HasValue ? task.DueDate.Value.ToString("yyyy/MM/dd") : "—", "fa-calendar"),
+                    };
+                }
+                @foreach (var (lbl, val, icon) in taskFields.Where(f => f.Item2?.Length > 0 && f.Item2 != "—"))
+                {
+                    <div class="col-6 col-md-4 col-lg-3">
+                        <div class="rd-task-field">
+                            <div class="rd-task-field-label">
+                                <i class="fas @icon me-1"></i>@lbl
+                            </div>
+                            <div class="rd-task-field-val">@val</div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    
+    @if (!string.IsNullOrWhiteSpace(rec.RecommendationJson))
+    {
+        <details class="dl-json-panel mb-3">
+            <summary><i class="fas fa-code me-1"></i>بيانات التوصية الكاملة (JSON)</summary>
+            <pre>@FormatJson(rec.RecommendationJson)</pre>
+        </details>
+    }
+    @if (!string.IsNullOrWhiteSpace(rec.InputSnapshotJson))
+    {
+        <details class="dl-json-panel mb-3">
+            <summary><i class="fas fa-database me-1"></i>لقطة بيانات الدفعة (JSON)</summary>
+            <pre>@FormatJson(rec.InputSnapshotJson)</pre>
+        </details>
+    }
+
+</div>
+
+
+<script>
+    (function () {
+        if (typeof Chart === 'undefined') return;
+
+        function makeGauge(id, score, color) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            new Chart(el, {
+                type: 'doughnut',
+                data: {
+                    datasets: [{
+                        data: [score, 100 - score],
+                        backgroundColor: [color, '#f3f4f6'],
+                        borderWidth: 0,
+                        circumference: 180,
+                        rotation: 270
+                    }]
+                },
+                options: {
+                    responsive: false,
+                    cutout: '72%',
+                    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                    animation: { duration: 900, easing: 'easeInOutQuart' }
+                }
+            });
+        }
+
+        makeGauge('impactGauge', @recImpactScore, '@gaugeColor');
+        makeGauge('riskGauge',   @((int)overallRiskScore), '@rGaugeColor');
+    })();
+</script>
+
+<style>
+    /* ── KPI cards ── */
+    .rd-kpi {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-top: 3px solid;
+        border-radius: 16px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.05);
+        padding: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .rd-kpi-icon {
+        width: 40px; height: 40px;
+        border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .rd-kpi-label { font-size: 12px; font-weight: 800; color: #6b7280; }
+    .rd-kpi-val   { font-size: 22px; font-weight: 900; }
+
+    /* ── Badges ── */
+    .rd-cat-badge, .rd-engine-badge {
+        background: #f0f9ff; border: 1px solid #bae6fd;
+        border-radius: 999px; color: #0369a1;
+        font-size: 12px; font-weight: 900; padding: 4px 12px;
+    }
+    .rd-engine-badge { background: #f5f3ff; border-color: #ddd6fe; color: #5b21b6; }
+    .rd-code-badge {
+        background: #ede9fe; color: #5b21b6;
+        font-size: 11px; border-radius: 4px; padding: 2px 8px;
+    }
+    .rd-pri-badge {
+        border: 1.5px solid; border-radius: 999px;
+        font-size: 12px; font-weight: 900; padding: 4px 12px;
+    }
+
+    /* ── Priority bar ── */
+    .rd-bar-labels {
+        display: flex; justify-content: space-between;
+        font-size: 11px; color: #9ca3af; font-weight: 700; margin-bottom: 6px;
+    }
+    .rd-priority-bar { display: flex; gap: 3px; height: 10px; }
+
+    /* ── Content blocks ── */
+    .rd-block {
+        background: #f8fafc; border: 1px solid #e5e7eb;
+        border-radius: 12px; padding: 14px 16px;
+    }
+    .rd-block-label {
+        font-size: 11px; font-weight: 900; color: #6b7280;
+        text-transform: uppercase; letter-spacing: .04em; margin-bottom: 7px;
+    }
+    .rd-block-text { color: #1f2937; font-weight: 700; line-height: 1.9; font-size: 14px; }
+
+    /* ── Intervention card ── */
+    .rd-intervention {
+        display: flex; align-items: center; gap: 12px;
+        background: #f8fafc; border: 1px solid #e5e7eb;
+        border-inline-start: 4px solid; border-radius: 12px; padding: 14px 16px;
+    }
+    .rd-int-icon {
+        width: 46px; height: 46px; border-radius: 12px;
+        display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .rd-int-lbl { font-size: 11px; font-weight: 900; color: #9ca3af; letter-spacing: .04em; text-transform: uppercase; }
+    .rd-int-val { font-size: 16px; font-weight: 900; color: #111827; margin: 2px 0; }
+    .rd-int-code { font-size: 11px; color: #6b7280; background: #f3f4f6; padding: 2px 6px; border-radius: 4px; }
+
+    /* ── Gauges ── */
+    .rd-gauge-label { font-size: 12px; font-weight: 900; color: #6b7280; text-transform: uppercase; letter-spacing: .05em; }
+    .rd-gauge-num {
+        position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+        font-size: 38px; font-weight: 900; line-height: 1;
+        font-family: 'Cairo', Tahoma, sans-serif;
+    }
+    .rd-gauge-sm { font-size: 28px; }
+    .rd-gauge-pct { font-size: 16px; font-weight: 700; }
+
+    /* ── Meta box ── */
+    .rd-metrics-box { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 12px; padding: 4px 0; }
+    .rd-meta-row {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 9px 14px; font-size: 12px; font-weight: 700;
+        border-bottom: 1px solid #f3f4f6;
+    }
+    .rd-meta-row:last-child { border-bottom: 0; }
+    .rd-meta-row span { color: #6b7280; }
+    .rd-batch-link {
+        font-size: 12px; font-weight: 900; color: #1e40af;
+        background: #dbeafe; border-radius: 999px; padding: 2px 9px;
+        text-decoration: none;
+    }
+
+    /* ── Section title ── */
+    .rd-section-title {
+        font-size: 15px; font-weight: 900; color: #111827;
+        display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    }
+    .rd-batch-context {
+        font-size: 12px; font-weight: 700; color: #6b7280;
+        background: #f3f4f6; border-radius: 999px; padding: 3px 10px;
+    }
+
+    /* ── Academic metrics ── */
+    .rd-metric-card {
+        background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+        padding: 14px 12px; text-align: center; position: relative;
+        overflow: hidden;
+    }
+    .rd-metric-danger { border-top: 3px solid #dc2626; }
+    .rd-metric-ok     { border-top: 3px solid #16a34a; }
+    .rd-metric-icon { font-size: 18px; color: #6b7280; margin-bottom: 6px; }
+    .rd-metric-danger .rd-metric-icon { color: #dc2626; }
+    .rd-metric-ok    .rd-metric-icon { color: #16a34a; }
+    .rd-metric-val { font-size: 24px; font-weight: 900; color: #111827; line-height: 1.1; }
+    .rd-metric-val span { font-size: 13px; font-weight: 700; }
+    .rd-metric-lbl { font-size: 11px; font-weight: 800; color: #6b7280; margin-top: 3px; }
+    .rd-metric-sub { font-size: 10px; color: #9ca3af; margin-top: 2px; }
+    .rd-metric-bar-track { margin-top: 8px; height: 4px; background: #f3f4f6; border-radius: 999px; overflow: hidden; }
+    .rd-metric-bar-fill  { height: 100%; border-radius: 999px; transition: width .9s ease; }
+
+    /* ── Risk bars ── */
+    .rd-risk-bars { display: flex; flex-direction: column; gap: 10px; }
+    .rd-risk-item { }
+    .rd-risk-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
+    .rd-risk-meta { display: flex; align-items: center; gap: 8px; }
+    .rd-risk-name { font-size: 13px; font-weight: 800; color: #374151; }
+    .rd-signal-badge {
+        font-size: 11px; font-weight: 900; border-radius: 999px; padding: 2px 8px;
+    }
+    .rd-risk-track { width: 100%; height: 8px; background: #f3f4f6; border-radius: 999px; overflow: hidden; }
+    .rd-risk-fill  { height: 100%; border-radius: 999px; transition: width .9s ease; }
+    .rd-decision-msg {
+        background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px;
+        padding: 14px 16px; font-weight: 700; color: #1e40af; font-size: 14px;
+        line-height: 1.8;
+    }
+
+    /* ── Suggested action ── */
+    .rd-action-card { border-inline-start: 4px solid #d97706 !important; }
+    .rd-action-icon {
+        width: 42px; height: 42px; background: #fef3c7; border-radius: 12px;
+        display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: #d97706;
+    }
+
+    /* ── Approval card ── */
+    .rd-approval-card { border: 2px solid #bfdbfe !important; }
+    .rd-approve-btn {
+        border-radius: 12px !important; font-weight: 900;
+        padding: 10px 28px;
+        box-shadow: 0 4px 14px rgba(30,64,175,.3);
+    }
+
+    /* ── Execution grid ── */
+    .rd-exec-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+    }
+    .rd-exec-card {
+        border: 1px solid #e5e7eb; border-radius: 16px; padding: 20px;
+        display: flex; flex-direction: column; gap: 10px;
+        transition: transform .18s, box-shadow .18s;
+    }
+    .rd-exec-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,.08); }
+    .rd-exec-available { border-color: #bfdbfe; background: linear-gradient(135deg, #fff 70%, #eff6ff); }
+    .rd-exec-soon { background: #fafafa; }
+    .rd-exec-icon {
+        width: 44px; height: 44px; border-radius: 12px;
+        display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .rd-exec-icon-blue   { background: #dbeafe; color: #1e40af; }
+    .rd-exec-icon-violet { background: #ede9fe; color: #7c3aed; }
+    .rd-exec-icon-amber  { background: #fef3c7; color: #d97706; }
+    .rd-exec-icon-red    { background: #fee2e2; color: #dc2626; }
+    .rd-exec-title { font-size: 16px; font-weight: 900; color: #111827; margin: 0; }
+    .rd-exec-desc  { font-size: 13px; font-weight: 700; color: #4b5563; line-height: 1.7; flex-grow: 1; }
+    .rd-exec-impact { font-size: 12px; font-weight: 700; color: #6b7280; background: #f9fafb; border-radius: 8px; padding: 8px 10px; }
+    .rd-exec-btn { border-radius: 10px !important; font-weight: 900 !important; font-size: 13px; }
+    .rd-exec-badge {
+        font-size: 11px; font-weight: 900; border-radius: 999px; padding: 4px 10px; white-space: nowrap; flex-shrink: 0;
+    }
+    .rd-badge-available { background: #dcfce7; color: #16a34a; }
+    .rd-badge-soon      { background: #e0f2fe; color: #0369a1; }
+    .rd-task-linked { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 12px; }
+
+    /* ── Task Timeline ── */
+    .rd-task-timeline { display: flex; align-items: flex-start; gap: 0; }
+    .rd-tl-step { display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0; }
+    .rd-tl-dot {
+        width: 40px; height: 40px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 900; font-size: 14px;
+    }
+    .rd-tl-done .rd-tl-dot    { background: #16a34a; color: #fff; box-shadow: 0 0 0 4px #dcfce7; }
+    .rd-tl-pending .rd-tl-dot { background: #f3f4f6; color: #9ca3af; border: 2px solid #e5e7eb; }
+    .rd-tl-info { text-align: center; }
+    .rd-tl-label { font-size: 11px; font-weight: 900; color: #6b7280; white-space: nowrap; }
+    .rd-tl-date  { font-size: 11px; font-weight: 700; color: #9ca3af; margin-top: 2px; white-space: nowrap; }
+    .rd-tl-done .rd-tl-label { color: #16a34a; }
+    .rd-tl-line { flex: 1; height: 3px; margin-bottom: 34px; min-width: 20px; background: #e5e7eb; }
+    .rd-tl-line-done { background: #16a34a; }
+
+    /* ── Task field cards ── */
+    .rd-task-field {
+        background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px 14px;
+    }
+    .rd-task-field-label { font-size: 11px; font-weight: 900; color: #9ca3af; text-transform: uppercase; letter-spacing:.04em; margin-bottom: 4px; }
+    .rd-task-field-val   { font-size: 14px; font-weight: 800; color: #111827; }
+
+    /* ── Responsive ── */
+    @@media (max-width: 992px) {
+        .rd-exec-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @@media (max-width: 768px) {
+        .rd-exec-grid { grid-template-columns: 1fr; }
+        .rd-task-timeline { gap: 0; }
+        .rd-tl-line { min-width: 12px; }
+    }
+</style>

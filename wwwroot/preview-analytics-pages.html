@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>معاينة صفحات التحليلات — قدرات نيو</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Cairo',sans-serif;background:#E2E8F0;direction:rtl;}
+
+/* ─── Nav ─── */
+.preview-nav{background:#1E293B;padding:16px 28px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:100;flex-wrap:wrap;}
+.preview-nav h1{color:#fff;font-size:16px;font-weight:800;margin-left:auto;}
+.pnav-btn{padding:8px 20px;border-radius:8px;border:1px solid rgba(255,255,255,.2);font-family:'Cairo',sans-serif;font-size:13px;font-weight:700;cursor:pointer;background:rgba(255,255,255,.1);color:#fff;transition:background .15s;}
+.pnav-btn:hover,.pnav-btn.active{background:rgba(255,255,255,.25);}
+.pnav-sep{width:1px;height:28px;background:rgba(255,255,255,.15);}
+
+/* ─── Pages ─── */
+.page-section{display:none;padding:28px 24px;min-height:100vh;}
+.page-section.active{display:block;}
+
+/* ─── Shared design tokens ─── */
+:root{
+  --bg:#F1F5F9;--surface:#fff;--border:#E2E8F0;
+  --danger:#DC2626;--danger-l:#FEE2E2;--danger-d:#991B1B;
+  --warning:#D97706;--warning-l:#FEF3C7;--warning-d:#92400E;
+  --success:#059669;--success-l:#D1FAE5;
+  --primary:#2563EB;--primary-l:#DBEAFE;
+  --indigo:#4F46E5;--indigo-l:#EEF2FF;
+  --violet:#7C3AED;--violet-l:#EDE9FE;
+  --text:#0F172A;--muted:#64748B;
+  --r:14px;--shadow:0 4px 24px rgba(15,23,42,.08);--shadow-sm:0 2px 12px rgba(15,23,42,.05);
+}
+.page-section{background:var(--bg);}
+.breadcrumb-row{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);margin-bottom:18px;flex-wrap:wrap;}
+.breadcrumb-row a{color:var(--muted);text-decoration:none;}
+.breadcrumb-row .sep{opacity:.4;}
+.breadcrumb-row .cur{color:var(--text);font-weight:700;}
+
+.ph{border-radius:20px;padding:28px 30px;color:#fff;position:relative;overflow:hidden;margin-bottom:22px;}
+.ph::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 10% 50%,rgba(255,255,255,.07),transparent 60%);pointer-events:none;}
+.ph::after{content:'';position:absolute;top:-40px;left:-40px;width:200px;height:200px;border-radius:50%;border:40px solid rgba(255,255,255,.06);pointer-events:none;}
+.ph-row{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;position:relative;z-index:1;}
+.ph-icon{width:52px;height:52px;border-radius:16px;background:rgba(255,255,255,.15);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;}
+.ph-title{font-size:24px;font-weight:900;margin-bottom:4px;}
+.ph-sub{font-size:14px;color:rgba(255,255,255,.72);}
+.ph-badge{background:rgba(255,255,255,.15);border-radius:20px;padding:2px 10px;font-size:13px;font-weight:700;display:inline-block;margin-right:8px;}
+.btn-back{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:10px;padding:9px 20px;font-size:14px;font-weight:700;text-decoration:none;cursor:pointer;}
+.btn-back:hover{background:rgba(255,255,255,.26);}
+
+.filter-bar{background:var(--surface);border-radius:var(--r);border:1px solid var(--border);box-shadow:var(--shadow-sm);padding:16px 22px;margin-bottom:22px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.filter-bar select{border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:14px;font-family:'Cairo',sans-serif;color:var(--text);background:#FAFBFC;min-width:150px;outline:none;}
+.btn-filter{color:#fff;border:none;border-radius:8px;padding:9px 20px;font-size:14px;font-weight:700;font-family:'Cairo',sans-serif;cursor:pointer;display:inline-flex;align-items:center;gap:6px;}
+
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px;}
+@media(max-width:1100px){.kpi-grid{grid-template-columns:repeat(2,1fr);}}
+.kpi{background:var(--surface);border-radius:var(--r);border:1px solid var(--border);box-shadow:var(--shadow-sm);padding:22px 20px;position:relative;overflow:hidden;transition:transform .18s,box-shadow .18s;}
+.kpi:hover{transform:translateY(-3px);box-shadow:var(--shadow);}
+.kpi::before{content:'';position:absolute;bottom:0;right:0;left:0;height:3px;border-radius:0 0 var(--r) var(--r);}
+.kpi.red::before{background:var(--danger);}
+.kpi.amber::before{background:var(--warning);}
+.kpi.blue::before{background:var(--primary);}
+.kpi.indigo::before{background:var(--indigo);}
+.kpi.violet::before{background:var(--violet);}
+.kpi-icon{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:21px;margin-bottom:14px;}
+.kpi-val{font-size:32px;font-weight:900;line-height:1;margin-bottom:5px;}
+.kpi-lbl{font-size:13px;font-weight:700;color:var(--muted);}
+.kpi-sub{font-size:11px;color:var(--muted);margin-top:3px;}
+
+.reason-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px;}
+@media(max-width:1100px){.reason-grid{grid-template-columns:repeat(2,1fr);}}
+.reason-card{background:var(--surface);border-radius:12px;border:1px solid var(--border);padding:16px 18px;display:flex;align-items:center;gap:14px;box-shadow:var(--shadow-sm);}
+.reason-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0;}
+.reason-count{font-size:26px;font-weight:900;line-height:1;}
+.reason-lbl{font-size:12px;color:var(--muted);font-weight:600;margin-top:2px;}
+
+.charts-row{display:grid;grid-template-columns:280px 1fr 1fr;gap:18px;margin-bottom:22px;align-items:start;}
+@media(max-width:1100px){.charts-row{grid-template-columns:1fr 1fr;}}
+.card{background:var(--surface);border-radius:var(--r);border:1px solid var(--border);box-shadow:var(--shadow-sm);padding:22px;}
+.card-title{font-size:15px;font-weight:800;display:flex;align-items:center;gap:8px;margin-bottom:4px;}
+.ct-icon{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+.card-sub{font-size:12px;color:var(--muted);margin-bottom:14px;padding-right:38px;}
+
+.section{background:var(--surface);border-radius:var(--r);border:1px solid var(--border);box-shadow:var(--shadow-sm);overflow:hidden;margin-bottom:60px;}
+.toolbar{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#FAFBFC;}
+.sec-title{font-size:16px;font-weight:800;display:flex;align-items:center;gap:8px;margin-left:auto;}
+.st-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;}
+.search-box{border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:14px;font-family:'Cairo',sans-serif;width:220px;outline:none;background:#fff;}
+
+.badge{display:inline-flex;align-items:center;gap:4px;padding:4px 11px;border-radius:20px;font-size:12px;font-weight:700;white-space:nowrap;}
+.b-red{background:var(--danger-l);color:var(--danger-d);}
+.b-amber{background:var(--warning-l);color:var(--warning-d);}
+.b-green{background:var(--success-l);color:#065F46;}
+
+.tbl{width:100%;border-collapse:collapse;font-size:14px;}
+.tbl thead th{background:#F8FAFC;color:var(--muted);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.4px;padding:12px 14px;border-bottom:2px solid var(--border);white-space:nowrap;}
+.tbl tbody td{padding:13px 14px;border-bottom:1px solid #F1F5F9;vertical-align:middle;}
+.tbl tbody tr:last-child td{border-bottom:none;}
+.tbl tbody tr:hover{background:#FFFBF5;}
+.cb{width:17px;height:17px;cursor:pointer;}
+.avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0;}
+.score-num{font-size:15px;font-weight:800;line-height:1;}
+.prog{height:5px;border-radius:20px;background:#EEF2F6;overflow:hidden;margin-top:5px;}
+.prog-bar{height:100%;border-radius:20px;}
+.chip{display:inline-block;background:#F8FAFC;border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:12px;font-weight:600;line-height:1.4;max-width:190px;white-space:normal;}
+.tbl-footer{padding:14px 22px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;background:#FAFBFC;}
+.footer-txt{font-size:13px;color:var(--muted);font-weight:600;}
+.footer-txt strong{color:var(--text);}
+
+.ftabs{display:flex;gap:6px;flex-wrap:wrap;}
+.ftab{padding:7px 16px;border-radius:20px;border:1px solid var(--border);font-size:13px;font-weight:700;cursor:pointer;background:#fff;color:var(--muted);transition:all .18s;font-family:'Cairo',sans-serif;}
+.ftab.active{border-color:var(--warning);color:var(--warning);background:var(--warning-l);}
+.ftab.ftab-red.active{border-color:var(--danger);color:var(--danger);background:var(--danger-l);}
+
+.risk-strip{background:var(--surface);border-radius:var(--r);border:1px solid var(--border);box-shadow:var(--shadow-sm);padding:14px 22px;margin-bottom:22px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+.risk-bar{flex:1;min-width:120px;height:8px;border-radius:20px;background:#EEF2F6;overflow:hidden;display:flex;}
+.risk-seg{height:100%;transition:width .5s;}
+.risk-legend{display:flex;gap:14px;flex-wrap:wrap;}
+.risk-item{display:flex;align-items:center;gap:5px;font-size:12px;font-weight:700;}
+.risk-dot{width:8px;height:8px;border-radius:50%;}
+
+/* FAB */
+.fab{position:fixed;bottom:28px;right:50%;transform:translateX(50%);z-index:1000;background:#0F172A;border-radius:16px;padding:14px 22px;display:flex;align-items:center;gap:14px;box-shadow:0 8px 40px rgba(15,23,42,.35);flex-wrap:wrap;transition:opacity .25s,transform .25s;max-width:90vw;}
+.fab.hidden{opacity:0;pointer-events:none;transform:translate(50%,20px);}
+.fab-info{color:rgba(255,255,255,.7);font-size:14px;font-weight:600;white-space:nowrap;}
+.fab-info strong{color:#fff;font-size:16px;}
+.fab-div{width:1px;height:30px;background:rgba(255,255,255,.15);flex-shrink:0;}
+.fab-btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:10px;border:none;font-size:13px;font-weight:700;font-family:'Cairo',sans-serif;cursor:pointer;transition:background .18s,transform .15s;white-space:nowrap;}
+.fab-btn:hover{transform:translateY(-1px);}
+.fb-d{background:var(--danger);color:#fff;}
+.fb-a{background:#B45309;color:#fff;}
+.fb-g{background:var(--success);color:#fff;}
+.fb-gh{background:rgba(255,255,255,.1);color:rgba(255,255,255,.85);}
+.fab-x{background:rgba(255,255,255,.08);border:none;color:rgba(255,255,255,.6);border-radius:8px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;}
+.fab-x:hover{background:rgba(255,255,255,.18);color:#fff;}
+
+/* Modal */
+.modal-ov{position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:1050;display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:opacity .22s;backdrop-filter:blur(3px);}
+.modal-ov.open{opacity:1;pointer-events:all;}
+.modal-box{background:#fff;border-radius:20px;width:100%;max-width:540px;box-shadow:0 24px 80px rgba(15,23,42,.22);overflow:hidden;transform:translateY(20px);transition:transform .22s;}
+.modal-ov.open .modal-box{transform:translateY(0);}
+.modal-hdr{padding:22px 26px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;}
+.m-icon{width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;}
+.m-title{font-size:18px;font-weight:800;}
+.m-sub{font-size:13px;color:var(--muted);}
+.m-close{margin-right:auto;background:#F1F5F9;border:none;border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;color:var(--muted);}
+.modal-body{padding:22px 26px;}
+.modal-ftr{padding:16px 26px 22px;display:flex;gap:10px;justify-content:flex-end;}
+.sel-list{background:#F8FAFC;border:1px solid var(--border);border-radius:10px;padding:12px 14px;max-height:140px;overflow-y:auto;margin-bottom:16px;}
+.sel-it{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #EEF2F6;font-size:13px;font-weight:600;}
+.sel-it:last-child{border-bottom:none;}
+.sel-dot{width:8px;height:8px;border-radius:50%;background:var(--danger);flex-shrink:0;}
+.fg{margin-bottom:12px;}
+.fl{font-size:13px;font-weight:700;margin-bottom:5px;display:block;}
+.fc{width:100%;border:1px solid var(--border);border-radius:8px;padding:9px 13px;font-size:14px;font-family:'Cairo',sans-serif;outline:none;background:#FAFBFC;}
+textarea.fc{resize:vertical;min-height:85px;}
+.btn-submit{background:var(--danger);color:#fff;border:none;border-radius:10px;padding:10px 26px;font-size:14px;font-weight:700;font-family:'Cairo',sans-serif;cursor:pointer;}
+.btn-cancel{background:#F1F5F9;color:var(--muted);border:none;border-radius:10px;padding:10px 22px;font-size:14px;font-weight:700;font-family:'Cairo',sans-serif;cursor:pointer;}
+
+.lesson-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+.weak-num{font-size:17px;font-weight:900;line-height:1;}
+.prog6{height:6px;border-radius:20px;background:#EEF2F6;overflow:hidden;margin-top:5px;}
+.prog6-bar{height:100%;border-radius:20px;}
+</style>
+</head>
+<body>
+
+<div class="preview-nav">
+  <button class="pnav-btn active" onclick="showPage('critical')">الحالات الحرجة</button>
+  <div class="pnav-sep"></div>
+  <button class="pnav-btn" onclick="showPage('lessons')">الدروس عالية الخطورة</button>
+  <h1>معاينة نظام التصميم الموحّد — قدرات نيو</h1>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- PAGE 1: CRITICAL STUDENTS                     -->
+<!-- ═══════════════════════════════════════════════ -->
+<div id="pageCritical" class="page-section active">
+
+  <nav class="breadcrumb-row"><i class="bi bi-house-fill"></i><a href="#">لوحة التحكم</a><span class="sep">‹</span><a href="#">التحليلات المتقدمة</a><span class="sep">‹</span><span class="cur">الحالات الحرجة</span></nav>
+
+  <div class="ph" style="background:linear-gradient(135deg,#7F1D1D 0%,#DC2626 55%,#EF4444 100%);margin-bottom:22px;">
+    <div class="ph-row">
+      <div style="display:flex;align-items:center;gap:16px;">
+        <div class="ph-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+        <div><h1 class="ph-title">الحالات الحرجة — أولوية عالية</h1><p class="ph-sub">طلاب يحتاجون تدخلاً فورياً <span class="ph-badge">12 حالة حرجة</span></p></div>
+      </div>
+      <button class="btn-back"><i class="bi bi-arrow-right"></i> رجوع للتحليلات</button>
+    </div>
+  </div>
+
+  <div class="filter-bar">
+    <span style="font-size:13px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:6px;"><i class="bi bi-funnel-fill"></i> تصفية:</span>
+    <select><option>كل المناهج</option><option>منهج الرياضيات</option></select>
+    <select><option>كل الدفعات</option><option>دفعة يناير 2025</option></select>
+    <select><option>كل المدرسين</option><option>أ. أحمد محمد</option></select>
+    <button class="btn-filter" style="background:var(--danger);"><i class="bi bi-search"></i> تطبيق</button>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi red"><div class="kpi-icon" style="background:var(--danger-l);color:var(--danger);"><i class="bi bi-person-fill-exclamation"></i></div><div class="kpi-val" style="color:var(--danger);">12</div><div class="kpi-lbl">إجمالي الحالات الحرجة</div><div class="kpi-sub">تدخل فوري مطلوب</div></div>
+    <div class="kpi amber"><div class="kpi-icon" style="background:var(--warning-l);color:var(--warning);"><i class="bi bi-pencil-square"></i></div><div class="kpi-val" style="color:var(--warning);">38.4<small style="font-size:18px;">%</small></div><div class="kpi-lbl">متوسط الاختبارات</div><div class="kpi-sub">أدنى من الحد المقبول</div></div>
+    <div class="kpi indigo"><div class="kpi-icon" style="background:var(--indigo-l);color:var(--indigo);"><i class="bi bi-journal-check"></i></div><div class="kpi-val" style="color:var(--indigo);">32.7<small style="font-size:18px;">%</small></div><div class="kpi-lbl">متوسط الواجبات</div><div class="kpi-sub">معدل التزام الحالات الحرجة</div></div>
+    <div class="kpi violet" style="--violet:#7C3AED;--violet-l:#EDE9FE;"><div class="kpi-icon" style="background:#EDE9FE;color:#7C3AED;"><i class="bi bi-calendar-x-fill"></i></div><div class="kpi-val" style="color:#7C3AED;">48.2<small style="font-size:18px;">%</small></div><div class="kpi-lbl">متوسط الحضور</div><div class="kpi-sub">نسبة حضور الحالات الحرجة</div></div>
+  </div>
+
+  <div class="reason-grid">
+    <div class="reason-card"><div class="reason-icon" style="background:#FEF2F2;color:#DC2626;"><i class="bi bi-brain"></i></div><div><div class="reason-count" style="color:#DC2626;">5</div><div class="reason-lbl">ضعف عام في الفهم</div></div></div>
+    <div class="reason-card"><div class="reason-icon" style="background:#FEF3C7;color:#D97706;"><i class="bi bi-pencil-fill"></i></div><div><div class="reason-count" style="color:#D97706;">3</div><div class="reason-lbl">ضعف في الاختبارات</div></div></div>
+    <div class="reason-card"><div class="reason-icon" style="background:#EDE9FE;color:#7C3AED;"><i class="bi bi-journal-x"></i></div><div><div class="reason-count" style="color:#7C3AED;">2</div><div class="reason-lbl">إهمال الواجبات</div></div></div>
+    <div class="reason-card"><div class="reason-icon" style="background:#EEF2FF;color:#4F46E5;"><i class="bi bi-calendar-x-fill"></i></div><div><div class="reason-count" style="color:#4F46E5;">2</div><div class="reason-lbl">غياب متكرر</div></div></div>
+  </div>
+
+  <div class="charts-row">
+    <div class="card"><div class="card-title"><div class="ct-icon" style="background:var(--danger-l);color:var(--danger);"><i class="bi bi-pie-chart-fill"></i></div>توزيع أسباب الضعف</div><p class="card-sub">تصنيف الحالات الحرجة حسب السبب</p><div id="c1ChartDist" style="min-height:240px;"></div></div>
+    <div class="card"><div class="card-title"><div class="ct-icon" style="background:var(--warning-l);color:var(--warning);"><i class="bi bi-bar-chart-steps"></i></div>مقارنة الأداء — أضعف 5 طلاب</div><p class="card-sub">مقارنة بين الاختبارات والواجبات والحضور</p><div id="c1ChartBar" style="min-height:240px;"></div></div>
+    <div class="card"><div class="card-title"><div class="ct-icon" style="background:var(--indigo-l);color:var(--indigo);"><i class="bi bi-speedometer2"></i></div>متوسطات الأداء العامة</div><p class="card-sub">مقارنة بالحد الأدنى المقبول (60%)</p><div id="c1ChartRadial" style="min-height:240px;"></div></div>
+  </div>
+
+  <div class="section">
+    <div class="toolbar">
+      <div class="sec-title"><div class="st-icon" style="background:var(--danger-l);color:var(--danger);"><i class="bi bi-exclamation-triangle-fill"></i></div>قائمة الحالات الحرجة<span class="badge b-red" style="font-size:11px;">12 حالة</span></div>
+      <input type="text" class="search-box" placeholder="🔍 ابحث باسم الطالب..." oninput="filterCrit(this.value)">
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="tbl" id="critTable">
+        <thead><tr><th style="width:44px;"><input type="checkbox" class="cb" id="ca" onchange="toggleAllCrit(this)"></th><th style="min-width:180px;">الطالب</th><th style="min-width:120px;">الاختبارات</th><th style="min-width:120px;">الواجبات</th><th style="min-width:120px;">الحضور</th><th style="min-width:160px;">سبب الضعف</th><th style="min-width:200px;">الإجراء المطلوب</th></tr></thead>
+        <tbody id="critBody"></tbody>
+      </table>
+    </div>
+    <div class="tbl-footer"><span class="footer-txt">إجمالي: <strong>12</strong> حالة حرجة</span><span class="footer-txt" id="critInfo"></span></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- PAGE 2: HIGH RISK LESSONS                     -->
+<!-- ═══════════════════════════════════════════════ -->
+<div id="pageLessons" class="page-section">
+
+  <nav class="breadcrumb-row"><i class="bi bi-house-fill"></i><a href="#">لوحة التحكم</a><span class="sep">‹</span><a href="#">التحليلات المتقدمة</a><span class="sep">‹</span><span class="cur">الدروس عالية الخطورة</span></nav>
+
+  <div class="ph" style="background:linear-gradient(135deg,#78350F 0%,#D97706 50%,#F59E0B 100%);margin-bottom:22px;">
+    <div class="ph-row">
+      <div style="display:flex;align-items:center;gap:16px;">
+        <div class="ph-icon"><i class="bi bi-fire"></i></div>
+        <div><h1 class="ph-title">الدروس عالية الخطورة</h1><p class="ph-sub">رصد الدروس ذات نسب الإجابات الخاطئة المرتفعة <span class="ph-badge">14 درس محلَّل</span></p></div>
+      </div>
+      <button class="btn-back"><i class="bi bi-arrow-right"></i> رجوع للتحليلات</button>
+    </div>
+  </div>
+
+  <div class="filter-bar">
+    <span style="font-size:13px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:6px;"><i class="bi bi-funnel-fill"></i> تصفية:</span>
+    <select><option>كل المناهج</option><option>منهج الرياضيات</option></select>
+    <select><option>كل الدفعات</option><option>دفعة يناير 2025</option></select>
+    <select><option>كل المدرسين</option><option>أ. أحمد محمد</option></select>
+    <button class="btn-filter" style="background:var(--warning);"><i class="bi bi-search"></i> تطبيق</button>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi amber"><div class="kpi-icon" style="background:var(--warning-l);color:var(--warning);"><i class="bi bi-book-fill"></i></div><div class="kpi-val" style="color:var(--warning);">14</div><div class="kpi-lbl">إجمالي الدروس الضعيفة</div><div class="kpi-sub">دروس بنسبة خطأ ≥ 50%</div></div>
+    <div class="kpi red"><div class="kpi-icon" style="background:var(--danger-l);color:var(--danger);"><i class="bi bi-fire"></i></div><div class="kpi-val" style="color:var(--danger);">6</div><div class="kpi-lbl">خطر عالي جداً</div><div class="kpi-sub">نسبة الخطأ ≥ 70%</div></div>
+    <div class="kpi blue"><div class="kpi-icon" style="background:var(--primary-l);color:var(--primary);"><i class="bi bi-graph-up-arrow"></i></div><div class="kpi-val" style="color:var(--primary);">67.3<small style="font-size:18px;">%</small></div><div class="kpi-lbl">متوسط نسبة الضعف</div><div class="kpi-sub">عبر جميع الدروس</div></div>
+    <div class="kpi indigo"><div class="kpi-icon" style="background:var(--indigo-l);color:var(--indigo);"><i class="bi bi-people-fill"></i></div><div class="kpi-val" style="color:var(--indigo);">247</div><div class="kpi-lbl">إجمالي الطلاب المتأثرين</div><div class="kpi-sub">طلاب بإجابات خاطئة</div></div>
+  </div>
+
+  <div class="risk-strip">
+    <span style="font-size:12px;font-weight:700;color:var(--muted);white-space:nowrap;">توزيع مستوى الخطورة</span>
+    <div class="risk-bar"><div class="risk-seg" style="width:43%;background:var(--danger);"></div><div class="risk-seg" style="width:36%;background:var(--warning);"></div><div class="risk-seg" style="width:21%;background:var(--success);"></div></div>
+    <div class="risk-legend">
+      <div class="risk-item"><div class="risk-dot" style="background:var(--danger);"></div><span>عالي جداً <span style="color:var(--muted);font-weight:400;">43%</span></span></div>
+      <div class="risk-item"><div class="risk-dot" style="background:var(--warning);"></div><span>متوسط <span style="color:var(--muted);font-weight:400;">36%</span></span></div>
+      <div class="risk-item"><div class="risk-dot" style="background:var(--success);"></div><span>منخفض <span style="color:var(--muted);font-weight:400;">21%</span></span></div>
+    </div>
+  </div>
+
+  <div class="charts-row" style="grid-template-columns:1fr 280px 1fr;">
+    <div class="card"><div class="card-title"><div class="ct-icon" style="background:var(--danger-l);color:var(--danger);"><i class="bi bi-bar-chart-fill"></i></div>نسب الضعف — أعلى الدروس</div><p class="card-sub">أعلى 6 دروس مرتبة حسب نسبة الإجابات الخاطئة</p><div id="c2ChartBar" style="min-height:260px;"></div></div>
+    <div class="card"><div class="card-title"><div class="ct-icon" style="background:var(--warning-l);color:var(--warning);"><i class="bi bi-pie-chart-fill"></i></div>توزيع مستوى الخطر</div><p class="card-sub">تصنيف الدروس حسب الخطورة</p><div id="c2ChartDist" style="min-height:260px;"></div></div>
+    <div class="card"><div class="card-title"><div class="ct-icon" style="background:var(--indigo-l);color:var(--indigo);"><i class="bi bi-people-fill"></i></div>الطلاب المتأثرون لكل درس</div><p class="card-sub">عدد الطلاب الذين أخطأوا في كل درس</p><div id="c2ChartAff" style="min-height:260px;"></div></div>
+  </div>
+
+  <div class="section">
+    <div class="toolbar">
+      <div class="sec-title"><div class="st-icon" style="background:var(--warning-l);color:var(--warning);"><i class="bi bi-book-fill"></i></div>قائمة الدروس الضعيفة<span class="badge b-amber" style="font-size:11px;">14 درس</span></div>
+      <div class="ftabs">
+        <button class="ftab active" onclick="filterLesson('all',this)">الكل</button>
+        <button class="ftab ftab-red" onclick="filterLesson('high',this)"><i class="bi bi-circle-fill" style="font-size:8px;"></i> عالي جداً (6)</button>
+        <button class="ftab" onclick="filterLesson('medium',this)"><i class="bi bi-circle-fill" style="font-size:8px;"></i> متوسط (8)</button>
+      </div>
+      <input type="text" class="search-box" placeholder="🔍 ابحث باسم الدرس..." oninput="filterLessonSearch(this.value)">
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="tbl" id="lessonTable">
+        <thead><tr><th style="min-width:220px;">الدرس</th><th style="min-width:150px;">الدفعة</th><th style="min-width:150px;">المدرس</th><th style="min-width:110px;">الطلاب المتأثرون</th><th style="min-width:160px;">نسبة الضعف</th><th style="min-width:110px;">مستوى الخطر</th></tr></thead>
+        <tbody id="lessonBody"></tbody>
+      </table>
+    </div>
+    <div class="tbl-footer"><span class="footer-txt">إجمالي: <strong>14</strong> درس</span><span class="footer-txt" id="lessonInfo"></span></div>
+  </div>
+</div>
+
+<!-- FAB & Modal (Critical Students) -->
+<div class="fab hidden" id="fabCrit">
+  <div class="fab-info"><strong id="fabCritCount">0</strong> طالب محدد</div>
+  <div class="fab-div"></div>
+  <button class="fab-btn fb-d" onclick="openM('notify')"><i class="bi bi-bell-fill"></i> إرسال تنبيه</button>
+  <button class="fab-btn fb-a" onclick="openM('session')"><i class="bi bi-calendar-plus-fill"></i> جلسة تدارك</button>
+  <button class="fab-btn fb-g" onclick="openM('teacher')"><i class="bi bi-person-plus-fill"></i> تعيين مدرس</button>
+  <button class="fab-btn fb-gh" onclick="openM('export')"><i class="bi bi-download"></i> تصدير</button>
+  <button class="fab-x" onclick="clearCrit()"><i class="bi bi-x"></i></button>
+</div>
+
+<div class="modal-ov" id="mOv">
+  <div class="modal-box">
+    <div class="modal-hdr"><div class="m-icon" id="mIcon"></div><div><div class="m-title" id="mTitle"></div><div class="m-sub" id="mSub"></div></div><button class="m-close" onclick="closeM()"><i class="bi bi-x-lg"></i></button></div>
+    <div class="modal-body"><div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px;">الطلاب المحددون</div><div class="sel-list" id="mList"></div><div id="mForm"></div></div>
+    <div class="modal-ftr"><button class="btn-cancel" onclick="closeM()">إلغاء</button><button class="btn-submit" id="mBtn"></button></div>
+  </div>
+</div>
+
+<script>
+/* ── Page switcher ─── */
+function showPage(p){
+  document.querySelectorAll('.page-section').forEach(function(s){s.classList.remove('active');});
+  document.getElementById(p==='critical'?'pageCritical':'pageLessons').classList.add('active');
+  document.querySelectorAll('.pnav-btn').forEach(function(b,i){b.classList.toggle('active',i===(p==='critical'?0:1));});
+}
+
+/* ── Mock data ─── */
+var critMock=[
+  {n:'أحمد محمد السيد',e:22,h:18,a:40,r:'ضعف عام في الفهم',ac:'إعادة شرح + واجبات إضافية'},
+  {n:'فاطمة علي حسن',e:28,h:35,a:55,r:'ضعف في الاختبارات',ac:'تدريب على نماذج امتحانات'},
+  {n:'عمر خالد إبراهيم',e:31,h:45,a:48,r:'ضعف عام في الفهم',ac:'إعادة شرح + واجبات إضافية'},
+  {n:'مريم يوسف محمد',e:35,h:28,a:62,r:'عدم الالتزام بالواجبات',ac:'متابعة يومية + واجب إجباري'},
+  {n:'خالد عبدالله أحمد',e:38,h:42,a:35,r:'غياب متكرر',ac:'تنبيه ولي الأمر'},
+  {n:'سارة محمود حسين',e:41,h:52,a:70,r:'ضعف في الاختبارات',ac:'تدريب على نماذج امتحانات'},
+  {n:'يوسف طارق علي',e:43,h:38,a:58,r:'عدم الالتزام بالواجبات',ac:'متابعة يومية + واجب إجباري'},
+  {n:'نور الدين سامي',e:46,h:48,a:44,r:'ضعف عام في الفهم',ac:'إعادة شرح + واجبات إضافية'},
+  {n:'هبة الرحمن أمين',e:48,h:55,a:65,r:'ضعف في الاختبارات',ac:'تدريب على نماذج امتحانات'},
+  {n:'إبراهيم جمال وليد',e:49,h:30,a:72,r:'عدم الالتزام بالواجبات',ac:'متابعة يومية + واجب إجباري'},
+  {n:'ليلى حسام منير',e:50,h:58,a:68,r:'ضعف عام في الفهم',ac:'إعادة شرح + واجبات إضافية'},
+  {n:'رامي وليد فاروق',e:51,h:46,a:73,r:'غياب متكرر',ac:'تنبيه ولي الأمر'},
+];
+var lessonMock=[
+  {n:'الجبر الخطي',b:'دفعة يناير',ins:'أ. سامي عمر',aff:28,pct:87,risk:'high'},
+  {n:'التفاضل والتكامل',b:'دفعة مارس',ins:'أ. نادية حسن',aff:22,pct:79,risk:'high'},
+  {n:'الهندسة التحليلية',b:'دفعة يناير',ins:'أ. سامي عمر',aff:18,pct:74,risk:'high'},
+  {n:'الإحصاء الوصفي',b:'دفعة أبريل',ins:'أ. أحمد علي',aff:31,pct:71,risk:'high'},
+  {n:'نظرية الأعداد',b:'دفعة مارس',ins:'أ. نادية حسن',aff:15,pct:70,risk:'high'},
+  {n:'المعادلات التفاضلية',b:'دفعة يناير',ins:'أ. كريم وليد',aff:24,pct:68,risk:'medium'},
+  {n:'حساب المثلثات',b:'دفعة مارس',ins:'أ. ريم سالم',aff:19,pct:63,risk:'medium'},
+  {n:'التحليل العددي',b:'دفعة أبريل',ins:'أ. أحمد علي',aff:16,pct:59,risk:'medium'},
+  {n:'الجبر المجرد',b:'دفعة يناير',ins:'أ. سامي عمر',aff:12,pct:56,risk:'medium'},
+  {n:'نظرية المجموعات',b:'دفعة مارس',ins:'أ. نادية حسن',aff:11,pct:54,risk:'medium'},
+  {n:'الطوبولوجيا',b:'دفعة أبريل',ins:'أ. كريم وليد',aff:9,pct:52,risk:'medium'},
+  {n:'حساب التفاضل متعدد المتغيرات',b:'دفعة يناير',ins:'أ. ريم سالم',aff:8,pct:51,risk:'medium'},
+];
+
+/* ── Render Critical Students ─── */
+(function(){
+  function sc(v){return v>=60?'var(--success)':v>=40?'var(--warning)':'var(--danger)';}
+  document.getElementById('critBody').innerHTML=critMock.map(function(s){
+    return '<tr class="crit-r" data-name="'+s.n.toLowerCase()+'">' +
+      '<td><input type="checkbox" class="cb crit-cb" data-name="'+s.n+'" onchange="onCritCb()" style="accent-color:#DC2626;"></td>' +
+      '<td><div style="display:flex;align-items:center;gap:10px;"><div class="avatar" style="background:#FEE2E2;color:#DC2626;">'+s.n[0]+'</div><div style="font-weight:700;font-size:14px;">'+s.n+'</div></div></td>' +
+      '<td><div class="score-num" style="color:'+sc(s.e)+';">'+s.e+'%</div><div class="prog"><div class="prog-bar" style="width:'+s.e+'%;background:'+sc(s.e)+';"></div></div></td>' +
+      '<td><div class="score-num" style="color:'+sc(s.h)+';">'+s.h+'%</div><div class="prog"><div class="prog-bar" style="width:'+s.h+'%;background:'+sc(s.h)+';"></div></div></td>' +
+      '<td><div class="score-num" style="color:'+sc(s.a)+';">'+s.a+'%</div><div class="prog"><div class="prog-bar" style="width:'+s.a+'%;background:'+sc(s.a)+';"></div></div></td>' +
+      '<td><span style="font-size:13px;font-weight:600;">'+s.r+'</span></td>' +
+      '<td><span class="chip">'+s.ac+'</span></td></tr>';
+  }).join('');
+})();
+
+/* ── Render Lessons ─── */
+(function(){
+  document.getElementById('lessonBody').innerHTML=lessonMock.map(function(l){
+    var barC=l.risk==='high'?'#DC2626':'#D97706';
+    var iconBg=l.risk==='high'?'#FEE2E2':'#FEF3C7';
+    var bCls=l.risk==='high'?'b-red':'b-amber';
+    var bTxt=l.risk==='high'?'خطر عالي':'متوسط';
+    var bIco=l.risk==='high'?'bi-fire':'bi-dash-circle-fill';
+    return '<tr class="lesson-r" data-risk="'+l.risk+'" data-name="'+l.n.toLowerCase()+'">' +
+      '<td><div style="display:flex;align-items:center;gap:10px;"><div class="lesson-icon" style="background:'+iconBg+';color:'+barC+'"><i class="bi bi-book-fill"></i></div><div style="font-weight:700;font-size:14px;line-height:1.3;">'+l.n+'</div></div></td>' +
+      '<td><span style="font-size:13px;font-weight:600;">'+l.b+'</span></td>' +
+      '<td><span style="font-size:13px;font-weight:600;">'+l.ins+'</span></td>' +
+      '<td><div style="display:flex;align-items:center;gap:6px;"><i class="bi bi-person-fill" style="color:#4F46E5;font-size:14px;"></i><span style="font-size:15px;font-weight:800;color:#4F46E5;">'+l.aff+'</span></div></td>' +
+      '<td><div class="weak-num" style="color:'+barC+';">'+l.pct+'%</div><div class="prog6"><div class="prog6-bar" style="width:'+l.pct+'%;background:'+barC+';"></div></div></td>' +
+      '<td><span class="badge '+bCls+'"><i class="bi '+bIco+'"></i> '+bTxt+'</span></td></tr>';
+  }).join('');
+})();
+
+/* ── Charts — Critical Students ─── */
+new ApexCharts(document.getElementById('c1ChartDist'),{chart:{type:'donut',height:240,fontFamily:'Cairo,sans-serif',toolbar:{show:false}},series:[5,3,2,2],labels:['ضعف عام','ضعف اختبارات','إهمال واجبات','غياب متكرر'],colors:['#DC2626','#D97706','#7C3AED','#4F46E5'],legend:{position:'bottom',fontSize:'12px',fontWeight:600},dataLabels:{style:{fontSize:'12px',fontFamily:'Cairo,sans-serif',fontWeight:'700'}},plotOptions:{pie:{donut:{size:'60%',labels:{show:true,total:{show:true,label:'الإجمالي',fontSize:'12px',fontWeight:'700',color:'#64748B',formatter:function(w){return w.globals.seriesTotals.reduce(function(a,b){return a+b;},0)+' حالة';}}}}}},tooltip:{style:{fontFamily:'Cairo,sans-serif'}}}).render();
+
+new ApexCharts(document.getElementById('c1ChartBar'),{chart:{type:'bar',height:240,fontFamily:'Cairo,sans-serif',toolbar:{show:false}},plotOptions:{bar:{borderRadius:4,columnWidth:'65%'}},series:[{name:'الاختبارات %',data:[22,28,31,35,38]},{name:'الواجبات %',data:[18,35,45,28,42]},{name:'الحضور %',data:[40,55,48,62,35]}],xaxis:{categories:['أحمد محمد','فاطمة علي','عمر خالد','مريم يوسف','خالد عبدالله'],labels:{style:{fontSize:'10px',fontFamily:'Cairo,sans-serif'},rotate:-25}},yaxis:{max:100,labels:{style:{fontSize:'11px',fontFamily:'Cairo,sans-serif'},formatter:function(v){return v+'%';}}},colors:['#DC2626','#7C3AED','#4F46E5'],legend:{fontSize:'12px',fontFamily:'Cairo,sans-serif'},dataLabels:{enabled:false},tooltip:{style:{fontFamily:'Cairo,sans-serif'},y:{formatter:function(v){return v+'%';}}},grid:{borderColor:'#E2E8F0'},annotations:{yaxis:[{y:60,borderColor:'#94A3B8',borderWidth:1,strokeDashArray:4,label:{text:'الحد المقبول 60%',style:{fontFamily:'Cairo,sans-serif',fontSize:'11px'}}}]}}).render();
+
+new ApexCharts(document.getElementById('c1ChartRadial'),{chart:{type:'radialBar',height:240,fontFamily:'Cairo,sans-serif',toolbar:{show:false}},series:[38,33,48],labels:['الاختبارات','الواجبات','الحضور'],colors:['#DC2626','#7C3AED','#4F46E5'],plotOptions:{radialBar:{hollow:{size:'30%'},dataLabels:{name:{fontSize:'12px',fontFamily:'Cairo,sans-serif'},value:{fontSize:'14px',fontWeight:'700',fontFamily:'Cairo,sans-serif',formatter:function(v){return v+'%';}},total:{show:true,label:'المتوسط',fontSize:'11px',fontFamily:'Cairo,sans-serif',color:'#64748B',formatter:function(){return '40%';}}}}},legend:{show:true,position:'bottom',fontSize:'12px',fontFamily:'Cairo,sans-serif'}}).render();
+
+/* ── Charts — Lessons ─── */
+var lL=['الجبر الخطي','التفاضل','الهندسة','الإحصاء','نظرية الأعداد','المعادلات'],lP=[87,79,74,71,70,68],lA=[28,22,18,31,15,24],lC=['#DC2626','#DC2626','#DC2626','#DC2626','#DC2626','#D97706'];
+new ApexCharts(document.getElementById('c2ChartBar'),{chart:{type:'bar',height:260,fontFamily:'Cairo,sans-serif',toolbar:{show:false}},plotOptions:{bar:{horizontal:true,borderRadius:5,distributed:true,dataLabels:{position:'top'}}},series:[{name:'نسبة الضعف %',data:lP}],xaxis:{categories:lL,max:100,labels:{style:{fontSize:'11px',fontFamily:'Cairo,sans-serif'},formatter:function(v){return v+'%';}}},yaxis:{labels:{style:{fontSize:'11px',fontFamily:'Cairo,sans-serif'}}},colors:lC,legend:{show:false},dataLabels:{enabled:true,formatter:function(v){return v+'%';},style:{fontSize:'11px',fontFamily:'Cairo,sans-serif',colors:['#fff']}},tooltip:{style:{fontFamily:'Cairo,sans-serif'},y:{formatter:function(v){return v+'%';}}},grid:{borderColor:'#E2E8F0'},annotations:{xaxis:[{x:70,borderColor:'#DC2626',borderWidth:1,strokeDashArray:4,label:{text:'70%',style:{fontFamily:'Cairo,sans-serif',fontSize:'10px',color:'#DC2626'}}},{x:50,borderColor:'#D97706',borderWidth:1,strokeDashArray:4,label:{text:'50%',style:{fontFamily:'Cairo,sans-serif',fontSize:'10px',color:'#D97706'}}}]}}).render();
+new ApexCharts(document.getElementById('c2ChartDist'),{chart:{type:'donut',height:260,fontFamily:'Cairo,sans-serif',toolbar:{show:false}},series:[6,8],labels:['خطر عالي جداً (≥70%)','متوسط (50-70%)'],colors:['#DC2626','#D97706'],legend:{position:'bottom',fontSize:'12px',fontWeight:600},dataLabels:{style:{fontSize:'12px',fontFamily:'Cairo,sans-serif',fontWeight:'700'}},plotOptions:{pie:{donut:{size:'62%',labels:{show:true,total:{show:true,label:'الدروس الضعيفة',fontSize:'11px',fontWeight:'700',color:'#64748B',formatter:function(w){return w.globals.seriesTotals.reduce(function(a,b){return a+b;},0)+' درس';}}}}}},tooltip:{style:{fontFamily:'Cairo,sans-serif'}}}).render();
+new ApexCharts(document.getElementById('c2ChartAff'),{chart:{type:'bar',height:260,fontFamily:'Cairo,sans-serif',toolbar:{show:false}},plotOptions:{bar:{borderRadius:5,columnWidth:'60%',distributed:true}},series:[{name:'الطلاب المتأثرون',data:lA}],xaxis:{categories:lL,labels:{style:{fontSize:'10px',fontFamily:'Cairo,sans-serif'},rotate:-35}},yaxis:{labels:{style:{fontSize:'11px',fontFamily:'Cairo,sans-serif'}}},colors:lC,legend:{show:false},dataLabels:{enabled:true,style:{fontSize:'11px',fontFamily:'Cairo,sans-serif'}},tooltip:{style:{fontFamily:'Cairo,sans-serif'},y:{formatter:function(v){return v+' طالب';}}},grid:{borderColor:'#E2E8F0'}}).render();
+
+/* ── Critical Students Interactions ─── */
+function filterCrit(v){var q=v.toLowerCase();document.querySelectorAll('.crit-r').forEach(function(r){r.style.display=!q||r.dataset.name.includes(q)?'':'none';});}
+function getSel(){return Array.from(document.querySelectorAll('.crit-cb:checked'));}
+function onCritCb(){
+  var sel=getSel();
+  document.getElementById('fabCritCount').textContent=sel.length;
+  document.getElementById('fabCrit').classList.toggle('hidden',sel.length===0);
+  document.querySelectorAll('.crit-r').forEach(function(r){var cb=r.querySelector('.crit-cb');r.style.background=cb&&cb.checked?'#FEF2F2':'';});
+  var all=document.querySelectorAll('.crit-cb').length,sa=document.getElementById('ca');
+  if(sa){sa.indeterminate=sel.length>0&&sel.length<all;sa.checked=sel.length===all&&all>0;}
+}
+function toggleAllCrit(m){document.querySelectorAll('.crit-cb').forEach(function(cb){var r=cb.closest('.crit-r');if(r&&r.style.display!=='none'){cb.checked=m.checked;r.style.background=m.checked?'#FEF2F2':'';}});onCritCb();}
+function clearCrit(){document.querySelectorAll('.crit-cb').forEach(function(cb){cb.checked=false;});var sa=document.getElementById('ca');if(sa){sa.checked=false;sa.indeterminate=false;}document.querySelectorAll('.crit-r').forEach(function(r){r.style.background='';});document.getElementById('fabCrit').classList.add('hidden');}
+
+/* ── Lesson filtering ─── */
+var lRisk='all',lSearch='';
+function applyLF(){document.querySelectorAll('.lesson-r').forEach(function(r){var mr=lRisk==='all'||r.dataset.risk===lRisk;var ms=!lSearch||r.dataset.name.includes(lSearch);r.style.display=mr&&ms?'':'none';});}
+function filterLesson(r,btn){lRisk=r;document.querySelectorAll('.ftab').forEach(function(t){t.classList.remove('active');});btn.classList.add('active');applyLF();}
+function filterLessonSearch(v){lSearch=v.toLowerCase();applyLF();}
+
+/* ── Modal ─── */
+var mCfgs={
+  notify:{icon:'<i class="bi bi-bell-fill" style="color:#DC2626;font-size:22px;"></i>',bg:'#FEE2E2',title:'إرسال تنبيه للطلاب',sub:'إشعار فوري للطلاب المحددين',btn:'إرسال التنبيه',form:'<div class="fg"><label class="fl">نوع التنبيه</label><select class="fc"><option>إنذار أداء</option><option>طلب مراجعة</option></select></div><div class="fg"><label class="fl">نص الرسالة</label><textarea class="fc" placeholder="أكتب رسالتك هنا..."></textarea></div>'},
+  session:{icon:'<i class="bi bi-calendar-plus-fill" style="color:#B45309;font-size:22px;"></i>',bg:'#FEF3C7',title:'جدولة جلسة تدارك',sub:'حجز جلسة مراجعة طارئة',btn:'تأكيد الجدولة',form:'<div class="fg"><label class="fl">تاريخ الجلسة</label><input type="date" class="fc"></div><div class="fg"><label class="fl">الوقت</label><input type="time" class="fc"></div><div class="fg"><label class="fl">ملاحظات</label><textarea class="fc" placeholder="تفاصيل الجلسة..."></textarea></div>'},
+  teacher:{icon:'<i class="bi bi-person-plus-fill" style="color:#059669;font-size:22px;"></i>',bg:'#D1FAE5',title:'تعيين مدرس مساعد',sub:'ربط الطلاب بمدرس للمتابعة المكثفة',btn:'تعيين المدرس',form:'<div class="fg"><label class="fl">المدرس المساعد</label><select class="fc"><option>-- اختر مدرساً --</option><option>أ. أحمد علي</option></select></div>'},
+  export:{icon:'<i class="bi bi-file-earmark-arrow-down-fill" style="color:#4F46E5;font-size:22px;"></i>',bg:'#EEF2FF',title:'تصدير التقرير',sub:'تصدير ملف مفصّل',btn:'تصدير الآن',form:'<div class="fg"><label class="fl">صيغة التصدير</label><select class="fc"><option>Excel (.xlsx)</option><option>PDF</option></select></div>'}
+};
+function openM(type){var c=mCfgs[type],sel=getSel();if(!sel.length)return;document.getElementById('mIcon').innerHTML=c.icon;document.getElementById('mIcon').style.background=c.bg;document.getElementById('mTitle').textContent=c.title;document.getElementById('mSub').textContent=c.sub;document.getElementById('mBtn').textContent=c.btn;document.getElementById('mForm').innerHTML=c.form;document.getElementById('mList').innerHTML=sel.map(function(cb){return '<div class="sel-it"><div class="sel-dot"></div>'+cb.dataset.name+'</div>';}).join('');document.getElementById('mOv').classList.add('open');document.body.style.overflow='hidden';}
+function closeM(){document.getElementById('mOv').classList.remove('open');document.body.style.overflow='';}
+document.getElementById('mOv').addEventListener('click',function(e){if(e.target===this)closeM();});
+document.addEventListener('keydown',function(e){if(e.key==='Escape')closeM();});
+</script>
+</body>
+</html>

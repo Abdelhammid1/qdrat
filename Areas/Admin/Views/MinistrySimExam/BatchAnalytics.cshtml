@@ -1,0 +1,267 @@
+@model QdratNew.ViewModels.Exam.MinistrySimExamBatchAnalyticsVm
+@{
+    ViewData["Title"] = "تحليلات الدفعة";
+}
+
+<style>
+    .qdrat-page { direction: rtl; text-align: right; }
+
+    .qdrat-hero {
+        background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 48%, #2563eb 100%);
+        border-radius: 24px; padding: 28px; color: #fff; margin-bottom: 24px;
+        box-shadow: 0 18px 45px rgba(15, 23, 42, .18);
+    }
+
+    .qdrat-card {
+        background: #fff; border: 1px solid #e5e7eb; border-radius: 22px;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, .06); overflow: hidden; margin-bottom: 18px;
+    }
+
+    .qdrat-card-header {
+        padding: 17px 20px; background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .qdrat-kpi-row { display: flex; gap: 14px; flex-wrap: wrap; padding: 20px; }
+    .qdrat-kpi { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 16px; padding: 14px 18px; min-width: 140px; flex: 1; }
+    .qdrat-kpi .num { font-size: 1.6rem; font-weight: 800; color: #1e3a8a; }
+    .qdrat-kpi .label { font-size: .8rem; color: #64748b; margin-top: 2px; }
+
+    .qdrat-student-row {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        padding: 14px 20px; border-bottom: 1px dashed #e5e7eb; flex-wrap: wrap;
+    }
+    .qdrat-student-row:last-child { border-bottom: none; }
+
+    .qdrat-status-chip { font-size: 12.5px; font-weight: 800; padding: 4px 12px; border-radius: 999px; }
+    .qdrat-status-chip.done { background: #ecfdf5; color: #047857; }
+    .qdrat-status-chip.progress { background: #fff6ea; color: #b45309; }
+    .qdrat-status-chip.pending { background: #f1f5f9; color: #475569; }
+
+    .qdrat-empty { padding: 40px 20px; text-align: center; color: #64748b; }
+
+    .qdrat-charts-row { display: flex; gap: 18px; flex-wrap: wrap; padding: 20px; }
+    .qdrat-chart-box { flex: 1; min-width: 260px; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 16px; padding: 16px; }
+    .qdrat-chart-box h6 { font-weight: 700; color: #1e3a8a; margin-bottom: 10px; font-size: .9rem; }
+    .qdrat-chart-box canvas { max-height: 260px; }
+
+    .qdrat-table-wrap { padding: 0 20px 20px; overflow-x: auto; }
+    .qdrat-stage-table { width: 100%; border-collapse: collapse; font-size: .87rem; }
+    .qdrat-stage-table th, .qdrat-stage-table td { padding: 10px 12px; text-align: center; border-bottom: 1px solid #e5e7eb; }
+    .qdrat-stage-table th { background: #f8fafc; color: #475569; font-weight: 700; }
+</style>
+
+<div class="container-fluid py-4 qdrat-page">
+    <div class="qdrat-hero">
+        <h2 class="mb-1"><i class="bi bi-graph-up ms-2"></i> تحليلات الدفعة</h2>
+        <p class="mb-0" style="opacity:.9">@Model.ExamTitle — @Model.BatchName</p>
+    </div>
+
+    <div class="qdrat-card">
+        <div class="qdrat-card-header">
+            <h5 class="mb-0"><i class="bi bi-bar-chart ms-1"></i> ملخّص عام</h5>
+        </div>
+        <div class="qdrat-kpi-row">
+            <div class="qdrat-kpi">
+                <div class="num">@Model.TotalStudents</div>
+                <div class="label">إجمالي طلاب الدفعة</div>
+            </div>
+            <div class="qdrat-kpi">
+                <div class="num">@Model.CompletedCount</div>
+                <div class="label">أكملوا الاختبار</div>
+            </div>
+            <div class="qdrat-kpi">
+                <div class="num">@Model.InProgressCount</div>
+                <div class="label">قيد التقدّم</div>
+            </div>
+            <div class="qdrat-kpi">
+                <div class="num">@Model.NotStartedCount</div>
+                <div class="label">لم يبدأوا بعد</div>
+            </div>
+            <div class="qdrat-kpi">
+                <div class="num">@Model.AvgScorePercent.ToString("0.#")%</div>
+                <div class="label">متوسط الدرجة العام</div>
+            </div>
+            <div class="qdrat-kpi">
+                <div class="num">@Model.AvgQuantPercent.ToString("0.#")%</div>
+                <div class="label">متوسط المحور الكمي</div>
+            </div>
+            <div class="qdrat-kpi">
+                <div class="num">@Model.AvgVerbalPercent.ToString("0.#")%</div>
+                <div class="label">متوسط المحور اللفظي</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="qdrat-card">
+        <div class="qdrat-card-header">
+            <h5 class="mb-0"><i class="bi bi-diagram-3 ms-1"></i> تفصيل المراحل الخمس</h5>
+        </div>
+        @if (!Model.StageStats.Any())
+        {
+            <div class="qdrat-empty">لا توجد بيانات مراحل بعد — لم يبدأ أي طالب الاختبار.</div>
+        }
+        else
+        {
+            <div class="qdrat-table-wrap">
+                <table class="qdrat-stage-table">
+                    <thead>
+                        <tr>
+                            <th>المرحلة</th>
+                            <th>متوسط الدرجة</th>
+                            <th>اكتملت ضمن الوقت</th>
+                            <th>انتهى وقتها</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var st in Model.StageStats)
+                        {
+                            <tr>
+                                <td>المرحلة @st.StageNumber</td>
+                                <td>@st.AvgScorePercent.ToString("0.#")%</td>
+                                <td>@st.CompletedWithinTimeCount</td>
+                                <td>@st.TimeExpiredCount</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="qdrat-charts-row">
+                <div class="qdrat-chart-box">
+                    <h6>متوسط الدرجة لكل مرحلة</h6>
+                    <canvas id="stageAvgScoreChart"></canvas>
+                </div>
+                <div class="qdrat-chart-box">
+                    <h6>الوقت: ضمن الوقت مقابل تجاوز الوقت لكل مرحلة</h6>
+                    <canvas id="stageTimeStatusChart"></canvas>
+                </div>
+                <div class="qdrat-chart-box">
+                    <h6>التوزيع الإجمالي لحالة الوقت</h6>
+                    <canvas id="stageTimeOverallChart"></canvas>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="qdrat-card">
+        <div class="qdrat-card-header">
+            <h5 class="mb-0"><i class="bi bi-people ms-1"></i> طلاب الدفعة (@Model.Students.Count)</h5>
+        </div>
+        <div class="qdrat-card-body">
+            @if (!Model.Students.Any())
+            {
+                <div class="qdrat-empty">لا يوجد طلاب فعّالون في هذه الدفعة.</div>
+            }
+            else
+            {
+                foreach (var s in Model.Students)
+                {
+                    <div class="qdrat-student-row">
+                        <div class="fw-semibold">@s.FullName</div>
+
+                        @if (s.IsCompleted)
+                        {
+                            <span class="qdrat-status-chip done"><i class="bi bi-check-circle"></i> مكتمل — @s.ScorePercent?.ToString("0.#")%</span>
+                            <span class="text-muted" style="font-size:13px">صحيح @s.CorrectAnswers — خطأ @s.WrongAnswers — متخطّى @s.SkippedAnswers</span>
+                        }
+                        else if (s.ScorePercent.HasValue || s.TotalQuestions > 0)
+                        {
+                            <span class="qdrat-status-chip progress"><i class="bi bi-hourglass-split"></i> قيد التقدّم</span>
+                        }
+                        else
+                        {
+                            <span class="qdrat-status-chip pending"><i class="bi bi-dash-circle"></i> لم يبدأ بعد</span>
+                        }
+
+                        @if (s.IsCompleted)
+                        {
+                            <a class="btn btn-sm qdrat-btn-primary btn-primary" href="@Url.Action("StudentResult", "MinistrySimExam", new { area = "Admin", id = Model.MinistrySimExamId, studentId = s.StudentId })">
+                                <i class="bi bi-eye ms-1"></i> عرض النتيجة
+                            </a>
+                        }
+                        else
+                        {
+                            <button type="button" class="btn btn-sm btn-outline-secondary" disabled>عرض النتيجة</button>
+                        }
+                    </div>
+                }
+            }
+        </div>
+    </div>
+
+    <a class="btn btn-outline-secondary" href="@Url.Action("Details", "MinistrySimExam", new { area = "Admin", id = Model.MinistrySimExamId })">
+        <i class="bi bi-arrow-right ms-1"></i> العودة لحالة الاختبار
+    </a>
+</div>
+
+@section Scripts {
+    @if (Model.StageStats.Any())
+    {
+        <script>
+            (function () {
+                const stageLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.StageStats.Select(s => "المرحلة " + s.StageNumber)));
+                const stageAvgScores = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.StageStats.Select(s => s.AvgScorePercent)));
+                const stageOnTime = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.StageStats.Select(s => s.CompletedWithinTimeCount)));
+                const stageExpired = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.StageStats.Select(s => s.TimeExpiredCount)));
+                const totalOnTime = stageOnTime.reduce((a, b) => a + b, 0);
+                const totalExpired = stageExpired.reduce((a, b) => a + b, 0);
+
+                new Chart(document.getElementById('stageAvgScoreChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: stageLabels,
+                        datasets: [{
+                            label: 'متوسط الدرجة %',
+                            data: stageAvgScores,
+                            backgroundColor: '#2563eb',
+                            borderRadius: 8,
+                            maxBarThickness: 42
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true, max: 100, ticks: { stepSize: 20 } } }
+                    }
+                });
+
+                new Chart(document.getElementById('stageTimeStatusChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: stageLabels,
+                        datasets: [
+                            { label: 'ضمن الوقت', data: stageOnTime, backgroundColor: '#22c55e', borderRadius: 6, maxBarThickness: 28 },
+                            { label: 'تجاوز الوقت', data: stageExpired, backgroundColor: '#ef4444', borderRadius: 6, maxBarThickness: 28 }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: { legend: { position: 'bottom' } },
+                        scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+                    }
+                });
+
+                new Chart(document.getElementById('stageTimeOverallChart'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['ضمن الوقت', 'تجاوز الوقت'],
+                        datasets: [{
+                            data: [totalOnTime, totalExpired],
+                            backgroundColor: ['#22c55e', '#ef4444'],
+                            borderWidth: 2,
+                            borderColor: '#fff'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: { legend: { position: 'bottom' } }
+                    }
+                });
+            })();
+        </script>
+    }
+}

@@ -1,0 +1,516 @@
+@model QdratNew.ViewModels.Students.StudentProfileEditVm
+
+@{
+    ViewData["Title"] = "ملفي الشخصي";
+    var profileImg = string.IsNullOrEmpty(Model.ProfileImagePath)
+        ? Url.Content("~/images/default-avatar.png")
+        : Url.Content(Model.ProfileImagePath);
+}
+
+@section Styles {
+<style>
+    .ap-card {
+        background: #fff;
+        border-radius: 14px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+        padding: 28px;
+        margin-bottom: 24px;
+    }
+
+    .ap-card-title {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: #3b82f6;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border-bottom: 2px solid #f1f5f9;
+        padding-bottom: 12px;
+    }
+
+    /* ===== Avatar Section ===== */
+    .ap-avatar-section {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+    }
+
+    .ap-avatar-wrap {
+        position: relative;
+        width: 110px;
+        height: 110px;
+        cursor: pointer;
+    }
+
+    #ap-avatar-img {
+        width: 110px;
+        height: 110px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 3px solid #e2e8f0;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+    }
+
+    .ap-avatar-overlay {
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        background: rgba(0,0,0,0.42);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity .2s;
+        color: #fff;
+        font-size: 1.2rem;
+    }
+
+    .ap-avatar-wrap:hover .ap-avatar-overlay { opacity: 1; }
+
+    .ap-upload-hint {
+        font-size: 0.78rem;
+        color: #94a3b8;
+    }
+
+    /* ===== Inputs ===== */
+    .ap-input-group {
+        display: flex;
+        gap: 10px;
+        align-items: flex-end;
+    }
+
+    .ap-input-group .form-control,
+    .ap-pw-field .form-control {
+        border-radius: 10px;
+        border: 1.5px solid #e2e8f0;
+        font-family: 'Cairo', sans-serif;
+        padding: 10px 14px;
+        font-size: 0.9rem;
+        transition: border-color .2s, box-shadow .2s;
+    }
+
+    .ap-input-group .form-control:focus,
+    .ap-pw-field .form-control:focus {
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
+        outline: none;
+    }
+
+    .ap-input-group .form-control:disabled {
+        background: #f8fafc;
+        color: #94a3b8;
+        cursor: not-allowed;
+    }
+
+    .ap-btn {
+        border-radius: 10px;
+        padding: 10px 22px;
+        font-family: 'Cairo', sans-serif;
+        font-size: 0.88rem;
+        font-weight: 600;
+        white-space: nowrap;
+        cursor: pointer;
+        border: none;
+        transition: background .2s, transform .15s;
+    }
+
+    .ap-btn-primary {
+        background: #3b82f6;
+        color: #fff;
+    }
+
+    .ap-btn-primary:hover:not(:disabled) {
+        background: #2563eb;
+        transform: translateY(-1px);
+    }
+
+    .ap-btn-primary:disabled {
+        background: #93c5fd;
+        cursor: not-allowed;
+    }
+
+    .ap-cooldown-note {
+        font-size: 0.78rem;
+        color: #f59e0b;
+        margin-top: 6px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+    /* ===== Password ===== */
+    .ap-pw-field {
+        position: relative;
+    }
+
+    .ap-pw-field .form-control {
+        padding-left: 42px;
+    }
+
+    .ap-pw-toggle {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        cursor: pointer;
+        color: #94a3b8;
+        background: none;
+        border: none;
+        padding: 0;
+        font-size: 0.9rem;
+        transition: color .2s;
+    }
+
+    .ap-pw-toggle:hover { color: #3b82f6; }
+
+    /* ===== Toast ===== */
+    .ap-toast {
+        position: fixed;
+        bottom: 28px;
+        left: 50%;
+        transform: translateX(-50%) translateY(20px);
+        background: #1e293b;
+        color: #fff;
+        padding: 12px 24px;
+        border-radius: 12px;
+        font-size: 0.9rem;
+        box-shadow: 0 6px 24px rgba(0,0,0,0.2);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity .3s, transform .3s;
+        z-index: 9999;
+        max-width: 340px;
+        text-align: center;
+    }
+
+    .ap-toast.show   { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .ap-toast.success { background: #059669; }
+    .ap-toast.error   { background: #dc2626; }
+
+    @@media (max-width: 600px) {
+        .ap-input-group { flex-direction: column; align-items: stretch; }
+        .ap-btn { width: 100%; }
+    }
+</style>
+}
+
+@Html.AntiForgeryToken()
+<div class="ap-toast" id="apToast"></div>
+
+<div class="row g-4" style="max-width:780px; margin:auto;">
+
+    <!-- ===== بطاقة الصورة ===== -->
+    <div class="col-12">
+        <div class="ap-card">
+            <div class="ap-card-title">
+                <i class="fas fa-user-circle"></i>
+                صورة الملف الشخصي
+            </div>
+            <div class="ap-avatar-section">
+                <div class="ap-avatar-wrap" onclick="document.getElementById('ap-img-input').click()" title="تغيير الصورة">
+                    <img id="ap-avatar-img" src="@profileImg" alt="صورتي" />
+                    <div class="ap-avatar-overlay">
+                        <i class="fas fa-camera"></i>
+                    </div>
+                </div>
+                <p class="ap-upload-hint">اضغط على الصورة لتغييرها — JPG أو PNG أو WEBP (حد أقصى 5 ميجا)</p>
+                <input type="file" id="ap-img-input" accept=".jpg,.jpeg,.png,.webp" style="display:none" />
+                <div id="ap-img-preview-bar" style="display:none; text-align:center;">
+                    <img id="ap-img-preview" src="" alt="معاينة"
+                         style="max-width:110px; max-height:110px; border-radius:50%; object-fit:cover; border:3px solid #3b82f6;" />
+                    <br>
+                    <button class="ap-btn ap-btn-primary mt-2" id="ap-upload-btn" type="button">
+                        <i class="fas fa-upload me-1"></i> رفع الصورة
+                    </button>
+                    <button class="ap-btn mt-2" style="background:#f1f5f9;color:#64748b;" id="ap-cancel-preview" type="button">إلغاء</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== بطاقة الاسم ===== -->
+    <div class="col-12">
+        <div class="ap-card">
+            <div class="ap-card-title">
+                <i class="fas fa-signature"></i>
+                الاسم المفضل
+            </div>
+
+            @if (!Model.CanChangeName)
+            {
+                <div class="ap-cooldown-note">
+                    <i class="fas fa-clock"></i>
+                    لا يمكنك تعديل الاسم حتى @Model.NextNameChangeAllowedAt?.ToString("yyyy/MM/dd")
+                    (يُسمح بتغيير الاسم مرة واحدة كل 7 أيام)
+                </div>
+            }
+
+            <div class="ap-input-group mt-2">
+                <input type="text"
+                       id="ap-name-input"
+                       class="form-control flex-grow-1"
+                       value="@Model.FullName"
+                       placeholder="أدخل اسمك المفضل"
+                       @(Model.CanChangeName ? "" : "disabled") />
+                <button class="ap-btn ap-btn-primary"
+                        id="ap-name-btn"
+                        type="button"
+                        @(Model.CanChangeName ? "" : "disabled")>
+                    <i class="fas fa-save me-1"></i> حفظ
+                </button>
+            </div>
+            <p style="font-size:0.76rem; color:#94a3b8; margin-top:8px;">
+                يُسمح بتغيير الاسم مرة واحدة كل 7 أيام.
+            </p>
+        </div>
+    </div>
+
+    <!-- ===== بطاقة كلمة المرور ===== -->
+    <div class="col-12">
+        <div class="ap-card">
+            <div class="ap-card-title">
+                <i class="fas fa-lock"></i>
+                تغيير كلمة المرور
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" style="font-size:0.88rem; font-weight:600; color:#475569;">كلمة المرور الحالية</label>
+                <div class="ap-pw-field">
+                    <input type="password" id="ap-pw-current" class="form-control" placeholder="••••••••" autocomplete="current-password" />
+                    <button type="button" class="ap-pw-toggle" data-target="ap-pw-current"><i class="fas fa-eye"></i></button>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" style="font-size:0.88rem; font-weight:600; color:#475569;">كلمة المرور الجديدة</label>
+                <div class="ap-pw-field">
+                    <input type="password" id="ap-pw-new" class="form-control" placeholder="••••••••" autocomplete="new-password" />
+                    <button type="button" class="ap-pw-toggle" data-target="ap-pw-new"><i class="fas fa-eye"></i></button>
+                </div>
+                <div id="ap-pw-strength" style="height:4px; border-radius:4px; margin-top:6px; background:#e2e8f0; overflow:hidden;">
+                    <div id="ap-pw-strength-bar" style="height:100%; width:0; border-radius:4px; transition:width .3s, background .3s;"></div>
+                </div>
+                <div id="ap-pw-strength-label" style="font-size:0.72rem; margin-top:3px; color:#94a3b8;"></div>
+            </div>
+            <div class="mb-4">
+                <label class="form-label" style="font-size:0.88rem; font-weight:600; color:#475569;">تأكيد كلمة المرور الجديدة</label>
+                <div class="ap-pw-field">
+                    <input type="password" id="ap-pw-confirm" class="form-control" placeholder="••••••••" autocomplete="new-password" />
+                    <button type="button" class="ap-pw-toggle" data-target="ap-pw-confirm"><i class="fas fa-eye"></i></button>
+                </div>
+                <div id="ap-pw-match" style="font-size:0.76rem; margin-top:4px;"></div>
+            </div>
+            <button class="ap-btn ap-btn-primary" id="ap-pw-btn" type="button">
+                <i class="fas fa-key me-1"></i> تغيير كلمة المرور
+            </button>
+        </div>
+    </div>
+
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    function showToast(msg, type) {
+        var t = document.getElementById('apToast');
+        t.textContent = msg;
+        t.className = 'ap-toast ' + (type || '');
+        t.classList.add('show');
+        setTimeout(function () { t.classList.remove('show'); }, 3500);
+    }
+
+    function getToken() {
+        var el = document.querySelector('input[name="__RequestVerificationToken"]');
+        return el ? el.value : '';
+    }
+
+    function postJson(url, data, callback) {
+        fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': getToken() },
+            body: JSON.stringify(data)
+        })
+        .then(function (r) { return r.json(); })
+        .then(callback)
+        .catch(function () { showToast('حدث خطأ في الاتصال', 'error'); });
+    }
+
+    /* ══ 1) رفع الصورة ══ */
+    var imgInput   = document.getElementById('ap-img-input');
+    var previewBar = document.getElementById('ap-img-preview-bar');
+    var previewImg = document.getElementById('ap-img-preview');
+    var uploadBtn  = document.getElementById('ap-upload-btn');
+    var cancelBtn  = document.getElementById('ap-cancel-preview');
+    var avatarImg  = document.getElementById('ap-avatar-img');
+
+    imgInput.addEventListener('change', function () {
+        if (!this.files || !this.files[0]) return;
+        var reader = new FileReader();
+        reader.onload = function (e) {
+            previewImg.src = e.target.result;
+            previewBar.style.display = 'block';
+        };
+        reader.readAsDataURL(this.files[0]);
+    });
+
+    cancelBtn.addEventListener('click', function () {
+        previewBar.style.display = 'none';
+        imgInput.value = '';
+    });
+
+    uploadBtn.addEventListener('click', function () {
+        if (!imgInput.files || !imgInput.files[0]) return;
+        var formData = new FormData();
+        formData.append('profileImage', imgInput.files[0]);
+
+        uploadBtn.disabled = true;
+        uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> جاري الرفع...';
+
+        fetch('@Url.Action("UploadProfileImage", "AdminProfile", new { area = "Admin" })', {
+            method: 'POST',
+            headers: { 'RequestVerificationToken': getToken() },
+            body: formData
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+            if (res.success) {
+                avatarImg.src = res.imageUrl + '?t=' + Date.now();
+                previewBar.style.display = 'none';
+                imgInput.value = '';
+                showToast(res.message, 'success');
+                // تحديث صورة الـ topbar
+                var topbarAvatar = document.querySelector('.user-avatar');
+                if (topbarAvatar) topbarAvatar.src = res.imageUrl + '?t=' + Date.now();
+                var dropdownAvatars = document.querySelectorAll('.dropdown-menu img.rounded-circle');
+                dropdownAvatars.forEach(function(img) { img.src = res.imageUrl + '?t=' + Date.now(); });
+            } else {
+                showToast(res.message, 'error');
+            }
+        })
+        .catch(function () { showToast('حدث خطأ أثناء رفع الصورة', 'error'); })
+        .finally(function () {
+            uploadBtn.disabled = false;
+            uploadBtn.innerHTML = '<i class="fas fa-upload me-1"></i> رفع الصورة';
+        });
+    });
+
+    /* ══ 2) تغيير الاسم ══ */
+    var nameInput = document.getElementById('ap-name-input');
+    var nameBtn   = document.getElementById('ap-name-btn');
+
+    if (nameBtn && !nameBtn.disabled) {
+        nameBtn.addEventListener('click', function () {
+            var val = (nameInput.value || '').trim();
+            if (!val) { showToast('يرجى إدخال الاسم', 'error'); return; }
+            if (val.length < 2) { showToast('الاسم يجب أن يكون حرفين على الأقل', 'error'); return; }
+
+            nameBtn.disabled = true;
+            nameBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>';
+
+            postJson('@Url.Action("UpdateDisplayName", "AdminProfile", new { area = "Admin" })', { fullName: val }, function (res) {
+                if (res.success) {
+                    showToast(res.message, 'success');
+                    // تحديث الاسم في الـ topbar dropdown
+                    var dropdownName = document.querySelector('.dropdown-menu .fw-bold');
+                    if (dropdownName) dropdownName.textContent = res.newName;
+                } else {
+                    showToast(res.message, 'error');
+                }
+                nameBtn.disabled = false;
+                nameBtn.innerHTML = '<i class="fas fa-save me-1"></i> حفظ';
+            });
+        });
+    }
+
+    /* ══ 3) كلمة المرور ══ */
+    document.querySelectorAll('.ap-pw-toggle').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var input = document.getElementById(this.dataset.target);
+            var icon  = this.querySelector('i');
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.classList.replace('fa-eye', 'fa-eye-slash');
+            } else {
+                input.type = 'password';
+                icon.classList.replace('fa-eye-slash', 'fa-eye');
+            }
+        });
+    });
+
+    var pwNew       = document.getElementById('ap-pw-new');
+    var pwConfirm   = document.getElementById('ap-pw-confirm');
+    var strengthBar = document.getElementById('ap-pw-strength-bar');
+    var strengthLbl = document.getElementById('ap-pw-strength-label');
+    var matchLbl    = document.getElementById('ap-pw-match');
+
+    pwNew.addEventListener('input', function () {
+        var v = this.value;
+        var score = 0;
+        if (v.length >= 6)  score++;
+        if (v.length >= 10) score++;
+        if (/[A-Z]/.test(v) || /[a-z]/.test(v)) score++;
+        if (/\d/.test(v))   score++;
+        if (/[^A-Za-z0-9]/.test(v)) score++;
+
+        var pct   = Math.min(score * 20, 100);
+        var color = pct <= 40 ? '#ef4444' : pct <= 70 ? '#f59e0b' : '#22c55e';
+        var label = pct <= 40 ? 'ضعيفة' : pct <= 70 ? 'متوسطة' : 'قوية';
+
+        strengthBar.style.width      = pct + '%';
+        strengthBar.style.background = color;
+        strengthLbl.textContent      = v ? 'قوة كلمة المرور: ' + label : '';
+        strengthLbl.style.color      = color;
+        checkMatch();
+    });
+
+    pwConfirm.addEventListener('input', checkMatch);
+
+    function checkMatch() {
+        if (!pwConfirm.value) { matchLbl.textContent = ''; return; }
+        if (pwNew.value === pwConfirm.value) {
+            matchLbl.textContent = '✓ كلمتا المرور متطابقتان';
+            matchLbl.style.color = '#22c55e';
+        } else {
+            matchLbl.textContent = '✗ كلمتا المرور غير متطابقتين';
+            matchLbl.style.color = '#ef4444';
+        }
+    }
+
+    document.getElementById('ap-pw-btn').addEventListener('click', function () {
+        var cur  = document.getElementById('ap-pw-current').value;
+        var nw   = pwNew.value;
+        var conf = pwConfirm.value;
+
+        if (!cur)  { showToast('يرجى إدخال كلمة المرور الحالية', 'error'); return; }
+        if (!nw)   { showToast('يرجى إدخال كلمة المرور الجديدة', 'error'); return; }
+        if (nw.length < 6) { showToast('كلمة المرور يجب أن تكون 6 أحرف على الأقل', 'error'); return; }
+        if (nw !== conf) { showToast('كلمتا المرور غير متطابقتين', 'error'); return; }
+
+        var btn = this;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> جاري التغيير...';
+
+        postJson('@Url.Action("ChangePassword", "AdminProfile", new { area = "Admin" })',
+            { currentPassword: cur, newPassword: nw, confirmPassword: conf },
+            function (res) {
+                if (res.success) {
+                    showToast(res.message, 'success');
+                    document.getElementById('ap-pw-current').value = '';
+                    pwNew.value = '';
+                    pwConfirm.value = '';
+                    strengthBar.style.width = '0';
+                    strengthLbl.textContent = '';
+                    matchLbl.textContent = '';
+                } else {
+                    showToast(res.message, 'error');
+                }
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-key me-1"></i> تغيير كلمة المرور';
+            }
+        );
+    });
+
+})();
+</script>
+}

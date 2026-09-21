@@ -1,0 +1,172 @@
+@model QdratNew.ViewModels.Instructors.Exam.AddQuestionVM
+
+@{
+    ViewData["Title"] = "إضافة سؤال للاختبار";
+}
+
+@section Styles {
+    <link href="~/css/instructor/instructor-drafts.css" rel="stylesheet" asp-append-version="true" />
+}
+
+<div class="instructor-page">
+
+    <div class="hw-page-header">
+        <h3 class="hw-page-title">
+            <i class="fas fa-plus-circle"></i>
+            إضافة سؤال من الأسئلة
+        </h3>
+    </div>
+
+    <div class="filter-cards-row">
+        <div class="filter-card active-filter" data-difficulty="">
+            <div class="filter-label">الكل</div>
+            <div class="filter-count">@Model.TotalCountAll سؤال</div>
+        </div>
+        <div class="filter-card" data-difficulty="0">
+            <div class="filter-label easy">سهل</div>
+            <div class="filter-count">@Model.EasyCount سؤال</div>
+        </div>
+        <div class="filter-card" data-difficulty="1">
+            <div class="filter-label medium">متوسط</div>
+            <div class="filter-count">@Model.MediumCount سؤال</div>
+        </div>
+        <div class="filter-card" data-difficulty="2">
+            <div class="filter-label hard">صعب</div>
+            <div class="filter-count">@Model.HardCount سؤال</div>
+        </div>
+    </div>
+
+    <div class="filter-bar">
+        <div class="row g-2">
+            <div class="col-md-4">
+                <select id="lessonFilter" class="form-select">
+                    <option value="">-- كل المؤشرات --</option>
+                    @foreach (var l in Model.Lessons)
+                    {
+                        <option value="@l.Id">@l.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-8">
+                <input type="text" id="searchInput" class="form-control"
+                       placeholder="ابحث داخل السؤال أو الملاحظات..." />
+            </div>
+        </div>
+    </div>
+
+    <div class="instructor-card">
+        <div class="table-responsive">
+            <table class="instructor-table">
+                <thead>
+                    <tr>
+                        <th style="width:50%">السؤال</th>
+                        <th style="width:30%">ملاحظات</th>
+                        <th style="width:20%">إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody id="questionsTable">
+                    <tr><td colspan="3" class="text-center py-3">جاري التحميل...</td></tr>
+                </tbody>
+            </table>
+            <div class="d-flex justify-content-center mt-3 pb-2" id="pagination"></div>
+        </div>
+    </div>
+
+</div>
+
+<div class="modal fade" id="previewModal">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body" id="previewContent">
+                <div class="text-center py-4">جاري التحميل...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const input = document.getElementById('searchInput');
+        const lessonFilter = document.getElementById('lessonFilter');
+        const table = document.getElementById('questionsTable');
+        let currentPage = 1;
+        let selectedDifficulty = '';
+
+        function loadQuestions(page = 1) {
+            currentPage = page;
+            const search = input ? input.value : '';
+            const lessonId = lessonFilter ? lessonFilter.value : '';
+            table.innerHTML = `<tr><td colspan="3" class="text-center py-3">جاري التحميل...</td></tr>`;
+            fetch(`/Instructors/InstructorExamDraft/SearchQuestions?draftId=@Model.DraftId&sectionId=@Model.SectionId&lessonId=${lessonId}&difficulty=${selectedDifficulty}&search=${search}&page=${page}`)
+                .then(res => res.json())
+                .then(result => {
+                    table.innerHTML = '';
+                    if (!result.data || result.data.length === 0) {
+                        table.innerHTML = `<tr><td colspan="3" class="text-center py-3 text-muted">لا توجد نتائج</td></tr>`;
+                        document.getElementById('pagination').innerHTML = '';
+                        return;
+                    }
+                    result.data.forEach(q => {
+                        let row = `<tr>
+                            <td class="text-start">${q.title}</td>
+                            <td class="text-start">${q.note ?? '-'}</td>
+                            <td>
+                            <button class="btn btn-sm btn-outline-primary"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#previewModal"
+                                    data-id="${q.id}">
+                                <i class="fa fa-eye"></i>
+                            </button>`;
+                        if (q.exists) {
+                            row += `<button class="btn btn-secondary btn-sm ms-1" disabled>✔ مضاف</button>`;
+                        } else {
+                            row += `<form method="post" action="/Instructors/InstructorExamDraft/AddQuestion" style="display:inline">
+                                <input type="hidden" name="draftId" value="@Model.DraftId"/>
+                                <input type="hidden" name="questionId" value="${q.id}"/>
+                                <button class="btn btn-success btn-sm ms-1"><i class="fas fa-plus"></i></button>
+                            </form>`;
+                        }
+                        row += `</td></tr>`;
+                        table.innerHTML += row;
+                    });
+                    buildPagination(result.total);
+                });
+        }
+
+        function buildPagination(total) {
+            let totalPages = Math.ceil(total / 20);
+            let start = Math.max(1, currentPage - 2);
+            let end = Math.min(totalPages, currentPage + 2);
+            let html = '';
+            if (currentPage > 1) html += `<button class="btn btn-outline-primary btn-sm m-1" onclick="loadQuestions(${currentPage - 1})">السابق</button>`;
+            for (let i = start; i <= end; i++) {
+                html += `<button class="btn btn-sm ${i === currentPage ? 'btn-primary' : 'btn-outline-primary'} m-1" onclick="loadQuestions(${i})">${i}</button>`;
+            }
+            if (currentPage < totalPages) html += `<button class="btn btn-outline-primary btn-sm m-1" onclick="loadQuestions(${currentPage + 1})">التالي</button>`;
+            document.getElementById('pagination').innerHTML = html;
+        }
+
+        document.querySelectorAll('.filter-card').forEach(card => {
+            card.addEventListener('click', function () {
+                selectedDifficulty = this.dataset.difficulty || '';
+                document.querySelectorAll('.filter-card').forEach(c => c.classList.remove('active-filter'));
+                this.classList.add('active-filter');
+                loadQuestions(1);
+            });
+        });
+
+        if (input) input.addEventListener('keyup', () => loadQuestions(1));
+        if (lessonFilter) lessonFilter.addEventListener('change', () => loadQuestions(1));
+
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('[data-id]');
+            if (!btn || !btn.hasAttribute('data-bs-target')) return;
+            const id = btn.getAttribute('data-id');
+            fetch('/Instructors/InstructorExamDraft/PreviewQuestion?questionId=' + id)
+                .then(r => r.text())
+                .then(html => { document.getElementById('previewContent').innerHTML = html; });
+        });
+
+        loadQuestions(1);
+    </script>
+}

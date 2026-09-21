@@ -1,0 +1,184 @@
+﻿@model IEnumerable<QdratNew.Entities.Question>
+
+@{
+    ViewData["Title"] = "استبدال سؤال";
+    var assignmentId = Context.Request.Query["assignmentId"];
+    var oldQuestion = ViewBag.OldQuestion as QdratNew.Entities.Question;
+}
+
+<div class="container mt-4" dir="rtl">
+
+    <!-- 🔵 عنوان الصفحة -->
+    <h3 class="fw-bold text-primary mb-4">
+        <i class="fa-solid fa-arrow-rotate-right me-2"></i>
+        استبدال السؤال
+    </h3>
+
+    <!-- 🔶 معلومات السؤال الحالي -->
+    <div class="alert alert-info shadow-sm">
+        <strong>📝 السؤال الحالي:</strong><br />
+        <span class="fw-bold text-dark">@oldQuestion.Title</span>
+    </div>
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger fw-bold">@TempData["Error"]</div>
+    }
+
+    @if (TempData["Warning"] != null)
+    {
+        <div class="alert alert-warning shadow-sm">
+            <div class="fw-bold mb-2">@TempData["Warning"]</div>
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" id="confirmResetCb">
+                <label class="form-check-label fw-bold" for="confirmResetCb">تأكيد الاستبدال رغم وجود محاولة سابقة</label>
+            </div>
+            <textarea id="editReasonInput" class="form-control" rows="2" placeholder="سبب الاستبدال (إجباري)"></textarea>
+        </div>
+    }
+
+    <!-- 🔽 جدول الأسئلة البديلة -->
+    <table id="replaceTable" class="table table-bordered table-striped text-center align-middle shadow-sm">
+
+        <thead class="table-dark">
+            <tr>
+                <th>#</th>
+                <th>السؤال</th>
+                <th>المحور</th>
+                <th>الصعوبة</th>
+                <th>ملاحظة داخلية</th>
+                <th>استبدال</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            @foreach (var q in Model)
+            {
+                <tr>
+                    <td>@q.ReferenceNumber</td>
+
+                    <!-- 🟦 عنوان مختصر + زر العدسة -->
+                    <td class="text-start">
+                        <button type="button"
+                                class="btn btn-outline-info btn-sm rounded-circle"
+                                onclick="loadPreview('@q.Id')"
+                                title="معاينة السؤال">
+                            <i class="fas fa-eye"></i>
+                        </button>
+
+                        <span class="ms-2">
+                            @(q.Title?.Length > 25 ? q.Title.Substring(0, 25) + "..." : q.Title)
+                        </span>
+                    </td>
+
+                    <!-- 🟧 المحور -->
+                    <td>@q.Section?.Title</td>
+
+                    <!-- 🟨 الصعوبة -->
+                    <td>
+                        <span class="badge bg-secondary">@q.Difficulty</span>
+                    </td>
+
+                    <!-- 🟥 ملاحظة داخلية -->
+                    <td class="text-danger fw-bold">
+                        @(!string.IsNullOrWhiteSpace(q.InternalNote) ? q.InternalNote : "—")
+                    </td>
+
+                    <!-- 🟢 زر الاستبدال -->
+                    <td>
+                        <form method="post"
+                              class="replace-form"
+                              action="/Admin/ExamIndividualAssignments/ReplaceQuestion">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="assignmentId" value="@assignmentId" />
+                            <input type="hidden" name="oldQuestionId" value="@oldQuestion.Id" />
+                            <input type="hidden" name="newQuestionId" value="@q.Id" />
+                            <input type="hidden" name="confirmReset" class="confirm-reset-field" value="false" />
+                            <input type="hidden" name="reason" class="reason-field" value="" />
+
+                            <button class="btn btn-success btn-sm">
+                                ✔ استبدال
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        </tbody>
+
+    </table>
+</div>
+
+
+<!-- 🔵 مودال المعاينة -->
+<div class="modal fade" id="previewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content text-end">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title"><i class="fas fa-eye"></i> معاينة السؤال</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="previewModalBody">
+                <div class="text-center">جاري التحميل...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+@section Scripts {
+
+    <!-- 🔹 DataTable -->
+    <script>
+        new DataTable('#replaceTable', {
+            paging: true,
+            searching: true,
+            ordering: true,
+            responsive: true,
+            language: {
+                url: '/lib/datatables/ar.json'
+            }
+        });
+    </script>
+
+    <!-- 🔹 تأكيد الاستبدال عند وجود محاولة سابقة -->
+    <script>
+        document.querySelectorAll('.replace-form').forEach(form => {
+            form.addEventListener('submit', function (e) {
+                const cb = document.getElementById('confirmResetCb');
+                if (!cb) return; // لا يوجد تحذير نشط → استبدال عادي
+
+                if (!cb.checked) {
+                    e.preventDefault();
+                    Swal.fire('تنبيه', 'فعّل "تأكيد الاستبدال" أولًا.', 'warning');
+                    return;
+                }
+
+                const reason = document.getElementById('editReasonInput').value.trim();
+                if (!reason) {
+                    e.preventDefault();
+                    Swal.fire('تنبيه', 'يجب كتابة سبب الاستبدال.', 'warning');
+                    return;
+                }
+
+                form.querySelector('.confirm-reset-field').value = 'true';
+                form.querySelector('.reason-field').value = reason;
+            });
+        });
+    </script>
+
+    <!-- 🔹 معاينة السؤال -->
+    <script>
+        function loadPreview(id) {
+
+            fetch(`/Admin/Questions/Preview/${id}`)
+                .then(res => res.text())
+                .then(html => {
+                    document.getElementById("previewModalBody").innerHTML = html;
+                    new bootstrap.Modal(document.getElementById("previewModal")).show();
+                })
+                .catch(() => {
+                    Swal.fire("خطأ", "تعذر تحميل المعاينة.", "error");
+                });
+        }
+    </script>
+}

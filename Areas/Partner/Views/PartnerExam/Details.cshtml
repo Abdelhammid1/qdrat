@@ -1,0 +1,162 @@
+﻿@model QdratNew.ViewModels.Partner.Exam.SentExamDetailsVM
+
+@{
+    ViewData["Title"] = "تفاصيل الاختبار";
+}
+
+@functions {
+    string ShortHtmlText(string html, int length = 45)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return "";
+
+        var plain = System.Text.RegularExpressions.Regex
+            .Replace(html, "<.*?>", string.Empty);
+
+        if (plain.Length <= length)
+            return plain;
+
+        return plain.Substring(0, length) + "...";
+    }
+}
+
+<div class="container mt-4" dir="rtl">
+
+    <!-- ================= Header ================= -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h3 class="fw-bold mb-1">📄 تفاصيل الاختبار</h3>
+            <div class="text-muted small">
+                عرض تفاصيل الاختبار المرسل للطلاب.
+            </div>
+        </div>
+
+        <a asp-action="SentExams" class="btn btn-outline-secondary">
+            رجوع
+        </a>
+    </div>
+
+    <!-- ================= Summary ================= -->
+    <div class="card shadow-sm border-0 rounded-4 mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+
+                <div class="col-md-4">
+                    <div class="fw-semibold">عنوان الاختبار</div>
+                    <div class="text-muted">@Model.Title</div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="fw-semibold">الدفعة</div>
+                    <div class="text-muted">@Model.BatchName</div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="fw-semibold">عدد الطلاب</div>
+                    <div class="text-muted">@Model.StudentsCount طالب</div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="fw-semibold">تاريخ الإرسال</div>
+                    <div class="text-muted">
+                        @Model.SentAt.ToString("yyyy/MM/dd HH:mm")
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="fw-semibold">بداية الاختبار</div>
+                    <div class="text-muted">
+                        @(Model.StartAt.HasValue
+                                                ? Model.StartAt.Value.ToString("yyyy/MM/dd HH:mm")
+                                                : "غير محدد")
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="fw-semibold">نهاية الاختبار</div>
+                    <div class="text-muted">
+                        @(Model.EndAt.HasValue
+                                                ? Model.EndAt.Value.ToString("yyyy/MM/dd HH:mm")
+                                                : "غير محدد")
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= Questions ================= -->
+    <div class="card shadow-sm border-0 rounded-4">
+
+        <div class="card-header bg-light fw-bold">
+            🧠 أسئلة الاختبار
+        </div>
+
+        <div class="card-body p-0">
+            <ol class="list-group list-group-numbered list-group-flush">
+
+                @foreach (var q in Model.Questions)
+                {
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+
+                        <!-- عنوان مختصر يدعم HTML -->
+                        <div class="fw-semibold text-truncate" style="max-width:75%">
+                            @ShortHtmlText(q.Title)
+                        </div>
+
+                        <!-- معاينة -->
+                        <button type="button"
+                                class="btn btn-sm btn-outline-primary"
+                                title="معاينة السؤال"
+                                data-bs-toggle="modal"
+                                data-bs-target="#questionPreviewModal"
+                                data-question-id="@q.QuestionId">
+                            👁️
+                        </button>
+
+                    </li>
+                }
+
+            </ol>
+        </div>
+    </div>
+
+</div>
+
+<!-- ================= Modal: Question Preview ================= -->
+<div class="modal fade" id="questionPreviewModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+
+            <div class="modal-header">
+                <h5 class="modal-title">معاينة السؤال</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body" id="questionPreviewContent">
+                <div class="text-center text-muted py-5">
+                    جاري تحميل السؤال...
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.getElementById('questionPreviewModal')
+            .addEventListener('show.bs.modal', function (event) {
+
+                const button = event.relatedTarget;
+                const questionId = button.getAttribute('data-question-id');
+                const container = document.getElementById('questionPreviewContent');
+
+                container.innerHTML = 'جاري التحميل...';
+
+                fetch('/Partner/HomeworkDrafts/PreviewQuestion?questionId=' + questionId)
+                    .then(r => r.text())
+                    .then(html => container.innerHTML = html);
+            });
+    </script>
+}

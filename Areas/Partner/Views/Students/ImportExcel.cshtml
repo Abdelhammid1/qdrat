@@ -1,0 +1,145 @@
+﻿@model QdratNew.ViewModels.Partner.PartnerStudentImportViewModel
+
+@{
+    ViewData["Title"] = "استيراد طلاب من Excel";
+}
+
+<div class="container mt-4" dir="rtl">
+
+    <!-- العنوان -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-bold mb-0">📥 استيراد طلاب من ملف Excel</h3>
+        <a asp-action="Index" class="btn btn-outline-secondary">رجوع</a>
+    </div>
+
+    <!-- رسائل النظام -->
+    @if (TempData["Error"] is string errorMessage && !string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger">
+            @Html.Raw(errorMessage)
+        </div>
+    }
+
+    @if (TempData["Success"] is string successMessage && !string.IsNullOrWhiteSpace(successMessage))
+    {
+        <div class="alert alert-success">
+            @successMessage
+        </div>
+    }
+    <a asp-action="DownloadExcelTemplate"
+       class="btn btn-outline-success p-2 btn-sm">
+        <i class="bi bi-file-earmark-excel"></i>
+        تحميل نموذج Excel للطلاب
+    </a>
+    <br/>
+    <form asp-action="ImportExcel"
+          method="post"
+          enctype="multipart/form-data"
+          class="card shadow-sm border-0 rounded-4 p-4">
+
+        @Html.AntiForgeryToken()
+
+        <!-- 🎓 تحديد السياق الأكاديمي -->
+        <div class="card mb-4 border-0">
+            <div class="card-header bg-light fw-bold">
+                🎓 تحديد الدورة والدفعة
+            </div>
+
+            <div class="card-body">
+                <div class="row g-3">
+
+                    <!-- الدورة -->
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">الدورة</label>
+                        <select asp-for="CourseId"
+                                asp-items="Model.Courses"
+                                class="form-select"
+                                onchange="loadBatchesForImport(this.value)">
+                            <option value="">-- اختر الدورة --</option>
+                        </select>
+                    </div>
+
+                    <!-- الدفعة -->
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">الدفعة</label>
+                        <select asp-for="BatchId"
+                                class="form-select"
+                                id="batchSelect">
+                            <option value="">-- اختر الدفعة --</option>
+                        </select>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- 📄 ملف Excel -->
+        <div class="card mb-4 border-0">
+            <div class="card-header bg-light fw-bold">
+                📄 ملف Excel
+            </div>
+
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">اختر ملف Excel</label>
+                    <input type="file"
+                           name="excelFile"
+                           class="form-control"
+                           accept=".xlsx,.xls"
+                           required />
+                </div>
+
+                <div class="alert alert-info small mb-0">
+                    <strong>تنبيه:</strong><br />
+                    يجب أن يحتوي الملف على الأعمدة التالية بالترتيب:
+                    <br />
+                    <code>FullName | NationalID | Phone | Gender | Level</code>
+                </div>
+            </div>
+        </div>
+
+        <!-- أزرار التحكم -->
+        <div class="d-flex justify-content-end gap-2">
+            <button type="submit"
+                    class="btn btn-success px-4"
+                    id="submitBtn"
+                    disabled>
+                ⬆️ استيراد الطلاب
+            </button>
+
+            <a asp-action="Index" class="btn btn-outline-secondary px-4">
+                إلغاء
+            </a>
+        </div>
+
+    </form>
+</div>
+
+@section Scripts {
+    <script>
+        function loadBatchesForImport(courseId) {
+
+            const batchSelect = document.getElementById("batchSelect");
+            const submitBtn = document.getElementById("submitBtn");
+
+            batchSelect.innerHTML = '<option value="">-- اختر الدفعة --</option>';
+            submitBtn.disabled = true;
+
+            if (!courseId) return;
+
+            fetch(`/Partner/Students/GetBatchesByCourseForImport?courseId=${courseId}`)
+                .then(r => r.json())
+                .then(data => {
+                    data.forEach(b => {
+                        batchSelect.innerHTML +=
+                            `<option value="${b.id}">${b.name}</option>`;
+                    });
+                });
+        }
+
+        document.getElementById("batchSelect")
+            .addEventListener("change", function () {
+                document.getElementById("submitBtn").disabled = !this.value;
+            });
+    </script>
+}

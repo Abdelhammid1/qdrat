@@ -1,0 +1,390 @@
+@model QdratNew.ViewModels.Reports.StudentExamReportViewModel
+@{
+    Layout = "~/Views/Shared/_ReportLayout.cshtml";   // ✅ بدون القائمة الجانبية
+    ViewData["Title"] = "📊 تقرير اختبار مؤشرات الأداء";
+}
+
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;700;800&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+    :root {
+        --primary: #0d6efd;
+        --success: #22c55e;
+        --danger: #ef4444;
+        --muted: #6c757d;
+        --bg: #f9fbfd;
+        --radius: 14px;
+        --shadow: 0 4px 15px rgba(0,0,0,0.08);
+    }
+
+    body {
+        background: var(--bg);
+        font-family: 'Cairo',sans-serif;
+        direction: rtl;
+    }
+
+    .container {
+        max-width: 1150px;
+        margin: 40px auto;
+        padding: 20px;
+    }
+
+    /* Header */
+    .report-header {
+        background: #fff;
+        border: 1px solid #e0e6f7;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 25px;
+        margin-bottom: 25px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+        .report-header h2 {
+            font-weight: 800;
+            color: var(--primary);
+            margin-bottom: 10px;
+        }
+
+    .chips span {
+        background: #eef2ff;
+        border: 1px solid #e0e6f7;
+        border-radius: 50px;
+        padding: 5px 12px;
+        color: var(--primary);
+        margin: 3px;
+        font-size: 13px;
+        font-weight: 600;
+        display: inline-block;
+    }
+
+    .btn-print {
+        background: var(--primary);
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        padding: 8px 14px;
+        cursor: pointer;
+        font-weight: 600;
+    }
+
+        .btn-print:hover {
+            background: #0b5ed7;
+        }
+
+    /* KPI Cards */
+    .stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit,minmax(160px,1fr));
+        gap: 18px;
+    }
+
+    .card {
+        background: #fff;
+        border: 1px solid #e0e6f7;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 18px;
+        text-align: center;
+    }
+
+    .stat-title {
+        color: var(--muted);
+        font-size: 14px;
+    }
+
+    .stat-value {
+        font-size: 22px;
+        font-weight: 800;
+        color: var(--primary);
+    }
+
+        .stat-value.good {
+            color: var(--success);
+        }
+
+        .stat-value.weak {
+            color: var(--danger);
+        }
+
+    /* دائرة النسبة المئوية */
+    .circle {
+        width: 130px;
+        height: 130px;
+        margin: auto;
+        border-radius: 50%;
+        background: conic-gradient(var(--primary) calc(var(--p)*1%), #e9ecf8 0);
+        display: grid;
+        place-items: center;
+        position: relative;
+        font-size: 22px;
+        font-weight: 800;
+        color: var(--primary);
+    }
+
+        .circle::after {
+            content: attr(data-label);
+            position: absolute;
+            inset: 15px;
+            background: #fff;
+            border-radius: 50%;
+            display: grid;
+            place-items: center;
+            color: var(--text);
+            font-weight: 800;
+            font-size: 20px;
+        }
+
+    /* Charts & Analysis */
+    .analysis-grid {
+        display: grid;
+        grid-template-columns: 1fr 0.8fr;
+        gap: 20px;
+        margin-top: 30px;
+    }
+    @@media(max-width:992px) {
+        .analysis-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .analysis-card {
+        background: #fff;
+        border: 1px solid #e0e6f7;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 20px;
+    }
+
+        .analysis-card h4 {
+            color: var(--primary);
+            font-weight: 700;
+            margin-bottom: 15px;
+        }
+
+    .progress-bar {
+        height: 22px;
+        background: #e9ecef;
+        border-radius: 12px;
+        overflow: hidden;
+        margin-bottom: 12px;
+    }
+
+    .progress-inner {
+        height: 100%;
+        background: var(--success);
+        color: #fff;
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 22px;
+    }
+
+    /* Table */
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 18px;
+    }
+
+    th, td {
+        border: 1px solid #dee2e6;
+        padding: 10px;
+        text-align: center;
+        font-size: 14px;
+    }
+
+    th {
+        background: #f1f4ff;
+        color: var(--primary);
+        font-weight: 700;
+    }
+
+    .weak {
+        color: var(--danger);
+        font-weight: 700;
+    }
+
+    .good {
+        color: var(--success);
+        font-weight: 700;
+    }
+
+    /* Print */
+    @@media print {
+        .no-print,nav,header,footer,.sidebar {
+            display: none !important;
+            visibility: hidden !important;
+        }
+
+        body {
+            background: #fff !important;
+            -webkit-print-color-adjust: exact !important;
+        }
+
+        .analysis-card, .card, table {
+            page-break-inside: avoid !important;
+        }
+
+        canvas {
+            page-break-inside: avoid !important;
+            max-width: 100% !important;
+            height: auto !important;
+        }
+
+        .stats {
+            display: grid !important;
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 10px !important;
+            page-break-inside: avoid !important;
+        }
+
+            .stats .card {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+                margin-bottom: 10px !important;
+            }
+    }
+</style>
+
+<div class="container">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-md-9 report-header">
+            <div>
+                <h2>@Model.StudentName</h2>
+                <div class="chips">
+                    <span>@Model.ExamTitle</span>
+                    <span>@Model.ExamDate.ToString("yyyy/MM/dd")</span>
+                    <span>@Model.CurriculumTitle</span>
+                    <span>👨‍🏫 @Model.InstructorName</span>
+                </div>
+            </div>
+            <button class="btn-print no-print" onclick="window.print()">🖨️ طباعة</button>
+        </div>
+
+        <div class="col-md-3 text-center">
+            <div class="card">
+                <div class="circle" style="--p:@Model.OverallPercent" data-label="@Model.OverallPercent%"></div>
+                <div class="stat-title mt-2">النسبة العامة</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="stats mb-4">
+        <div class="card"><div class="stat-title">عدد الأسئلة</div><div class="stat-value">@Model.TotalQuestions</div></div>
+        <div class="card"><div class="stat-title">صحيحة</div><div class="stat-value good">@Model.CorrectAnswers</div></div>
+        <div class="card"><div class="stat-title">خاطئة</div><div class="stat-value weak">@Model.WrongAnswers</div></div>
+        <div class="card"><div class="stat-title">متخطاة</div><div class="stat-value">@Model.Skipped</div></div>
+    </div>
+
+    <!-- Analysis -->
+    <div class="analysis-grid">
+        <div class="analysis-card">
+            <h4>تحليل المحاور (صحيحة / خاطئة / متخطاة)</h4>
+            <canvas id="sectionsChart" height="280"></canvas>
+        </div>
+
+        <div class="analysis-card">
+            <h4>تحليلات وتوصيات ذكية</h4>
+            <div class="progress-bar">
+                <div class="progress-inner"
+                     style="width:@Model.TimeUsagePercent%">
+                    نسبة الوقت المستهلك: @Model.TimeUsagePercent%
+                </div>
+            </div>
+
+            <div class="advice-box" style="margin:0;">
+                <h5>🧠 تحليل السرعة × الدقة</h5>
+                <p>@Model.SpeedAccuracyFeedback</p>
+                <h5>💬 التوصية العامة</h5>
+                <p>@Model.MotivationalMessage</p>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(Model.CheatingFlagMessage))
+            {
+                <div class="alert alert-danger fw-bold mb-3" style="font-size:16px;">
+                    ⚠️ @Model.CheatingFlagMessage
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="analysis-card mt-4">
+        <h4>تفصيل الأداء حسب المحاور</h4>
+        <table>
+            <thead>
+                <tr>
+                    <th>المحور</th>
+                    <th>عدد الأسئلة</th>
+                    <th>صحيحة</th>
+                    <th>خاطئة</th>
+                    <th>متخطاة</th>
+                    <th>النسبة</th>
+                    <th>التقييم</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var s in Model.Sections)
+                {
+                    var percent = s.Total == 0 ? 0 : Math.Round((s.Correct / (double)s.Total) * 100, 1);
+                    var eval = percent >= 80 ? "ممتاز" : percent >= 70 ? "جيد" : percent >= 60 ? "متوسط" : percent >= 50 ? "قيد التطوير" : "محور أولوية";
+                    var color = percent < 50 ? "weak" : percent >= 80 ? "good" : "";
+                    <tr>
+                        <td>@s.SectionTitle</td>
+                        <td>@s.Total</td>
+                        <td>@s.Correct</td>
+                        <td class="@color">@s.Wrong</td>
+                        <td>@s.Skipped</td>
+                        <td>@percent%</td>
+                        <td class="@color">@eval</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Print Button -->
+    <div class="text-center mt-4 no-print">
+        <button class="btn-print" onclick="window.print()">🖨️ طباعة / PDF</button>
+    </div>
+</div>
+
+<script>
+    const sectionLabels=@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Sections.Select(s => s.SectionTitle)));
+    const correctData=@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Sections.Select(s => s.Correct)));
+    const wrongData=@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Sections.Select(s => s.Wrong)));
+    const skippedData=@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Sections.Select(s => s.Skipped)));
+
+    new Chart(document.getElementById('sectionsChart'),{
+        type:'bar',
+        data:{
+            labels:sectionLabels,
+            datasets:[
+                {label:'صحيحة',data:correctData,backgroundColor:'#22c55e',borderRadius:8,barPercentage:0.75,categoryPercentage:0.7},
+                {label:'خاطئة',data:wrongData,backgroundColor:'#ef4444',borderRadius:8,barPercentage:0.75,categoryPercentage:0.7},
+                {label:'متخطاة',data:skippedData,backgroundColor:'#9ca3af',borderRadius:8,barPercentage:0.75,categoryPercentage:0.7}
+            ]
+        },
+        options:{
+            responsive:true,maintainAspectRatio:false,
+            plugins:{legend:{position:'bottom'}},
+            scales:{
+                x:{grid:{display:false},ticks:{font:{size:13}}},
+                y:{beginAtZero:true,grid:{color:'#e5e7eb'},ticks:{stepSize:1,font:{size:12}}}
+            }
+        }
+    });
+</script>
+
+<style>
+    #sectionsChart {
+        height: 300px !important;
+        width: 100%;
+    }
+</style>

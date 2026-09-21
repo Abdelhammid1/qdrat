@@ -1,0 +1,111 @@
+﻿@model QdratNew.ViewModels.Dashboard.BatchPerformanceDetailViewModel
+
+<div class="card mt-4 shadow-sm">
+    <div class="card-header bg-primary text-white fw-bold d-flex justify-content-between align-items-center">
+        🔍 تحليل الأداء داخل الدفعة: @Model.BatchName
+        <button class="btn btn-light btn-sm" onclick="document.getElementById('batchDetailsContainer').innerHTML=''">✖ إغلاق</button>
+    </div>
+
+    <div class="card-body">
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <canvas id="sectionPerformanceChart"></canvas>
+            </div>
+            <div class="col-md-6">
+                <canvas id="failedStudentsChart"></canvas>
+            </div>
+        </div>
+
+        <h6 class="fw-bold text-secondary mb-3">📘 تفاصيل المحاور</h6>
+        <table class="table table-bordered table-hover align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>المحور</th>
+                    <th>متوسط النسبة</th>
+                    <th>عدد الراسبين</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var s in Model.Sections)
+                {
+                    var danger = s.AverageScore < 50 ? "table-danger" : "";
+                    <tr class="@danger">
+                        <td>@s.SectionTitle</td>
+                        <td>@s.AverageScore %</td>
+                        <td>@s.FailedStudents</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // 🔹 تجهيز البيانات من السيرفر
+        const sectionTitles = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Sections.Select(s => s.SectionTitle)));
+        const avgScores = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Sections.Select(s => s.AverageScore)));
+        const failedCounts = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Sections.Select(s => s.FailedStudents)));
+
+        // 🎯 الرسم البياني الأول: متوسط الأداء في كل محور
+        const ctx1 = document.getElementById('sectionPerformanceChart');
+        new Chart(ctx1, {
+            type: 'bar',
+            data: {
+                labels: sectionTitles,
+                datasets: [{
+                    label: 'متوسط الأداء (%)',
+                    data: avgScores,
+                    borderWidth: 1,
+                    backgroundColor: avgScores.map(v => v < 50 ? 'rgba(255,99,132,0.6)' : 'rgba(54,162,235,0.6)'),
+                    borderColor: 'rgba(0,0,0,0.1)'
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false },
+                    title: {
+                        display: true,
+                        text: '📊 متوسط الأداء في المحاور',
+                        font: { size: 16, family: 'Cairo' }
+                    }
+                },
+                scales: {
+                    y: { beginAtZero: true, max: 100 }
+                }
+            }
+        });
+
+        // 🎯 الرسم الثاني: عدد الراسبين في كل محور
+        const ctx2 = document.getElementById('failedStudentsChart');
+        new Chart(ctx2, {
+            type: 'bar',
+            data: {
+                labels: sectionTitles,
+                datasets: [{
+                    label: 'عدد الراسبين',
+                    data: failedCounts,
+                    borderWidth: 1,
+                    backgroundColor: 'rgba(255,206,86,0.6)',
+                    borderColor: 'rgba(0,0,0,0.1)'
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false },
+                    title: {
+                        display: true,
+                        text: '📉 توزيع الراسبين في المحاور',
+                        font: { size: 16, family: 'Cairo' }
+                    }
+                },
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    </script>
+}

@@ -1,0 +1,623 @@
+@model QdratNew.ViewModels.Admin.Analytics.BatchPerformanceDetailsVM
+
+@{
+    var instList = Model?.Instructors ?? new();
+    var lessonList = Model?.WeakLessons ?? new();
+    var stuList = Model?.Students ?? new();
+    var top12Lessons = lessonList.Take(12).ToList();
+    var top15Stu = stuList.Take(15).ToList();
+    var dangerStu = stuList.Count(s => s.RiskLevel == "خطر");
+    var medStu = stuList.Count(s => s.RiskLevel == "متوسط");
+    var stableStu = stuList.Count(s => s.RiskLevel == "مستقر");
+}
+
+<style>
+    .dd-wrap { margin-bottom: var(--gap); }
+
+    .dd-tabs {
+        display: flex;
+        gap: 4px;
+        background: var(--surface);
+        border: 1.5px solid var(--border);
+        border-radius: calc(var(--r) + 4px) calc(var(--r) + 4px) 0 0;
+        padding: 8px 10px 0;
+        overflow-x: auto;
+    }
+
+    .dd-tab {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 20px;
+        border-radius: var(--r-sm) var(--r-sm) 0 0;
+        font-size: 14px;
+        font-weight: 800;
+        color: var(--muted);
+        cursor: pointer;
+        border: none;
+        background: transparent;
+        font-family: inherit;
+        transition: all .2s;
+        white-space: nowrap;
+        border-bottom: 3px solid transparent;
+        position: relative;
+        top: 1px;
+    }
+
+    .dd-tab:hover { color: var(--text); background: #f8fafc; }
+
+    .dd-tab.active {
+        color: var(--text);
+        background: var(--surface);
+        border-bottom-color: var(--primary);
+        border-bottom-width: 3px;
+    }
+
+    .dd-tab-count {
+        font-size: 11px;
+        font-weight: 900;
+        padding: 2px 8px;
+        border-radius: 50px;
+        background: var(--border);
+        color: var(--muted);
+    }
+
+    .dd-tab.active .dd-tab-count {
+        background: #eff6ff;
+        color: var(--primary);
+    }
+
+    .dd-panels {
+        background: var(--surface);
+        border: 1.5px solid var(--border);
+        border-top: none;
+        border-radius: 0 0 var(--r) var(--r);
+        padding: 24px;
+    }
+
+    .dd-panel { display: none; }
+    .dd-panel.active { display: block; }
+
+    .dd-ph {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 18px;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .dd-ph-left { display: flex; align-items: center; gap: 10px; }
+    .dd-ph-ico { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+    .dd-ph-t { font-size: 15px; font-weight: 900; color: var(--text); }
+    .dd-ph-s { font-size: 12.5px; color: var(--muted); }
+
+    .dd-chart-box {
+        background: #f8fafc;
+        border: 1.5px solid var(--border);
+        border-radius: var(--r-sm);
+        padding: 18px 20px;
+        margin-bottom: 18px;
+    }
+
+    .dd-chart-lbl {
+        font-size: 12.5px;
+        font-weight: 800;
+        color: var(--muted);
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .inst-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 12px;
+        margin-bottom: 18px;
+    }
+
+    .inst-card {
+        background: #fff;
+        border: 1.5px solid var(--border);
+        border-radius: var(--r-sm);
+        padding: 16px;
+        transition: transform .15s, box-shadow .15s;
+    }
+
+    .inst-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,.07); }
+    .inst-card-top { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+
+    .inst-score-ring {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        font-weight: 900;
+        flex-shrink: 0;
+        border: 2.5px solid;
+    }
+
+    .inst-name { font-size: 13.5px; font-weight: 800; color: var(--text); }
+    .inst-meta { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+    .inst-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
+
+    .inst-stat {
+        background: #f8fafc;
+        border-radius: 7px;
+        padding: 7px 10px;
+        font-size: 11.5px;
+        color: var(--muted);
+    }
+
+    .inst-stat strong { display: block; font-size: 14px; font-weight: 900; color: var(--text); }
+
+    .lesson-bar-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        margin-bottom: 7px;
+        background: #fff;
+        transition: background .15s;
+    }
+
+    .lesson-bar-item:hover { background: #fafbfc; }
+
+    .lbi-rank {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: #fef2f2;
+        color: #dc2626;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        font-weight: 900;
+        flex-shrink: 0;
+    }
+
+    .lbi-name {
+        flex: 1;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text);
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .lbi-bar { width: 120px; flex-shrink: 0; }
+    .lbi-pct { width: 40px; text-align: center; font-size: 13px; font-weight: 900; flex-shrink: 0; }
+
+    .stu-grid { display: grid; grid-template-columns: 200px 1fr; gap: 18px; margin-bottom: 18px; }
+
+    .stu-risk-summary {
+        background: #f8fafc;
+        border: 1.5px solid var(--border);
+        border-radius: var(--r-sm);
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .stu-risk-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 12px;
+    }
+
+    .stu-risk-num { font-size: 22px; font-weight: 900; line-height: 1; flex-shrink: 0; }
+    .stu-risk-lbl { font-size: 12px; color: var(--muted); font-weight: 600; }
+    .stu-risk-pct { margin-inline-start: auto; font-size: 12px; font-weight: 800; }
+
+    @@media (max-width:768px) {
+        .inst-grid { grid-template-columns: 1fr; }
+        .stu-grid { grid-template-columns: 1fr; }
+        .lbi-bar { width: 70px; }
+    }
+</style>
+
+<div class="bpd-inner dd-wrap">
+    <div class="dd-tabs" role="tablist">
+        <button class="dd-tab active" role="tab" onclick="ddSwitch(0,this)">
+            <i class="bi bi-person-badge-fill"></i>
+            المدربون
+            <span class="dd-tab-count">@instList.Count</span>
+        </button>
+        <button class="dd-tab" role="tab" onclick="ddSwitch(1,this)">
+            <i class="bi bi-exclamation-diamond-fill"></i>
+            الدروس الحرجة
+            <span class="dd-tab-count">@lessonList.Count</span>
+        </button>
+        <button class="dd-tab" role="tab" onclick="ddSwitch(2,this)">
+            <i class="bi bi-people-fill"></i>
+            الطلاب بالخطر
+            <span class="dd-tab-count">@stuList.Count</span>
+        </button>
+    </div>
+
+    <div class="dd-panels">
+        <div class="dd-panel active" id="dd-panel-0">
+            <div class="dd-ph">
+                <div class="dd-ph-left">
+                    <div class="dd-ph-ico" style="background:#ecfeff;color:#0891b2;"><i class="bi bi-person-badge-fill"></i></div>
+                    <div>
+                        <div class="dd-ph-t">أداء المدربين داخل الدفعة</div>
+                        <div class="dd-ph-s">مرتبون من الأضعف إلى الأقوى</div>
+                    </div>
+                </div>
+            </div>
+
+            @if (!instList.Any())
+            {
+                <div class="empty"><i class="bi bi-person-badge"></i><div style="font-weight:800;">لا يوجد مدربون مسجلون</div></div>
+            }
+            else
+            {
+                <div class="dd-chart-box">
+                    <div class="dd-chart-lbl"><i class="bi bi-bar-chart-line-fill" style="color:#0891b2;"></i>مقارنة متوسط أداء المدربين</div>
+                    <canvas id="instBarChart" style="max-height:200px;width:100%;"></canvas>
+                </div>
+
+                <div class="inst-grid">
+                    @foreach (var inst in instList)
+                    {
+                        var sc = inst.AvgScore;
+                        var (clr, bg, bdr) = sc >= 70 ? ("#16a34a", "#f0fdf4", "#22c55e")
+                                         : sc >= 50 ? ("#d97706", "#fffbeb", "#f59e0b")
+                                         : ("#dc2626", "#fef2f2", "#ef4444");
+                        var st = sc >= 70 ? "جيد" : sc >= 50 ? "متوسط" : "يحتاج دعمًا";
+
+                        <div class="inst-card">
+                            <div class="inst-card-top">
+                                <div class="inst-score-ring" style="border-color:@bdr;color:@clr;background:@bg;">
+                                    @sc.ToString("0")%
+                                </div>
+                                <div>
+                                    <div class="inst-name">@inst.InstructorName</div>
+                                    <div class="inst-meta">
+                                        <span class="badge" style="background:@bg;color:@clr;padding:2px 8px;font-size:11px;">@st</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bar"><div class="bar-fill" style="width:@sc%;background:@bdr;"></div></div>
+                            <div class="inst-stats">
+                                <div class="inst-stat">
+                                    <strong style="color:@(inst.WeakLessonsCount > 0 ? "#d97706" : "#16a34a");">@inst.WeakLessonsCount</strong>
+                                    درس ضعيف
+                                </div>
+                                <div class="inst-stat">
+                                    <strong style="color:@(inst.HighRiskQuestionsCount > 0 ? "#dc2626" : "#16a34a");">@inst.HighRiskQuestionsCount</strong>
+                                    سؤال عالي
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="dd-panel" id="dd-panel-1">
+            <div class="dd-ph">
+                <div class="dd-ph-left">
+                    <div class="dd-ph-ico" style="background:#fef2f2;color:#dc2626;"><i class="bi bi-exclamation-diamond-fill"></i></div>
+                    <div>
+                        <div class="dd-ph-t">الدروس عالية الضعف</div>
+                        <div class="dd-ph-s">الدروس التي تجاوزت نسبة الضعف فيها 50%</div>
+                    </div>
+                </div>
+            </div>
+
+            @if (!lessonList.Any())
+            {
+                <div class="empty" style="background:#f0fdf4;">
+                    <i class="bi bi-check2-circle" style="color:#22c55e;"></i>
+                    <div style="font-weight:800;color:#16a34a;">لا توجد دروس حرجة</div>
+                </div>
+            }
+            else
+            {
+                <div class="dd-chart-box">
+                    <div class="dd-chart-lbl"><i class="bi bi-bar-chart-steps" style="color:#dc2626;"></i>أعلى @top12Lessons.Count درس ضعفًا</div>
+                    <canvas id="lessonsBarChart" style="max-height:260px;width:100%;"></canvas>
+                </div>
+
+                int lRank = 0;
+                @foreach (var l in lessonList)
+                {
+                    lRank++;
+                    var lc = l.WeaknessPercentage >= 70 ? "#dc2626" : "#d97706";
+
+                    <div class="lesson-bar-item">
+                        <div class="lbi-rank">@lRank</div>
+                        <div class="lbi-name" title="@l.LessonName">@l.LessonName</div>
+                        <div style="font-size:11.5px;color:var(--muted);white-space:nowrap;flex-shrink:0;">
+                            <i class="bi bi-people-fill me-1"></i>@l.AffectedStudents
+                            <span class="mx-2">|</span>
+                            <i class="bi bi-question-diamond-fill me-1" style="color:#dc2626;"></i>@(l.HighRiskQuestions?.Count ?? 0)
+                        </div>
+                        <div class="lbi-bar">
+                            <div class="bar">
+                                <div class="bar-fill" style="width:@l.WeaknessPercentage%;background:@lc;"></div>
+                            </div>
+                        </div>
+                        <div class="lbi-pct" style="color:@lc;">@l.WeaknessPercentage.ToString("0.#")%</div>
+                    </div>
+                }
+            }
+        </div>
+
+        <div class="dd-panel" id="dd-panel-2">
+            <div class="dd-ph">
+                <div class="dd-ph-left">
+                    <div class="dd-ph-ico" style="background:#f5f3ff;color:#7c3aed;"><i class="bi bi-people-fill"></i></div>
+                    <div>
+                        <div class="dd-ph-t">تحليل خطورة الطلاب</div>
+                        <div class="dd-ph-s">بناءً على الاختبارات والواجبات والحضور</div>
+                    </div>
+                </div>
+            </div>
+
+            @if (!stuList.Any())
+            {
+                <div class="empty"><i class="bi bi-person-slash"></i><div style="font-weight:800;">لا توجد بيانات طلاب</div></div>
+            }
+            else
+            {
+                <div class="stu-grid">
+                    <div class="stu-risk-summary">
+                        <div style="font-size:12px;font-weight:800;color:var(--muted);margin-bottom:4px;">توزيع مستوى الخطورة</div>
+                        <div class="stu-risk-row">
+                            <div class="stu-risk-num" style="color:#dc2626;">@dangerStu</div>
+                            <div class="stu-risk-lbl">طالب في خطر</div>
+                            <div class="stu-risk-pct" style="color:#dc2626;">@(stuList.Count > 0 ? ((double)dangerStu / stuList.Count * 100).ToString("0.#") : "0")%</div>
+                        </div>
+                        <div class="stu-risk-row">
+                            <div class="stu-risk-num" style="color:#d97706;">@medStu</div>
+                            <div class="stu-risk-lbl">طالب متوسط</div>
+                            <div class="stu-risk-pct" style="color:#d97706;">@(stuList.Count > 0 ? ((double)medStu / stuList.Count * 100).ToString("0.#") : "0")%</div>
+                        </div>
+                        <div class="stu-risk-row">
+                            <div class="stu-risk-num" style="color:#16a34a;">@stableStu</div>
+                            <div class="stu-risk-lbl">طالب مستقر</div>
+                            <div class="stu-risk-pct" style="color:#16a34a;">@(stuList.Count > 0 ? ((double)stableStu / stuList.Count * 100).ToString("0.#") : "0")%</div>
+                        </div>
+                        <canvas id="riskDonut" width="160" height="160" style="margin:0 auto;display:block;"></canvas>
+                    </div>
+
+                    <div class="dd-chart-box" style="margin-bottom:0;">
+                        <div class="dd-chart-lbl"><i class="bi bi-graph-up" style="color:#7c3aed;"></i>خريطة الطلاب: الاختبارات × الحضور</div>
+                        <canvas id="stuScatter" style="max-height:220px;width:100%;"></canvas>
+                    </div>
+                </div>
+
+                <div style="overflow-x:auto;border-radius:var(--r-sm);border:1.5px solid var(--border);">
+                    <table class="tbl" style="text-align:center;">
+                        <thead>
+                            <tr>
+                                <th style="text-align:right;">الطالب</th>
+                                <th>الاختبارات</th>
+                                <th>الواجبات</th>
+                                <th>الحضور</th>
+                                <th>الحالة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var s in stuList)
+                            {
+                                var ec = s.ExamScore >= 70 ? "#16a34a" : s.ExamScore >= 50 ? "#d97706" : "#dc2626";
+                                var hc = s.HomeworkScore >= 70 ? "#16a34a" : s.HomeworkScore >= 50 ? "#d97706" : "#dc2626";
+                                var ac = s.Attendance >= 70 ? "#16a34a" : s.Attendance >= 50 ? "#d97706" : "#dc2626";
+                                var rb = s.RiskLevel == "خطر" ? ("badge-d", "bi-exclamation-triangle-fill")
+                                    : s.RiskLevel == "متوسط" ? ("badge-w", "bi-dash-circle-fill")
+                                    : ("badge-s", "bi-check-circle-fill");
+
+                                <tr>
+                                    <td style="text-align:right;">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="avatar" style="background:#f5f3ff;color:#7c3aed;border:2px solid #ddd6fe;">
+                                                @(string.IsNullOrWhiteSpace(s.StudentName) ? "?" : s.StudentName[0].ToString())
+                                            </div>
+                                            <span style="font-weight:800;font-size:13px;">@s.StudentName</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div style="font-weight:900;font-size:14px;color:@ec;">@s.ExamScore.ToString("0.#")%</div>
+                                        <div class="bar"><div class="bar-fill" style="width:@s.ExamScore%;background:@ec;"></div></div>
+                                    </td>
+                                    <td>
+                                        <div style="font-weight:900;font-size:14px;color:@hc;">@s.HomeworkScore.ToString("0.#")%</div>
+                                        <div class="bar"><div class="bar-fill" style="width:@s.HomeworkScore%;background:@hc;"></div></div>
+                                    </td>
+                                    <td>
+                                        <div style="font-weight:900;font-size:14px;color:@ac;">@s.Attendance.ToString("0.#")%</div>
+                                        <div class="bar"><div class="bar-fill" style="width:@s.Attendance%;background:@ac;"></div></div>
+                                    </td>
+                                    <td>
+                                        <span class="badge @rb.Item1" style="border-radius:50px;">
+                                            <i class="bi @rb.Item2"></i> @s.RiskLevel
+                                        </span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    if (typeof Chart === 'undefined') return;
+
+    var instCtx = document.getElementById('instBarChart');
+    if (instCtx && @instList.Count > 0) {
+        var iLabels = [@Html.Raw(string.Join(",", instList.Select(i => "'" + i.InstructorName.Replace("'", "\\'") + "'")))];
+        var iScores = [@Html.Raw(string.Join(",", instList.Select(i => i.AvgScore.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))))];
+        new Chart(instCtx, {
+            type: 'bar',
+            data: {
+                labels: iLabels,
+                datasets: [{
+                    label: 'متوسط الأداء %',
+                    data: iScores,
+                    backgroundColor: iScores.map(v => v >= 70 ? 'rgba(34,197,94,.75)' : v >= 50 ? 'rgba(245,158,11,.75)' : 'rgba(239,68,68,.75)'),
+                    borderColor: iScores.map(v => v >= 70 ? '#22c55e' : v >= 50 ? '#f59e0b' : '#ef4444'),
+                    borderWidth: 1.5,
+                    borderRadius: 6,
+                    borderSkipped: false
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { rtl: true, callbacks: { label: function (c) { return ' ' + c.parsed.x.toFixed(1) + '%'; } } }
+                },
+                scales: {
+                    x: { min: 0, max: 100, grid: { color: '#f1f5f9' }, ticks: { font: { family: 'Cairo', size: 11 }, color: '#94a3b8', callback: function (v) { return v + '%'; } } },
+                    y: { grid: { display: false }, ticks: { font: { family: 'Cairo', size: 12, weight: '700' }, color: '#374151' } }
+                },
+                animation: { duration: 900 }
+            }
+        });
+    }
+
+    var lessCtx = document.getElementById('lessonsBarChart');
+    if (lessCtx && @top12Lessons.Count > 0) {
+        var lLabels = [@Html.Raw(string.Join(",", top12Lessons.Select(l => "'" + l.LessonName.Replace("'", "\\'") + "'")))];
+        var lData = [@Html.Raw(string.Join(",", top12Lessons.Select(l => l.WeaknessPercentage.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))))];
+        new Chart(lessCtx, {
+            type: 'bar',
+            data: {
+                labels: lLabels,
+                datasets: [{
+                    label: 'نسبة الضعف %',
+                    data: lData,
+                    backgroundColor: lData.map(v => v >= 70 ? 'rgba(239,68,68,.75)' : 'rgba(245,158,11,.75)'),
+                    borderColor: lData.map(v => v >= 70 ? '#ef4444' : '#f59e0b'),
+                    borderWidth: 1.5,
+                    borderRadius: 6,
+                    borderSkipped: false
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { rtl: true, callbacks: { label: function (c) { return ' ' + c.parsed.x.toFixed(1) + '%'; } } }
+                },
+                scales: {
+                    x: { min: 0, max: 100, grid: { color: '#fef2f2' }, ticks: { font: { family: 'Cairo', size: 11 }, color: '#94a3b8', callback: function (v) { return v + '%'; } } },
+                    y: { grid: { display: false }, ticks: { font: { family: 'Cairo', size: 11, weight: '700' }, color: '#374151' } }
+                },
+                animation: { duration: 900 }
+            }
+        });
+    }
+
+    var donutCtx = document.getElementById('riskDonut');
+    if (donutCtx && @stuList.Count > 0) {
+        new Chart(donutCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['خطر', 'متوسط', 'مستقر'],
+                datasets: [{
+                    data: [@dangerStu, @medStu, @stableStu],
+                    backgroundColor: ['#ef4444', '#f59e0b', '#22c55e'],
+                    borderColor: ['#fff', '#fff', '#fff'],
+                    borderWidth: 3,
+                    hoverOffset: 5
+                }]
+            },
+            options: {
+                cutout: '68%',
+                responsive: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { rtl: true, callbacks: { label: function (c) { return ' ' + c.label + ': ' + c.parsed + ' طالب'; } } }
+                },
+                animation: { duration: 900 }
+            }
+        });
+    }
+
+    var scatterCtx = document.getElementById('stuScatter');
+    if (scatterCtx && @top15Stu.Count > 0) {
+        var dangerPts = [], medPts = [], stablePts = [];
+        @foreach (var s in top15Stu)
+        {
+            var targetArray = s.RiskLevel == "خطر" ? "dangerPts" : s.RiskLevel == "متوسط" ? "medPts" : "stablePts";
+            var bubbleRadius = Math.Max(4d, s.HomeworkScore / 15d);
+            <text>
+            @(targetArray).push({
+                x:@s.ExamScore.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture),
+                y:@s.Attendance.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture),
+                r:@bubbleRadius.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)
+            });
+            </text>
+        }
+
+        new Chart(scatterCtx, {
+            type: 'bubble',
+            data: {
+                datasets: [
+                    { label: 'خطر', data: dangerPts, backgroundColor: 'rgba(239,68,68,.55)', borderColor: '#ef4444', borderWidth: 1.5 },
+                    { label: 'متوسط', data: medPts, backgroundColor: 'rgba(245,158,11,.55)', borderColor: '#f59e0b', borderWidth: 1.5 },
+                    { label: 'مستقر', data: stablePts, backgroundColor: 'rgba(34,197,94,.55)', borderColor: '#22c55e', borderWidth: 1.5 }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: true, position: 'top', align: 'start', labels: { font: { family: 'Cairo', size: 11 }, boxWidth: 10, boxHeight: 10, padding: 12 } },
+                    tooltip: { rtl: true, callbacks: { label: function (c) { return ' اختبار:' + c.parsed.x.toFixed(0) + '% - حضور:' + c.parsed.y.toFixed(0) + '%'; } } }
+                },
+                scales: {
+                    x: {
+                        min: 0, max: 100,
+                        title: { display: true, text: 'الاختبارات %', font: { family: 'Cairo', size: 11 }, color: '#64748b' },
+                        grid: { color: '#f1f5f9' },
+                        ticks: { font: { family: 'Cairo', size: 10 }, color: '#94a3b8', callback: function (v) { return v + '%'; } }
+                    },
+                    y: {
+                        min: 0, max: 100,
+                        title: { display: true, text: 'الحضور %', font: { family: 'Cairo', size: 11 }, color: '#64748b' },
+                        grid: { color: '#f1f5f9' },
+                        ticks: { font: { family: 'Cairo', size: 10 }, color: '#94a3b8', callback: function (v) { return v + '%'; } }
+                    }
+                },
+                animation: { duration: 900 }
+            }
+        });
+    }
+
+    window.ddSwitch = function (idx, btn) {
+        document.querySelectorAll('.dd-tab').forEach(function (t) { t.classList.remove('active'); });
+        document.querySelectorAll('.dd-panel').forEach(function (p) { p.classList.remove('active'); });
+        btn.classList.add('active');
+        var panel = document.getElementById('dd-panel-' + idx);
+        if (panel) panel.classList.add('active');
+    };
+}());
+</script>

@@ -1,0 +1,480 @@
+@model QdratNew.ViewModels.Reports.BatchPerformanceReportVM
+@{
+    Layout = "~/Areas/Admin/Views/Shared/_ReportLayout.cshtml";
+    ViewData["Title"] = $"تقرير أداء الدفعة — {Model.BatchName}";
+    bool hasData = Model.TotalLecturesInPeriod > 0 || Model.TotalHomeworksInPeriod > 0;
+}
+
+<style>
+    :root {
+        --emerald:#0D7A5B;--emerald-bg:#E4F5EE;
+        --amber:#985D09;--amber-bg:#FDF0D8;
+        --rose:#BF1030;--rose-bg:#FDEAEE;
+        --blue:#1B5EAE;--blue-bg:#E8F1FB;
+        --ink:#0D1B2A;--ink-2:#2C3E50;--ink-3:#5A6A7A;--ink-4:#8FA0B0;
+        --border:#DDE4EC;--surface-3:#EEF2F7;
+    }
+    .pr-header { margin-bottom:20px; }
+    .pr-title { font-size:20px;font-weight:800;color:var(--blue);margin-bottom:4px; }
+    .pr-meta { font-size:13px;color:var(--ink-3); }
+    .pr-period { font-size:13px;font-weight:700;color:var(--ink-2);background:var(--emerald-bg);padding:5px 14px;border-radius:20px;display:inline-block;margin-top:8px; }
+
+    .pr-kpis { display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:20px; }
+    @@media print { .pr-kpis{display:table;width:100%;} .pr-kpi-cell{display:table-cell;padding:4px;} }
+    .kpi-box { background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px 10px;text-align:center;page-break-inside:avoid; }
+    .kpi-label { font-size:10px;font-weight:700;color:var(--ink-4);margin-bottom:4px; }
+    .kpi-val   { font-size:18px;font-weight:800;color:var(--ink); }
+
+    .pr-section { margin-bottom:22px;page-break-inside:avoid; }
+    .pr-section-title { font-size:14px;font-weight:800;padding:8px 12px;border-radius:6px;margin-bottom:10px;display:flex;align-items:center;gap:8px; }
+    .title-blue    { background:var(--blue-bg);color:var(--blue); }
+    .title-emerald { background:var(--emerald-bg);color:var(--emerald); }
+    .title-amber   { background:var(--amber-bg);color:var(--amber); }
+    .title-rose    { background:var(--rose-bg);color:var(--rose); }
+    .title-gray    { background:var(--surface-3);color:var(--ink-2); }
+
+    .pr-table { width:100%;border-collapse:collapse;font-size:12px;margin-bottom:2px; }
+    .pr-table th { background:var(--surface-3);color:var(--ink-3);font-weight:700;padding:7px 10px;text-align:right;border:1px solid var(--border); }
+    .pr-table td { padding:7px 10px;border:1px solid var(--border);color:var(--ink-2);vertical-align:middle; }
+
+    .badge-em { background:var(--emerald-bg);color:var(--emerald);padding:2px 7px;border-radius:12px;font-size:11px;font-weight:700; }
+    .badge-am { background:var(--amber-bg);color:var(--amber);padding:2px 7px;border-radius:12px;font-size:11px;font-weight:700; }
+    .badge-ro { background:var(--rose-bg);color:var(--rose);padding:2px 7px;border-radius:12px;font-size:11px;font-weight:700; }
+    .badge-bl { background:var(--blue-bg);color:var(--blue);padding:2px 7px;border-radius:12px;font-size:11px;font-weight:700; }
+
+    .rec-print { border-radius:6px;padding:8px 12px;margin-bottom:8px;font-size:12px;page-break-inside:avoid; }
+    .rec-print.critical { background:var(--rose-bg);color:var(--rose); }
+    .rec-print.warning  { background:var(--amber-bg);color:var(--amber); }
+    .rec-print.info     { background:var(--emerald-bg);color:var(--emerald); }
+    .rec-title { font-weight:800;margin-bottom:2px; }
+    .rec-msg   { opacity:.85;line-height:1.5; }
+
+    .btn-print-action { background:var(--blue);color:#fff;border:none;padding:8px 20px;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Cairo',sans-serif;margin-bottom:16px; }
+    @@media print { .btn-print-action,.no-print { display:none!important; } }
+
+    .empty-print { text-align:center;padding:40px;color:var(--ink-4);font-size:14px; }
+    .exec-print { border-radius:6px;padding:10px 14px;margin-bottom:18px;font-size:13px;line-height:1.7;border-right:4px solid; }
+    .exec-print.success  { background:var(--emerald-bg);border-color:var(--emerald);color:var(--emerald); }
+    .exec-print.info     { background:var(--blue-bg);border-color:var(--blue);color:var(--blue); }
+    .exec-print.warning  { background:var(--amber-bg);border-color:var(--amber);color:var(--amber); }
+    .exec-print.critical { background:var(--rose-bg);border-color:var(--rose);color:var(--rose); }
+    .kpi-trend-print { font-size:10px;margin-top:2px; }
+    .kpi-trend-print.up   { color:var(--emerald); }
+    .kpi-trend-print.down { color:var(--rose); }
+    .kpi-trend-print.flat { color:var(--ink-4); }
+    .charts-grid-print { display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px; }
+    .chart-box-print { background:#fff;border:1px solid var(--border);border-radius:6px;padding:12px;page-break-inside:avoid; }
+    .action-plan-print { padding:10px 16px; }
+    .action-plan-print li { padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;color:var(--ink-2); }
+    .perf-grid-print { display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px; }
+    .perf-box-print-title { padding:8px 12px;font-size:13px;font-weight:800;border-radius:6px 6px 0 0; }
+    .perf-title-top    { background:var(--emerald-bg);color:var(--emerald); }
+    .perf-title-bottom { background:var(--amber-bg);color:var(--amber); }
+    .perf-row-print { display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);font-size:12px; }
+    .risk-bar-print { width:60px;height:5px;border-radius:10px;background:var(--border);overflow:hidden;display:inline-block;vertical-align:middle; }
+    .risk-fill-rose    { background:var(--rose);height:100%; }
+    .risk-fill-amber   { background:var(--amber);height:100%; }
+    .risk-fill-emerald { background:var(--emerald);height:100%; }
+</style>
+
+<button class="btn-print-action no-print" onclick="window.print()">
+    <i class="bi bi-printer"></i> طباعة
+</button>
+
+@* رأس التقرير *@
+<div class="pr-header">
+    <div class="pr-title">تقرير أداء الدفعة: @Model.BatchName</div>
+    <div class="pr-meta">
+        @Model.CourseTitle — تاريخ إصدار التقرير: @DateTime.Now.ToString("yyyy/MM/dd HH:mm")
+    </div>
+    <div class="pr-period">
+        الفترة: من @Model.FromDate.ToString("yyyy/MM/dd") إلى @Model.ToDate.ToString("yyyy/MM/dd")
+        @if (Model.IsYesterdayOnly) { <span> (أمس)</span> }
+    </div>
+</div>
+
+@* الملخص التنفيذي *@
+@if (!string.IsNullOrEmpty(Model.ExecutiveSummary))
+{
+    <div class="exec-print @Model.OverallStatusSeverity">
+        <strong>الحالة العامة: @Model.OverallStatusLabel</strong><br />
+        @Model.ExecutiveSummary
+    </div>
+}
+@{
+    string PTrendIcon(string t) => t == "up" ? "▲" : t == "down" ? "▼" : "—";
+}
+@if (!hasData)
+{
+    <div class="empty-print">لا توجد بيانات محاضرات أو واجبات خلال هذه الفترة.</div>
+}
+else
+{
+    @* KPI *@
+  
+    <div class="pr-kpis" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;">
+        <div class="kpi-box" style="flex:1;min-width:120px;">
+            <div class="kpi-label">المحاضرات</div>
+            <div class="kpi-val">@Model.TotalLecturesInPeriod</div>
+            <div style="font-size:11px;color:var(--ink-4);">حضور @Model.OverallAttendanceRate.ToString("F0")%</div>
+            <div class="kpi-trend-print @Model.Comparison.AttendanceRate.Trend">@PTrendIcon(Model.Comparison.AttendanceRate.Trend) @((Model.Comparison.AttendanceRate.Delta >= 0 ? "+" : "") + Model.Comparison.AttendanceRate.Delta.ToString("F1"))%</div>
+        </div>
+        <div class="kpi-box" style="flex:1;min-width:120px;">
+            <div class="kpi-label">الواجبات</div>
+            <div class="kpi-val">@Model.TotalHomeworksInPeriod</div>
+            <div style="font-size:11px;color:var(--ink-4);">تسليم @Model.OverallSubmissionRate.ToString("F0")%</div>
+            <div class="kpi-trend-print @Model.Comparison.SubmissionRate.Trend">@PTrendIcon(Model.Comparison.SubmissionRate.Trend) @((Model.Comparison.SubmissionRate.Delta >= 0 ? "+" : "") + Model.Comparison.SubmissionRate.Delta.ToString("F1"))%</div>
+        </div>
+        <div class="kpi-box" style="flex:1;min-width:120px;">
+            <div class="kpi-label">متوسط الدرجات</div>
+            <div class="kpi-val">@Model.OverallAverageScore.ToString("F0")%</div>
+            <div class="kpi-trend-print @Model.Comparison.AverageScore.Trend">@PTrendIcon(Model.Comparison.AverageScore.Trend) @((Model.Comparison.AverageScore.Delta >= 0 ? "+" : "") + Model.Comparison.AverageScore.Delta.ToString("F1"))%</div>
+        </div>
+        <div class="kpi-box" style="flex:1;min-width:120px;">
+            <div class="kpi-label">ممتاز ≥60%</div>
+            <div class="kpi-val" style="color:var(--emerald);">@Model.CountAbove60</div>
+            <div class="kpi-trend-print @Model.Comparison.CountAbove60.Trend">@PTrendIcon(Model.Comparison.CountAbove60.Trend) @((Model.Comparison.CountAbove60.Delta >= 0 ? "+" : "") + Model.Comparison.CountAbove60.Delta.ToString("F0"))</div>
+        </div>
+        <div class="kpi-box" style="flex:1;min-width:120px;">
+            <div class="kpi-label">يحتاج دعم &lt;60%</div>
+            <div class="kpi-val" style="color:var(--amber);">@Model.CountBelow60</div>
+            <div class="kpi-trend-print @Model.Comparison.CountBelow60.Trend">@PTrendIcon(Model.Comparison.CountBelow60.Trend) @((Model.Comparison.CountBelow60.Delta >= 0 ? "+" : "") + Model.Comparison.CountBelow60.Delta.ToString("F0"))</div>
+        </div>
+        <div class="kpi-box" style="flex:1;min-width:120px;">
+            <div class="kpi-label">لم يسلّم</div>
+            <div class="kpi-val" style="color:var(--rose);">@Model.CountNotSubmitted</div>
+            <div class="kpi-trend-print @Model.Comparison.CountNotSubmitted.Trend">@PTrendIcon(Model.Comparison.CountNotSubmitted.Trend) @((Model.Comparison.CountNotSubmitted.Delta >= 0 ? "+" : "") + Model.Comparison.CountNotSubmitted.Delta.ToString("F0"))</div>
+        </div>
+    </div>
+
+    @* التوصيات *@
+    @if (Model.Recommendations.Any())
+    {
+        <div class="pr-section">
+            <div class="pr-section-title title-amber">توصيات للمدرب</div>
+            @foreach (var rec in Model.Recommendations)
+            {
+                <div class="rec-print @rec.Severity">
+                    <div class="rec-title">@rec.Title</div>
+                    <div class="rec-msg">@rec.Message</div>
+                </div>
+            }
+        </div>
+    }
+
+    @* المحاضرات *@
+    @if (Model.Lectures.Any())
+    {
+        <div class="pr-section">
+            <div class="pr-section-title title-blue">المحاضرات والحضور</div>
+            <table class="pr-table">
+                <thead>
+                    <tr><th>المحاضرة</th><th>التاريخ</th><th>حضور</th><th>تأخر</th><th>غياب</th><th>نسبة الحضور</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var lec in Model.Lectures)
+                    {
+                        <tr>
+                            <td style="font-weight:700;">@lec.Title</td>
+                            <td>@lec.Date.ToString("yyyy/MM/dd")</td>
+                            <td><span class="badge-em">@lec.PresentCount</span></td>
+                            <td><span class="badge-am">@lec.LateCount</span></td>
+                            <td><span class="badge-ro">@lec.AbsentCount</span></td>
+                            <td><span class="badge-bl">@lec.AttendanceRate.ToString("F0")%</span></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @* الواجبات *@
+    @if (Model.Homeworks.Any())
+    {
+        <div class="pr-section">
+            <div class="pr-section-title title-blue">الواجبات المرسلة</div>
+            <table class="pr-table">
+                <thead>
+                    <tr><th>الواجب</th><th>تاريخ الإرسال</th><th>الموعد النهائي</th><th>المكلَّفون</th><th>المسلِّمون</th><th>نسبة التسليم</th><th>متوسط الدرجة</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var hw in Model.Homeworks)
+                    {
+                        <tr>
+                            <td style="font-weight:700;">@hw.Title</td>
+                            <td>@hw.CreatedAt.ToString("yyyy/MM/dd")</td>
+                            <td>@(hw.EndAt.HasValue ? hw.EndAt.Value.ToString("yyyy/MM/dd") : "—")</td>
+                            <td>@hw.TotalAssigned</td>
+                            <td><span class="badge-em">@hw.SubmittedCount</span></td>
+                            <td><span class="@(hw.SubmissionRate >= 75 ? "badge-em" : hw.SubmissionRate >= 50 ? "badge-am" : "badge-ro")">@hw.SubmissionRate.ToString("F0")%</span></td>
+                            <td>
+                                @if (hw.SubmittedCount > 0)
+                                {
+                                    <span class="@(hw.AverageScore >= 60 ? "badge-em" : "badge-ro")">@hw.AverageScore.ToString("F0")%</span>
+                                }
+                                else { <span>—</span> }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @* طلاب ≥60% *@
+    @if (Model.StudentsAbove60.Any())
+    {
+        <div class="pr-section">
+            <div class="pr-section-title title-emerald">طلاب بمستوى ممتاز (60% فأعلى) — @Model.CountAbove60 طالب</div>
+            <table class="pr-table">
+                <thead>
+                    <tr><th>الاسم</th><th>الهاتف</th><th>متوسط الدرجة</th><th>الواجبات</th><th>الحضور</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var s in Model.StudentsAbove60)
+                    {
+                        <tr>
+                            <td style="font-weight:700;">@s.FullName</td>
+                            <td>@(s.PhoneNumber ?? "—")</td>
+                            <td><span class="badge-em">@s.AverageScore.ToString("F0")%</span></td>
+                            <td>@s.SubmittedCount / @s.AssignedCount</td>
+                            <td>@s.AttendedCount / @s.TotalLecturesInPeriod</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @* طلاب <60% *@
+    @if (Model.StudentsBelow60.Any())
+    {
+        <div class="pr-section">
+            <div class="pr-section-title title-amber">طلاب يحتاجون دعم (أقل من 60%) — @Model.CountBelow60 طالب</div>
+            <table class="pr-table">
+                <thead>
+                    <tr><th>الاسم</th><th>الهاتف</th><th>متوسط الدرجة</th><th>الواجبات</th><th>الحضور</th><th>واجبات ناقصة</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var s in Model.StudentsBelow60)
+                    {
+                        <tr>
+                            <td style="font-weight:700;">@s.FullName</td>
+                            <td>@(s.PhoneNumber ?? "—")</td>
+                            <td><span class="badge-am">@s.AverageScore.ToString("F0")%</span></td>
+                            <td>@s.SubmittedCount / @s.AssignedCount</td>
+                            <td>@s.AttendedCount / @s.TotalLecturesInPeriod</td>
+                            <td>@string.Join("، ", s.MissingHomeworkTitles)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @* طلاب لم يسلّموا *@
+    @if (Model.StudentsNotSubmitted.Any())
+    {
+        <div class="pr-section">
+            <div class="pr-section-title title-rose">طلاب لم يسلّموا أي واجب — @Model.CountNotSubmitted طالب</div>
+            <table class="pr-table">
+                <thead>
+                    <tr><th>الاسم</th><th>الهاتف</th><th>الواجبات الفائتة</th><th>الحضور</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var s in Model.StudentsNotSubmitted)
+                    {
+                        <tr>
+                            <td style="font-weight:700;color:var(--rose);">@s.FullName</td>
+                            <td>@(s.PhoneNumber ?? "—")</td>
+                            <td>@string.Join("، ", s.MissingHomeworkTitles)</td>
+                            <td>@s.AttendedCount / @s.TotalLecturesInPeriod</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+    @* خطة العمل الأسبوعية *@
+    @if (Model.WeeklyActionPlan.Any())
+    {
+        <div class="pr-section">
+            <div class="pr-section-title title-blue">خطة العمل المقترحة للأسبوع القادم</div>
+            <ol class="action-plan-print">
+                @foreach (var step in Model.WeeklyActionPlan)
+                {
+                    <li>@step</li>
+                }
+            </ol>
+        </div>
+    }
+
+    @* أفضل/أضعف 5 طلاب *@
+    @if (Model.TopPerformers.Any() || Model.BottomPerformers.Any())
+    {
+        <div class="pr-section">
+            <div class="pr-section-title title-blue">أفضل وأضعف الطلاب أداءً</div>
+            <div class="perf-grid-print">
+                <div style="border:1px solid var(--border);border-radius:6px;overflow:hidden;page-break-inside:avoid;">
+                    <div class="perf-box-print-title perf-title-top">الأفضل أداءً</div>
+                    @foreach (var s in Model.TopPerformers)
+                    {
+                        <div class="perf-row-print">
+                            <span style="flex:1;font-weight:700;">@s.FullName</span>
+                            <span class="badge-em">@s.AverageScore.ToString("F0")%</span>
+                        </div>
+                    }
+                </div>
+                <div style="border:1px solid var(--border);border-radius:6px;overflow:hidden;page-break-inside:avoid;">
+                    <div class="perf-box-print-title perf-title-bottom">يحتاجون دعماً إضافياً</div>
+                    @foreach (var s in Model.BottomPerformers)
+                    {
+                        <div class="perf-row-print">
+                            <span style="flex:1;font-weight:700;">@s.FullName</span>
+                            <span class="badge-am">@s.AverageScore.ToString("F0")%</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+
+    @* تفصيل المناهج *@
+    @if (Model.CurriculumBreakdown.Any())
+    {
+        <div class="pr-section">
+            <div class="pr-section-title title-blue">تفصيل المناهج والمدربين</div>
+            <table class="pr-table">
+                <thead>
+                    <tr><th>المنهج</th><th>المدرّب</th><th>واجبات</th><th>متوسط الدرجة</th><th>نسبة التسليم</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var cb in Model.CurriculumBreakdown)
+                    {
+                        <tr>
+                            <td style="font-weight:700;color:var(--blue);">@cb.CurriculumTitle</td>
+                            <td>@(string.IsNullOrEmpty(cb.InstructorName) ? "غير محدد" : cb.InstructorName)</td>
+                            <td>@(cb.HomeworkCount > 0 ? cb.HomeworkCount.ToString() : "—")</td>
+                            <td>@(cb.HomeworkCount > 0 ? cb.AverageScore.ToString("F0") + "%" : "—")</td>
+                            <td>@(cb.HomeworkCount > 0 ? cb.SubmissionRate.ToString("F0") + "%" : "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @* مؤشر الخطورة *@
+    @if (Model.StudentsRisk.Any())
+    {
+        <div class="pr-section">
+            <div class="pr-section-title title-rose">مؤشر الخطورة لجميع الطلاب</div>
+            <table class="pr-table">
+                <thead>
+                    <tr><th>#</th><th>الاسم</th><th>الحضور</th><th>التسليم</th><th>الدرجة</th><th>مؤشر الخطورة</th><th>التصنيف</th></tr>
+                </thead>
+                <tbody>
+                    @for (int i = 0; i < Model.StudentsRisk.Count; i++)
+                    {
+                        var r = Model.StudentsRisk[i];
+                        <tr>
+                            <td style="color:var(--ink-4);">@(i+1)</td>
+                            <td style="font-weight:700;">@r.FullName</td>
+                            <td>@r.AttendanceRate.ToString("F0")%</td>
+                            <td>@r.SubmissionRate.ToString("F0")%</td>
+                            <td>@r.AverageScore.ToString("F0")%</td>
+                            <td>
+                                <span style="display:inline-flex;align-items:center;gap:6px;">
+                                    <span class="risk-bar-print"><span class="risk-fill-@r.RiskSeverity" style="width:@((int)r.AtRiskIndex)%;display:block;"></span></span>
+                                    @r.AtRiskIndex.ToString("F0")%
+                                </span>
+                            </td>
+                            <td><span class="@(r.RiskSeverity == "rose" ? "badge-ro" : r.RiskSeverity == "amber" ? "badge-am" : "badge-em")">@r.RiskLevel</span></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @* الرسوم البيانية *@
+    @if (hasData)
+    {
+        <div class="pr-section" style="page-break-before:always;">
+            <div class="pr-section-title title-blue">الرسوم البيانية التحليلية</div>
+            <div class="charts-grid-print">
+                @if (Model.AttendanceTrendChart.Labels.Any())
+                {
+                    <div class="chart-box-print"><canvas id="pAttTrend" width="500" height="280"></canvas></div>
+                }
+                @if (Model.ScoreDistributionChart.Series.Any() && Model.ScoreDistributionChart.Series[0].Values.Any(v => v > 0))
+                {
+                    <div class="chart-box-print"><canvas id="pScoreDist" width="500" height="280"></canvas></div>
+                }
+                @if (Model.HomeworkSubmissionChart.Labels.Any())
+                {
+                    <div class="chart-box-print"><canvas id="pHwSub" width="500" height="280"></canvas></div>
+                }
+                @if (Model.CurriculumPerformanceChart.Labels.Any())
+                {
+                    <div class="chart-box-print"><canvas id="pCurrPerf" width="500" height="280"></canvas></div>
+                }
+            </div>
+        </div>
+    }
+}
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        Chart.defaults.font.family = "'Cairo', sans-serif";
+        const tokens = { blue:'#1B5EAE', emerald:'#0D7A5B', amber:'#985D09', rose:'#BF1030', violet:'#5535B5', gray:'#9AA5B1' };
+
+        window.onload = function() {
+            // 1) اتجاه الحضور
+            (function() {
+                const el = document.getElementById('pAttTrend');
+                if (!el) return;
+                const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.AttendanceTrendChart.Labels));
+                const values = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.AttendanceTrendChart.Series.FirstOrDefault()?.Values ?? new List<double>()));
+                if (!labels.length) return;
+                new Chart(el, { type: labels.length > 1 ? 'line' : 'bar', data: { labels, datasets: [{ label: 'نسبة الحضور %', data: values, borderColor: tokens.blue, backgroundColor: tokens.blue + '33', tension: 0.3, fill: true }] }, options: { responsive: false, plugins: { title: { display: true, text: 'اتجاه الحضور' } }, scales: { y: { beginAtZero: true, max: 100 } } } });
+            })();
+
+            // 2) توزيع الدرجات
+            (function() {
+                const el = document.getElementById('pScoreDist');
+                if (!el) return;
+                const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ScoreDistributionChart.Labels));
+                const values = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ScoreDistributionChart.Series.FirstOrDefault()?.Values ?? new List<double>()));
+                if (!values.some(v => v > 0)) return;
+                new Chart(el, { type: 'doughnut', data: { labels, datasets: [{ data: values, backgroundColor: [tokens.emerald, '#4CAF93', tokens.amber, '#E08A3C', tokens.rose, tokens.gray] }] }, options: { responsive: false, plugins: { title: { display: true, text: 'توزيع الدرجات' } } } });
+            })();
+
+            // 3) تسليم الواجبات
+            (function() {
+                const el = document.getElementById('pHwSub');
+                if (!el) return;
+                const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.HomeworkSubmissionChart.Labels));
+                const series = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.HomeworkSubmissionChart.Series));
+                if (!labels.length || series.length < 2) return;
+                new Chart(el, { type: 'bar', data: { labels, datasets: [{ label: series[0].name, data: series[0].values, backgroundColor: tokens.violet + 'CC' }, { label: series[1].name, data: series[1].values, backgroundColor: tokens.blue + 'CC' }] }, options: { responsive: false, plugins: { title: { display: true, text: 'تسليم الواجبات' } }, scales: { y: { beginAtZero: true, max: 100 } } } });
+            })();
+
+            // 4) أداء المناهج
+            (function() {
+                const el = document.getElementById('pCurrPerf');
+                if (!el) return;
+                const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.CurriculumPerformanceChart.Labels));
+                const series = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.CurriculumPerformanceChart.Series));
+                if (!labels.length || series.length < 2) return;
+                const chartType = labels.length >= 3 ? 'radar' : 'bar';
+                new Chart(el, { type: chartType, data: { labels, datasets: [{ label: series[0].name, data: series[0].values, borderColor: tokens.emerald, backgroundColor: tokens.emerald + '33' }, { label: series[1].name, data: series[1].values, borderColor: tokens.violet, backgroundColor: tokens.violet + '33' }] }, options: { responsive: false, plugins: { title: { display: true, text: 'أداء المناهج' } }, scales: chartType === 'bar' ? { y: { beginAtZero: true, max: 100 } } : undefined } });
+            })();
+
+            setTimeout(() => window.print(), 1200);
+        };
+    </script>
+}

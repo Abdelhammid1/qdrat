@@ -1,0 +1,177 @@
+﻿@model List<QdratNew.ViewModels.Exam.CompletedSectionsViewModel>
+
+@{
+    ViewData["Title"] = "المحاور المكتملة";
+}
+
+<div class="container-fluid">
+    <h2 class="text-primary mb-4"><i class="fas fa-check-circle"></i> المحاور المكتملة في الدفعات</h2>
+
+    @if (!Model.Any())
+    {
+        <div class="alert alert-info">لا توجد محاور مكتملة بعد.</div>
+    }
+    else
+    {
+        <div class="row mb-3">
+            <div class="col-md-3">
+                <select id="filterBatch" class="form-select">
+                    <option value="">كل الدفعات</option>
+                    @foreach (var batch in Model.Select(x => x.BatchName).Distinct())
+                    {
+                        <option value="@batch">@batch</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select id="filterCurriculum" class="form-select">
+                    <option value="">كل الأقسام</option>
+                    @foreach (var curr in Model.Select(x => x.CurriculumTitle).Distinct())
+                    {
+                        <option value="@curr">@curr</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select id="filterSection" class="form-select">
+                    <option value="">كل المحاور</option>
+                    @foreach (var sec in Model.Select(x => x.SectionTitle).Distinct())
+                    {
+                        <option value="@sec">@sec</option>
+                    }
+                </select>
+            </div>
+        </div>
+
+        <table id="sectionsTable" class="table table-bordered table-hover text-center align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>الدفعة</th>
+                    <th>القسم</th>
+                    <th>المحور</th>
+                    <th>الدروس المكتملة</th>
+                    <th>الإجمالي</th>
+                    <th>تم إنشاء اختبار؟</th>
+                    <th>إجراء</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Model)
+                {
+                    <tr>
+                        <td>@item.BatchName</td>
+                        <td>@item.CurriculumTitle</td>
+                        <td>@item.SectionTitle</td>
+                        <td class="text-success fw-bold">@item.CompletedLessonsCount</td>
+                        <td>@item.TotalLessonsInSection</td>
+                        <td>
+                            @if (item.IsExamGenerated)
+                            {
+                                <span class="badge bg-success">نعم</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">لا</span>
+                            }
+                        </td>
+                        <td class="d-flex gap-2 justify-content-center">
+                            @if (!item.IsExamGenerated)
+                            {
+                                <form asp-action="GenerateExamForSection"
+                                      asp-controller="ExamAssignments"
+                                      asp-area="Admin"
+                                      method="post" class="d-inline">
+                                    <input type="hidden" name="batchId" value="@item.BatchId" />
+                                    <input type="hidden" name="sectionId" value="@item.SectionId" />
+                                    <input type="hidden" name="curriculumId" value="@item.CurriculumId" />
+                                    <input type="hidden" name="lessonId" value="@item.LessonId" />
+                                    <button type="submit" class="btn btn-danger btn-sm">
+                                        <i class="fas fa-bolt"></i> توليد مباشر
+                                    </button>
+                                </form>
+
+                                <a asp-action="PreviewGenerateExamForSection"
+                                   asp-controller="ExamAssignments"
+                                   asp-area="Admin"
+                                   asp-route-batchId="@item.BatchId"
+                                   asp-route-sectionId="@item.SectionId"
+                                   asp-route-curriculumId="@item.CurriculumId"
+                                   asp-route-lessonId="@item.LessonId"
+                                   class="btn btn-outline-warning btn-sm">
+                                    <i class="fas fa-eye"></i> مراجعة وتوليد
+                                </a>
+                            }
+                            else
+                            {
+                                <span class="badge bg-success">تم التوليد</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <hr class="my-5" />
+
+        <h4 class="mb-3 text-primary"><i class="fas fa-calendar-plus"></i> توليد اختبار مؤشرات الأداء</h4>
+
+        @foreach (var group in Model.GroupBy(x => new { x.BatchId, x.CurriculumId }))
+        {
+            var batchName = group.First().BatchName;
+            var curriculumTitle = group.First().CurriculumTitle;
+            var allGenerated = group.All(x => x.IsExamGenerated);
+            var allCompleted = group.All(x => x.CompletedLessonsCount == x.TotalLessonsInSection);
+
+            if (!allGenerated && allCompleted)
+            {
+                <div class="border rounded p-3 mb-4 bg-light">
+                    <h5>📘 الدفعة: <strong>@batchName</strong> | المنهج: <strong>@curriculumTitle</strong></h5>
+
+                    <form asp-action="GenerateCurriculumPerformanceExam"
+                          asp-controller="ExamAssignments"
+                          asp-area="Admin"
+                          method="post"
+                          class="row g-2 mt-3 align-items-end">
+
+                        <input type="hidden" name="batchId" value="@group.Key.BatchId" />
+                        <input type="hidden" name="curriculumId" value="@group.Key.CurriculumId" />
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">موعد الاختبار</label>
+                            <input type="datetime-local" name="ScheduledDate" class="form-control" required />
+                        </div>
+
+                        <div class="col-md-3">
+                            <button type="submit" class="btn btn-success w-100">
+                                <i class="fas fa-rocket"></i> توليد اختبار مؤشرات الأداء
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            }
+        }
+    }
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            var table = $('#sectionsTable').DataTable({
+                dom: 'Bfrtip',
+                buttons: ['copyHtml5', 'excelHtml5', 'print'],
+                language: { url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json" }
+            });
+
+            $('#filterBatch, #filterCurriculum, #filterSection').on('change', function () {
+                let batch = $('#filterBatch').val();
+                let curriculum = $('#filterCurriculum').val();
+                let section = $('#filterSection').val();
+
+                table.column(0).search(batch);
+                table.column(1).search(curriculum);
+                table.column(2).search(section);
+                table.draw();
+            });
+        });
+    </script>
+}

@@ -1,0 +1,229 @@
+﻿@model QdratNew.ViewModels.Reports.PlacementReportViewModel
+@using QdratNew.Helpers
+@{
+    Layout = "~/Views/Shared/_ReportLayout.cshtml";
+    ViewData["Title"] = "تقرير تحديد المستوى - لوحة الإدارة";
+}
+
+
+<div class="flex justify-between items-center bg-white shadow-md rounded-xl p-4">
+<div class="flex items-center gap-4">
+    <img src="~/images/160×100.png" alt="شعار معهد القدرات"
+         class="rounded-md border border-gray-200 shadow-sm" style="width:130px;height:85px;" />
+    <div>
+        <h1 class="text-2xl font-bold text-[var(--main-color)]">@ViewData["Title"]</h1>
+        <p class="text-gray-500 text-sm">نظام التقارير الذكية لمعهد القدرات</p>
+    </div>
+</div>
+<div class="text-right">
+    <p class="bg-[var(--main-color)]/10 text-[var(--main-color)] px-4 py-1 rounded-full text-sm font-semibold">
+        📅 @DateTime.Now.ToString("yyyy/MM/dd")
+    </p>
+</div>
+
+</div>
+<!-- 👨‍🎓 معلومات الطالب -->
+<section class="card">
+    <div class="grid md:grid-cols-2 gap-4 text-sm">
+        <div>
+            <p><strong>👤 اسم الطالب:</strong> @Model.Student.FullName</p>
+            <p><strong>🆔 رقم الطالب:</strong> @Model.Student.StudentID</p>
+            <p><strong>🎓 المستوى:</strong> @Model.Student.Level</p>
+        </div>
+        <div>
+            <p><strong>⏱️ زمن الحل:</strong> @NumberHelper.ToIndicNumbersSafe(Model.SolveMinutes.ToString()) دقيقة</p>
+            <p><strong>❓ عدد الأسئلة:</strong> @Model.TotalQuestions</p>
+            <p><strong>✅ الإجابات الصحيحة:</strong> @Model.CorrectAnswers</p>
+        </div>
+    </div>
+</section>
+
+<!-- 📊 كروت الأداء -->
+<section class="grid sm:grid-cols-4 gap-4">
+    <div class="card text-center border-t-4 border-[var(--main-color)]">
+        <h6 class="text-gray-500">النسبة العامة</h6>
+        <h2 class="text-3xl font-bold text-[var(--main-color)]">@Model.OverallPercent%</h2>
+    </div>
+    <div class="card text-center border-t-4 border-emerald-500">
+        <h6 class="text-gray-500">الصحيحة</h6>
+        <h2 class="text-3xl font-bold text-emerald-600">@Model.CorrectAnswers</h2>
+    </div>
+    <div class="card text-center border-t-4 border-red-500">
+        <h6 class="text-gray-500">الخاطئة</h6>
+        <h2 class="text-3xl font-bold text-red-600">@Model.WrongAnswers</h2>
+    </div>
+    <div class="card text-center border-t-4 border-amber-500">
+        <h6 class="text-gray-500">غير المجابة</h6>
+        <h2 class="text-3xl font-bold text-amber-500">@Model.SkippedQuestions</h2>
+    </div>
+
+    @if (Model.DontKnowAnswers > 0)
+    {
+        <div class="card text-center border-t-4 border-slate-400">
+            <h6 class="text-gray-500">لا أعرف الإجابة</h6>
+            <h2 class="text-3xl font-bold text-slate-500">@Model.DontKnowAnswers</h2>
+        </div>
+    }
+
+
+
+
+</section>
+
+<!-- 🔷 الرسم العام -->
+<section class="card">
+    <h2 class="chart-title">توزيع الأداء العام</h2>
+    <canvas id="overallChart" height="160"></canvas>
+</section>
+<section class="grid sm:grid-cols-3 gap-3">
+    <div class="card text-center border-t-3 border-amber-500">
+        <h6 class="text-gray-500">نسبة الوقت المستهلك</h6>
+        <h2 class="text-3xl font-bold text-amber-500">@Model.PercentTime%</h2>
+    </div>
+    <div class="card text-center border-t-3 border-amber-500">
+        <h6 class="text-gray-500">⏱️ الوقت المحدد</h6>
+        <h2 class="text-3xl font-bold text-amber-500">@Model.TotalMinutes دقيقة</h2>
+    </div>
+    <div class="card text-center border-t-3 border-amber-500">
+        <h6 class="text-gray-500">📊 المستوى العام</h6>
+        <h2 class="text-3xl font-bold text-amber-500">@Model.OverallPercent%</h2>
+    </div>
+</section>
+<!-- 🔹 التحليل الكمي واللفظي -->
+<div class="grid md:grid-cols-2 gap-6">
+    @if (Model.QuantLabels?.Any() == true)
+    {
+        <section class="card">
+            <h2 class="chart-title">التحليل الكمي</h2>
+            <canvas id="quantChart" height="200"></canvas>
+        </section>
+    }
+
+    @if (Model.VerbalLabels?.Any() == true)
+    {
+        <section class="card">
+            <h2 class="chart-title">التحليل اللفظي</h2>
+            <canvas id="verbalChart" height="200"></canvas>
+        </section>
+    }
+</div>
+
+<!-- 📘 تحليل المحاور -->
+<h3 class="font-bold text-[var(--main-color)] text-lg mt-8">تحليل المحاور والمؤشرات</h3>
+@foreach (var sec in Model.SectionLessonReports)
+{
+    <div class="card  mt-3">
+        <h4 class="font-semibold bg-qdrat-soft p- text-gray-700 mb-3"><i class="fas fa-layer-group text-[var(--main-color)] me-2"></i>@sec.SectionName</h4>
+        <table class="w-full bg-white  p-2 text-center border border-gray-200">
+            <thead class="bg-[var(--main-color)]/10 text-[var(--main-color)]">
+                <tr>
+                    <th>المؤشر</th>
+                    <th>عدد الأسئلة</th>
+                    <th>الصحيحة</th>
+                    <th>الخاطئة</th>
+                    <th>المتخطاة</th>
+                    <th>نسبة النجاح</th>
+                    <th>خيارات</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var l in sec.Lessons)
+                {
+                    <tr class="border-t hover:bg-gray-50">
+                        <td class="text-right px-2">@l.LessonName</td>
+                        <td>@l.TotalQuestions</td>
+                        <td class="text-emerald-600">@l.CorrectCount</td>
+                        <td class="text-red-600">@l.WrongCount</td>
+                        <td class="text-gray-500">@l.SkippedCount</td>
+                        <td>@l.Percent%</td>
+                        <td>
+                            <a asp-action="ReviewLessonQuestions" asp-route-assignmentId="@Model.AssignmentId"
+                               asp-route-studentId="@Model.Student.StudentID" asp-route-lessonId="@l.LessonId"
+                               class="text-[var(--main-color)] underline text-sm">عرض الأسئلة</a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+<!-- 💡 توصيات -->
+<section class="card">
+    <h2 class="chart-title">توصيات الذكاء الاصطناعي</h2>
+    @if (Model.Recommendation != null)
+    {
+        <p class="text-gray-700 mb-3">@Model.Recommendation.PerformanceSummary</p>
+        <div class="grid sm:grid-cols-2 gap-4">
+            <div class="p-4 rounded-xl bg-emerald-50 border-r-4 border-emerald-500">
+                <h4 class="text-emerald-700 font-bold mb-1">@Model.Recommendation.TrackCard1</h4>
+                <p class="text-gray-700 text-sm">@Model.Recommendation.TrackCard1Desc</p>
+            </div>
+            <div class="p-4 rounded-xl bg-sky-50 border-r-4 border-sky-500">
+                <h4 class="text-sky-700 font-bold mb-1">@Model.Recommendation.TrackCard2</h4>
+                <p class="text-gray-700 text-sm">@Model.Recommendation.TrackCard2Desc</p>
+            </div>
+        </div>
+    }
+    else
+    {
+        <p class="text-gray-600">لا توجد توصيات حالياً.</p>
+    }
+</section>
+
+<!-- 🖨️ زر الطباعة -->
+<div class="text-center no-print">
+    <button onclick="window.print()" class="mt-6 bg-[var(--main-color)] text-white font-semibold px-6 py-2 rounded-lg shadow hover:bg-teal-700">
+        <i class="fas fa-print me-2"></i> طباعة / حفظ PDF
+    </button>
+</div>
+
+<!-- 🔙 زر الرجوع للصفحة السابقة -->
+
+
+<!-- 📊 ChartJS Scripts -->
+@section Scripts {
+    <script>
+        const overallCtx = document.getElementById('overallChart');
+        new Chart(overallCtx, {
+            type: 'bar',
+            data: {
+                labels: ['صحيحة', 'خاطئة', 'غير مجابة'],
+                datasets: [{
+                    data: [@Model.CorrectAnswers, @Model.WrongAnswers, @Model.SkippedQuestions],
+                    backgroundColor: ['#10b981', '#ef4444', '#f59e0b'],
+                    borderRadius: 10
+                }]
+            },
+            options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, max: @Model.TotalQuestions } } }
+        });
+
+        @if (Model.QuantLabels?.Any() == true)
+        {
+                <text>
+                new Chart(document.getElementById('quantChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: @Html.Raw(Json.Serialize(Model.QuantLabels)),
+                        datasets: [{ data: @Html.Raw(Json.Serialize(Model.QuantScores)), backgroundColor: '#339999', borderRadius: 8 }]
+                    },
+                    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, max: 100 } } }
+                });
+                </text>
+        }
+
+        @if (Model.VerbalLabels?.Any() == true)
+        {
+                <text>
+                new Chart(document.getElementById('verbalChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: @Html.Raw(Json.Serialize(Model.VerbalLabels)),
+                        datasets: [{ data: @Html.Raw(Json.Serialize(Model.VerbalScores)), backgroundColor: '#66b2b2', borderRadius: 8 }]
+                    },
+                    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, max: 100 } } }
+                });
+                </text>
+        }
+    </script>
+}

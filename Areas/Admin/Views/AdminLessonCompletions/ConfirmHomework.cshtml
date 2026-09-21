@@ -1,0 +1,286 @@
+﻿@model QdratNew.ViewModels.Homework.ConfirmHomeworkViewModel
+@{
+    ViewData["Title"] = "تأكيد توليد الواجبات";
+    var totalManual = Model.Lessons.Where(l => (l.IsManualSelection ?? false)).Sum(l => l.ManuallySelectedQuestionsCount);
+    var totalAuto = Model.Lessons.Where(l => !(l.IsManualSelection ?? false)).Sum(l => l.QuestionsToUse);
+    var totalCount = totalManual + totalAuto;
+}
+
+<!-- ✅ تنبيهات -->
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger text-center fw-bold">
+        <i class="fas fa-exclamation-circle"></i> @Html.Raw(TempData["Error"])
+    </div>
+}
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success text-center fw-bold">
+        <i class="fas fa-check-circle"></i> @TempData["Success"]
+    </div>
+}
+
+@if (TempData["AllowForceGenerate"] != null)
+{
+    <div class="alert alert-warning text-center fw-bold">
+        ⚠️ يمكن توليد الواجب رغم قلة الأسئلة.
+        <form asp-action="ConfirmHomework" method="post">
+            @Html.AntiForgeryToken()
+            <input type="hidden" asp-for="BatchId" />
+            <input type="hidden" asp-for="CurriculumId" />
+            <input type="hidden" asp-for="BatchName" />
+            <input type="hidden" asp-for="CompletionTitle" />
+            <input type="hidden" name="ForceGenerateAnyway" value="true" />
+            @for (int i = 0; i < Model.Lessons.Count; i++)
+            {
+                <input type="hidden" name="Lessons[@i].LessonId" value="@Model.Lessons[i].LessonId" />
+                <input type="hidden" name="Lessons[@i].LessonTitle" value="@Model.Lessons[i].LessonTitle" />
+                <input type="hidden" name="Lessons[@i].TotalQuestions" value="@Model.Lessons[i].TotalQuestions" />
+                <input type="hidden" name="Lessons[@i].ReviewedQuestions" value="@Model.Lessons[i].ReviewedQuestions" />
+                <input type="hidden" name="Lessons[@i].SectionId" value="@Model.Lessons[i].SectionId" />
+                <input type="hidden" name="Lessons[@i].QuestionsToUse" value="@Model.Lessons[i].QuestionsToUse" />
+            }
+            <button type="submit" class="btn btn-warning mt-2"><i class="fas fa-bolt"></i> توليد رغم النقص</button>
+        </form>
+    </div>
+}
+
+<!-- ✅ العنوان -->
+<div class="text-center mb-3">
+    <h3 class="text-primary">تأكيد توليد الواجبات - الدفعة: @Model.BatchName</h3>
+    @if (!string.IsNullOrEmpty(Model.CompletionTitle))
+    {
+        <div class="alert alert-info">
+            <strong>عنوان المؤشرات:</strong> @Model.CompletionTitle
+        </div>
+    }
+
+    <div class="alert alert-secondary">
+        سيتم إرسال <span class="badge bg-primary">@totalCount</span> سؤال للطلاب:
+        <span class="badge bg-dark">يدوي: @totalManual</span>
+        <span class="badge bg-success">تلقائي: @totalAuto</span>
+    </div>
+</div>
+
+<form asp-action="ConfirmHomework" method="post">
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="BatchId" />
+    <input type="hidden" asp-for="CurriculumId" />
+    <input type="hidden" asp-for="BatchName" />
+    <input type="hidden" asp-for="CompletionTitle" />
+
+    <div class="row g-4">
+        @foreach (var lesson in Model.Lessons)
+        {
+            <div class="col-md-6 col-lg-12">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-light fw-bold text-dark">
+                        <i class="fas fa-book"></i> @lesson.LessonTitle
+                    </div>
+
+                    <div class="card-body small">
+                        <p><strong>عدد الأسئلة المتوفرة:</strong> @lesson.TotalQuestions</p>
+                        <p class="text-success"><strong>مُراجعة:</strong> @lesson.ReviewedQuestions</p>
+
+                        <!-- ✅ جدول الأسئلة المختارة -->
+                        @if (lesson.SelectedQuestions != null && lesson.SelectedQuestions.Any())
+                        {
+                            <table id="lessonTable_@lesson.LessonId" class="table table-bordered table-striped text-center align-middle table-sm w-100">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>#</th>
+                                        <th style="width: 55%">نص السؤال</th>
+                                        <th>الصعوبة</th>
+                                        <th>مراجَع</th>
+                                        <th><i class="fas fa-cogs text-danger"></i></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @for (int i = 0; i < lesson.SelectedQuestions.Count; i++)
+                                    {
+                                        var q = lesson.SelectedQuestions[i];
+                            <tr>
+                                <td>@(i + 1)</td>
+                                <td class="text-start">
+                                    <button class="btn btn-sm btn-outline-info me-2" onclick="showQuestionPreview('@q.QuestionId')">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    @Html.Raw(q.Title)
+                                </td>
+                                <td>@q.Difficulty</td>
+                                <td>
+                                    @Html.Raw(q.IsReviewed
+                                                                        ? "<i class='fas fa-check-circle text-success'></i>"
+                                                                        : "<i class='fas fa-times-circle text-danger'></i>")
+                                </td>
+                                <td>
+                                    <button type="button"
+                                            class="btn btn-outline-danger btn-sm remove-question"
+                                            data-qid="@q.QuestionId"
+                                            data-lid="@lesson.LessonId">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                                                        }
+                            </tbody>
+                        </table>
+                    }
+                                        else
+                    {
+                        <p class="text-muted text-center">لا توجد أسئلة مختارة بعد.</p>
+                    }
+
+                    <div class="mb-2 mt-3">
+                        <label>عدد الأسئلة المطلوب إرسالها:</label>
+                        <input type="number" name="Lessons[@Model.Lessons.IndexOf(lesson)].QuestionsToUse"
+                               class="form-control form-control-sm"
+                               min="1"
+                               max="@lesson.ReviewedQuestions"
+                               value="@lesson.QuestionsToUse" />
+                    </div>
+
+                    <div class="d-flex justify-content-between mt-3">
+                        <a asp-action="SelectQuestionsForLesson"
+                           asp-route-lessonId="@lesson.LessonId"
+                           class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-list"></i> اختيار من بنك الأسئلة
+                        </a>
+                        <span class="badge bg-info align-self-center">
+                            @lesson.SelectedQuestions?.Count() ?? 0 سؤال
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+                }
+    </div>
+
+    <!-- ✅ تحديد وقت الظهور -->
+    <hr class="my-4" />
+    <h4 class="text-center text-primary fw-bold mb-3">ضبط توقيت ظهور الواجب للطلاب</h4>
+    <div class="row justify-content-center mb-4">
+        <div class="col-md-4">
+            <label>🕒 يبدأ العرض من:</label>
+            <input type="datetime-local" name="StartAt" class="form-control" required />
+        </div>
+        <div class="col-md-4">
+            <label>⏰ ينتهي في:</label>
+            <input type="datetime-local" name="EndAt" class="form-control" required />
+        </div>
+    </div>
+
+    <!-- ✅ أزرار التحكم -->
+    <div class="text-center mt-4">
+        <button type="button" id="previewAll" class="btn btn-outline-dark me-3">
+            👁️ استعراض جميع الأسئلة المختارة
+        </button>
+        <button type="submit" class="btn btn-success px-5">
+            <i class="fas fa-paper-plane"></i> إرسال الواجبات للطلاب
+        </button>
+    </div>
+</form>
+
+<div class="text-center mt-3">
+    <a class="btn btn-outline-secondary" href="@Url.Action("SelectLessons", "AdminLessonCompletions", new { area = "Admin", batchId = Model.BatchId })">
+        <i class="fas fa-arrow-left"></i> العودة لاختيار المؤشرات
+    </a>
+</div>
+
+<!-- ✅ مودال معاينة السؤال -->
+<div class="modal fade" id="questionPreviewModal" tabindex="-1" dir="rtl">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content text-end">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title"><i class="fas fa-eye me-2"></i> معاينة السؤال</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="questionPreviewModalBody"></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <style>
+        .table-sm td, .table-sm th {
+            font-size: 14px;
+            vertical-align: middle;
+        }
+
+        .card .table {
+            margin-bottom: 0 !important;
+        }
+
+        .card-body {
+            background-color: #fcfcfc;
+        }
+
+        .dataTables_wrapper .dataTables_paginate .paginate_button {
+            padding: 2px 8px !important;
+            font-size: 12px;
+        }
+    </style>
+
+    <script src="https://cdn.datatables.net/1.13.5/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.5/js/dataTables.bootstrap5.min.js"></script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            // ✅ تفعيل DataTable لكل جدول
+            document.querySelectorAll("table[id^='lessonTable_']").forEach(tbl => {
+                $(tbl).DataTable({
+                    language: { url: "//cdn.datatables.net/plug-ins/1.13.5/i18n/ar.json" },
+                    pageLength: 5,
+                    lengthMenu: [5, 10, 25, 50],
+                    order: [[0, 'asc']],
+                    columnDefs: [{ orderable: false, targets: [1, 4] }]
+                });
+            });
+        });
+
+        // ✅ منع التمرير عند عرض المودال
+        // ✅ فتح المودال بدون Scroll
+        function showQuestionPreview(id) {
+            fetch(`/Admin/Questions/Preview/${id}`)
+                .then(response => response.text())
+                .then(html => {
+                    const modalBody = document.getElementById('questionPreviewModalBody');
+                    modalBody.innerHTML = html;
+                    const modal = new bootstrap.Modal(document.getElementById('questionPreviewModal'), {
+                        focus: false, // يمنع التركيز التلقائي
+                        backdrop: 'static' // اختياري: يمنع الإغلاق بالنقر بالخارج
+                    });
+                    modal.show();
+                })
+                .catch(() => Swal.fire('خطأ!', 'حدث خطأ أثناء تحميل السؤال.', 'error'));
+        }
+
+        // ✅ منع التمرير التلقائي في الخلفية
+          // ✅ منع التمرير التلقائي في الصفحة عند فتح المودال
+        const questionPreviewModalEl = document.getElementById('questionPreviewModal');
+
+        questionPreviewModalEl.addEventListener('show.bs.modal', function () {
+            // حفظ موضع التمرير الحالي
+            window.previousScrollY = window.scrollY;
+        });
+
+        questionPreviewModalEl.addEventListener('shown.bs.modal', function () {
+            // إعادة الصفحة لنفس موضعها السابق بعد الفتح
+            window.scrollTo(0, window.previousScrollY || 0);
+            document.activeElement.blur(); // إلغاء التركيز التلقائي
+        });
+
+        questionPreviewModalEl.addEventListener('hidden.bs.modal', function () {
+            // بعد الإغلاق يرجع التحكم طبيعي
+            document.body.style.overflow = '';
+        });
+
+        // ✅ استبعاد سؤال
+        document.addEventListener("click", e => {
+            if (e.target.closest(".remove-question")) {
+                e.target.closest("tr").remove();
+            }
+        });
+    </script>
+}

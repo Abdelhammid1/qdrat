@@ -1,0 +1,615 @@
+@model QdratNew.ViewModels.Homework.ConfirmHomeworkViewModel
+@{
+    ViewData["Title"] = "مراجعة الأسئلة وإرسال الواجب";
+    var totalSelected = Model.Lessons?.Sum(l => l.SelectedQuestions?.Count ?? l.QuestionsToUse) ?? 0;
+    var hasAny        = Model.Lessons?.Any() == true;
+}
+
+@functions {
+    static string StripHtml(string html, int maxLen = 75)
+    {
+        if (string.IsNullOrWhiteSpace(html)) return "—";
+        var plain = System.Text.RegularExpressions.Regex.Replace(html, "<[^>]+>", " ");
+        plain = System.Net.WebUtility.HtmlDecode(plain).Trim();
+        plain = System.Text.RegularExpressions.Regex.Replace(plain, @"\s+", " ").Trim();
+        return plain.Length <= maxLen ? plain : plain.Substring(0, maxLen) + "…";
+    }
+}
+
+@section Styles {
+<style>
+    :root {
+        --brand-500: #0d9488; --brand-600: #0f766e; --brand-700: #115e59;
+        --brand-100: #ccfbf1; --brand-50:  #f0fdfa;
+        --slate-900: #0f172a; --slate-800: #1e293b; --slate-700: #334155;
+        --slate-600: #475569; --slate-500: #64748b; --slate-400: #94a3b8;
+        --slate-200: #e2e8f0; --slate-100: #f1f5f9; --slate-50:  #f8fafc;
+        --green-600: #16a34a; --green-100: #dcfce7; --green-50: #f0fdf4;
+        --amber-50: #fffbeb; --amber-100: #fef3c7; --amber-500: #f59e0b;
+        --red-600: #dc2626; --red-100: #fee2e2; --red-50: #fff1f2;
+        --blue-500: #3b82f6; --blue-50: #eff6ff;
+        --yellow-100: #fef9c3;
+        --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px; --radius-xl: 20px;
+        --shadow-sm: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+        --shadow-md: 0 4px 16px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.05);
+        --transition: all .22s cubic-bezier(.4,0,.2,1);
+    }
+
+    .cfm-page { padding: 22px 18px 80px; direction: rtl; }
+
+    /* ─── Step Indicator ──────────────────────── */
+    .step-indicator {
+        display: flex; align-items: center; margin-bottom: 24px; background: #fff;
+        border-radius: var(--radius-lg); padding: 14px 22px;
+        box-shadow: var(--shadow-sm); border: 1px solid var(--slate-200);
+    }
+    .step-item { display: flex; align-items: center; gap: 11px; flex: 1; }
+    .step-dot {
+        width: 38px; height: 38px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: .82rem; font-weight: 800; flex-shrink: 0; transition: var(--transition);
+    }
+    .step-dot.done   { background: var(--brand-100); color: var(--brand-600); }
+    .step-dot.active { background: var(--brand-500); color: #fff; box-shadow: 0 4px 14px rgba(13,148,136,.35); }
+    .step-text strong { display: block; font-size: .83rem; font-weight: 700; color: var(--slate-800); }
+    .step-text span   { font-size: .73rem; color: var(--slate-400); }
+    .step-div { flex: 0 0 36px; height: 2px; background: var(--brand-500); border-radius: 2px; margin: 0 6px; }
+
+    /* ─── Summary Hero ────────────────────────── */
+    .summary-hero {
+        background: linear-gradient(135deg, var(--brand-600) 0%, var(--slate-800) 100%);
+        border-radius: var(--radius-xl); padding: 22px 26px; color: #fff;
+        margin-bottom: 18px; display: flex; align-items: flex-start;
+        justify-content: space-between; flex-wrap: wrap; gap: 14px;
+        position: relative; overflow: hidden;
+    }
+    .summary-hero::before {
+        content: ''; position: absolute; inset: 0;
+        background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none'%3E%3Cg fill='%23fff' fill-opacity='.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    }
+    .sh-meta { position: relative; }
+    .sh-badge {
+        display: inline-flex; align-items: center; gap: 6px;
+        background: rgba(255,255,255,.15); backdrop-filter: blur(6px);
+        border: 1px solid rgba(255,255,255,.2); border-radius: 20px;
+        padding: 3px 12px; font-size: .72rem; font-weight: 700; color: #fff; margin-bottom: 8px;
+    }
+    .sh-meta h2 { font-size: 1.15rem; font-weight: 800; margin: 0 0 4px; }
+    .sh-meta p  { font-size: .8rem; opacity: .75; margin: 0; }
+    .sh-stats { display: flex; gap: 10px; flex-wrap: wrap; position: relative; }
+    .sh-stat {
+        background: rgba(255,255,255,.15); backdrop-filter: blur(6px);
+        border: 1px solid rgba(255,255,255,.2); border-radius: var(--radius-md);
+        padding: 9px 14px; text-align: center; min-width: 80px;
+    }
+    .sh-stat .sv { font-size: 1.35rem; font-weight: 900; display: block; }
+    .sh-stat .sl { font-size: .68rem; opacity: .8; }
+
+    /* ─── Alerts ──────────────────────────────── */
+    .cfm-alert {
+        border-radius: var(--radius-md); padding: 13px 16px; margin-bottom: 14px;
+        display: flex; align-items: flex-start; gap: 11px; font-size: .875rem;
+    }
+    .cfm-alert.warning { background: var(--amber-50); border: 1px solid #fde68a; color: #92400e; }
+    .cfm-alert.success { background: var(--green-50); border: 1px solid #bbf7d0; color: #166534; }
+    .cfm-alert-icon {
+        width: 32px; height: 32px; border-radius: var(--radius-sm);
+        display: flex; align-items: center; justify-content: center;
+        font-size: .8rem; flex-shrink: 0;
+    }
+    .cfm-alert.warning .cfm-alert-icon { background: #fde68a; color: #b45309; }
+    .cfm-alert.success .cfm-alert-icon { background: #bbf7d0; color: var(--green-600); }
+
+    /* ─── Action Bar ──────────────────────────── */
+    .action-bar {
+        display: flex; align-items: center; justify-content: space-between;
+        flex-wrap: wrap; gap: 12px; background: #fff;
+        border: 1px solid var(--slate-200); border-radius: var(--radius-lg);
+        padding: 14px 20px; box-shadow: var(--shadow-sm); margin-bottom: 18px;
+    }
+    .total-pill {
+        display: inline-flex; align-items: center; gap: 7px;
+        background: var(--brand-50); border: 1px solid var(--brand-100);
+        border-radius: var(--radius-md); padding: 7px 16px;
+        font-size: .85rem; font-weight: 800; color: var(--brand-700);
+    }
+    .total-pill .tn { font-size: 1.2rem; }
+
+    /* ─── Lesson Cards ────────────────────────── */
+    .lessons-section { display: flex; flex-direction: column; gap: 14px; margin-bottom: 20px; }
+    .lesson-card {
+        background: #fff; border-radius: var(--radius-lg);
+        border: 1.5px solid var(--slate-200); box-shadow: var(--shadow-sm); overflow: hidden;
+    }
+    .lc-head {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 13px 18px; background: var(--slate-50);
+        border-bottom: 1px solid var(--slate-200); gap: 10px; flex-wrap: wrap;
+    }
+    .lc-head-left { display: flex; align-items: center; gap: 10px; }
+    .lc-icon {
+        width: 36px; height: 36px; border-radius: var(--radius-sm);
+        background: linear-gradient(135deg, var(--brand-500), var(--brand-700));
+        color: #fff; display: flex; align-items: center; justify-content: center;
+        font-size: .82rem; flex-shrink: 0; box-shadow: 0 3px 8px rgba(13,148,136,.25);
+    }
+    .lc-title { font-size: .88rem; font-weight: 800; color: var(--slate-800); }
+    .lc-meta  { font-size: .7rem; color: var(--slate-400); margin-top: 2px; }
+    .lc-count-badge {
+        display: inline-flex; align-items: center; gap: 5px;
+        background: var(--brand-100); color: var(--brand-700);
+        border-radius: 20px; padding: 3px 12px; font-size: .72rem; font-weight: 800;
+    }
+
+    /* ─── Question Rows ───────────────────────── */
+    .q-list { padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
+    .q-row {
+        display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+        border-radius: var(--radius-md); border: 1.5px solid var(--slate-100);
+        background: var(--slate-50); transition: var(--transition); position: relative;
+    }
+    .q-row:hover { border-color: var(--brand-100); background: #fff; box-shadow: var(--shadow-sm); }
+    .q-row.swapping { opacity: .5; pointer-events: none; }
+    .q-row.swapped  { animation: swapFlash .4s ease; }
+    @@keyframes swapFlash {
+        0%   { background: var(--brand-50); border-color: var(--brand-500); }
+        100% { background: var(--slate-50); border-color: var(--slate-100); }
+    }
+    .q-num {
+        width: 26px; height: 26px; border-radius: 50%;
+        background: var(--brand-100); color: var(--brand-700);
+        display: flex; align-items: center; justify-content: center;
+        font-size: .7rem; font-weight: 800; flex-shrink: 0;
+    }
+    .q-text {
+        flex: 1; font-size: .855rem; font-weight: 500; color: var(--slate-700);
+        line-height: 1.5; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .q-diff { font-size: .65rem; font-weight: 800; padding: 2px 8px; border-radius: 20px; flex-shrink: 0; white-space: nowrap; }
+    .diff-easy   { background: var(--green-100); color: var(--green-600); }
+    .diff-medium { background: var(--yellow-100); color: #a16207; }
+    .diff-hard   { background: var(--red-100); color: var(--red-600); }
+    .q-actions { display: flex; gap: 5px; flex-shrink: 0; }
+    .q-btn {
+        width: 30px; height: 30px; border-radius: var(--radius-sm);
+        display: flex; align-items: center; justify-content: center;
+        font-size: .76rem; border: 1.5px solid var(--slate-200);
+        background: #fff; color: var(--slate-500); cursor: pointer; transition: var(--transition);
+    }
+    .q-btn-preview:hover { border-color: var(--blue-500); color: var(--blue-500); background: var(--blue-50); }
+    .q-btn-swap:hover    { border-color: var(--amber-500); color: var(--amber-500); background: var(--amber-50); }
+    .q-btn.loading { pointer-events: none; }
+    .q-btn.loading i { display: none; }
+    .q-btn.loading::before {
+        content: ''; display: block; width: 12px; height: 12px; border-radius: 50%;
+        border: 2px solid var(--slate-300); border-top-color: var(--brand-500);
+        animation: spin .6s linear infinite;
+    }
+    @@keyframes spin { to { transform: rotate(360deg); } }
+    .q-empty {
+        padding: 28px; text-align: center; color: var(--slate-400); font-size: .82rem;
+        display: flex; flex-direction: column; align-items: center; gap: 8px;
+    }
+    .q-empty i { font-size: 1.4rem; opacity: .4; }
+
+    /* ─── Date Panel ──────────────────────────── */
+    .panel-card {
+        background: #fff; border-radius: var(--radius-lg);
+        border: 1px solid var(--slate-200); box-shadow: var(--shadow-sm); margin-bottom: 18px; overflow: hidden;
+    }
+    .panel-header {
+        display: flex; align-items: center; gap: 12px; padding: 14px 20px;
+        border-bottom: 1px solid var(--slate-100); background: var(--slate-50);
+    }
+    .panel-icon {
+        width: 38px; height: 38px; border-radius: var(--radius-sm);
+        background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: #fff;
+        display: flex; align-items: center; justify-content: center; font-size: .85rem; flex-shrink: 0;
+    }
+    .panel-title    { font-size: .9rem; font-weight: 700; color: var(--slate-800); margin: 0; }
+    .panel-subtitle { font-size: .72rem; color: var(--slate-500); margin: 2px 0 0; }
+    .panel-body { padding: 20px; }
+    .date-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    @@media (max-width: 600px) { .date-grid { grid-template-columns: 1fr; } }
+    .date-field label {
+        display: block; font-size: .73rem; font-weight: 700;
+        color: var(--slate-500); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px;
+    }
+    .date-input-wrap { position: relative; }
+    .date-input-wrap i { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--slate-400); font-size: .8rem; pointer-events: none; }
+    .date-input {
+        width: 100%; border: 1.5px solid var(--slate-200); border-radius: var(--radius-md);
+        padding: 10px 36px 10px 14px; font-size: .875rem; color: var(--slate-800);
+        font-family: inherit; outline: none; transition: var(--transition);
+    }
+    .date-input:focus { border-color: var(--brand-500); box-shadow: 0 0 0 3px rgba(13,148,136,.1); }
+
+    /* ─── Submit Row ──────────────────────────── */
+    .submit-row {
+        display: flex; align-items: center; justify-content: space-between;
+        flex-wrap: wrap; gap: 12px; padding: 4px 0 20px;
+    }
+    .btn-back {
+        display: inline-flex; align-items: center; gap: 7px; background: none;
+        color: var(--slate-600); border: 1.5px solid var(--slate-200); border-radius: var(--radius-md);
+        padding: 10px 20px; font-size: .875rem; font-family: inherit; font-weight: 600;
+        cursor: pointer; transition: var(--transition); text-decoration: none;
+    }
+    .btn-back:hover { border-color: var(--brand-500); color: var(--brand-600); background: var(--brand-50); }
+    .btn-submit {
+        display: inline-flex; align-items: center; gap: 9px;
+        background: linear-gradient(135deg, var(--green-600), #15803d);
+        color: #fff; border: none; border-radius: var(--radius-md);
+        padding: 11px 30px; font-size: .9rem; font-family: inherit; font-weight: 800;
+        cursor: pointer; transition: var(--transition); box-shadow: 0 4px 14px rgba(22,163,74,.3);
+    }
+    .btn-submit:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(22,163,74,.4); filter: brightness(1.05); }
+    .btn-submit:disabled { background: var(--slate-300); box-shadow: none; cursor: not-allowed; }
+
+    .preview-modal .modal-dialog { max-width: 760px; }
+    .preview-modal .modal-header { background: linear-gradient(135deg, var(--brand-600), var(--slate-800)); color: #fff; }
+    .preview-modal .modal-header .btn-close { filter: invert(1); }
+
+    @@media (max-width: 640px) { .q-diff { display: none; } }
+</style>
+}
+
+<div class="cfm-page container-fluid">
+
+    @* Step Indicator *@
+    <div class="step-indicator">
+        <div class="step-item">
+            <div class="step-dot done"><i class="fas fa-check"></i></div>
+            <div class="step-text"><strong>اختيار المؤشرات</strong><span>تم بنجاح</span></div>
+        </div>
+        <div class="step-div"></div>
+        <div class="step-item">
+            <div class="step-dot active"><i class="fas fa-eye"></i></div>
+            <div class="step-text"><strong>مراجعة الأسئلة واعتمادها</strong><span>راجع وعدّل ثم أرسل</span></div>
+        </div>
+    </div>
+
+    @if (!hasAny)
+    {
+        <div style="text-align:center;padding:60px 20px;color:var(--slate-400)">
+            <div style="width:64px;height:64px;border-radius:50%;background:var(--slate-100);display:flex;align-items:center;justify-content:center;font-size:1.6rem;margin:0 auto 14px">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <p style="font-size:1rem;color:var(--slate-600);font-weight:700;margin-bottom:14px">لا توجد مؤشرات</p>
+            <a href="@Url.Action("SelectLessons", "InstructorLessonCompletions", new { area = "Instructors" })" class="btn-back" style="display:inline-flex">
+                <i class="fas fa-arrow-right"></i> العودة للاختيار
+            </a>
+        </div>
+    }
+    else
+    {
+        @* Summary Hero *@
+        <div class="summary-hero">
+            <div class="sh-meta">
+                <div class="sh-badge"><i class="fas fa-eye"></i> راجع الأسئلة قبل الإرسال</div>
+                <h2>دفعة: @Model.BatchName</h2>
+                <p><i class="fas fa-tag me-1" style="opacity:.7"></i>@Model.CompletionTitle</p>
+            </div>
+            <div class="sh-stats">
+                <div class="sh-stat">
+                    <span class="sv">@(Model.Lessons?.Count ?? 0)</span>
+                    <span class="sl">مؤشر</span>
+                </div>
+                <div class="sh-stat">
+                    <span class="sv" id="totalQCount">@totalSelected</span>
+                    <span class="sl">سؤال محدد</span>
+                </div>
+            </div>
+        </div>
+
+        @* Alerts *@
+        @if (TempData["Error"] != null)
+        {
+            <div class="cfm-alert warning">
+                <div class="cfm-alert-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                <div>@Html.Raw(TempData["Error"])</div>
+            </div>
+        }
+        @if (TempData["Success"] != null)
+        {
+            <div class="cfm-alert success">
+                <div class="cfm-alert-icon"><i class="fas fa-check-circle"></i></div>
+                <div>@TempData["Success"]</div>
+            </div>
+        }
+        @if (TempData["AllowForceGenerate"] != null)
+        {
+            <div class="cfm-alert warning" style="flex-direction:column;gap:10px">
+                <div style="display:flex;gap:10px;align-items:center">
+                    <div class="cfm-alert-icon"><i class="fas fa-exclamation-circle"></i></div>
+                    <strong>لا توجد أسئلة كافية — هل تريد الإرسال بما هو متاح؟</strong>
+                </div>
+                <form asp-area="Instructors" asp-controller="InstructorLessonCompletions" asp-action="ConfirmHomework" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="ForceGenerateAnyway" value="true" />
+                    <input type="hidden" name="BatchId" value="@Model.BatchId" />
+                    <input type="hidden" name="CurriculumId" value="@Model.CurriculumId" />
+                    <input type="hidden" name="CompletionTitle" value="@Model.CompletionTitle" />
+                    @for (int i = 0; i < (Model.Lessons?.Count ?? 0); i++)
+                    {
+                        <input type="hidden" name="Lessons[@i].LessonId" value="@Model.Lessons[i].LessonId" />
+                        <input type="hidden" name="Lessons[@i].LessonTitle" value="@Model.Lessons[i].LessonTitle" />
+                        <input type="hidden" name="Lessons[@i].QuestionsToUse" value="@Model.Lessons[i].QuestionsToUse" />
+                        <input type="hidden" name="Lessons[@i].SectionId" value="@Model.Lessons[i].SectionId" />
+                    }
+                    <button type="submit" style="display:inline-flex;align-items:center;gap:7px;background:var(--amber-100);color:#92400e;border:1.5px solid #fde68a;border-radius:var(--radius-md);padding:8px 18px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:inherit">
+                        <i class="fas fa-check-circle"></i> اعتماد على مسؤوليتي
+                    </button>
+                </form>
+            </div>
+        }
+
+        @* Top action bar *@
+        <div class="action-bar">
+            <div class="total-pill">
+                <i class="fas fa-check-circle"></i>
+                <span>إجمالي الأسئلة المحددة:</span>
+                <span class="tn" id="liveTotalPill">@totalSelected</span>
+            </div>
+            <a href="@Url.Action("SelectLessons", "InstructorLessonCompletions", new { area = "Instructors" })" class="btn-back">
+                <i class="fas fa-arrow-right"></i> تعديل المؤشرات
+            </a>
+        </div>
+
+        @* ──── Main Form ──── *@
+        <form asp-area="Instructors" asp-controller="InstructorLessonCompletions"
+              asp-action="ConfirmHomework" method="post" id="confirmForm">
+            @Html.AntiForgeryToken()
+            <input type="hidden" asp-for="BatchId" />
+            <input type="hidden" asp-for="CurriculumId" />
+            <input type="hidden" asp-for="BatchName" />
+            <input type="hidden" asp-for="CompletionTitle" />
+
+            @* ─── Lesson Cards ─── *@
+            <div class="lessons-section">
+                @for (int i = 0; i < Model.Lessons.Count; i++)
+                {
+                    var lesson = Model.Lessons[i];
+                    var qCount = lesson.SelectedQuestions?.Count ?? 0;
+
+                    <input type="hidden" name="Lessons[@i].LessonId"         value="@lesson.LessonId" />
+                    <input type="hidden" name="Lessons[@i].LessonTitle"       value="@lesson.LessonTitle" />
+                    <input type="hidden" name="Lessons[@i].TotalQuestions"    value="@lesson.TotalQuestions" />
+                    <input type="hidden" name="Lessons[@i].ReviewedQuestions" value="@lesson.ReviewedQuestions" />
+                    <input type="hidden" name="Lessons[@i].SectionId"         value="@lesson.SectionId" />
+                    <input type="hidden" name="Lessons[@i].CurriculumId"      value="@lesson.CurriculumId" />
+                    <input type="hidden" name="Lessons[@i].IsManualSelection" value="false" />
+                    <input type="hidden" name="Lessons[@i].QuestionsToUse"    value="@qCount"
+                           class="q-use-count" data-lesson-idx="@i" />
+
+                    <div class="lesson-card" data-lesson-id="@lesson.LessonId" data-lesson-idx="@i">
+                        <div class="lc-head">
+                            <div class="lc-head-left">
+                                <div class="lc-icon"><i class="fas fa-bookmark"></i></div>
+                                <div>
+                                    <div class="lc-title">@lesson.LessonTitle</div>
+                                    <div class="lc-meta">مراجع: @lesson.ReviewedQuestions · إجمالي: @lesson.TotalQuestions</div>
+                                </div>
+                            </div>
+                            <div>
+                                <span class="lc-count-badge q-count-badge" data-lesson-idx="@i">
+                                    <i class="fas fa-check-circle"></i>
+                                    <span class="q-count-val">@qCount</span> سؤال محدد
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="q-list" id="qlist-@i">
+                            @if (lesson.SelectedQuestions == null || !lesson.SelectedQuestions.Any())
+                            {
+                                <div class="q-empty">
+                                    <i class="fas fa-inbox"></i>
+                                    <span>لا توجد أسئلة مراجعة لهذا المؤشر</span>
+                                </div>
+                            }
+                            else
+                            {
+                                int qNum = 1;
+                                @foreach (var q in lesson.SelectedQuestions)
+                                {
+                                    var dc = q.Difficulty switch { "Easy" => "diff-easy", "Hard" or "VeryHard" => "diff-hard", _ => "diff-medium" };
+                                    var dl = q.Difficulty switch { "Easy" => "سهل", "Hard" => "صعب", "VeryHard" => "صعب جداً", _ => "متوسط" };
+
+                                    <div class="q-row"
+                                         data-question-id="@q.QuestionId"
+                                         data-lesson-id="@lesson.LessonId"
+                                         data-lesson-idx="@i">
+                                        <div class="q-num">@qNum</div>
+                                        <span class="q-text" title="@StripHtml(q.Title, 200)">@StripHtml(q.Title)</span>
+                                        <span class="q-diff @dc">@dl</span>
+                                        <div class="q-actions">
+                                            <button type="button" class="q-btn q-btn-preview"
+                                                    data-question-id="@q.QuestionId" title="معاينة السؤال">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                            <button type="button" class="q-btn q-btn-swap"
+                                                    data-question-id="@q.QuestionId"
+                                                    data-lesson-id="@lesson.LessonId"
+                                                    data-lesson-idx="@i"
+                                                    title="استبدال بسؤال آخر">
+                                                <i class="fas fa-repeat"></i>
+                                            </button>
+                                        </div>
+                                        <input type="hidden" name="Lessons[@i].SelectedQuestions[@(qNum-1)].QuestionId" value="@q.QuestionId" class="q-hidden-id" />
+                                        <input type="hidden" name="Lessons[@i].SelectedQuestions[@(qNum-1)].Title" value="@q.Title" />
+                                        <input type="hidden" name="Lessons[@i].SelectedQuestions[@(qNum-1)].Difficulty" value="@q.Difficulty" />
+                                        <input type="hidden" name="Lessons[@i].SelectedQuestions[@(qNum-1)].IsReviewed" value="true" />
+                                    </div>
+                                    qNum++;
+                                }
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+
+            @* Date Panel *@
+            <div class="panel-card">
+                <div class="panel-header">
+                    <div class="panel-icon"><i class="fas fa-calendar-alt"></i></div>
+                    <div>
+                        <p class="panel-title">تحديد فترة الواجب</p>
+                        <p class="panel-subtitle">اختياري — حدد متى يبدأ الطلاب وآخر موعد للتسليم</p>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <div class="date-grid">
+                        <div class="date-field">
+                            <label><i class="fas fa-play-circle me-1"></i> تاريخ بدء الواجب</label>
+                            <div class="date-input-wrap">
+                                <i class="fas fa-calendar"></i>
+                                <input type="datetime-local" class="date-input" name="StartAt"
+                                       value="@(Model.StartAt.HasValue ? Model.StartAt.Value.ToString("yyyy-MM-ddTHH:mm") : "")" />
+                            </div>
+                        </div>
+                        <div class="date-field">
+                            <label><i class="fas fa-flag-checkered me-1"></i> آخر موعد للتسليم</label>
+                            <div class="date-input-wrap">
+                                <i class="fas fa-calendar-check"></i>
+                                <input type="datetime-local" class="date-input" name="EndAt"
+                                       value="@(Model.EndAt.HasValue ? Model.EndAt.Value.ToString("yyyy-MM-ddTHH:mm") : "")" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @* Submit *@
+            <div class="submit-row">
+                <div class="total-pill">
+                    <i class="fas fa-paper-plane"></i>
+                    <span>جاهز لإرسال</span>
+                    <span class="tn" id="liveTotalSubmit">@totalSelected</span>
+                    <span>سؤال للطلاب</span>
+                </div>
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                    <a href="@Url.Action("SelectLessons", "InstructorLessonCompletions", new { area = "Instructors" })" class="btn-back">
+                        <i class="fas fa-arrow-right"></i> رجوع
+                    </a>
+                    <button type="submit" class="btn-submit" id="confirmBtn">
+                        <i class="fas fa-paper-plane"></i>
+                        إرسال الواجب للطلاب الآن
+                    </button>
+                </div>
+            </div>
+        </form>
+    }
+</div>
+
+@* Preview Modal *@
+<div class="modal fade preview-modal" id="previewModal" tabindex="-1" dir="rtl">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-eye me-2"></i> معاينة السؤال</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0" id="previewModalBody">
+                <div style="display:flex;align-items:center;justify-content:center;height:200px">
+                    <div class="spinner-border text-secondary"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    const bsModal   = new bootstrap.Modal(document.getElementById('previewModal'));
+    const modalBody = document.getElementById('previewModalBody');
+    const loading   = `<div style="display:flex;align-items:center;justify-content:center;height:200px">
+        <div class="spinner-border text-secondary"></div></div>`;
+
+    // ── Preview ────────────────────────────────────────────────
+    document.addEventListener('click', function (e) {
+        const btn = e.target.closest('.q-btn-preview');
+        if (!btn) return;
+        modalBody.innerHTML = loading;
+        bsModal.show();
+        fetch('/Instructors/InstructorLessonCompletions/PreviewQuestion?questionId=' + btn.dataset.questionId)
+            .then(r => r.text())
+            .then(html => { modalBody.innerHTML = html; })
+            .catch(() => { modalBody.innerHTML = '<div class="text-danger p-4 text-center">تعذر تحميل السؤال</div>'; });
+    });
+
+    // ── Swap ───────────────────────────────────────────────────
+    document.addEventListener('click', function (e) {
+        const btn = e.target.closest('.q-btn-swap');
+        if (!btn) return;
+
+        const row       = btn.closest('.q-row');
+        const lessonId  = btn.dataset.lessonId;
+        const lessonIdx = btn.dataset.lessonIdx;
+        const qList     = document.getElementById('qlist-' + lessonIdx);
+
+        const excludeIds = [...(qList ? qList.querySelectorAll('.q-row') : [])]
+            .map(r => r.dataset.questionId).filter(Boolean).join(',');
+
+        row.classList.add('swapping');
+        btn.classList.add('loading');
+
+        fetch('/Instructors/InstructorLessonCompletions/GetSwapQuestion?lessonId='
+              + lessonId + '&excludeIds=' + encodeURIComponent(excludeIds))
+            .then(r => r.json())
+            .then(data => {
+                row.classList.remove('swapping');
+                btn.classList.remove('loading');
+                if (!data.success) { alert(data.message || 'لا توجد أسئلة بديلة'); return; }
+
+                // Update row
+                row.dataset.questionId = data.questionId;
+                btn.dataset.questionId = data.questionId;
+                row.querySelector('.q-btn-preview').dataset.questionId = data.questionId;
+                row.querySelector('.q-text').textContent = stripHtml(data.title, 75);
+                row.querySelector('.q-text').title       = stripHtml(data.title, 200);
+
+                const diffBadge = row.querySelector('.q-diff');
+                if (diffBadge) {
+                    const dc = {Easy:'diff-easy', Hard:'diff-hard', VeryHard:'diff-hard'}[data.difficulty] || 'diff-medium';
+                    const dl = {Easy:'سهل', Hard:'صعب', VeryHard:'صعب جداً'}[data.difficulty] || 'متوسط';
+                    diffBadge.className = 'q-diff ' + dc;
+                    diffBadge.textContent = dl;
+                }
+                const hiddenId = row.querySelector('.q-hidden-id');
+                if (hiddenId) hiddenId.value = data.questionId;
+
+                row.classList.add('swapped');
+                setTimeout(() => row.classList.remove('swapped'), 500);
+            })
+            .catch(() => { row.classList.remove('swapping'); btn.classList.remove('loading'); alert('حدث خطأ'); });
+    });
+
+    // ── Live counter ───────────────────────────────────────────
+    function countTotal() {
+        let total = 0;
+        document.querySelectorAll('.q-list').forEach(l => { total += l.querySelectorAll('.q-row').length; });
+        ['totalQCount','liveTotalPill','liveTotalSubmit'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = total;
+        });
+    }
+
+    function stripHtml(html, maxLen) {
+        if (!html) return '—';
+        const d = document.createElement('div');
+        d.innerHTML = html;
+        let t = (d.textContent || d.innerText || '').replace(/\s+/g,' ').trim();
+        return t.length <= maxLen ? t : t.substring(0, maxLen) + '…';
+    }
+
+    // ── Submit spinner ─────────────────────────────────────────
+    document.getElementById('confirmForm')?.addEventListener('submit', function () {
+        const btn = document.getElementById('confirmBtn');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<div class="spinner-border spinner-border-sm me-2"></div> جاري الإرسال...'; }
+    });
+
+    countTotal();
+})();
+</script>
+}

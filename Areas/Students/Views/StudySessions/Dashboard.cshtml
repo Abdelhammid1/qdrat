@@ -1,0 +1,166 @@
+﻿@model QdratNew.ViewModels.Students.StudySessionsDashboardViewModel
+@using QdratNew.Helpers
+@using QdratNew.Enums;
+
+@{
+    ViewData["Title"] = "📊 لوحة التحكم لجلسات المذاكرة";
+}
+
+<!-- ✅ العنوان العلوي -->
+<div class="ai-hero-section p-4 mb-4 rounded text-white text-center" style="background:#339999; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+    <h3 class="fw-bold mb-2"><i class="fas fa-calendar-alt"></i> لوحة التحكم لجلسات المذاكرة</h3>
+    <p class="lead">تابع تفاصيل الجلسات، الرسوم، والحجوزات القادمة بسهولة وذكاء!</p>
+</div>
+
+<!-- ✅ كروت الإحصائيات -->
+<div class="row g-4 mb-4 text-center">
+    <div class="col-md-3">
+        <div class="card border-0 shadow h-100" style="background: #e3f2fd;">
+            <div class="card-body">
+                <h6 class="text-primary mb-2"><i class="fas fa-layer-group"></i> عدد الجلسات الكلية</h6>
+                <h2 class="fw-bold text-dark">@Model.AllReservations.Count</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow h-100" style="background: #e8f5e9;">
+            <div class="card-body">
+                <h6 class="text-success mb-2"><i class="fas fa-check-circle"></i> الجلسات المعتمدة هذا الأسبوع</h6>
+                <h2 class="fw-bold text-dark">@Model.ApprovedThisWeekCount</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow h-100" style="background: #ffebee;">
+            <div class="card-body">
+                <h6 class="text-danger mb-2"><i class="fas fa-money-bill-wave"></i> الرسوم غير المدفوعة</h6>
+                <h2 class="fw-bold text-dark">@Model.TotalUnpaidFees.ToString("N0") ريال</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-0 shadow h-100" style="background: #fff3e0;">
+            <div class="card-body">
+                <h6 class="text-warning"><i class="fas fa-calendar-check"></i> أقرب جلسة قادمة</h6>
+                <p class="fw-bold text-dark mt-2">@Model.NearestSessionInfo</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ✅ جدول الجلسات -->
+<div class="card shadow-sm mb-5 border-0">
+    <div class="card-header bg-dark text-white text-center fw-bold">
+        🧾 تفاصيل الجلسات المحجوزة
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table id="sessionsTable" class="table table-hover table-bordered text-center mb-0 bg-white">
+                <thead class="table-secondary">
+                    <tr>
+                        <th>📅 التاريخ</th>
+                        <th>🕐 الوقت</th>
+                        <th>👨‍🏫 المدرب</th>
+                        <th>💺 المقاعد</th>
+                        <th>💵 الرسوم</th>
+                        <th>📌 الحالة</th>
+                        <th>📌 الإجراءات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var session in Model.AllReservations)
+                    {
+                        var badgeClass = session.Status switch
+                        {
+                            StudySessionStatus.Pending => "bg-warning text-dark",
+                            StudySessionStatus.Approved => "bg-success",
+                            StudySessionStatus.Rejected => "bg-danger",
+                            _ => "bg-secondary"
+                        };
+
+                        <tr>
+                            <td>@session.RequestedDate.ToString("yyyy-MM-dd")</td>
+                            <td>@session.StartTime.ToString(@"hh\:mm") - @session.EndTime.ToString(@"hh\:mm")</td>
+                            <td>@session.InstructorName</td>
+                            <td>@session.TotalSeats</td>
+                            <td>@(session.Fee.HasValue ? $"{session.Fee.Value} ريال" : "بدون")</td>
+                            <td><span class="badge @badgeClass">@session.Status.GetDisplayName()</span></td>
+                            <td>
+                                <a asp-action="Details" asp-route-id="@session.Id" class="btn btn-dark btn-sm me-1" title="تفاصيل">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+
+                                @if (session.Status == StudySessionStatus.Pending)
+                                {
+                                    <a asp-action="Edit" asp-route-id="@session.Id" class="btn btn-dark btn-sm me-1" title="تعديل">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                }
+
+                                @if (session.Status == StudySessionStatus.Pending || session.Status == StudySessionStatus.Approved)
+                                {
+                                    <a href="#" class="btn btn-sm btn-dark" data-bs-toggle="modal" data-bs-target="#cancelModal-@session.Id" title="إلغاء">
+                                        <i class="fas fa-times"></i>
+                                    </a>
+                                }
+
+                                @* ✅ زر التقييم (يظهر فقط للجلسات المعتمدة والمكتملة ولم تُقيّم بعد) *@
+                                @if (session.Status == StudySessionStatus.Approved && session.IsCompleted && !session.IsRated)
+                                {
+                                    <a href="/Students/SessionRatings/Create?sessionId=@session.Id"
+                                       class="btn btn-sm btn-warning me-1" title="قيّم الجلسة">
+                                        <i class="fas fa-star"></i>
+                                    </a>
+                                }
+                            </td>
+                        </tr>
+
+                        <!-- Modal تأكيد الإلغاء -->
+                        <div class="modal fade" id="cancelModal-@session.Id" tabindex="-1" aria-labelledby="cancelModalLabel-@session.Id" aria-hidden="true">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content text-center">
+                                    <div class="modal-header bg-danger text-white">
+                                        <h5 class="modal-title w-100">تأكيد إلغاء الجلسة</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <p>هل أنت متأكد من أنك تريد إلغاء الجلسة بتاريخ <strong>@session.RequestedDate.ToString("yyyy-MM-dd")</strong>؟</p>
+                                    </div>
+                                    <div class="modal-footer justify-content-center">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">رجوع</button>
+                                        <a asp-action="Cancel" asp-route-id="@session.Id" class="btn btn-danger">تأكيد الإلغاء</a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js"></script>
+    <script src="https://cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json"></script>
+
+    <script>
+        $(document).ready(function () {
+            $('#sessionsTable').DataTable({
+                language: {
+                    url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json'
+                },
+                dom: 'Bfrtip',
+                buttons: [
+                    { extend: 'copy', text: '<i class="fas fa-copy"></i> نسخ', className: 'btn btn-secondary' },
+                    { extend: 'excel', text: '<i class="fas fa-file-excel"></i> Excel', className: 'btn btn-success' },
+                    { extend: 'print', text: '<i class="fas fa-print"></i> طباعة', className: 'btn btn-primary' }
+                ],
+                responsive: true
+            });
+        });
+    </script>
+}

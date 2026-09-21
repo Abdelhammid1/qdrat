@@ -1,0 +1,983 @@
+@using Microsoft.AspNetCore.Identity
+@using QdratNew.Entities
+@inject SignInManager<ApplicationUser> SignInManager
+@inject QdratNew.Interfaces.IUserAccountDropdownService AccountDropdownService
+
+@{
+    var account = await AccountDropdownService.GetDropdownViewModelAsync(User);
+    var path    = Context.Request.Path.Value ?? "";
+
+    /* helper: returns "nav-active" if any keyword matches current path */
+    string IsActive(params string[] keys) =>
+        keys.Any(k => path.Contains(k, StringComparison.OrdinalIgnoreCase))
+            ? "nav-active" : "";
+
+    bool AnyActive(params string[] keys) =>
+        keys.Any(k => path.Contains(k, StringComparison.OrdinalIgnoreCase));
+}
+
+<style>
+/* ═══════════════════════════════════════════════
+   Sidebar — قدرات (Light Theme)
+═══════════════════════════════════════════════ */
+.instructor-sidebar {
+    background: #FFFFFF;
+    height: 100vh;
+    position: fixed;
+    right: 0;
+    top: 0;
+    width: 260px;
+    z-index: 1030;
+    border-left: 1px solid #E2E8F0;
+    box-shadow: -4px 0 24px rgba(0,0,0,.07);
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    scrollbar-width: thin;
+    scrollbar-color: #CBD5E1 transparent;
+    transition: transform .3s ease;
+}
+
+.instructor-sidebar::-webkit-scrollbar { width: 4px; }
+.instructor-sidebar::-webkit-scrollbar-thumb {
+    background: #CBD5E1;
+    border-radius: 4px;
+}
+
+/* ── Brand ── */
+.sb-brand {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 18px 20px 16px;
+    border-bottom: 1px solid #E2E8F0;
+    flex-shrink: 0;
+    text-decoration: none;
+}
+
+.sb-brand-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #4CA6A8 0%, #22C55E 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-weight: 900;
+    color: #fff;
+    flex-shrink: 0;
+    box-shadow: 0 4px 12px rgba(76,166,168,.35);
+}
+
+.sb-brand-title {
+    font-weight: 800;
+    font-size: 18px;
+    color: #1E293B;
+    line-height: 1.2;
+    font-family: 'Cairo', sans-serif;
+}
+
+.sb-brand-sub {
+    font-size: 11px;
+    color: #94A3B8;
+    font-family: 'Tajawal', sans-serif;
+}
+
+/* ── Profile Section ── */
+.sb-profile {
+    padding: 20px;
+    border-bottom: 1px solid #E2E8F0;
+    background: linear-gradient(160deg, #F8FFFE 0%, #F0F9F9 100%);
+    flex-shrink: 0;
+}
+
+.sb-photo-wrap {
+    position: relative;
+    width: 82px;
+    height: 82px;
+    margin: 0 auto 12px;
+    cursor: pointer;
+}
+
+.sb-photo {
+    width: 82px;
+    height: 82px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid #4CA6A8;
+    box-shadow: 0 4px 14px rgba(76,166,168,.28);
+    display: block;
+    transition: filter .25s;
+}
+
+.sb-photo-overlay {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: rgba(76,166,168,.82);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity .25s;
+}
+
+.sb-photo-wrap:hover .sb-photo { filter: brightness(.85); }
+.sb-photo-wrap:hover .sb-photo-overlay { opacity: 1; }
+
+.sb-photo-overlay i {
+    color: #fff;
+    font-size: 22px;
+}
+
+.sb-name {
+    text-align: center;
+    font-weight: 800;
+    font-size: 14.5px;
+    color: #1E293B;
+    font-family: 'Cairo', sans-serif;
+    margin-bottom: 5px;
+}
+
+.sb-role-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #E8F5F5;
+    color: #4CA6A8;
+    border-radius: 20px;
+    padding: 3px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: 'Cairo', sans-serif;
+    margin: 0 auto;
+}
+
+.sb-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 13px;
+}
+
+.sb-action-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding: 7px 10px;
+    border-radius: 9px;
+    font-size: 11.5px;
+    font-weight: 600;
+    font-family: 'Cairo', sans-serif;
+    border: 1px solid #E2E8F0;
+    background: #fff;
+    color: #64748B;
+    cursor: pointer;
+    transition: all .2s;
+    text-decoration: none;
+}
+
+.sb-action-btn:hover {
+    border-color: #4CA6A8;
+    color: #4CA6A8;
+    background: #E8F5F5;
+}
+
+/* ── Navigation ── */
+.sb-nav {
+    flex: 1;
+    padding: 10px 0 8px;
+    overflow-y: visible;
+}
+
+.nav-section-label {
+    padding: 10px 20px 4px;
+    font-size: 9.5px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #94A3B8;
+    font-family: 'Cairo', sans-serif;
+}
+
+/* Single nav link */
+.nav-link-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 20px;
+    color: #475569;
+    font-size: 13.5px;
+    font-weight: 500;
+    font-family: 'Cairo', sans-serif;
+    transition: all .2s ease;
+    text-decoration: none;
+    border-right: 3px solid transparent;
+    margin: 1px 0;
+    position: relative;
+}
+
+.nav-link-item .nav-ico {
+    width: 33px;
+    height: 33px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #F1F5F9;
+    color: #94A3B8;
+    font-size: 13.5px;
+    flex-shrink: 0;
+    transition: all .2s;
+}
+
+.nav-link-item:hover {
+    background: #F8FAFC;
+    color: #4CA6A8;
+    border-right-color: #4CA6A8;
+}
+
+.nav-link-item:hover .nav-ico {
+    background: #E8F5F5;
+    color: #4CA6A8;
+}
+
+.nav-link-item.nav-active {
+    background: #E8F5F5;
+    color: #4CA6A8;
+    font-weight: 700;
+    border-right-color: #4CA6A8;
+}
+
+.nav-link-item.nav-active .nav-ico {
+    background: #4CA6A8;
+    color: #fff;
+    box-shadow: 0 4px 10px rgba(76,166,168,.35);
+}
+
+/* Collapsible trigger */
+.nav-collapse-btn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 20px;
+    color: #475569;
+    font-size: 13.5px;
+    font-weight: 600;
+    font-family: 'Cairo', sans-serif;
+    cursor: pointer;
+    border-right: 3px solid transparent;
+    margin: 1px 0;
+    transition: all .2s;
+    user-select: none;
+}
+
+.nav-collapse-btn .trigger-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.nav-collapse-btn .nav-ico {
+    width: 33px;
+    height: 33px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #F1F5F9;
+    color: #94A3B8;
+    font-size: 13.5px;
+    flex-shrink: 0;
+    transition: all .2s;
+}
+
+.nav-collapse-btn .arrow-icon {
+    font-size: 10.5px;
+    color: #94A3B8;
+    transition: transform .25s ease;
+}
+
+.nav-collapse-btn:hover {
+    background: #F8FAFC;
+    color: #4CA6A8;
+    border-right-color: #4CA6A8;
+}
+
+.nav-collapse-btn:hover .nav-ico {
+    background: #E8F5F5;
+    color: #4CA6A8;
+}
+
+.nav-collapse-btn.open {
+    color: #4CA6A8;
+    border-right-color: #4CA6A8;
+    background: #F0FAFA;
+}
+
+.nav-collapse-btn.open .nav-ico {
+    background: #4CA6A8;
+    color: #fff;
+    box-shadow: 0 4px 10px rgba(76,166,168,.3);
+}
+
+.nav-collapse-btn.open .arrow-icon {
+    transform: rotate(180deg);
+}
+
+/* Sub-menu */
+.nav-sub-menu {
+    background: #FAFBFC;
+    border-right: 3px solid #C8ECEC;
+    margin-right: 12px;
+    border-radius: 0 0 10px 10px;
+    padding: 4px 0;
+}
+
+.nav-sub-link {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 18px;
+    color: #64748B;
+    font-size: 13px;
+    font-weight: 500;
+    font-family: 'Cairo', sans-serif;
+    transition: all .2s;
+    text-decoration: none;
+}
+
+.nav-sub-link i {
+    width: 16px;
+    text-align: center;
+    font-size: 11.5px;
+    color: #94A3B8;
+}
+
+.nav-sub-link:hover {
+    color: #4CA6A8;
+    background: #E8F5F5;
+}
+
+.nav-sub-link:hover i { color: #4CA6A8; }
+
+.nav-sub-link.nav-active {
+    color: #4CA6A8;
+    font-weight: 700;
+    background: #DFF5F5;
+}
+
+.nav-sub-link.nav-active i { color: #4CA6A8; }
+
+/* Divider */
+.sb-divider {
+    height: 1px;
+    background: #F1F5F9;
+    margin: 6px 20px;
+}
+
+/* ── Footer ── */
+.sb-footer {
+    padding: 16px 20px;
+    border-top: 1px solid #E2E8F0;
+    flex-shrink: 0;
+}
+
+.btn-sb-logout {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px;
+    background: #FEF2F2;
+    color: #EF4444;
+    border: 1px solid #FECACA;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    font-family: 'Cairo', sans-serif;
+    transition: all .2s;
+    text-decoration: none;
+}
+
+.btn-sb-logout:hover {
+    background: #EF4444;
+    color: #fff;
+    border-color: #EF4444;
+}
+
+/* ── Mobile open state ── */
+@@media (max-width: 768px) {
+    .instructor-sidebar {
+        transform: translateX(100%);
+    }
+    .instructor-sidebar.sidebar-open {
+        transform: translateX(0);
+    }
+}
+
+/* ══════════════════════════════════════
+   Change Photo Modal
+══════════════════════════════════════ */
+.photo-modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15,23,42,.55);
+    z-index: 9998;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+}
+
+.photo-modal-backdrop.open { display: flex; }
+
+.photo-modal-card {
+    background: #fff;
+    border-radius: 18px;
+    padding: 28px 28px 24px;
+    width: 400px;
+    max-width: 95vw;
+    box-shadow: 0 25px 60px rgba(0,0,0,.18);
+    direction: rtl;
+    font-family: 'Cairo', sans-serif;
+    animation: modalIn .25s ease;
+}
+
+@@keyframes modalIn {
+    from { transform: scale(.93); opacity: 0; }
+    to   { transform: scale(1);   opacity: 1; }
+}
+
+.photo-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.photo-modal-title {
+    font-weight: 800;
+    font-size: 16px;
+    color: #1E293B;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.photo-modal-title i { color: #4CA6A8; }
+
+.photo-modal-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #94A3B8;
+    font-size: 18px;
+    padding: 4px 8px;
+    border-radius: 8px;
+    transition: all .2s;
+}
+
+.photo-modal-close:hover { background: #F1F5F9; color: #475569; }
+
+.photo-preview-area {
+    text-align: center;
+    margin-bottom: 18px;
+}
+
+.photo-preview-img {
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid #4CA6A8;
+    box-shadow: 0 6px 18px rgba(76,166,168,.22);
+    margin-bottom: 8px;
+}
+
+.photo-preview-label {
+    font-size: 11.5px;
+    color: #94A3B8;
+}
+
+.drop-zone {
+    border: 2px dashed #CBD5E1;
+    border-radius: 14px;
+    padding: 24px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all .2s;
+    margin-bottom: 18px;
+    background: #F8FAFC;
+}
+
+.drop-zone:hover, .drop-zone.drag-over {
+    border-color: #4CA6A8;
+    background: #F0FAFA;
+}
+
+.drop-zone-icon {
+    font-size: 30px;
+    color: #4CA6A8;
+    margin-bottom: 8px;
+    display: block;
+}
+
+.drop-zone-text {
+    font-size: 13px;
+    font-weight: 700;
+    color: #475569;
+}
+
+.drop-zone-hint {
+    font-size: 11px;
+    color: #94A3B8;
+    margin-top: 4px;
+}
+
+.photo-modal-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.btn-save-photo {
+    flex: 1;
+    padding: 11px;
+    background: linear-gradient(135deg, #4CA6A8, #22C55E);
+    color: #fff;
+    border: none;
+    border-radius: 11px;
+    font-weight: 700;
+    font-family: 'Cairo', sans-serif;
+    font-size: 13.5px;
+    cursor: pointer;
+    transition: opacity .2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+}
+
+.btn-save-photo:hover { opacity: .9; }
+
+.btn-cancel-photo {
+    flex: 1;
+    padding: 11px;
+    background: #F1F5F9;
+    color: #64748B;
+    border: 1px solid #E2E8F0;
+    border-radius: 11px;
+    font-weight: 600;
+    font-family: 'Cairo', sans-serif;
+    font-size: 13.5px;
+    cursor: pointer;
+    transition: all .2s;
+}
+
+.btn-cancel-photo:hover { background: #E2E8F0; }
+</style>
+
+
+<!-- ═══════════════════════════════════ SIDEBAR ═══════════════════════════════════ -->
+<aside class="instructor-sidebar" id="instructorSidebar" role="navigation" aria-label="القائمة الرئيسية">
+
+    <!-- Brand -->
+    <a href="/" class="sb-brand">
+        <div class="sb-brand-icon">ق</div>
+        <div>
+            <div class="sb-brand-title">مدرب معهد القدرات</div>
+            <div class="sb-brand-sub">منصة التعلم الذكي</div>
+        </div>
+    </a>
+
+    <!-- ── Profile Section ── -->
+    @if (account != null)
+    {
+        <div class="sb-profile">
+            <div class="sb-photo-wrap" onclick="openPhotoModal()" title="تغيير الصورة الشخصية">
+                <img src="@account.ProfileImageUrl"
+                     alt="صورة المدرب"
+                     class="sb-photo"
+                     id="sidebarAvatar" />
+                <div class="sb-photo-overlay" aria-hidden="true">
+                    <i class="fas fa-camera"></i>
+                </div>
+            </div>
+
+            <div class="sb-name">@account.FullName</div>
+
+            <div class="d-flex justify-content-center mt-1">
+                <span class="sb-role-badge">
+                    <i class="fas fa-chalkboard-teacher" style="font-size:10px;"></i>
+                    مدرب
+                </span>
+            </div>
+
+            <div class="sb-actions mt-2">
+                <button class="sb-action-btn" onclick="openPhotoModal()" type="button">
+                    <i class="fas fa-camera"></i>
+                    <span>الصورة</span>
+                </button>
+                <a asp-area="Identity"
+                   asp-page="/Account/Manage/ChangePassword"
+                   class="sb-action-btn">
+                    <i class="fas fa-key"></i>
+                    <span>كلمة المرور</span>
+                </a>
+            </div>
+        </div>
+    }
+
+    <!-- ── Navigation ── -->
+    <nav class="sb-nav">
+
+        <!-- الرئيسية -->
+        <div class="nav-section-label">الرئيسية</div>
+
+        <a asp-area="Instructors"
+           asp-controller="InstructorDashboard"
+           asp-action="Index"
+           class="nav-link-item @IsActive("InstructorDashboard", "Dashboard")">
+            <div class="nav-ico"><i class="fas fa-home"></i></div>
+            <span>لوحة التحكم</span>
+        </a>
+
+        <div class="sb-divider"></div>
+
+        <!-- الطلاب والمجموعات -->
+        <div class="nav-section-label">الطلاب والمجموعات</div>
+
+        <a asp-area="Instructors"
+           asp-controller="InstructorBatches"
+           asp-action="Index"
+           class="nav-link-item @IsActive("InstructorBatches")">
+            <div class="nav-ico"><i class="fas fa-layer-group"></i></div>
+            <span>الدفعات</span>
+        </a>
+
+        <a asp-area="Instructors"
+           asp-controller="InstructorLectures"
+           asp-action="Index"
+           class="nav-link-item @IsActive("InstructorLectures")">
+            <div class="nav-ico"><i class="fas fa-chalkboard"></i></div>
+            <span>المحاضرات</span>
+        </a>
+
+        <a asp-area="Instructors"
+           asp-controller="InstructorAttendance"
+           asp-action="Index"
+           class="nav-link-item @IsActive("InstructorAttendance", "Attendance")">
+            <div class="nav-ico"><i class="fas fa-calendar-check"></i></div>
+            <span>الحضور والغياب</span>
+        </a>
+
+        <div class="sb-divider"></div>
+
+        <!-- المحتوى الأكاديمي -->
+        <div class="nav-section-label">المحتوى الأكاديمي</div>
+
+        <!-- الواجبات - Collapsible -->
+        @{
+            bool hwOpen = AnyActive("InstructorHomeworks", "InstructorHomeworkDrafts");
+        }
+        <div class="nav-collapse-btn @(hwOpen ? "open" : "")"
+             data-bs-toggle="collapse"
+             data-bs-target="#collapseHomework"
+             aria-expanded="@(hwOpen.ToString().ToLower())"
+             aria-controls="collapseHomework">
+            <div class="trigger-left">
+                <div class="nav-ico"><i class="fas fa-book-open"></i></div>
+                <span>الواجبات</span>
+            </div>
+            <i class="fas fa-chevron-down arrow-icon"></i>
+        </div>
+
+        <div id="collapseHomework" class="collapse @(hwOpen ? "show" : "")">
+            <div class="nav-sub-menu">
+                <a asp-area="Instructors"
+                   asp-controller="InstructorHomeworks"
+                   asp-action="Index"
+                   class="nav-sub-link @IsActive("InstructorHomeworks")">
+                    <i class="fas fa-paper-plane"></i>
+                    الواجبات المرسلة
+                </a>
+                <a asp-area="Instructors"
+                   asp-controller="InstructorHomeworkDrafts"
+                   asp-action="Index"
+                   class="nav-sub-link @(path.Contains("InstructorHomeworkDrafts") && !path.Contains("Create") && !path.Contains("AutoGenerate") && !path.Contains("Archived") ? "nav-active" : "")">
+                    <i class="fas fa-file-alt"></i>
+                    نماذج الواجبات
+                </a>
+                <a asp-area="Instructors"
+                   asp-controller="InstructorHomeworkDrafts"
+                   asp-action="Create"
+                   class="nav-sub-link @(path.Contains("HomeworkDrafts") && path.Contains("Create") ? "nav-active" : "")">
+                    <i class="fas fa-plus-circle"></i>
+                    إنشاء نموذج
+                </a>
+                <a asp-area="Instructors"
+                   asp-controller="InstructorHomeworkDrafts"
+                   asp-action="AutoGenerate"
+                   class="nav-sub-link @IsActive("AutoGenerate")">
+                    <i class="fas fa-magic"></i>
+                    توليد تلقائي
+                </a>
+                <a asp-area="Instructors"
+                   asp-controller="InstructorHomeworkDrafts"
+                   asp-action="Archived"
+                   class="nav-sub-link @IsActive("Archived")">
+                    <i class="fas fa-archive"></i>
+                    الأرشيف
+                </a>
+            </div>
+        </div>
+
+        <!-- الاختبارات - Collapsible -->
+        @{
+            bool examOpen = AnyActive("InstructorExamDraft", "InstructorExamSend", "InstructorExamGenerate", "ExamGenerate");
+        }
+        <div class="nav-collapse-btn @(examOpen ? "open" : "")"
+             data-bs-toggle="collapse"
+             data-bs-target="#collapseExams"
+             aria-expanded="@(examOpen.ToString().ToLower())"
+             aria-controls="collapseExams">
+            <div class="trigger-left">
+                <div class="nav-ico"><i class="fas fa-file-signature"></i></div>
+                <span>الاختبارات</span>
+            </div>
+            <i class="fas fa-chevron-down arrow-icon"></i>
+        </div>
+
+        <div id="collapseExams" class="collapse @(examOpen ? "show" : "")">
+            <div class="nav-sub-menu">
+                <a asp-area="Instructors"
+                   asp-controller="InstructorExamDraft"
+                   asp-action="Drafts"
+                   class="nav-sub-link @(path.Contains("InstructorExamDraft") && path.Contains("Drafts") ? "nav-active" : "")">
+                    <i class="fas fa-list-ul"></i>
+                    نماذج الاختبارات
+                </a>
+                <a asp-area="Instructors"
+                   asp-controller="InstructorExamDraft"
+                   asp-action="Create"
+                   class="nav-sub-link @(path.Contains("InstructorExamDraft") && path.Contains("Create") ? "nav-active" : "")">
+                    <i class="fas fa-plus-circle"></i>
+                    إنشاء اختبار
+                </a>
+                <a asp-area="Instructors"
+                   asp-controller="InstructorExamSend"
+                   asp-action="SentExams"
+                   class="nav-sub-link @IsActive("SentExams")">
+                    <i class="fas fa-clipboard-list"></i>
+                    قائمة الاختبارات
+                </a>
+                <a asp-area="Instructors"
+                   asp-controller="InstructorExamGenerate"
+                   asp-action="Index"
+                   class="nav-sub-link @IsActive("InstructorExamGenerate", "ExamGenerate")">
+                    <i class="fas fa-cogs"></i>
+                    توليد اختبار
+                </a>
+            </div>
+        </div>
+
+        <div class="sb-divider"></div>
+
+        <!-- متابعة الأداء -->
+        <div class="nav-section-label">متابعة الأداء</div>
+
+        <a asp-area="Instructors"
+           asp-controller="InstructorInterventionTasks"
+           asp-action="Index"
+           class="nav-link-item @IsActive("InstructorInterventionTasks", "InterventionTask")">
+            <div class="nav-ico"><i class="fas fa-hand-holding-heart"></i></div>
+            <span>مهام التدخل</span>
+        </a>
+
+        <a asp-area="Instructors"
+           asp-controller="InstructorLessonCompletions"
+           asp-action="SelectLessons"
+           class="nav-link-item @IsActive("InstructorLessonCompletion", "LessonCompletion")">
+            <div class="nav-ico"><i class="fas fa-check-double"></i></div>
+            <span>تسجيل المؤشرات</span>
+        </a>
+
+        <a asp-area="Instructors"
+           asp-controller="QuestionsReview"
+           asp-action="PendingReview"
+           class="nav-link-item @IsActive("QuestionsReview")">
+            <div class="nav-ico"><i class="fas fa-search-plus"></i></div>
+            <span>مراجعة الأسئلة</span>
+        </a>
+
+        <div class="sb-divider"></div>
+
+        <!-- التواصل -->
+        <div class="nav-section-label">التواصل</div>
+
+        <a asp-area="Instructors"
+           asp-controller="Notifications"
+           asp-action="Sent"
+           class="nav-link-item @IsActive("Notifications")">
+            <div class="nav-ico"><i class="fas fa-bell"></i></div>
+            <span>الإشعارات</span>
+        </a>
+
+        <div class="sb-divider"></div>
+
+        <!-- أدوات متقدمة -->
+        <div class="nav-section-label">أدوات متقدمة</div>
+
+        <a asp-area="Instructors"
+           asp-controller="InstructorDashboard"
+           asp-action="TrainModels"
+           class="nav-link-item @IsActive("TrainModels")">
+            <div class="nav-ico" style="background:linear-gradient(135deg,#E0F2FE,#F0FDF4);">
+                <i class="fas fa-robot" style="color:#4CA6A8;"></i>
+            </div>
+            <span>الذكاء الاصطناعي</span>
+        </a>
+
+    </nav>
+
+    <!-- ── Footer ── -->
+    <div class="sb-footer">
+        <a asp-area="Identity"
+           asp-page="/Account/Logout"
+           asp-route-returnUrl="/"
+           class="btn-sb-logout">
+            <i class="fas fa-sign-out-alt"></i>
+            تسجيل الخروج
+        </a>
+    </div>
+</aside>
+
+
+<!-- ═══════════════════ Change Photo Modal ═══════════════════ -->
+<div class="photo-modal-backdrop" id="photoModal" onclick="handleModalBackdropClick(event)">
+    <div class="photo-modal-card" role="dialog" aria-modal="true" aria-labelledby="photoModalTitle">
+
+        <div class="photo-modal-header">
+            <div class="photo-modal-title" id="photoModalTitle">
+                <i class="fas fa-camera"></i>
+                تغيير صورة الملف الشخصي
+            </div>
+            <button class="photo-modal-close" onclick="closePhotoModal()" aria-label="إغلاق">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div class="photo-preview-area">
+            <img src="@(account?.ProfileImageUrl ?? "/images/default-avatar.png")"
+                 id="photoPreviewImg"
+                 class="photo-preview-img"
+                 alt="معاينة الصورة" />
+            <div class="photo-preview-label">الصورة الحالية</div>
+        </div>
+
+        <form id="changePhotoForm"
+              method="post"
+              enctype="multipart/form-data"
+              asp-controller="Profile"
+              asp-action="UpdatePhoto"
+              asp-area="">
+            @Html.AntiForgeryToken()
+
+            <div class="drop-zone" id="dropZone" onclick="triggerFileInput()">
+                <i class="fas fa-cloud-upload-alt drop-zone-icon"></i>
+                <div class="drop-zone-text">اضغط أو اسحب صورتك هنا</div>
+                <div class="drop-zone-hint">PNG، JPG، WEBP — حتى 5 ميغابايت</div>
+            </div>
+
+            <input type="file"
+                   id="photoFileInput"
+                   name="photo"
+                   accept="image/png,image/jpeg,image/webp"
+                   style="display:none;"
+                   onchange="handlePhotoSelect(this)" />
+
+            <div class="photo-modal-actions">
+                <button type="submit" class="btn-save-photo">
+                    <i class="fas fa-save"></i>
+                    حفظ الصورة
+                </button>
+                <button type="button" class="btn-cancel-photo" onclick="closePhotoModal()">
+                    إلغاء
+                </button>
+            </div>
+        </form>
+
+    </div>
+</div>
+
+
+<script>
+    /* ── Photo Modal ── */
+    function openPhotoModal() {
+        document.getElementById('photoModal').classList.add('open');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closePhotoModal() {
+        document.getElementById('photoModal').classList.remove('open');
+        document.body.style.overflow = '';
+    }
+
+    function handleModalBackdropClick(e) {
+        if (e.target === document.getElementById('photoModal')) closePhotoModal();
+    }
+
+    function triggerFileInput() {
+        document.getElementById('photoFileInput').click();
+    }
+
+    function handlePhotoSelect(input) {
+        if (!input.files || !input.files[0]) return;
+        const file = input.files[0];
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            document.getElementById('photoPreviewImg').src = e.target.result;
+            document.getElementById('sidebarAvatar').src = e.target.result;
+            const dz = document.getElementById('dropZone');
+            dz.style.borderColor = '#4CA6A8';
+            dz.style.background  = '#F0FAFA';
+            dz.querySelector('.drop-zone-text').textContent = file.name;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    /* Drag-over effect */
+    (function () {
+        const dz = document.getElementById('dropZone');
+        if (!dz) return;
+        dz.addEventListener('dragover', function (e) {
+            e.preventDefault();
+            dz.classList.add('drag-over');
+        });
+        dz.addEventListener('dragleave', function () {
+            dz.classList.remove('drag-over');
+        });
+        dz.addEventListener('drop', function (e) {
+            e.preventDefault();
+            dz.classList.remove('drag-over');
+            const input = document.getElementById('photoFileInput');
+            input.files = e.dataTransfer.files;
+            handlePhotoSelect(input);
+        });
+    })();
+
+    /* ── Collapse arrow sync ── */
+    document.querySelectorAll('.nav-collapse-btn').forEach(function (btn) {
+        const targetSelector = btn.getAttribute('data-bs-target');
+        if (!targetSelector) return;
+        const panel = document.querySelector(targetSelector);
+        if (!panel) return;
+
+        panel.addEventListener('show.bs.collapse',  function () { btn.classList.add('open');    });
+        panel.addEventListener('hide.bs.collapse',  function () { btn.classList.remove('open'); });
+    });
+</script>

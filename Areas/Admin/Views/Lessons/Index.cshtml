@@ -1,0 +1,1126 @@
+﻿@model QdratNew.ViewModels.Lesson.LessonIndexViewModel
+@using QdratNew.Helpers
+
+@{
+    ViewData["Title"] = "قائمة المؤشرات";
+
+    var lessonsList = Model.Lessons != null
+        ? Model.Lessons.ToList()
+        : new List<QdratNew.ViewModels.Lesson.LessonViewModel>();
+
+    var totalLessons = lessonsList.Count;
+    var quantitativeLessons = lessonsList.Count(x => x.IsQuantitative);
+    var verbalLessons = totalLessons - quantitativeLessons;
+
+    var unitsCount = lessonsList
+        .Where(x => !string.IsNullOrWhiteSpace(x.UnitTitle))
+        .Select(x => x.UnitTitle)
+        .Distinct()
+        .Count();
+
+    var sectionsCount = lessonsList
+        .Where(x => !string.IsNullOrWhiteSpace(x.SectionTitle))
+        .Select(x => x.SectionTitle)
+        .Distinct()
+        .Count();
+}
+
+@section Styles {
+    <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet" />
+
+    <style>
+        :root {
+            --ink: #0D1B2A;
+            --ink-2: #2C3E50;
+            --ink-3: #5A6A7A;
+            --ink-4: #8FA0B0;
+            --ink-5: #C8D5E0;
+            --canvas: #F3F6FA;
+            --surface: #FFFFFF;
+            --surface-2: #F8FAFC;
+            --surface-3: #EEF2F7;
+            --border: #DDE4EC;
+            --blue: #1B5EAE;
+            --blue-2: #2471D0;
+            --blue-bg: #E8F1FB;
+            --blue-dark: #103E7A;
+            --emerald: #0D7A5B;
+            --emerald-bg: #E4F5EE;
+            --amber: #985D09;
+            --amber-bg: #FDF0D8;
+            --rose: #BF1030;
+            --rose-bg: #FDEAEE;
+            --violet: #5535B5;
+            --violet-bg: #EDE8F9;
+            --r-sm: 6px;
+            --r-md: 10px;
+            --r-lg: 14px;
+            --r-xl: 20px;
+            --sh-xs: 0 1px 3px rgba(13,27,42,.06);
+            --sh-sm: 0 2px 8px rgba(13,27,42,.08);
+            --sh-md: 0 4px 18px rgba(13,27,42,.10);
+            --ease: cubic-bezier(.25,.46,.45,.94);
+        }
+
+        .lessons-page {
+            background: var(--canvas);
+            min-height: 100vh;
+            padding: 32px 28px 64px;
+            direction: rtl;
+            font-family: 'Cairo';
+            color: var(--ink-2);
+        }
+
+        .lessons-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-bottom: 28px;
+        }
+
+        .lessons-brand {
+            display: flex;
+            align-items: center;
+            gap: 13px;
+        }
+
+        .lessons-brand-icon {
+            width: 46px;
+            height: 46px;
+            background: var(--blue);
+            border-radius: var(--r-lg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 18px;
+            box-shadow: 0 4px 14px rgba(27,94,174,.28);
+        }
+
+        .lessons-brand-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--ink);
+            line-height: 1.15;
+        }
+
+        .lessons-brand-sub {
+            font-size: 14px;
+            color: var(--ink-4);
+            margin-top: 2px;
+            line-height: 1.8;
+        }
+
+        .top-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn-main-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            background: var(--blue);
+            color: #fff;
+            border: none;
+            border-radius: var(--r-md);
+            padding: 10px 20px;
+            font-size: 16px;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            box-shadow: 0 3px 10px rgba(27,94,174,.28);
+            transition: background .16s var(--ease), transform .14s, box-shadow .16s;
+        }
+
+            .btn-main-action:hover {
+                background: var(--blue-dark);
+                color: #fff;
+                transform: translateY(-2px);
+                box-shadow: 0 6px 18px rgba(27,94,174,.32);
+            }
+
+        .lessons-kpis {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 13px;
+            margin-bottom: 24px;
+        }
+
+        @@media (max-width: 960px) {
+            .lessons-kpis {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @@media (max-width: 480px) {
+            .lessons-kpis {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .kpi-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            padding: 18px 19px;
+            display: flex;
+            align-items: center;
+            gap: 13px;
+            box-shadow: var(--sh-xs);
+            transition: transform .2s var(--ease), box-shadow .2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+            .kpi-card::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                right: 0;
+                width: 4px;
+                height: 100%;
+                border-radius: 0 var(--r-xl) var(--r-xl) 0;
+            }
+
+            .kpi-card:hover {
+                transform: translateY(-3px);
+                box-shadow: var(--sh-sm);
+            }
+
+        .kpi-blue::after {
+            background: var(--blue);
+        }
+
+        .kpi-emerald::after {
+            background: var(--emerald);
+        }
+
+        .kpi-amber::after {
+            background: var(--amber);
+        }
+
+        .kpi-violet::after {
+            background: var(--violet);
+        }
+
+        .kpi-ico {
+            width: 42px;
+            height: 42px;
+            border-radius: var(--r-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .ico-blue {
+            background: var(--blue-bg);
+            color: var(--blue);
+        }
+
+        .ico-emerald {
+            background: var(--emerald-bg);
+            color: var(--emerald);
+        }
+
+        .ico-amber {
+            background: var(--amber-bg);
+            color: var(--amber);
+        }
+
+        .ico-violet {
+            background: var(--violet-bg);
+            color: var(--violet);
+        }
+
+        .kpi-label {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--ink-4);
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            margin-bottom: 3px;
+        }
+
+        .kpi-val {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--ink);
+            line-height: 1;
+        }
+
+        .lessons-filter-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            padding: 18px 22px 21px;
+            box-shadow: var(--sh-xs);
+            margin-bottom: 22px;
+        }
+
+        .lessons-filter-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--ink-4);
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            margin-bottom: 14px;
+        }
+
+        .lessons-filter-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            align-items: end;
+        }
+
+        @@media (max-width: 992px) {
+            .lessons-filter-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .lessons-field label {
+            display: block;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--ink-3);
+            margin-bottom: 5px;
+        }
+
+        .lessons-select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: var(--r-md);
+            font-size: 16px;
+            background: var(--surface-2);
+            color: var(--ink);
+            transition: border-color .16s, box-shadow .16s;
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238FA0B0' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: left 10px center;
+            padding-left: 30px;
+        }
+
+            .lessons-select:focus {
+                outline: none;
+                border-color: var(--blue-2);
+                box-shadow: 0 0 0 3px rgba(36,113,208,.11);
+                background-color: var(--surface);
+            }
+
+        .lessons-table-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            overflow: visible;
+            box-shadow: var(--sh-sm);
+            margin-bottom: 24px;
+        }
+
+        .lessons-table-topbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 11px 16px;
+            border-bottom: 1px solid var(--surface-3);
+            flex-wrap: wrap;
+        }
+
+        .table-section-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 16px;
+            font-weight: 800;
+            color: var(--ink);
+            margin-left: 10px;
+        }
+
+            .table-section-title i {
+                color: var(--blue);
+            }
+
+        .lessons-table-search-wrap {
+            position: relative;
+            flex: 1;
+            min-width: 220px;
+            max-width: 390px;
+        }
+
+            .lessons-table-search-wrap i {
+                position: absolute;
+                right: 11px;
+                top: 50%;
+                transform: translateY(-50%);
+                color: var(--ink-4);
+                font-size: 15px;
+                pointer-events: none;
+            }
+
+            .lessons-table-search-wrap input {
+                width: 100%;
+                padding: 7px 32px 7px 12px;
+                border: 1px solid var(--border);
+                border-radius: var(--r-md);
+                font-size: 16px;
+                background: var(--surface-2);
+                color: var(--ink);
+                transition: border-color .15s, box-shadow .15s;
+            }
+
+                .lessons-table-search-wrap input:focus {
+                    outline: none;
+                    border-color: var(--blue-2);
+                    box-shadow: 0 0 0 3px rgba(36,113,208,.1);
+                    background: var(--surface);
+                }
+
+        .lessons-count-badge {
+            margin-right: auto;
+            font-size: 14px;
+            color: var(--ink-4);
+        }
+
+            .lessons-count-badge strong {
+                color: var(--blue);
+                font-weight: 700;
+            }
+
+        .table-responsive-safe {
+            width: 100%;
+            overflow-x: auto;
+            overflow-y: visible;
+        }
+
+        #lessonsTable {
+            width: 100% !important;
+            border-collapse: collapse;
+        }
+
+            #lessonsTable thead th {
+                background: var(--surface-2) !important;
+                padding: 11px 15px !important;
+                font-size: 13px !important;
+                font-weight: 700 !important;
+                color: var(--ink-4) !important;
+                text-transform: uppercase;
+                letter-spacing: .05em;
+                white-space: nowrap;
+                border: none !important;
+                text-align: center;
+            }
+
+            #lessonsTable tbody tr {
+                border-bottom: 1px solid var(--surface-3);
+                transition: background .1s;
+            }
+
+                #lessonsTable tbody tr:last-child {
+                    border-bottom: none;
+                }
+
+                #lessonsTable tbody tr:hover {
+                    background: #F5F8FD;
+                }
+
+            #lessonsTable td {
+                padding: 11px 15px !important;
+                vertical-align: middle !important;
+                font-size: 16px !important;
+                color: var(--ink-2);
+                border: none !important;
+                text-align: center;
+            }
+
+        .lesson-title-cell {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-align: right;
+        }
+
+        .lesson-avatar {
+            width: 33px;
+            height: 33px;
+            border-radius: 50%;
+            background: var(--blue-bg);
+            color: var(--blue);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .lesson-item-name {
+            font-weight: 700;
+            color: var(--ink);
+            font-size: 13px;
+            line-height: 1.7;
+        }
+
+        .content-preview {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--surface-3);
+            color: var(--ink-3);
+            padding: 5px 11px;
+            border-radius: 30px;
+            font-size: 12px;
+            font-weight: 700;
+            max-width: 260px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .btn-content-view {
+            width: 30px;
+            height: 30px;
+            min-width: 30px;
+            border-radius: 8px;
+            border: 1px solid #B6D3F4;
+            background: var(--blue-bg);
+            color: var(--blue);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all .15s ease;
+            margin-right: 6px;
+        }
+
+            .btn-content-view:hover {
+                background: var(--blue);
+                color: #fff;
+                border-color: var(--blue);
+                transform: translateY(-1px);
+            }
+
+        .unit-chip,
+        .section-chip,
+        .type-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 11px;
+            border-radius: 30px;
+            font-size: 12px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .unit-chip {
+            background: var(--violet-bg);
+            color: var(--violet);
+        }
+
+        .section-chip {
+            background: var(--emerald-bg);
+            color: var(--emerald);
+        }
+
+        .type-chip {
+            background: var(--amber-bg);
+            color: var(--amber);
+        }
+
+            .type-chip.quantitative {
+                background: var(--blue-bg);
+                color: var(--blue);
+            }
+
+        .lessons-act-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            flex-wrap: nowrap;
+            position: relative;
+            overflow: visible;
+        }
+
+        .act-btn {
+            position: relative;
+            width: 34px;
+            height: 34px;
+            min-width: 34px;
+            padding: 0;
+            border-radius: var(--r-sm);
+            font-size: 12px;
+            font-weight: 600;
+            text-decoration: none;
+            border: 1.5px solid transparent;
+            cursor: pointer;
+            background: transparent;
+            transition: all .15s;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            overflow: visible;
+        }
+
+            .act-btn i {
+                margin: 0;
+                font-size: 11px;
+                line-height: 1;
+            }
+
+            .act-btn .act-text {
+                position: absolute;
+                bottom: calc(100% + 8px);
+                right: 50%;
+                transform: translateX(50%) translateY(4px);
+                background: var(--ink);
+                color: #fff;
+                font-size: 11px;
+                font-weight: 600;
+                padding: 5px 9px;
+                border-radius: 6px;
+                opacity: 0;
+                visibility: hidden;
+                pointer-events: none;
+                transition: opacity .15s ease, transform .15s ease, visibility .15s ease;
+                z-index: 9999;
+                box-shadow: 0 4px 12px rgba(13,27,42,.18);
+                min-width: max-content;
+            }
+
+                .act-btn .act-text::after {
+                    content: "";
+                    position: absolute;
+                    top: 100%;
+                    right: 50%;
+                    transform: translateX(50%);
+                    border-width: 5px;
+                    border-style: solid;
+                    border-color: var(--ink) transparent transparent transparent;
+                }
+
+            .act-btn:hover .act-text {
+                opacity: 1;
+                visibility: visible;
+                transform: translateX(50%) translateY(0);
+            }
+
+        .act-edit {
+            background: var(--surface-3);
+            color: var(--ink-3);
+            border-color: var(--border);
+        }
+
+            .act-edit:hover {
+                background: var(--ink-3);
+                color: #fff;
+                border-color: var(--ink-3);
+            }
+
+        .act-view {
+            background: var(--blue-bg);
+            color: var(--blue);
+            border-color: #B6D3F4;
+        }
+
+            .act-view:hover {
+                background: var(--blue);
+                color: #fff;
+                border-color: var(--blue);
+            }
+
+        .act-delete {
+            background: var(--rose-bg);
+            color: var(--rose);
+            border-color: #F5B8C2;
+        }
+
+            .act-delete:hover {
+                background: var(--rose);
+                color: #fff;
+                border-color: var(--rose);
+            }
+
+        .dataTables_wrapper {
+            direction: rtl;
+            overflow: visible;
+        }
+
+            .dataTables_wrapper .dataTables_filter {
+                display: none;
+            }
+
+            .dataTables_wrapper .dataTables_length,
+            .dataTables_wrapper .dataTables_info {
+                padding: 9px 16px;
+                font-size: 14px;
+                color: var(--ink-4);
+            }
+
+            .dataTables_wrapper .dataTables_paginate {
+                padding: 9px 16px;
+            }
+
+                .dataTables_wrapper .dataTables_paginate .paginate_button {
+                    border-radius: var(--r-sm) !important;
+                    font-size: 14px !important;
+                    padding: 4px 10px !important;
+                    border: 1px solid var(--border) !important;
+                    margin: 0 2px !important;
+                    color: var(--ink-3) !important;
+                }
+
+                    .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+                    .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
+                        background: var(--blue) !important;
+                        border-color: var(--blue) !important;
+                        color: #fff !important;
+                    }
+
+                    .dataTables_wrapper .dataTables_paginate .paginate_button:hover:not(.current):not(.disabled) {
+                        background: var(--blue-bg) !important;
+                        border-color: #B6D3F4 !important;
+                        color: var(--blue) !important;
+                    }
+
+            .dataTables_wrapper .dataTables_length select {
+                border: 1px solid var(--border);
+                border-radius: var(--r-sm);
+                padding: 3px 8px;
+                font-size: 14px;
+                color: var(--ink);
+            }
+
+        div.dataTables_wrapper div.dataTables_paginate,
+        div.dataTables_wrapper div.dataTables_info,
+        div.dataTables_wrapper div.dataTables_length {
+            border-top: 1px solid var(--surface-3);
+            background: var(--surface-2);
+        }
+
+        .lessons-empty {
+            text-align: center;
+            padding: 56px 16px;
+            color: var(--ink-4);
+        }
+
+            .lessons-empty i {
+                font-size: 18px;
+                display: block;
+                margin-bottom: 12px;
+                color: var(--ink-5);
+            }
+
+        .lessons-empty-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--ink-3);
+        }
+
+        .lessons-empty-sub {
+            font-size: 14px;
+            margin-top: 4px;
+        }
+
+        .modal-content {
+            border: none;
+            border-radius: var(--r-xl);
+            overflow: hidden;
+        }
+
+        .modal-header {
+            background: var(--blue);
+            color: #fff;
+            border-bottom: none;
+            padding: 15px 18px;
+        }
+
+        .modal-title {
+            font-size: 16px;
+            font-weight: 800;
+        }
+
+        .modal-body {
+            font-size: 16px;
+            line-height: 2;
+            color: var(--ink-2);
+            padding: 22px;
+        }
+
+        @@media (max-width: 768px) {
+            .lessons-page {
+                padding: 22px 14px 48px;
+            }
+
+            .top-actions {
+                width: 100%;
+            }
+
+            .btn-main-action {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .lessons-table-topbar {
+                align-items: stretch;
+            }
+
+            .lessons-table-search-wrap {
+                max-width: 100%;
+                width: 100%;
+            }
+
+            .lessons-count-badge {
+                margin-right: 0;
+            }
+        }
+    </style>
+}
+
+<div class="lessons-page">
+
+    <div class="lessons-topbar">
+        <div class="lessons-brand">
+            <div class="lessons-brand-icon">
+                <i class="bi bi-list-check"></i>
+            </div>
+
+            <div>
+                <div class="lessons-brand-title">قائمة المؤشرات</div>
+                <div class="lessons-brand-sub">
+                    إدارة مؤشرات الأداء وربطها بالمنهج والمحور والوحدة.
+                </div>
+            </div>
+        </div>
+
+        <div class="top-actions">
+            <a asp-action="Create" class="btn-main-action">
+                <i class="bi bi-plus-circle"></i>
+                إضافة مؤشر
+            </a>
+        </div>
+    </div>
+
+    <div class="lessons-kpis">
+
+        <div class="kpi-card kpi-blue">
+            <div class="kpi-ico ico-blue">
+                <i class="bi bi-list-task"></i>
+            </div>
+            <div>
+                <div class="kpi-label">إجمالي المؤشرات</div>
+                <div class="kpi-val">@totalLessons</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-emerald">
+            <div class="kpi-ico ico-emerald">
+                <i class="bi bi-calculator"></i>
+            </div>
+            <div>
+                <div class="kpi-label">مؤشرات كمية</div>
+                <div class="kpi-val">@quantitativeLessons</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-amber">
+            <div class="kpi-ico ico-amber">
+                <i class="bi bi-chat-square-text"></i>
+            </div>
+            <div>
+                <div class="kpi-label">مؤشرات لفظية</div>
+                <div class="kpi-val">@verbalLessons</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-violet">
+            <div class="kpi-ico ico-violet">
+                <i class="bi bi-diagram-3"></i>
+            </div>
+            <div>
+                <div class="kpi-label">المحاور</div>
+                <div class="kpi-val">@sectionsCount</div>
+            </div>
+        </div>
+
+    </div>
+
+    <form method="get" class="lessons-filter-card">
+        <div class="lessons-filter-title">
+            <i class="bi bi-sliders" style="color:var(--blue)"></i>
+            تصفية المؤشرات
+        </div>
+
+        <div class="lessons-filter-grid">
+
+            <div class="lessons-field">
+                <label asp-for="SelectedCurriculumId">
+                    <i class="bi bi-book" style="color:var(--blue);margin-left:4px"></i>
+                    المنهج
+                </label>
+
+                <select asp-for="SelectedCurriculumId"
+                        asp-items="Model.CurriculumList"
+                        class="lessons-select"
+                        onchange="this.form.submit()">
+                    <option value="">كل المناهج</option>
+                </select>
+            </div>
+
+            <div class="lessons-field">
+                <label asp-for="SelectedSectionId">
+                    <i class="bi bi-diagram-3" style="color:var(--emerald);margin-left:4px"></i>
+                    المحور
+                </label>
+
+                <select asp-for="SelectedSectionId"
+                        asp-items="Model.SectionList"
+                        class="lessons-select"
+                        onchange="this.form.submit()">
+                    <option value="">كل المحاور</option>
+                </select>
+            </div>
+
+            <div class="lessons-field">
+                <label asp-for="SelectedUnitId">
+                    <i class="bi bi-grid" style="color:var(--violet);margin-left:4px"></i>
+                    الوحدة
+                </label>
+
+                <select asp-for="SelectedUnitId"
+                        asp-items="Model.UnitList"
+                        class="lessons-select"
+                        onchange="this.form.submit()">
+                    <option value="">كل الوحدات</option>
+                </select>
+            </div>
+
+        </div>
+    </form>
+
+    <div class="lessons-table-card">
+
+        <div class="lessons-table-topbar">
+            <div class="table-section-title">
+                <i class="bi bi-table"></i>
+                المؤشرات المسجلة
+            </div>
+
+            <div class="lessons-table-search-wrap">
+                <i class="bi bi-search"></i>
+                <input type="text"
+                       id="lessonsSearch"
+                       placeholder="ابحث في المؤشر أو المحتوى أو الوحدة أو المحور..." />
+            </div>
+
+            <div class="lessons-count-badge">
+                إجمالي: <strong>@totalLessons</strong> مؤشر
+            </div>
+        </div>
+
+        @if (!lessonsList.Any())
+        {
+            <div class="lessons-empty">
+                <i class="bi bi-inbox"></i>
+                <div class="lessons-empty-title">لا توجد مؤشرات حسب الفلاتر الحالية</div>
+                <div class="lessons-empty-sub">يمكنك تغيير الفلاتر أو إضافة مؤشر جديد</div>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive-safe">
+                <table id="lessonsTable">
+                    <thead>
+                        <tr>
+                            <th style="text-align:right; width:30%">المؤشر</th>
+                            <th style="width:24%">المحتوى</th>
+                            <th style="width:14%">الوحدة</th>
+                            <th style="width:14%">المحور</th>
+                            <th style="width:8%">النوع</th>
+                            <th style="width:10%">الإجراءات</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @foreach (var item in lessonsList)
+                        {
+                            var contentText = item.Content != null ? item.Content.ToString() : "";
+                            var contentPreview = contentText.Length > 20 ? contentText.Substring(0, 20) : contentText;
+
+                    <tr>
+                        <td style="text-align:right">
+                            <div class="lesson-title-cell">
+                                <div class="lesson-avatar">
+                                    <i class="bi bi-list-check"></i>
+                                </div>
+
+                                <span class="lesson-item-name">
+                                    @Html.Raw(item.IsQuantitative
+                                                                        ? NumberHelper.ToIndicNumbersSafe(item.Title)
+                                                                        : item.Title)
+                                </span>
+                            </div>
+                        </td>
+
+                        <td>
+                            <span class="content-preview">
+                                <i class="bi bi-file-text"></i>
+                                @Html.Raw(item.IsQuantitative
+                                                                ? NumberHelper.ToIndicNumbersSafe(contentPreview)
+                                                                : contentPreview)
+                            </span>
+
+                            @if (!string.IsNullOrWhiteSpace(contentText) && contentText.Length > 20)
+                                    {
+                                        <button type="button"
+                                                class="btn-content-view"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#contentModal_@item.Id"
+                                                title="عرض المحتوى الكامل"
+                                                aria-label="عرض المحتوى الكامل">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                    }
+
+                            <div class="modal fade" id="contentModal_@item.Id" tabindex="-1" dir="rtl">
+                                <div class="modal-dialog modal-dialog-scrollable modal-lg">
+                                    <div class="modal-content text-end">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">
+                                                <i class="bi bi-file-text" style="margin-left:6px"></i>
+                                                محتوى المؤشر
+                                            </h5>
+                                            <button type="button"
+                                                    class="btn-close btn-close-white"
+                                                    data-bs-dismiss="modal"
+                                                    aria-label="إغلاق">
+                                            </button>
+                                        </div>
+                                        <div class="modal-body">
+                                            @Html.Raw(item.IsQuantitative
+                                                                                        ? NumberHelper.ToIndicNumbersSafe(contentText)
+                                                                                        : contentText)
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+
+                        <td>
+                            <span class="unit-chip">
+                                <i class="bi bi-grid"></i>
+                                @(string.IsNullOrWhiteSpace(item.UnitTitle) ? "غير محددة" : item.UnitTitle)
+                            </span>
+                        </td>
+
+                        <td>
+                            <span class="section-chip">
+                                <i class="bi bi-diagram-3"></i>
+                                @(string.IsNullOrWhiteSpace(item.SectionTitle) ? "غير محدد" : item.SectionTitle)
+                            </span>
+                        </td>
+
+                        <td>
+                            @if (item.IsQuantitative)
+                                    {
+                                        <span class="type-chip quantitative">
+                                            <i class="bi bi-calculator"></i>
+                                            كمي
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="type-chip">
+                                            <i class="bi bi-chat-square-text"></i>
+                                            لفظي
+                                        </span>
+                                    }
+                                </td>
+
+                                <td>
+                                    <div class="lessons-act-row">
+
+                                        <a asp-action="Edit"
+                                           asp-route-id="@item.Id"
+                                           class="act-btn act-edit"
+                                           aria-label="تعديل">
+                                            <i class="bi bi-pencil-square"></i>
+                                            <span class="act-text">تعديل</span>
+                                        </a>
+
+                                        <a asp-action="Details"
+                                           asp-route-id="@item.Id"
+                                           class="act-btn act-view"
+                                           aria-label="تفاصيل">
+                                            <i class="bi bi-eye"></i>
+                                            <span class="act-text">تفاصيل</span>
+                                        </a>
+
+                                        <a asp-action="Delete"
+                                           asp-route-id="@item.Id"
+                                           class="act-btn act-delete"
+                                           aria-label="حذف">
+                                            <i class="bi bi-trash"></i>
+                                            <span class="act-text">حذف</span>
+                                        </a>
+
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+    </div>
+
+</div>
+
+@section Scripts {
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            var tableElement = document.getElementById('lessonsTable');
+
+            if (tableElement) {
+                var table = $('#lessonsTable').DataTable({
+                    language: {
+                        url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json"
+                    },
+                    pageLength: 10,
+                    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "الكل"]],
+                    order: [[0, "asc"]],
+                    responsive: true,
+                    stateSave: true,
+                    dom: 'Brtip',
+                    columnDefs: [
+                        { orderable: false, targets: [5] }
+                    ]
+                });
+
+                $('#lessonsSearch').on('input', function () {
+                    table.search(this.value).draw();
+                });
+            }
+        });
+    </script>
+}

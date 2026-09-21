@@ -1,0 +1,83 @@
+﻿@model List<QdratNew.ViewModels.Students.PracticeQuestionVm>
+
+<div class="container mt-4">
+    <h3 class="text-center fw-bold mb-4">📘 مراجعة أخطائي السابقة</h3>
+
+    @if (Model != null && Model.Any())
+    {
+        foreach (var item in Model)
+        {
+            @Html.Partial("_MistakeQuestionPartial", item)
+        }
+
+        <div class="text-center mt-4">
+            @if (ViewBag.HasMore)
+            {
+                <a asp-action="MistakePractice" asp-route-page="@((int)ViewBag.Page + 1)"
+                   class="btn btn-outline-primary btn-lg">
+                    عرض 10 أسئلة أخرى ▶️
+                </a>
+            }
+            else
+            {
+                <div class="alert alert-success mt-3">
+                    ✅ لقد انتهيت من مراجعة جميع أسئلتك الخاطئة.
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info text-center">
+            🎉 لا توجد أسئلة خاطئة لمراجعتها حالياً.
+        </div>
+    }
+</div>
+@section Scripts {
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(document).on("submit", ".mistake-form", function (e) {
+            e.preventDefault(); // 🛑 منع إعادة تحميل الصفحة
+
+            var form = $(this);
+            var questionId = form.data("question-id");
+            var selectedAnswer = form.find("input[name='SelectedAnswer']:checked").val();
+
+            if (!selectedAnswer) {
+                form.siblings(".result").html("<span class='text-danger'>⚠️ من فضلك اختر إجابة أولاً</span>");
+                return;
+            }
+
+            $.post("/Students/Practice/SubmitPracticeAnswer",
+                { questionId: questionId, selectedAnswer: selectedAnswer },
+                function (data) {
+                    if (data.success) {
+                        if (data.isCorrect) {
+                            form.siblings(".result").html("<span class='text-success fw-bold'>✅ إجابتك صحيحة</span>");
+                        } else {
+                            form.siblings(".result").html("<span class='text-danger fw-bold'>❌ إجابتك خاطئة.<br/>الإجابة الصحيحة: " + data.correctAnswer + "</span>");
+                        }
+
+                        // 🟢 تسجيل إن الطالب راجع السؤال
+                        $.post("/Students/Practice/MarkReviewed",
+                            { questionId: questionId },
+                            function (res) {
+                                if (res.success) {
+                                    form.find("button[type='submit']")
+                                        .prop("disabled", true)
+                                        .removeClass("btn-primary")
+                                        .addClass("btn-success")
+                                        .html("✅ تمت المراجعة");
+                                }
+                            });
+                    } else {
+                        form.siblings(".result").html("<span class='text-danger'>" + data.message + "</span>");
+                    }
+                })
+                .fail(function (err) {
+                    console.error("Error calling SubmitPracticeAnswer:", err);
+                    form.siblings(".result").html("<span class='text-danger'>⚠️ حدث خطأ أثناء الاتصال بالخادم.</span>");
+                });
+        });
+    </script>
+}

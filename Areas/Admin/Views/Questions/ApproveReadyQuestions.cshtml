@@ -1,0 +1,143 @@
+﻿@model QdratNew.ViewModels.Question.ApproveReadyQuestionsViewModel
+@using QdratNew.Entities
+@{
+    ViewData["Title"] = "اعتماد الأسئلة الجاهزة";
+}
+<div class="container mt-4" dir="rtl">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="text-primary"><i class="fas fa-check-double"></i> اعتماد الأسئلة الجاهزة</h3>
+    </div>
+
+    <form method="get" asp-action="ApproveReadyQuestions" class="mb-4 bg-light p-3 rounded border">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label>القسم</label>
+                <select asp-for="CurriculumId" class="form-select" asp-items="Model.Curriculums">
+                    <option value="">-- اختر القسم --</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label>المحور</label>
+                <select asp-for="SectionId" class="form-select" asp-items="Model.Sections">
+                    <option value="">-- اختر المحور --</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label>المؤشر</label>
+                <select asp-for="LessonId" class="form-select" asp-items="Model.Lessons">
+                    <option value="">-- اختر المؤشر --</option>
+                </select>
+            </div>
+            <div class="col-12">
+                <button type="submit" class="btn btn-outline-dark mt-2"><i class="fas fa-filter"></i> تطبيق الفلاتر</button>
+                <a asp-action="ApproveReadyQuestions" class="btn btn-outline-secondary mt-2 ms-2">إعادة تعيين</a>
+            </div>
+        </div>
+    </form>
+
+    <form asp-action="ApproveQuestions" method="post" id="approveForm">
+        @Html.AntiForgeryToken()
+        <button type="submit" class="btn btn-success mb-3"><i class="fas fa-check-double"></i> اعتماد المحدد</button>
+
+        <div class="table-responsive">
+            <table id="questionsTable" class="table table-bordered table-striped text-center w-100">
+                <thead class="table-dark">
+                    <tr>
+                        <th><input type="checkbox" id="selectAll" /></th>
+                        <th>رقم</th>
+                        <th>السؤال</th>
+                        <th>القسم</th>
+                        <th>المحور</th>
+                        <th>المؤشر</th>
+                        <th>التاريخ</th>
+                        <th>اعتماد</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var q in Model.Questions)
+                    {
+                        <tr>
+                            <td><input type="checkbox" name="selectedIds" value="@q.Id" class="question-checkbox" /></td>
+                            <td>@q.ReferenceNumber</td>
+                            <td>@Html.Raw(q.IsQuantitative ? QdratNew.Helpers.NumberHelper.ToIndicNumbersSafe(q.TitlePreview) : q.TitlePreview)</td>
+                            <td>@q.CurriculumTitle</td>
+                            <td>@q.SectionTitle</td>
+                            <td>@q.LessonTitle</td>
+                            <td>@q.CreatedAt.ToString("yyyy/MM/dd")</td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-outline-success" onclick="approveSingle('@q.Id')">
+                                    <i class="fas fa-check-circle"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.datatables.net/1.13.5/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.5/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+
+    <script>
+        $(document).ready(function () {
+            var table = $('#questionsTable').DataTable({
+                paging: true,
+                searching: true,
+                ordering: true,
+                pageLength: 10,
+                responsive: true,
+                autoWidth: false,
+                dom: 'Bfrtip',
+                buttons: [
+                    { extend: 'copy', className: 'btn btn-secondary btn-sm', text: '<i class=\"fas fa-copy\"></i> نسخ' },
+                    { extend: 'excel', className: 'btn btn-success btn-sm', text: '<i class=\"fas fa-file-excel\"></i> Excel' },
+                    { extend: 'print', className: 'btn btn-primary btn-sm', text: '<i class=\"fas fa-print\"></i> طباعة' }
+                ],
+                language: {
+                    url: \"//cdn.datatables.net/plug-ins/1.13.5/i18n/ar.json\"
+                }
+            });
+
+            $("#selectAll").on("change", function () {
+                var rows = table.rows({ 'search': 'applied' }).nodes();
+                $('input[type=\"checkbox\"].question-checkbox', rows).prop('checked', this.checked);
+            });
+
+            $('#approveForm').on('submit', function () {
+                var selected = [];
+                table.$(\"input[name='selectedIds']:checked\").each(function () {
+                    selected.push($(this).val());
+                });
+                $('#approveForm input[name=\"selectedIds\"]').remove();
+                selected.forEach(function (val) {
+                    $('<input>').attr({ type: 'hidden', name: 'selectedIds', value: val }).appendTo('#approveForm');
+                });
+            });
+        });
+
+        async function approveSingle(questionId) {
+            if (!confirm(\"هل تريد اعتماد هذا السؤال؟\")) return;
+            const token = document.querySelector('input[name=\"__RequestVerificationToken\"]').value;
+            const formData = new FormData();
+            formData.append(\"selectedId\", questionId);
+            formData.append(\"__RequestVerificationToken\", token);
+
+            const response = await fetch('/Admin/Questions/ApproveSingleQuestion', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (response.redirected) window.location.href = response.url;
+            else alert(\"❌ حدث خطأ أثناء الاعتماد.\");
+        }
+    </script>
+}

@@ -1,0 +1,1090 @@
+@model QdratNew.ViewModels.Admin.Analytics.WeakLessonDetailsVM
+@using System.Text.Json
+
+@{
+    ViewData["Title"] = "تحليل الدرس — " + (Model?.LessonName ?? "");
+
+    var weakPct   = Model?.WeaknessPercentage ?? 0;
+    var questions = Model?.Questions ?? new List<QdratNew.ViewModels.Admin.Analytics.WeakLessonQuestionDetailsVM>();
+    var totalAll  = Model?.TotalAttempts    ?? 0;
+    var totalOk   = Model?.CorrectAttempts  ?? 0;
+    var totalBad  = Model?.WrongAttempts    ?? 0;
+
+    /* risk palette */
+    var (rColor, rBg, rBorder, rIcon, rGrad) = (Model?.RiskLevel ?? "") switch
+    {
+        "خطر عالي جدًا" => ("#dc2626", "#fff1f1", "#fca5a5", "bi-exclamation-octagon-fill",  "135deg,#7f1d1d,#dc2626"),
+        "خطر عالي"       => ("#dc2626", "#fff5f5", "#fca5a5", "bi-exclamation-triangle-fill", "135deg,#991b1b,#dc2626"),
+        "متوسط"          => ("#d97706", "#fffbeb", "#fcd34d", "bi-exclamation-circle-fill",   "135deg,#92400e,#d97706"),
+        _                => ("#16a34a", "#f0fdf4", "#86efac", "bi-check-circle-fill",          "135deg,#14532d,#16a34a")
+    };
+
+    /* chart data */
+    var qLabels   = questions.Select(q => q.ReferenceNumber != "" ? q.ReferenceNumber : q.QuestionTitle.Length > 20 ? q.QuestionTitle[..20]+"…" : q.QuestionTitle).ToList();
+    var qErrors   = questions.Select(q => (double)q.ErrorPercentage).ToList();
+    var qCorrects = questions.Select(q => (double)(100 - q.ErrorPercentage)).ToList();
+
+    var qLabelsJson   = JsonSerializer.Serialize(qLabels);
+    var qErrorsJson   = JsonSerializer.Serialize(qErrors);
+    var qCorrectsJson = JsonSerializer.Serialize(qCorrects);
+}
+
+@* ═══════════ STYLES ═══════════ *@
+<style>
+:root {
+    --q-bg:          #f0f2f5;
+    --q-surface:     #ffffff;
+    --q-border:      #e5e7eb;
+    --q-primary:     #1e40af;
+    --q-primary-lt:  #dbeafe;
+    --q-success:     #16a34a;
+    --q-success-lt:  #dcfce7;
+    --q-warning:     #d97706;
+    --q-warning-lt:  #fef3c7;
+    --q-danger:      #dc2626;
+    --q-danger-lt:   #fee2e2;
+    --q-info:        #0891b2;
+    --q-info-lt:     #cffafe;
+    --q-violet:      #7c3aed;
+    --q-violet-lt:   #ede9fe;
+    --q-text:        #111827;
+    --q-muted:       #6b7280;
+    --q-radius:      18px;
+    --q-radius-sm:   11px;
+    --q-shadow:      0 6px 28px rgba(0,0,0,.09);
+    --q-shadow-sm:   0 2px 12px rgba(0,0,0,.06);
+}
+
+*,*::before,*::after { box-sizing: border-box; }
+
+body {
+    background: var(--q-bg);
+    font-family: 'Tajawal', 'Cairo', Tahoma, Arial, sans-serif;
+    color: var(--q-text);
+}
+
+.wl-page { direction: rtl; }
+
+/* ── Header ── */
+.wl-header {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 55%, #1e40af 100%);
+    border-radius: 22px;
+    padding: 30px 36px;
+    color: #fff;
+    position: relative;
+    overflow: hidden;
+}
+.wl-header::before {
+    content:'';
+    position:absolute;
+    inset:0;
+    background:url("data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23ffffff' fill-opacity='0.025'%3E%3Cpath d='M0 0h40v40H0zM40 40h40v40H40z'/%3E%3C/g%3E%3C/svg%3E");
+    pointer-events:none;
+}
+.wl-header::after {
+    content:'';
+    position:absolute;
+    bottom:-40px; left:-40px;
+    width:200px; height:200px;
+    border-radius:50%;
+    background:rgba(96,165,250,.08);
+    pointer-events:none;
+}
+.wl-header-badge {
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    background:rgba(255,255,255,.12);
+    border:1px solid rgba(255,255,255,.18);
+    border-radius:8px;
+    padding:4px 14px;
+    font-size:12px;
+    font-weight:700;
+    color:#93c5fd;
+    margin-bottom:12px;
+    letter-spacing:.3px;
+}
+.wl-header-title {
+    font-size:22px;
+    font-weight:900;
+    margin:0 0 4px;
+    line-height:1.3;
+}
+.wl-header-sub {
+    color:#93c5fd;
+    font-size:14px;
+    margin:0;
+    font-weight:500;
+}
+.wl-header-meta {
+    display:flex;
+    gap:20px;
+    flex-wrap:wrap;
+    margin-top:16px;
+}
+.wl-meta-chip {
+    display:inline-flex;
+    align-items:center;
+    gap:7px;
+    background:rgba(255,255,255,.09);
+    border:1px solid rgba(255,255,255,.14);
+    border-radius:9px;
+    padding:5px 13px;
+    font-size:13px;
+    font-weight:700;
+}
+.wl-meta-chip .label { color:rgba(255,255,255,.6); font-weight:500; }
+.btn-back {
+    display:inline-flex;
+    align-items:center;
+    gap:7px;
+    background:rgba(255,255,255,.12);
+    color:#fff;
+    border:1px solid rgba(255,255,255,.2);
+    border-radius:var(--q-radius-sm);
+    padding:10px 22px;
+    font-size:13px;
+    font-weight:700;
+    text-decoration:none;
+    transition:background .2s;
+}
+.btn-back:hover { background:rgba(255,255,255,.22); color:#fff; }
+
+/* ── Alert ── */
+.wl-alert {
+    border-radius:var(--q-radius-sm);
+    padding:14px 18px;
+    display:flex;
+    align-items:flex-start;
+    gap:12px;
+    border:none;
+    font-size:14px;
+}
+.wl-alert-success { background:#dcfce7; color:#14532d; }
+.wl-alert-danger  { background:#fee2e2; color:#7f1d1d; }
+
+/* ── KPI Cards ── */
+.wl-kpi {
+    background: var(--q-surface);
+    border-radius: var(--q-radius);
+    padding: 22px;
+    border: 1px solid var(--q-border);
+    box-shadow: var(--q-shadow-sm);
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+    transition: transform .2s, box-shadow .2s;
+}
+.wl-kpi:hover { transform:translateY(-4px); box-shadow:var(--q-shadow); }
+.wl-kpi-accent {
+    position:absolute;
+    top:0; right:0;
+    width:5px; height:100%;
+    border-radius:0 var(--q-radius) var(--q-radius) 0;
+}
+.wl-kpi-icon {
+    width:48px; height:48px;
+    border-radius:14px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:22px;
+    margin-bottom:16px;
+}
+.wl-kpi-value { font-size:32px; font-weight:900; line-height:1; margin-bottom:5px; }
+.wl-kpi-label { font-size:14px; color:var(--q-muted); font-weight:600; margin-bottom:4px; }
+.wl-kpi-sub   { font-size:12px; color:var(--q-muted); }
+
+/* ── Risk gauge ── */
+.wl-gauge-wrap {
+    position:relative;
+    width:100px; height:100px;
+    margin:0 auto 10px;
+}
+.wl-gauge-svg { width:100%; height:100%; transform:rotate(-90deg); }
+.wl-gauge-bg  { fill:none; stroke:#e5e7eb; stroke-width:10; }
+.wl-gauge-fill { fill:none; stroke-width:10; stroke-linecap:round; transition:stroke-dashoffset .8s ease; }
+.wl-gauge-center {
+    position:absolute;
+    inset:0;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    font-weight:900;
+}
+.wl-gauge-pct { font-size:20px; line-height:1; }
+.wl-gauge-lbl { font-size:10px; color:var(--q-muted); font-weight:700; }
+
+/* ── Section Card ── */
+.wl-card {
+    background: var(--q-surface);
+    border-radius: var(--q-radius);
+    padding: 26px;
+    border: 1px solid var(--q-border);
+    box-shadow: var(--q-shadow-sm);
+}
+.wl-section-title {
+    font-size:16px;
+    font-weight:800;
+    display:flex;
+    align-items:center;
+    gap:9px;
+    margin-bottom:4px;
+}
+.wl-section-title .icon-box {
+    width:36px; height:36px;
+    border-radius:11px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:17px;
+    flex-shrink:0;
+}
+.wl-section-sub {
+    font-size:13px;
+    color:var(--q-muted);
+    margin-bottom:20px;
+    margin-right:45px;
+}
+
+/* ── Decision Panel ── */
+.wl-decision {
+    border-radius: var(--q-radius);
+    padding: 26px 30px;
+    border: 2px solid;
+    position: relative;
+    overflow: hidden;
+}
+.wl-decision::before {
+    content:'';
+    position:absolute;
+    top:-30px; left:-30px;
+    width:140px; height:140px;
+    border-radius:50%;
+    background:rgba(0,0,0,.04);
+    pointer-events:none;
+}
+.wl-decision-tag { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.8px; opacity:.65; margin-bottom:4px; }
+.wl-decision-status { font-size:24px; font-weight:900; margin-bottom:8px; }
+.wl-decision-msg { font-size:15px; opacity:.9; line-height:1.7; margin-bottom:20px; }
+
+.btn-action {
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:11px 24px;
+    border-radius:var(--q-radius-sm);
+    font-size:14px;
+    font-weight:700;
+    text-decoration:none;
+    border:none;
+    cursor:pointer;
+    font-family:inherit;
+    transition:filter .2s, transform .15s;
+}
+.btn-action:hover { filter:brightness(1.1); transform:translateY(-1px); }
+.btn-action-danger  { background:var(--q-danger);  color:#fff; }
+.btn-action-dark    { background:#111827; color:#fff; }
+.btn-action-outline {
+    background:transparent;
+    color:var(--q-text);
+    border:1.5px solid var(--q-border);
+}
+.btn-action-outline:hover { background:var(--q-bg); }
+
+/* ── Charts ── */
+.chart-container { position:relative; }
+.chart-legend {
+    display:flex;
+    gap:16px;
+    flex-wrap:wrap;
+    justify-content:center;
+    margin-top:12px;
+}
+.chart-legend-dot {
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    font-size:13px;
+    font-weight:700;
+}
+.chart-legend-dot::before {
+    content:'';
+    width:12px; height:12px;
+    border-radius:50%;
+    flex-shrink:0;
+}
+
+/* ── Divider ── */
+.wl-divider {
+    border:none;
+    border-top:2px dashed #e5e7eb;
+    margin:24px 0;
+}
+
+/* ── Question Cards ── */
+.q-card {
+    border:1.5px solid var(--q-border);
+    border-radius:var(--q-radius-sm);
+    overflow:hidden;
+    margin-bottom:16px;
+    transition:box-shadow .18s;
+}
+.q-card:hover { box-shadow:var(--q-shadow-sm); }
+.q-card:last-child { margin-bottom:0; }
+
+.q-card-head {
+    background:#f8fafc;
+    padding:16px 20px;
+    display:flex;
+    align-items:center;
+    gap:12px;
+    cursor:pointer;
+    user-select:none;
+    transition:background .15s;
+    border-bottom:1.5px solid var(--q-border);
+}
+.q-card-head:hover { background:#f1f4f8; }
+.q-card-body { padding:20px; }
+
+.q-rank {
+    width:32px; height:32px;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:13px;
+    font-weight:800;
+    flex-shrink:0;
+}
+.q-ref {
+    display:inline-flex;
+    align-items:center;
+    background:var(--q-primary-lt);
+    color:var(--q-primary);
+    border-radius:6px;
+    padding:2px 8px;
+    font-size:11px;
+    font-weight:800;
+    margin-bottom:4px;
+}
+.q-title { font-size:14px; font-weight:700; flex:1; line-height:1.5; }
+.q-err-num { font-size:22px; font-weight:900; line-height:1; white-space:nowrap; }
+.q-err-lbl { font-size:10px; color:var(--q-muted); font-weight:700; }
+.toggle-chevron { transition:transform .25s; font-size:13px; color:var(--q-muted); }
+
+/* ── Stats Strip ── */
+.q-stats {
+    display:flex;
+    gap:14px;
+    flex-wrap:wrap;
+    background:#f8fafc;
+    border:1px solid var(--q-border);
+    border-radius:var(--q-radius-sm);
+    padding:11px 16px;
+    margin-bottom:16px;
+}
+.q-stat { display:flex; align-items:center; gap:6px; font-size:13px; font-weight:700; }
+
+/* ── Progress bar ── */
+.q-bar-wrap {
+    height:10px;
+    border-radius:20px;
+    background:#e5e7eb;
+    overflow:hidden;
+    display:flex;
+    margin-bottom:6px;
+}
+.q-bar-seg { height:100%; transition:width .5s; }
+
+/* ── Table ── */
+.qd-table-wrap { border-radius:var(--q-radius-sm); overflow:hidden; border:1px solid var(--q-border); }
+.qd-table { margin:0; font-size:13px; }
+.qd-table thead th {
+    background:#f8fafc;
+    color:var(--q-muted);
+    font-weight:700;
+    font-size:11px;
+    letter-spacing:.4px;
+    text-transform:uppercase;
+    padding:11px 15px;
+    border-bottom:1px solid var(--q-border);
+    white-space:nowrap;
+}
+.qd-table tbody td { padding:11px 15px; vertical-align:middle; border-bottom:1px solid #f3f4f6; }
+.qd-table tbody tr:last-child td { border-bottom:none; }
+.qd-table tbody tr:hover { background:#fafbfc; }
+
+.answer-chip {
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+    background:var(--q-danger-lt);
+    color:#991b1b;
+    border-radius:8px;
+    padding:4px 11px;
+    font-size:12px;
+    font-weight:700;
+}
+
+/* ── Badges ── */
+.qd-badge {
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    padding:3px 10px;
+    border-radius:20px;
+    font-size:11px;
+    font-weight:700;
+    white-space:nowrap;
+}
+.badge-danger  { background:var(--q-danger-lt);  color:#991b1b; }
+.badge-warning { background:var(--q-warning-lt); color:#92400e; }
+.badge-success { background:var(--q-success-lt); color:#14532d; }
+.badge-primary { background:var(--q-primary-lt); color:#1e3a8a; }
+.badge-info    { background:var(--q-info-lt);    color:#164e63; }
+
+/* ── Empty ── */
+.wl-empty {
+    padding:36px 20px;
+    text-align:center;
+    background:var(--q-success-lt);
+    border-radius:var(--q-radius-sm);
+}
+.wl-empty i { font-size:40px; color:var(--q-success); opacity:.6; display:block; margin-bottom:10px; }
+.wl-empty-title { font-weight:800; font-size:15px; color:var(--q-success); margin-bottom:4px; }
+.wl-empty-sub   { font-size:13px; color:#166534; }
+
+/* ── Responsive ── */
+@@media(max-width:991px) {
+    .wl-header { padding:22px 20px; }
+    .wl-header-title { font-size:18px; }
+}
+@@media(max-width:767px) {
+    .wl-kpi-value { font-size:24px; }
+    .wl-decision { padding:18px 20px; }
+    .wl-header-meta { gap:10px; }
+    .q-title { font-size:13px; }
+}
+</style>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+<div class="container-fluid wl-page py-4 px-3 px-lg-4">
+
+    @* ── Alerts ── *@
+    @if (TempData["Success"] != null)
+    {
+        <div class="wl-alert wl-alert-success mb-4">
+            <i class="bi bi-check-circle-fill fs-5 flex-shrink-0"></i>
+            <div>
+                <div class="fw-bold">تمت العملية بنجاح</div>
+                <div>@TempData["Success"]</div>
+                @if (TempData["SuccessCode"] != null)
+                {
+                    <div class="mt-1 small">كود العملية: <strong>@TempData["SuccessCode"]</strong></div>
+                }
+            </div>
+        </div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="wl-alert wl-alert-danger mb-4">
+            <i class="bi bi-exclamation-triangle-fill fs-5 flex-shrink-0"></i>
+            <div>
+                <div class="fw-bold">فشل تنفيذ العملية</div>
+                <div>@TempData["Error"]</div>
+                @if (TempData["ErrorCode"] != null)
+                {
+                    <div class="mt-1 small">كود الخطأ: <strong>@TempData["ErrorCode"]</strong></div>
+                }
+                @if (TempData["ErrorDetails"] != null)
+                {
+                    <details class="mt-2">
+                        <summary class="fw-bold" style="cursor:pointer;font-size:12px;">تفاصيل تقنية</summary>
+                        <div class="mt-1 p-2 rounded" style="background:rgba(0,0,0,.05);direction:ltr;text-align:left;font-size:11px;white-space:pre-wrap;">@TempData["ErrorDetails"]</div>
+                    </details>
+                }
+            </div>
+        </div>
+    }
+
+    @* ── 1. Header ── *@
+    <div class="wl-header mb-4">
+        <div class="row align-items-start g-3">
+            <div class="col-lg-8">
+                <div class="wl-header-badge">
+                    <i class="bi bi-book-half"></i> تحليل درس — نظام قدرات
+                </div>
+                <div class="d-flex align-items-center gap-3 mb-2">
+                    <div style="background:rgba(255,255,255,.13);border-radius:16px;width:54px;height:54px;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;">
+                        <i class="bi bi-exclamation-diamond-fill"></i>
+                    </div>
+                    <div>
+                        <h1 class="wl-header-title">@(Model?.LessonName ?? "درس غير معروف")</h1>
+                        <p class="wl-header-sub">تحليل أداء الطلاب — الأسئلة عالية الخطأ والطلاب المتأثرون</p>
+                    </div>
+                </div>
+                <div class="wl-header-meta">
+                    @if (!string.IsNullOrEmpty(Model?.BatchName) && Model.BatchName != "-")
+                    {
+                        <div class="wl-meta-chip">
+                            <i class="bi bi-layers-fill" style="color:#93c5fd;"></i>
+                            <span class="label">الدفعة</span>
+                            @Model.BatchName
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(Model?.InstructorName) && Model.InstructorName != "-")
+                    {
+                        <div class="wl-meta-chip">
+                            <i class="bi bi-person-badge-fill" style="color:#6ee7b7;"></i>
+                            <span class="label">المدرب</span>
+                            @Model.InstructorName
+                        </div>
+                    }
+                    <div class="wl-meta-chip">
+                        <i class="bi bi-question-diamond-fill" style="color:#fca5a5;"></i>
+                        <span class="label">أسئلة حرجة</span>
+                        @questions.Count
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4 text-lg-end">
+                <a asp-area="Admin"
+                   asp-controller="Analytics"
+                   asp-action="AdvancedDashboard"
+                   asp-route-curriculumId="@Model?.CurriculumId"
+                   asp-route-batchId="@Model?.BatchId"
+                   asp-route-instructorId="@Model?.InstructorId"
+                   class="btn-back">
+                    <i class="bi bi-arrow-right"></i> رجوع للوحة التحليل
+                </a>
+            </div>
+        </div>
+    </div>
+
+    @* ── 2. KPI Cards ── *@
+    <div class="row g-3 mb-4">
+
+        @* Gauge — نسبة الضعف *@
+        <div class="col-6 col-md-4 col-xl-3">
+            <div class="wl-kpi" style="text-align:center;">
+                <div class="wl-kpi-accent" style="background:@rColor;"></div>
+                @{
+                    var circumference = 2 * Math.PI * 42;
+                    var fillLen = circumference * (weakPct / 100.0);
+                    var gapLen  = circumference - fillLen;
+                }
+                <div class="wl-gauge-wrap">
+                    <svg class="wl-gauge-svg" viewBox="0 0 100 100">
+                        <circle class="wl-gauge-bg" cx="50" cy="50" r="42"/>
+                        <circle class="wl-gauge-fill"
+                                cx="50" cy="50" r="42"
+                                stroke="@rColor"
+                                stroke-dasharray="@fillLen.ToString("F1") @gapLen.ToString("F1")"
+                                stroke-dashoffset="0"/>
+                    </svg>
+                    <div class="wl-gauge-center">
+                        <div class="wl-gauge-pct" style="color:@rColor;">@weakPct%</div>
+                        <div class="wl-gauge-lbl">ضعف</div>
+                    </div>
+                </div>
+                <div class="wl-kpi-label">نسبة الضعف الكلية</div>
+                <div class="wl-kpi-sub">من إجمالي محاولات الدرس</div>
+            </div>
+        </div>
+
+        @* مستوى الخطورة *@
+        <div class="col-6 col-md-4 col-xl-3">
+            <div class="wl-kpi">
+                <div class="wl-kpi-accent" style="background:@rColor;"></div>
+                <div class="wl-kpi-icon" style="background:@rBg;color:@rColor;">
+                    <i class="bi @rIcon"></i>
+                </div>
+                <div class="wl-kpi-value" style="color:@rColor;font-size:20px;">@(Model?.RiskLevel ?? "-")</div>
+                <div class="wl-kpi-label">مستوى الخطورة</div>
+                <div class="wl-kpi-sub">تقييم النظام الآلي</div>
+            </div>
+        </div>
+
+        @* الطلاب المتأثرون *@
+        <div class="col-6 col-md-4 col-xl-3">
+            <div class="wl-kpi">
+                <div class="wl-kpi-accent" style="background:var(--q-danger);"></div>
+                <div class="wl-kpi-icon" style="background:var(--q-danger-lt);color:var(--q-danger);">
+                    <i class="bi bi-people-fill"></i>
+                </div>
+                <div class="wl-kpi-value" style="color:var(--q-danger);">@(Model?.AffectedStudents ?? 0)</div>
+                <div class="wl-kpi-label">الطلاب المتأثرون</div>
+                <div class="wl-kpi-sub">أخطأوا في هذا الدرس</div>
+            </div>
+        </div>
+
+        @* المحاولات *@
+        <div class="col-6 col-md-4 col-xl-3">
+            <div class="wl-kpi">
+                <div class="wl-kpi-accent" style="background:var(--q-primary);"></div>
+                <div class="wl-kpi-icon" style="background:var(--q-primary-lt);color:var(--q-primary);">
+                    <i class="bi bi-list-check"></i>
+                </div>
+                <div class="wl-kpi-value" style="color:var(--q-primary);">@totalAll</div>
+                <div class="wl-kpi-label">إجمالي المحاولات</div>
+                <div class="wl-kpi-sub">
+                    <span style="color:var(--q-success);font-weight:700;">✓ @totalOk</span>
+                    &nbsp;·&nbsp;
+                    <span style="color:var(--q-danger);font-weight:700;">✗ @totalBad</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    @* ── 3. Charts Row ── *@
+    @if (totalAll > 0)
+    {
+        <div class="row g-3 mb-4">
+
+            @* دونات — توزيع المحاولات *@
+            <div class="col-md-5 col-xl-4">
+                <div class="wl-card h-100">
+                    <div class="wl-section-title mb-1">
+                        <div class="icon-box" style="background:var(--q-primary-lt);color:var(--q-primary);">
+                            <i class="bi bi-pie-chart-fill"></i>
+                        </div>
+                        توزيع المحاولات
+                    </div>
+                    <div class="wl-section-sub">الصحيح مقابل الخطأ في كامل الدرس</div>
+                    <div class="chart-container" style="height:230px;">
+                        <canvas id="donutChart"></canvas>
+                    </div>
+                    <div class="chart-legend mt-3">
+                        <span class="chart-legend-dot" style="--dot-color:#16a34a;">
+                            <span style="width:14px;height:14px;border-radius:50%;background:#16a34a;display:inline-block;"></span>
+                            صحيح @totalOk (@(totalAll > 0 ? (int)(totalOk * 100.0 / totalAll) : 0)%)
+                        </span>
+                        <span class="chart-legend-dot">
+                            <span style="width:14px;height:14px;border-radius:50%;background:#dc2626;display:inline-block;"></span>
+                            خطأ @totalBad (@(totalAll > 0 ? (int)(totalBad * 100.0 / totalAll) : 0)%)
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            @* أعمدة أفقية — الأسئلة الحرجة *@
+            <div class="col-md-7 col-xl-8">
+                <div class="wl-card h-100">
+                    <div class="wl-section-title mb-1">
+                        <div class="icon-box" style="background:var(--q-danger-lt);color:var(--q-danger);">
+                            <i class="bi bi-bar-chart-fill"></i>
+                        </div>
+                        نسبة الخطأ — الأسئلة الحرجة
+                    </div>
+                    <div class="wl-section-sub">مرتبة تنازليًا — الأسئلة التي تجاوزت 60% أخطاء</div>
+                    @if (!questions.Any())
+                    {
+                        <div style="height:230px;display:flex;align-items:center;justify-content:center;color:var(--q-muted);font-weight:700;">
+                            <div class="text-center">
+                                <i class="bi bi-patch-check-fill" style="font-size:36px;color:var(--q-success);opacity:.6;display:block;margin-bottom:8px;"></i>
+                                لا توجد أسئلة تجاوزت 60%
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="chart-container" style="height:@(Math.Max(230, questions.Count * 42))px;">
+                            <canvas id="barChart"></canvas>
+                        </div>
+                    }
+                </div>
+            </div>
+
+        </div>
+    }
+
+    @* ── 4. Decision Panel ── *@
+    <div class="wl-decision mb-4" style="background:@rBg;border-color:@rBorder;">
+        <div class="row align-items-start g-3">
+            <div class="col-lg-8">
+                <div class="d-flex align-items-start gap-4">
+                    <div style="width:58px;height:58px;border-radius:50%;background:rgba(0,0,0,.07);display:flex;align-items:center;justify-content:center;font-size:26px;color:@rColor;flex-shrink:0;">
+                        <i class="bi @rIcon"></i>
+                    </div>
+                    <div>
+                        <div class="wl-decision-tag" style="color:@rColor;">قرار النظام الذكي — محرك التحليل</div>
+                        <div class="wl-decision-status" style="color:@rColor;">@(Model?.RiskLevel ?? "غير محدد")</div>
+                        <p class="wl-decision-msg" style="color:@rColor;">@(Model?.DecisionMessage ?? "-")</p>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <form asp-area="Admin"
+                                  asp-controller="Analytics"
+                                  asp-action="SendWeakLessonGuidanceToInstructor"
+                                  method="post"
+                                  style="display:inline;">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="lessonId"    value="@Model?.LessonId" />
+                                <input type="hidden" name="batchId"     value="@Model?.BatchId" />
+                                <input type="hidden" name="instructorId" value="@Model?.InstructorId" />
+                                <button type="submit" class="btn-action btn-action-danger">
+                                    <i class="bi bi-send-fill"></i>
+                                    إرسال توجيه للمدرب
+                                </button>
+                            </form>
+                            @if (Model?.BatchId.HasValue == true && (User.IsInRole("Owner") || User.IsInRole("Developer")))
+                            {
+                                <a asp-area="Admin"
+                                   asp-controller="DecisionLab"
+                                   asp-action="BatchAnalysis"
+                                   asp-route-batchId="@Model.BatchId"
+                                   asp-route-curriculumId="@Model.CurriculumId"
+                                   class="btn-action btn-action-dark">
+                                    <i class="bi bi-flask"></i>
+                                    تحليل الدفعة في DecisionLab
+                                </a>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                @* Mini summary stats *@
+                <div style="background:rgba(0,0,0,.05);border-radius:var(--q-radius-sm);padding:16px 18px;">
+                    <div style="font-size:11px;font-weight:800;color:@rColor;text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px;">ملخص سريع</div>
+                    <div class="d-flex flex-column gap-3">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <span style="font-size:13px;color:@rColor;font-weight:600;">
+                                <i class="bi bi-percent me-1"></i>نسبة الضعف
+                            </span>
+                            <strong style="font-size:16px;color:@rColor;">@weakPct%</strong>
+                        </div>
+                        <div class="d-flex align-items-center justify-content-between">
+                            <span style="font-size:13px;color:@rColor;font-weight:600;">
+                                <i class="bi bi-people-fill me-1"></i>متأثرون
+                            </span>
+                            <strong style="font-size:16px;color:@rColor;">@(Model?.AffectedStudents ?? 0)</strong>
+                        </div>
+                        <div class="d-flex align-items-center justify-content-between">
+                            <span style="font-size:13px;color:@rColor;font-weight:600;">
+                                <i class="bi bi-question-diamond-fill me-1"></i>أسئلة حرجة
+                            </span>
+                            <strong style="font-size:16px;color:@rColor;">@questions.Count</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── 5. Questions Section ── *@
+    <div class="wl-card">
+        <div class="wl-section-title mb-1">
+            <div class="icon-box" style="background:var(--q-danger-lt);color:var(--q-danger);">
+                <i class="bi bi-question-diamond-fill"></i>
+            </div>
+            الأسئلة الحرجة — نسبة خطأ ≥ 60%
+        </div>
+        <div class="wl-section-sub">مرتبة تنازليًا · انقر على أي سؤال لعرض تفاصيل الطلاب المخطئين</div>
+
+        @if (!questions.Any())
+        {
+            <div class="wl-empty">
+                <i class="bi bi-patch-check-fill"></i>
+                <div class="wl-empty-title">لا توجد أسئلة تجاوزت 60% أخطاء</div>
+                <div class="wl-empty-sub">أداء الطلاب في أسئلة هذا الدرس ضمن المستوى المقبول</div>
+            </div>
+        }
+        else
+        {
+            var qNum = 0;
+            foreach (var q in questions)
+            {
+                qNum++;
+                var qColor  = q.ErrorPercentage >= 80 ? "var(--q-danger)" : "var(--q-warning)";
+                var qBadge  = q.ErrorPercentage >= 80 ? "badge-danger" : "badge-warning";
+                var qBg     = q.ErrorPercentage >= 80 ? "var(--q-danger-lt)" : "var(--q-warning-lt)";
+                var collapseId = $"qc-{qNum}";
+                var qOkPct  = q.TotalAttempts > 0 ? (int)(q.CorrectAttempts * 100.0 / q.TotalAttempts) : 0;
+                var qErrPct = 100 - qOkPct;
+
+                <div class="q-card">
+                    <div class="q-card-head"
+                         data-bs-toggle="collapse"
+                         data-bs-target="#@collapseId"
+                         aria-expanded="true">
+
+                        <div class="q-rank" style="background:@qBg;color:@qColor;">@qNum</div>
+
+                        <div style="flex:1;min-width:0;">
+                            @if (!string.IsNullOrWhiteSpace(q.ReferenceNumber))
+                            {
+                                <div class="q-ref"><i class="bi bi-hash"></i> @q.ReferenceNumber</div>
+                            }
+                            <div class="q-title">@Html.Raw(q.QuestionTitle)</div>
+                        </div>
+
+                        <div class="d-flex flex-column align-items-center gap-1 mx-3 flex-shrink-0">
+                            <div class="q-err-num" style="color:@qColor;">@q.ErrorPercentage%</div>
+                            <div class="q-err-lbl">خطأ</div>
+                        </div>
+
+                        <i class="bi bi-chevron-up toggle-chevron"></i>
+                    </div>
+
+                    <div class="collapse show" id="@collapseId">
+                        <div class="q-card-body">
+
+                            <div class="q-stats">
+                                <div class="q-stat" style="color:var(--q-danger);">
+                                    <i class="bi bi-x-circle-fill"></i> @q.WrongAttempts خطأ
+                                </div>
+                                <div class="q-stat" style="color:var(--q-success);">
+                                    <i class="bi bi-check-circle-fill"></i> @q.CorrectAttempts صحيح
+                                </div>
+                                <div class="q-stat" style="color:var(--q-primary);">
+                                    <i class="bi bi-list-check"></i> @q.TotalAttempts محاولة
+                                </div>
+                                <div class="ms-auto">
+                                    <span class="qd-badge @qBadge">
+                                        <i class="bi bi-exclamation-triangle-fill"></i>
+                                        @q.ErrorPercentage% خطأ
+                                    </span>
+                                </div>
+                            </div>
+
+                            @* Progress bar *@
+                            <div class="d-flex align-items-center gap-3 mb-4">
+                                <div style="font-size:11px;font-weight:700;color:var(--q-muted);white-space:nowrap;">توزيع الإجابات</div>
+                                <div class="q-bar-wrap flex-grow-1">
+                                    <div class="q-bar-seg" style="width:@qOkPct%;background:var(--q-success);"></div>
+                                    <div class="q-bar-seg" style="width:@qErrPct%;background:@qColor;"></div>
+                                </div>
+                                <div style="font-size:11px;color:var(--q-muted);white-space:nowrap;">
+                                    <span style="color:var(--q-success);font-weight:700;">@qOkPct%</span> صح /
+                                    <span style="color:@qColor;font-weight:700;">@qErrPct%</span> خطأ
+                                </div>
+                            </div>
+
+                            @* Students table *@
+                            <div style="font-size:11px;font-weight:800;color:var(--q-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;">
+                                <i class="bi bi-person-fill-x me-1" style="color:var(--q-danger);"></i>
+                                الطلاب المخطئون
+                                <span class="qd-badge badge-danger" style="margin-right:6px;">@(q.WrongStudents?.Count ?? 0)</span>
+                            </div>
+
+                            @if (q.WrongStudents == null || !q.WrongStudents.Any())
+                            {
+                                <div style="font-size:12px;color:var(--q-muted);padding:8px 0;">
+                                    <i class="bi bi-info-circle me-1"></i> لا توجد تفاصيل لهذا السؤال
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="table-responsive qd-table-wrap">
+                                    <table class="table qd-table">
+                                        <thead>
+                                            <tr>
+                                                <th style="min-width:170px;">الطالب</th>
+                                                <th style="min-width:110px;text-align:center;">محاولات خاطئة</th>
+                                                <th style="min-width:110px;text-align:center;">محاولات صحيحة</th>
+                                                <th style="min-width:140px;">آخر إجابة خاطئة</th>
+                                                <th style="min-width:140px;">آخر محاولة</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var s in q.WrongStudents)
+                                            {
+                                                var initial      = string.IsNullOrWhiteSpace(s.StudentName) ? "؟" : s.StudentName[0].ToString();
+                                                var totalSt      = s.WrongAttemptsCount + s.CorrectAttemptsCount;
+                                                var wrongPctSt   = totalSt > 0 ? (int)(s.WrongAttemptsCount * 100.0 / totalSt) : 0;
+                                                var okPctSt      = 100 - wrongPctSt;
+                                                var hasCorrected = s.CorrectAttemptsCount > 0;
+                                                <tr>
+                                                    <td>
+                                                        <div class="d-flex align-items-center gap-2">
+                                                            <div style="width:32px;height:32px;border-radius:50%;background:var(--q-danger-lt);color:var(--q-danger);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;">
+                                                                @initial
+                                                            </div>
+                                                            <div>
+                                                                <div style="font-weight:700;font-size:13px;">@s.StudentName</div>
+                                                                @* mini bar per student *@
+                                                                <div style="display:flex;height:4px;border-radius:4px;overflow:hidden;width:80px;margin-top:4px;background:#e5e7eb;">
+                                                                    <div style="width:@wrongPctSt%;background:var(--q-danger);"></div>
+                                                                    <div style="width:@okPctSt%;background:var(--q-success);"></div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td style="text-align:center;">
+                                                        <span style="display:inline-flex;align-items:center;gap:5px;background:var(--q-danger-lt);color:#991b1b;border-radius:20px;padding:4px 12px;font-size:13px;font-weight:800;">
+                                                            <i class="bi bi-x-circle-fill" style="font-size:11px;"></i>
+                                                            @s.WrongAttemptsCount
+                                                        </span>
+                                                    </td>
+                                                    <td style="text-align:center;">
+                                                        @if (hasCorrected)
+                                                        {
+                                                            <span style="display:inline-flex;align-items:center;gap:5px;background:var(--q-success-lt);color:#14532d;border-radius:20px;padding:4px 12px;font-size:13px;font-weight:800;">
+                                                                <i class="bi bi-check-circle-fill" style="font-size:11px;"></i>
+                                                                @s.CorrectAttemptsCount
+                                                            </span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span style="color:var(--q-muted);font-size:12px;font-weight:700;">—</span>
+                                                        }
+                                                    </td>
+                                                    <td>
+                                                        @if (!string.IsNullOrWhiteSpace(s.LastWrongAnswer))
+                                                        {
+                                                            <span style="display:inline-flex;align-items:center;gap:5px;background:var(--q-danger-lt);color:#991b1b;border-radius:8px;padding:4px 10px;font-size:12px;font-weight:700;">
+                                                                <i class="bi bi-x-circle-fill" style="font-size:10px;"></i>
+                                                                @s.LastWrongAnswer
+                                                            </span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span style="color:var(--q-muted);font-size:12px;">—</span>
+                                                        }
+                                                    </td>
+                                                    <td>
+                                                        @if (s.LastAttemptedAt != DateTime.MinValue)
+                                                        {
+                                                            <div style="font-size:12px;color:var(--q-muted);">
+                                                                <i class="bi bi-clock me-1"></i>
+                                                                @s.LastAttemptedAt.ToString("yyyy/MM/dd")
+                                                                <strong style="color:var(--q-text);margin-right:4px;">@s.LastAttemptedAt.ToString("HH:mm")</strong>
+                                                            </div>
+                                                        }
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+
+</div>
+
+@* ── Charts Scripts ── *@
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    Chart.defaults.font.family = "'Tajawal', 'Cairo', Tahoma, Arial, sans-serif";
+    Chart.defaults.font.size   = 13;
+
+    /* ── 1. Donut chart ── */
+    const donutEl = document.getElementById('donutChart');
+    if (donutEl) {
+        new Chart(donutEl, {
+            type: 'doughnut',
+            data: {
+                labels: ['صحيح', 'خطأ'],
+                datasets: [{
+                    data: [@totalOk, @totalBad],
+                    backgroundColor: ['#16a34a', '#dc2626'],
+                    borderWidth: 0,
+                    hoverOffset: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '72%',
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        rtl: true,
+                        bodyFont: { family: "'Tajawal', 'Cairo', Tahoma", size: 13, weight: '700' },
+                        callbacks: {
+                            label: ctx => ` ${ctx.label}: ${ctx.parsed} محاولة`
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    /* ── 2. Horizontal bar chart ── */
+    const barEl = document.getElementById('barChart');
+    if (barEl) {
+        const labels   = @Html.Raw(qLabelsJson);
+        const errors   = @Html.Raw(qErrorsJson);
+        const corrects = @Html.Raw(qCorrectsJson);
+
+        const barColors = errors.map(v => v >= 80 ? '#dc2626' : '#d97706');
+
+        new Chart(barEl, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: 'نسبة الخطأ %',
+                        data: errors,
+                        backgroundColor: barColors,
+                        borderRadius: 6,
+                        borderSkipped: false,
+                        barThickness: 24
+                    },
+                    {
+                        label: 'نسبة الصحة %',
+                        data: corrects,
+                        backgroundColor: '#dcfce7',
+                        borderRadius: 6,
+                        borderSkipped: false,
+                        barThickness: 24
+                    }
+                ]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        stacked: true,
+                        max: 100,
+                        ticks: { callback: v => v + '%' },
+                        grid: { color: '#f3f4f6' }
+                    },
+                    y: {
+                        stacked: true,
+                        ticks: { font: { weight: '700' } },
+                        grid: { display: false }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        rtl: true,
+                        bodyFont: { family: "'Tajawal', 'Cairo', Tahoma", size: 13, weight: '700' },
+                        callbacks: {
+                            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.x}%`
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    /* ── collapse chevron toggle ── */
+    document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(btn => {
+        btn.addEventListener('click', function () {
+            const chevron = this.querySelector('.toggle-chevron');
+            if (!chevron) return;
+            const target = document.querySelector(this.dataset.bsTarget);
+            if (!target) return;
+            const isShown = target.classList.contains('show');
+            chevron.style.transform = isShown ? 'rotate(180deg)' : 'rotate(0deg)';
+        });
+    });
+})();
+</script>

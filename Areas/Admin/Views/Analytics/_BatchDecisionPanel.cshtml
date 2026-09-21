@@ -1,0 +1,272 @@
+@model QdratNew.ViewModels.Admin.Analytics.BatchPerformanceDetailsVM
+@* ═══════════════════════════════════════════════════════════════════
+   _BatchDecisionPanel — Risk decision + POST guidance + half-gauge
+   Identity: Dynamic risk-colored alert · Chart: Half-donut gauge
+   فلسفة: "القرار واضح — الآن ماذا ستفعل؟"
+═══════════════════════════════════════════════════════════════════ *@
+@{
+    var weakPct  = Model?.WeaknessPercentage ?? 0;
+    var avgScore = Model?.AvgScore ?? 0;
+
+    var (rc, rbg, rborder, ricon, rlevel) = (Model?.RiskLevel ?? "") switch
+    {
+        "خطر عالي جدًا" => ("#dc2626","#fef2f2","#fecaca","bi-exclamation-octagon-fill","critical"),
+        "خطر عالي"      => ("#dc2626","#fef2f2","#fecaca","bi-exclamation-triangle-fill","high"),
+        "متوسط"         => ("#d97706","#fffbeb","#fde68a","bi-exclamation-circle-fill","medium"),
+        _               => ("#16a34a","#f0fdf4","#bbf7d0","bi-check-circle-fill","stable")
+    };
+}
+<style>
+    .bdp-wrap { margin-bottom: 24px; }
+
+    /* ── Main decision banner ── */
+    .bdp-banner {
+        border-radius: var(--bpd-radius);
+        border:        2px solid @rborder;
+        background:    @rbg;
+        padding:       26px 30px;
+        display:       flex;
+        align-items:   flex-start;
+        gap:           20px;
+        position:      relative;
+        overflow:      hidden;
+    }
+    .bdp-banner::before {
+        content:       '';
+        position:      absolute;
+        inset-inline-start: 0;
+        top:           0;
+        bottom:        0;
+        width:         5px;
+        background:    @rc;
+        border-radius: 0 4px 4px 0;
+    }
+    .bdp-icon-ring {
+        width:          56px;
+        height:         56px;
+        border-radius:  50%;
+        background:     rgba(0,0,0,.06);
+        display:        flex;
+        align-items:    center;
+        justify-content:center;
+        font-size:      26px;
+        flex-shrink:    0;
+        color:          @rc;
+    }
+    @if (rlevel == "critical" || rlevel == "high")
+    {
+        <text>
+        .bdp-icon-ring { animation: bdp-pulse 2s ease-in-out infinite; }
+        @@keyframes bdp-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,.25); }
+            50%       { box-shadow: 0 0 0 10px rgba(220,38,38,0); }
+        }
+        </text>
+    }
+    .bdp-tag   { font-size: 11.5px; font-weight: 800; letter-spacing:.06em; text-transform:uppercase; color:@rc; opacity:.8; }
+    .bdp-title { font-size: 20px; font-weight: 900; color:@rc; margin: 3px 0 8px; }
+    .bdp-msg   { font-size: 15px; color:@rc; opacity:.9; line-height:1.7; margin:0 0 16px; }
+
+    .bdp-send-btn {
+        display:       inline-flex;
+        align-items:   center;
+        gap:           8px;
+        background:    @rc;
+        color:         #fff;
+        border:        none;
+        border-radius: var(--bpd-radius-sm);
+        padding:       11px 24px;
+        font-size:     14.5px;
+        font-weight:   800;
+        cursor:        pointer;
+        font-family:   inherit;
+        transition:    opacity .2s, transform .15s;
+    }
+    .bdp-send-btn:hover { opacity: .88; transform: translateY(-1px); color:#fff; }
+
+    /* ── Stats sidebar ── */
+    .bdp-stats {
+        min-width:     150px;
+        flex-shrink:   0;
+        display:       flex;
+        flex-direction:column;
+        gap:           8px;
+    }
+    .bdp-stats-title {
+        font-size:   11px;
+        font-weight: 800;
+        color:       var(--bpd-muted);
+        text-transform:uppercase;
+        letter-spacing:.05em;
+        margin-bottom:4px;
+    }
+    .bdp-stat-row {
+        display:     flex;
+        align-items: center;
+        gap:         7px;
+        font-size:   13px;
+        font-weight: 600;
+        color:       var(--bpd-text);
+    }
+    .bdp-stat-row i { font-size: 14px; }
+
+    /* ── Gauge chart card ── */
+    .bdp-gauge-card {
+        background:    var(--bpd-surface);
+        border:        1.5px solid var(--bpd-border);
+        border-radius: var(--bpd-radius);
+        padding:       22px 24px;
+        display:       flex;
+        flex-direction:column;
+        gap:           10px;
+        height:        100%;
+    }
+    .bdp-gauge-title {
+        font-size:   14px;
+        font-weight: 800;
+        color:       var(--bpd-text);
+        display:     flex;
+        align-items: center;
+        gap:         8px;
+    }
+    .bdp-gauge-title i { color: @rc; }
+    .bdp-gauge-body {
+        display:         flex;
+        align-items:     center;
+        justify-content: center;
+        flex:            1;
+        flex-direction:  column;
+        gap:             8px;
+    }
+    .bdp-gauge-label-row {
+        display:         flex;
+        justify-content: space-between;
+        width:           100%;
+        max-width:       240px;
+    }
+    .bdp-gauge-label {
+        font-size:   11.5px;
+        font-weight: 700;
+        color:       var(--bpd-muted);
+    }
+
+    @@media (max-width: 991px) {
+        .bdp-banner  { flex-direction: column; }
+        .bdp-stats   { flex-direction: row; flex-wrap: wrap; min-width: unset; }
+    }
+    @@media (max-width: 767px) {
+        .bdp-banner { padding: 18px; }
+        .bdp-send-btn { width: 100%; justify-content: center; }
+    }
+</style>
+
+<div class="bdp-wrap">
+    <div class="row g-3">
+
+        @* ── Decision Banner ── *@
+        <div class="col-lg-8">
+            <div class="bdp-banner">
+                <div class="bdp-icon-ring">
+                    <i class="bi @ricon"></i>
+                </div>
+
+                <div class="flex-grow-1">
+                    <div class="bdp-tag">قرار النظام الذكي</div>
+                    <div class="bdp-title">@(Model?.RiskLevel ?? "غير محدد")</div>
+                    <p class="bdp-msg">@(Model?.DecisionMessage ?? "—")</p>
+
+                    <form asp-area="Admin"
+                          asp-controller="Analytics"
+                          asp-action="SendBatchGuidanceToInstructors"
+                          method="post"
+                          style="display:inline;">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="batchId" value="@Model?.BatchId" />
+                        <button type="submit" class="bdp-send-btn">
+                            <i class="bi bi-send-fill"></i>
+                            إرسال توجيه لمدربي الدفعة
+                        </button>
+                    </form>
+                </div>
+
+                <div class="bdp-stats d-none d-lg-flex">
+                    <div class="bdp-stats-title">إحصاء سريع</div>
+                    <div class="bdp-stat-row">
+                        <i class="bi bi-check-circle-fill" style="color:var(--bpd-success);"></i>
+                        صحيح: <strong>@(Model?.CorrectAttempts ?? 0)</strong>
+                    </div>
+                    <div class="bdp-stat-row">
+                        <i class="bi bi-x-circle-fill" style="color:var(--bpd-danger);"></i>
+                        خطأ: <strong>@(Model?.WrongAttempts ?? 0)</strong>
+                    </div>
+                    <div class="bdp-stat-row">
+                        <i class="bi bi-list-check" style="color:var(--bpd-primary);"></i>
+                        إجمالي: <strong>@(Model?.TotalAttempts ?? 0)</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* ── Gauge Chart: Weakness vs Performance ── *@
+        <div class="col-lg-4">
+            <div class="bdp-gauge-card">
+                <div class="bdp-gauge-title">
+                    <i class="bi bi-speedometer2"></i>
+                    مقياس الأداء مقابل الضعف
+                </div>
+                <div class="bdp-gauge-body">
+                    <canvas id="gaugeChart" width="220" height="120"></canvas>
+                    <div class="bdp-gauge-label-row">
+                        <div class="bdp-gauge-label" style="color:var(--bpd-success);">أداء: @avgScore.ToString("0.#")%</div>
+                        <div class="bdp-gauge-label" style="color:var(--bpd-danger);">ضعف: @weakPct.ToString("0.#")%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+(function () {
+    var avg    = @avgScore.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+    var weak   = @weakPct.ToString("0.##",  System.Globalization.CultureInfo.InvariantCulture);
+    var remain = Math.max(0, 100 - avg - weak);
+
+    var ctx = document.getElementById('gaugeChart');
+    if (!ctx || typeof Chart === 'undefined') return;
+
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['أداء', 'ضعف', 'باقي'],
+            datasets: [{
+                data:            [avg, weak, remain],
+                backgroundColor: ['#22c55e', '#ef4444', '#e2e8f0'],
+                borderColor:     ['#fff', '#fff', '#fff'],
+                borderWidth:     3,
+                hoverOffset:     5,
+                circumference:   Math.PI,   // half donut
+                rotation:        -Math.PI   // start from left
+            }]
+        },
+        options: {
+            cutout:    '65%',
+            responsive: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    rtl: true,
+                    callbacks: {
+                        label: function(c) {
+                            if (c.label === 'باقي') return null;
+                            return ' ' + c.label + ': ' + c.parsed.toFixed(1) + '%';
+                        }
+                    }
+                }
+            },
+            animation: { animateRotate: true, duration: 1000 }
+        }
+    });
+}());
+</script>

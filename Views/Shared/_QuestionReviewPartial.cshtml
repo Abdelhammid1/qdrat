@@ -1,0 +1,185 @@
+﻿@* Views/Shared/_QuestionReviewPartial.cshtml *@
+@model dynamic
+@using QdratNew.Helpers
+<style>
+
+    .rtl-mode {
+        direction: rtl;
+        text-align: right;
+    }
+
+    .ltr-mode {
+        direction: ltr;
+        text-align: left;
+    }
+
+        /* إجبار العناصر الداخلية */
+        .ltr-mode * {
+            direction: ltr !important;
+            text-align: left !important;
+        }
+
+    .rtl-mode * {
+        direction: rtl !important;
+        text-align: right !important;
+    }
+
+
+</style>
+@{
+    // المرونة: يمكن تمرير إما: (1) الـ question مباشرة كـ model
+    // أو (2) كـ new { Question = q, Index = idx }
+    var question = Model?.Question ?? Model;
+    var indexObj = (Model?.Index != null) ? (int?)Model.Index : null;
+
+    int qIndex = indexObj ?? (Model?.QuestionIndex != null ? (int)Model.QuestionIndex : 0);
+    // إذا لم يمرر index، حاول استخدام question.Index أو اترك 0
+    if (qIndex == 0)
+    {
+        try { qIndex = (int)(question?.Index ?? question?.QuestionIndex ?? 0); } catch { }
+    }
+
+    // الخصائص الممكنة (محاولة مرنة للوصول)
+    string questionTitle = question?.QuestionTitle ?? question?.QuestionText ?? "";
+    bool isQuant = (question?.IsQuantitative != null) ? (bool)question.IsQuantitative : false;
+    Func<string, string> convert = s => isQuant ? NumberHelper.ToIndicNumbersSafe(s) : s;
+
+    string imageUrl = question?.ImageUrl ?? "";
+    var displayType = question?.DisplayType;
+    string comparison1 = question?.ComparisonValue1 ?? "";
+    string comparison2 = question?.ComparisonValue2 ?? "";
+    string verbalPassage = question?.VerbalPassageContent ?? "";
+    var options = question?.Options ?? new List<dynamic>();
+    string studentAnswer = question?.StudentAnswer ?? "";
+    string correctAnswer = question?.CorrectAnswer ?? "";
+    bool isCorrect = (question?.IsCorrect != null) ? (bool)question.IsCorrect : false;
+    double timeTaken = 0;
+    try { timeTaken = Math.Round(Convert.ToDouble(question?.TimeTakenSeconds ?? 0)); } catch { timeTaken = 0; }
+
+    double scoreVal = 0;
+    try { scoreVal = Convert.ToDouble(question?.Score ?? 0); } catch { scoreVal = 0; }
+
+    string displayMeta = question?.DisplayMeta ?? "";
+}
+
+<div class="question-preview-wrapper @(Model.IsRTL ? "rtl-mode" : "ltr-mode")"
+     dir="@(Model.IsRTL ? "rtl" : "ltr")">
+
+<article class="card shadow-sm question-card mb-3" aria-labelledby="q-title-@qIndex" data-qindex="@qIndex">
+    <header class="card-header d-flex align-items-start justify-content-between bg-qdrat text-white">
+        <div>
+            <div id="q-title-@qIndex" class="fw-bold">
+                @Html.Raw(convert((qIndex > 0 ? $"سؤال {NumberHelper.ToIndicNumbersSafe(qIndex.ToString())}: " : "") + questionTitle))
+            </div>
+            @if (!string.IsNullOrWhiteSpace(displayMeta))
+            {
+                <small class="text-light opacity-75">@displayMeta</small>
+            }
+        </div>
+        <div class="text-end">
+            <div class="small text-light">الدرجة</div>
+            <div class="fw-bold">@NumberHelper.ToIndicNumbersSafe(scoreVal.ToString())</div>
+        </div>
+    </header>
+
+    <div class="card-body">
+
+        @* القطعة اللفظية (قابلة للطي) *@
+        @if (!string.IsNullOrWhiteSpace(verbalPassage))
+        {
+            <details class="mb-3 passage" open>
+                <summary class="fw-semibold">📘 القطعة المرتبطة (انقر للعرض)</summary>
+                <div class="mt-2">@Html.Raw(convert(verbalPassage))</div>
+            </details>
+        }
+
+        @* صورة السؤال إن وجدت *@
+        @if (!string.IsNullOrWhiteSpace(imageUrl))
+        {
+            <div class="text-center mb-3">
+                <img src="@Url.Content(imageUrl)" class="img-fluid rounded-3 shadow-sm" style="max-height:220px;" alt="صورة السؤال" />
+            </div>
+        }
+
+        @* أنواع المقارنة *@
+        @if (displayType != null && displayType.ToString().Contains("Comparison"))
+        {
+            <div class="row mb-3 text-center">
+                <div class="col-6 border-end">
+                    <small class="text-muted">القيمة الأولى</small>
+                    <div class="fw-semibold">@Html.Raw(convert(comparison1))</div>
+                </div>
+                <div class="col-6">
+                    <small class="text-muted">القيمة الثانية</small>
+                    <div class="fw-semibold">@Html.Raw(convert(comparison2))</div>
+                </div>
+            </div>
+        }
+
+        @* اختيارات السؤال *@
+        @if (options != null && options.Count > 0)
+        {
+            <ul class="list-group mb-3 options-list" role="list">
+                @foreach (var opt in options)
+                {
+                    var optText = opt?.Text ?? opt?.OptionText ?? "";
+                    var optImg = opt?.ImageUrl ?? opt?.ImagePath ?? "";
+                    var isSelected = !string.IsNullOrEmpty(studentAnswer) && optText == studentAnswer;
+                    var isCorrectOpt = !string.IsNullOrEmpty(correctAnswer) && optText == correctAnswer;
+
+                    var liClasses = "list-group-item d-flex align-items-center";
+                    if (isCorrectOpt) liClasses += " list-group-item-success";
+                    else if (isSelected && !isCorrectOpt) liClasses += " list-group-item-danger";
+
+                    <li class="@liClasses" role="listitem" aria-selected="@(isSelected ? "true" : "false")">
+                        <div class="d-flex align-items-center gap-3 w-100">
+                            <div class="option-left d-flex align-items-center">
+                                @if (!string.IsNullOrWhiteSpace(optImg))
+                                {
+                                    <img src="@Url.Content(optImg)" alt="اختيار" class="img-fluid rounded" style="max-height:54px; max-width:120px;" />
+                                }
+                                else
+                                {
+                                    <div class="option-text">@Html.Raw(convert(optText))</div>
+                                }
+                            </div>
+
+                            <div class="ms-auto text-end">
+                                @if (isCorrectOpt)
+                                {
+                                    <span class="badge bg-success"><i class="fa-solid fa-check me-1"></i>الإجابة الصحيحة</span>
+                                }
+                                else if (isSelected && !isCorrectOpt)
+                                {
+                                    <span class="badge bg-danger"><i class="fa-solid fa-xmark me-1"></i>إجابتك</span>
+                                }
+                                else if (isSelected)
+                                {
+                                    <span class="badge bg-primary">إجابتك</span>
+                                }
+                            </div>
+                        </div>
+                    </li>
+                }
+            </ul>
+        }
+        else
+        {
+            <div class="alert alert-light mb-3">لا توجد اختيارات لهذا السؤال.</div>
+        }
+
+        @* النتيجة و الوقت *@
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="fw-bold">
+                <span class="@(isCorrect ? "text-success" : "text-danger")">
+                    @(isCorrect ? "✔️ صحيح" : "❌ خطأ")
+                </span>
+            </div>
+            <div class="small text-muted">
+                ⏱️ @NumberHelper.ToIndicNumbersSafe(timeTaken.ToString()) ثانية
+            </div>
+        </div>
+
+    </div>
+</article>
+</div>

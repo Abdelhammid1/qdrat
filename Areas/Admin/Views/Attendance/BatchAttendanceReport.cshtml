@@ -1,0 +1,149 @@
+﻿@model QdratNew.ViewModels.Attendance.BatchAttendanceReportViewModel
+@{
+    ViewData["Title"] = "تقرير حضور الدفعة";
+    double overallRate = Model.Lectures.Any()
+        ? Math.Round(Model.Lectures.Average(l => l.AttendanceRate), 1)
+        : 0;
+    int totalLectures = Model.Lectures.Count;
+    int totalStudents = Model.Lectures.FirstOrDefault()?.TotalStudents ?? 0;
+    int totalPresence = Model.Lectures.Sum(l => l.PresentCount);
+}
+
+<div class="container py-4">
+
+    <!-- 🔹 شريط الأزرار العلوي -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <a asp-action="AttendanceDashboard" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-right-circle"></i> العودة لتقارير الدفعات
+        </a>
+
+        <a asp-action="ExportBatchAttendancePdf" asp-route-batchId="@Model.BatchId"
+           class="btn btn-danger">
+            <i class="bi bi-file-earmark-pdf"></i> تحميل التقرير PDF
+        </a>
+    </div>
+
+    <!-- 🔹 العنوان -->
+    <div class="text-center mb-4">
+        <h3 class="fw-bold text-primary">📊 تقرير حضور الدفعة</h3>
+        <h5 class="text-muted">@Model.BatchName</h5>
+        <p><strong>الدورة:</strong> @Model.CourseName</p>
+    </div>
+
+    <!-- 🔹 بطاقات الإحصائيات -->
+    <div class="row g-3 mb-4 text-center">
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 p-3 bg-light rounded-4">
+                <h6 class="text-secondary">عدد المحاضرات</h6>
+                <h4 class="fw-bold">@totalLectures</h4>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 p-3 bg-light rounded-4">
+                <h6 class="text-secondary">عدد الطلاب</h6>
+                <h4 class="fw-bold">@totalStudents</h4>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 p-3 bg-success text-white rounded-4">
+                <h6>عدد الحاضرين الكلي</h6>
+                <h4 class="fw-bold">@totalPresence</h4>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 p-3 bg-info text-white rounded-4">
+                <h6>متوسط نسبة الحضور</h6>
+                <h4 class="fw-bold">@overallRate %</h4>
+                <div class="progress mt-2" style="height:8px;">
+                    <div class="progress-bar bg-success" style="width:@overallRate%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🔹 الرسم البياني -->
+    <div class="card border-0 shadow-sm rounded-4 p-4 mb-4">
+        <h6 class="fw-bold text-primary mb-3">تحليل نسب الحضور عبر المحاضرات</h6>
+        <canvas id="attendanceChart" height="100"></canvas>
+    </div>
+
+    <!-- 🔹 جدول المحاضرات -->
+    <div class="card border-0 shadow-sm rounded-4 p-3">
+        <table id="lecturesTable" class="table table-striped table-hover align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>#</th>
+                    <th>عنوان المحاضرة</th>
+                    <th>المدرب</th>
+                    <th>التاريخ</th>
+                    <th>عدد الحاضرين</th>
+                    <th>إجمالي الطلاب</th>
+                    <th>نسبة الحضور</th>
+                    <th>عرض التفاصيل</th>
+                </tr>
+            </thead>
+            <tbody>
+                @for (int i = 0; i < Model.Lectures.Count; i++)
+                {
+                    var lec = Model.Lectures[i];
+                    <tr>
+                        <td>@(i + 1)</td>
+                        <td>@lec.LectureTitle</td>
+                        <td>@lec.InstructorName</td>
+                        <td>@lec.Date.ToString("yyyy/MM/dd")</td>
+                        <td>@lec.PresentCount</td>
+                        <td>@lec.TotalStudents</td>
+                        <td>
+                            <div class="progress" style="height:8px;">
+                                <div class="progress-bar bg-success" style="width:@lec.AttendanceRate%"></div>
+                            </div>
+                            <small class="text-muted fw-bold">@lec.AttendanceRate %</small>
+                        </td>
+                        <td>
+                            <a asp-action="LectureAttendanceReport" asp-route-lectureId="@lec.LectureId"
+                               class="btn btn-outline-primary btn-sm">
+                                <i class="bi bi-eye"></i> عرض
+                            </a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+    <script>
+        // Chart
+        const ctx = document.getElementById('attendanceChart');
+        const chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(Model.Lectures.Select(l => l.LectureTitle))),
+                datasets: [{
+                    label: 'نسبة الحضور (%)',
+                    data: @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(Model.Lectures.Select(l => l.AttendanceRate))),
+                    backgroundColor: '#198754'
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true, max: 100 }
+                }
+            }
+        });
+
+        // Table
+        $(document).ready(function () {
+            $('#lecturesTable').DataTable({
+                "language": { "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json" },
+                "pageLength": 10
+            });
+        });
+    </script>
+}
+<link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet" />

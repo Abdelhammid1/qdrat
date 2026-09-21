@@ -1,0 +1,796 @@
+﻿@model QdratNew.ViewModels.Reports.ExamDetailedReportViewModel
+@{
+    double overall = Model.OverallPercent;
+    double solve = Model.SolveMinutes;
+    double total = Model.TotalMinutes <= 0 ? 1 : Model.TotalMinutes;
+    double timePercent = Math.Round((solve / total) * 100, 1);
+}
+<style>
+
+    html, body {
+        overflow-x: hidden;
+        max-width: 100%;
+    }
+
+
+    .container,
+    .row {
+        overflow-x: hidden;
+    }
+
+    /* تخفيض ارتفاع الرسم */
+    #quantChart, #verbalChart {
+        max-height: 380px !important;
+        height: 380px !important;
+    }
+
+    body {
+        background: linear-gradient(135deg, #f8fafc, #eef2ff);
+        font-family: 'Cairo', sans-serif;
+    }
+
+    .dashboard-card {
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(12px);
+        border-radius: 1.2rem;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+        border: 1px solid rgba(255,255,255,0.4);
+        transition: all .25s ease;
+    }
+
+        .dashboard-card:hover {
+            transform: translateY(-4px);
+        }
+
+    .metric-badge {
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: .9rem;
+        font-weight: 600;
+        color: #fff;
+        display: inline-block;
+        margin-top: 5px;
+    }
+
+        .metric-badge.green {
+            background: linear-gradient(to right, #22c55e, #16a34a);
+        }
+
+        .metric-badge.yellow {
+            background: linear-gradient(to right, #eab308, #f59e0b);
+        }
+
+        .metric-badge.red {
+            background: linear-gradient(to right, #ef4444, #dc2626);
+        }
+
+    .section-heading {
+        font-weight: 700;
+        color: #334155;
+        border-right: 5px solid #6366f1;
+        padding-right: 10px;
+    }
+
+    .badge-tip {
+        border-radius: 10px;
+        padding: 10px 14px;
+        display: block;
+        margin-bottom: 8px;
+        font-size: .95rem;
+        font-weight: 500;
+    }
+
+        .badge-tip.success {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-tip.warn {
+            background: #fef9c3;
+            color: #854d0e;
+        }
+
+        .badge-tip.danger {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+    canvas {
+        background: #fff;
+        border-radius: 10px;
+    }
+
+    @@media (max-width: 768px) {
+        table
+
+    {
+        font-size: 13px;
+    }
+
+    table th,
+    table td {
+        padding: 6px 4px !important;
+        white-space: nowrap;
+    }
+
+    table .btn {
+        padding: 4px 6px;
+        font-size: 12px;
+    }
+
+    }
+
+    @@media (max-width: 768px) {
+        #quantChart, #verbalChart
+
+    {
+        width: 100% !important;
+        height: 260px !important;
+        max-height: 260px !important;
+    }
+
+    }
+
+    table {
+        width: 100% !important;
+        table-layout: fixed;
+    }
+
+
+        table th,
+        table td {
+            word-wrap: break-word;
+            word-break: break-word;
+            white-space: normal !important;
+        }
+    @@media (max-width: 768px) {
+        /* إخفاء أعمدة ثانوية */
+        table th:nth-child(2), table td:nth-child(2), /* عدد الأسئلة */
+        table th:nth-child(4), table td:nth-child(4), /* الخاطئة */
+        table th:nth-child(5), table td:nth-child(5), /* المتخطاة */
+        table th:nth-child(8), table td:nth-child(8)
+
+    { /* المؤشرات */
+        display: none;
+    }
+
+    }
+    @@media (max-width: 768px) {
+        table
+
+    {
+        font-size: 13px;
+    }
+
+    table .btn {
+        padding: 4px 6px;
+        font-size: 12px;
+    }
+
+    }
+
+
+    @@media (max-width: 768px) {
+        .score-row
+
+    {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+    }
+
+    .score-card {
+        padding-left: 4px;
+        padding-right: 4px;
+    }
+
+    }
+</style>
+<style>
+    @@media print {
+        /* إخفاء القائمة الجانبية */
+        .sidebar, .navbar, .footer, .offcanvas, .nav, .menu, .student-sidebar
+
+    {
+        display: none !important;
+        visibility: hidden !important;
+    }
+
+    /* جعل الصفحة بالحجم الكامل */
+    body {
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #fff !important;
+    }
+
+    /* جعل الكروت تأخذ كل عرض الصفحة */
+    .container,
+    .dashboard-card,
+    .row,
+    .col-md-6,
+    .col-md-12 {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    /* منع قطع الجداول */
+    table {
+        page-break-inside: avoid !important;
+    }
+
+    tr {
+        page-break-inside: avoid !important;
+    }
+
+    /* منع قطع الكروت */
+    .dashboard-card {
+        page-break-inside: avoid !important;
+    }
+
+    /* جعل الرسوم البيانية لا تُقص */
+    canvas {
+        page-break-inside: avoid !important;
+        max-height: 420px !important;
+    }
+
+        chart-container {
+            height: 450px !important;
+            width: 100% !important;
+            page-break-inside: avoid !important;
+        }
+
+        canvas {
+            height: 450px !important;
+            width: 100% !important;
+            max-height: none !important;
+            display: block !important;
+            page-break-inside: avoid !important;
+        }
+
+        .score-row {
+            display: grid !important;
+            grid-template-columns: repeat(3, 1fr) !important;
+            gap: 20px !important;
+            width: 100% !important;
+        }
+        /* الكروت */
+        .score-card {
+            width: 100% !important;
+            margin: 0 !important;
+            page-break-inside: avoid !important;
+            background: #fff !important;
+            -webkit-print-color-adjust: exact !important;
+        }
+            /* ضبط الكارت داخليًا */
+            .score-card .dashboard-card {
+                width: 100% !important;
+                height: auto !important;
+            }
+    }
+</style>
+
+<div class="container py-5">
+    <div class="text-center mb-4">
+        <button class="btn btn-dark px-4" onclick="window.print()">
+            🖨️ طباعة التقرير
+        </button>
+    </div>
+
+    <!-- 🎓 بطاقة بيانات الطالب -->
+    <div class="dashboard-card p-4 mb-5 shadow-sm border-0 rounded-4 bg-white">
+        <div class="row align-items-center">
+            <div class="col-md-2 text-center">
+                <img src="~/images/160×100.png" alt="شعار مركز القدرات"
+                     class="rounded-3 shadow-sm" style="width:160px;height:100px;" />
+            </div>
+
+            <div class="col-md-10">
+                <div class="row small gy-1">
+                    <div class="col-md-6">
+                        <h5 class="mb-1"><strong>👨‍🎓 اسم الطالب:</strong> @Model.StudentName</h5>
+                        <p class="mb-1"><strong>🎓 المستوى:</strong> @Model.Level</p>
+                        <p class="mb-1"><strong>🆔 رقم الطالب:</strong> STD-@Model.StudentId</p>
+                    </div>
+
+
+
+
+
+                    <div class="col-md-6">
+                        <h6 class="mb-1"><strong>📅 تاريخ الاختبار:</strong> @Model.ExamDate.ToString("yyyy-MM-dd HH:mm")</h6>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🧭 العنوان -->
+    <div class="text-center mb-4">
+        <h2 class="fw-bold text-primary"><i class="bi bi-bar-chart-line"></i> تقرير الأداء في الاختبار</h2>
+        <p class="text-muted">تحليل شامل لأداء الطالب في الاختبار <strong>@Model.ExamTitle</strong></p>
+    </div>
+
+    <!-- 📊 كروت الإحصاءات العامة -->
+    <div class="row g-4 mb-5 text-center score-row">
+
+        <!-- عدد الأسئلة -->
+        <div class="col-md-2 col-6 score-card">
+            <div class="dashboard-card p-4 h-100">
+                <div class="small text-muted mb-2"><i class="bi bi-list-numeric"></i> عدد الأسئلة</div>
+                <h3 class="fw-bold text-primary">@Model.TotalQuestions</h3>
+            </div>
+        </div>
+
+        <!-- الصحيحة -->
+        <div class="col-md-2 col-6 score-card">
+            <div class="dashboard-card p-4 h-100">
+                <div class="small text-muted mb-2"><i class="bi bi-check-circle-fill text-success"></i> صحيحة</div>
+                <h3 class="fw-bold text-success">@Model.TotalCorrect</h3>
+            </div>
+        </div>
+
+        <!-- الخاطئة -->
+        <div class="col-md-2 col-6 score-card">
+            <div class="dashboard-card p-4 h-100">
+                <div class="small text-muted mb-2"><i class="bi bi-x-circle-fill text-danger"></i> خاطئة</div>
+                <h3 class="fw-bold text-danger">@Model.TotalWrong</h3>
+            </div>
+        </div>
+
+        <!-- المتخطاة -->
+        <div class="col-md-2 col-6 score-card">
+            <div class="dashboard-card p-4 h-100">
+                <div class="small text-muted mb-2"><i class="bi bi-skip-forward-fill text-warning"></i> متخطاة</div>
+                <h3 class="fw-bold text-warning">@Model.TotalSkipped</h3>
+            </div>
+        </div>
+
+        <!-- الدرجة -->
+        <div class="col-md-2 col-6 score-card">
+            <div class="dashboard-card p-4 h-100">
+                <div class="small text-muted mb-2"><i class="bi bi-star-fill text-info"></i> الدرجة</div>
+                <h3 class="fw-bold text-info">@Model.TotalScore</h3>
+            </div>
+        </div>
+
+        <!-- الدرجة الكلية -->
+        <div class="col-md-2 col-6 score-card">
+            <div class="dashboard-card p-4 h-100">
+                <div class="small text-muted mb-2"><i class="bi bi-trophy-fill text-secondary"></i> الدرجة الكلية</div>
+                <h3 class="fw-bold text-secondary">@Model.MaxScore</h3>
+            </div>
+        </div>
+
+    </div>
+
+
+    <!-- 🧩 جدول تحليل المحاور داخل الاختبار -->
+    @if (Model.SectionPerformances != null && Model.SectionPerformances.Any())
+    {
+        <div class="dashboard-card p-4 mt-4">
+            <h5 class="section-heading mb-3">
+                <i class="bi bi-layers text-primary"></i> تحليل المحاور داخل الاختبار
+            </h5>
+
+            <div class="table-responsive">
+
+
+                <table class="table table-hover align-middle text-center">
+                    <thead class="table-light">
+                        <tr>
+                            <th>المحور</th>
+                            <th>عدد الأسئلة</th>
+                            <th>الصحيحة</th>
+                            <th>الخاطئة</th>
+                            <th>المتخطاة</th>
+                            <th>نسبة الدقة</th>
+                            <th>الأسئلة</th>
+                            <th>المؤشرات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var s in Model.SectionPerformances)
+                        {
+                            var wrong = s.TotalQuestions - s.CorrectAnswers;
+                            var skipped = s.TotalQuestions - (s.CorrectAnswers + wrong);
+
+                            string color = s.AccuracyPercent >= 80 ? "success"
+                            : s.AccuracyPercent >= 60 ? "warning"
+                            : "danger";
+
+                            <tr>
+                                <td class="text-start fw-bold">@s.SectionName</td>
+                                <td>@s.TotalQuestions</td>
+                                <td class="text-success">@s.CorrectAnswers</td>
+                                <td class="text-danger">@s.WrongAnswers</td>
+                                <td class="text-warning">@s.Skipped</td>
+
+
+                                <td>
+                                    <span class="badge bg-@color">@s.AccuracyPercent %</span>
+                                </td>
+
+                                <!-- 🔎 زر عرض أسئلة المحور -->
+                                <td>
+                                    <a asp-area="Students"
+                                       asp-controller="Exams"
+                                       asp-action="ExamSectionQuestions"
+                                       asp-route-examAssignmentId="@Model.ExamAssignmentId"
+                                       asp-route-sectionId="@s.SectionId"
+                                       class="btn btn-outline-primary btn-sm">
+                                        <i class="fa-solid fa-eye"></i>
+                                    </a>
+
+                                </td>
+
+                                <!-- 📘 زر عرض مؤشرات المحور -->
+                                <td>
+                                    <a asp-area="Students"
+                                       asp-controller="Exams"
+                                       asp-action="ExamSectionLessonsReport"
+                                       asp-route-examAssignmentId="@Model.ExamAssignmentId"
+                                       asp-route-sectionId="@s.SectionId"
+                                       class="btn btn-outline-success btn-sm">
+                                        <i class="fa-solid fa-list"></i>
+                                    </a>
+
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+
+
+
+    <br />
+    <br />
+    <!-- 🧾 مؤشرات الأداء العامة -->
+    <div class="row g-4 mb-4 text-center p-2">
+        <div class="col-md-4">
+            <div class="dashboard-card p-4">
+                <h6 class="text-muted">المستوى العام</h6>
+                <h1 class="fw-bold text-primary">@overall%</h1>
+                <span class="metric-badge @(overall >= 80 ? "green" : overall >= 60 ? "yellow" : "red")">
+                    @(overall >= 80 ? "ممتاز" : overall >= 70 ? "جيد" : overall >= 60 ? "متوسط" : "قيد التطوير")
+                </span>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="dashboard-card p-4">
+                <h6 class="text-muted">الوقت المستهلك</h6>
+                <h2 class="fw-bold">@timePercent%</h2>
+                <span class="metric-badge @(timePercent < 40 ? "red" : timePercent < 70 ? "green" : "yellow")">
+                    @(timePercent < 40 ? "سريع جدًا" : timePercent < 70 ? "مناسب" : "بطيء نسبيًا")
+                </span>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="dashboard-card p-4">
+                <h6 class="text-muted">مدة الاختبار</h6>
+                <h2 class="fw-bold">@Model.TotalMinutes دقيقة</h2>
+                <span class="text-muted small">الزمن الفعلي للحل: @Model.SolveMinutes دقيقة</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🧩 جدول تحليل المؤشرات المرتبطة -->
+    @if (Model.LessonPerformances != null && Model.LessonPerformances.Any())
+    {
+        <div class="dashboard-card p-4 mt-5">
+            <h5 class="section-heading mb-3">
+                <i class="bi bi-diagram-3 text-primary"></i> المؤشرات المرتبطة بالاختبار
+            </h5>
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle text-center">
+                    <thead class="table-light">
+                        <tr>
+                            <th>المحور</th>
+                            <th>المؤشر (الدرس)</th>
+                            <th>عدد الأسئلة</th>
+                            <th>الإجابات الصحيحة</th>
+                            <th>نسبة الدقة</th>
+                            <th>الإجراء</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model.LessonPerformances)
+                        {
+                            var color = item.AccuracyPercent >= 80 ? "success"
+                            : item.AccuracyPercent >= 60 ? "warning"
+                            : "danger";
+                            <tr>
+                                <td class="text-start fw-bold">@item.SectionTitle</td>
+                                <td class="text-start">@item.LessonTitle</td>
+                                <td>@item.TotalQuestions</td>
+                                <td>@item.CorrectAnswers</td>
+                                <td><span class="badge bg-@color">@item.AccuracyPercent %</span></td>
+                                <td>
+                                    <a asp-action="LessonQuestions"
+                                       asp-controller="Exams"
+                                       asp-area="Students"
+                                       asp-route-lessonId="@item.LessonId"
+                                       asp-route-examAssignmentId="@ViewBag.ExamAssignmentId"
+                                       class="btn btn-outline-primary btn-sm">
+                                        <i class="bi bi-eye"></i> عرض الأسئلة
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+
+
+    <!-- 📊 التحليل الكمي واللفظي -->
+    <div class="row mb-5 g-4">
+
+        @if (Model.HasQuantChart && Model.HasVerbalChart)
+        {
+            <!-- إذا كان هناك نوعين من المناهج -->
+            <div class="col-md-6">
+                <div class="dashboard-card p-3">
+                    <h6 class="fw-bold mb-3 text-center">📐 تحليل المحاور الكمية</h6>
+                    <canvas id="quantChart" height="220"></canvas>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="dashboard-card p-3">
+                    <h6 class="fw-bold mb-3 text-center">🗣️ تحليل المحاور اللفظية</h6>
+                    <canvas id="verbalChart" height="220"></canvas>
+                </div>
+            </div>
+        }
+        else if (Model.HasQuantChart)
+        {
+            <!-- منهج كمي فقط -->
+            <div class="col-md-12">
+                <div class="dashboard-card p-3">
+                    <h6 class="fw-bold mb-3 text-center">📐 تحليل المحاور الكمية</h6>
+                    <canvas id="quantChart" height="220"></canvas>
+                </div>
+            </div>
+        }
+        else if (Model.HasVerbalChart)
+        {
+            <!-- منهج لفظي فقط -->
+            <div class="col-md-12">
+                <div class="dashboard-card p-3">
+                    <h6 class="fw-bold mb-3 text-center">🗣️ تحليل المحاور اللفظية</h6>
+                    <canvas id="verbalChart" height="220"></canvas>
+                </div>
+            </div>
+        }
+
+    </div>
+
+
+    <!-- 🗺️ المسار التدريبي -->
+    <div class="dashboard-card p-4 mb-5">
+        <h5 class="section-heading mb-3"><i class="bi bi-map"></i> المسار التدريبي المقترح</h5>
+        <div class="row text-center g-4">
+            <div class="col-md-6">
+                <div class="p-3 border rounded-3 bg-light">
+                    <h6 class="text-primary">@Model.TrackCard1</h6>
+                    <p class="small text-secondary mb-0">@Model.TrackCard1Desc</p>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="p-3 border rounded-3 bg-success bg-opacity-10 border-success">
+                    <h6 class="text-success">@Model.TrackCard2</h6>
+                    <p class="small text-secondary mb-0">@Model.TrackCard2Desc</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ⚡ تقييم السرعة والتركيز -->
+    <div class="dashboard-card p-4 mb-5">
+        <h5 class="section-heading mb-3"><i class="bi bi-speedometer2"></i> تقييم السرعة والتركيز</h5>
+        <h6 class="fw-bold">@Model.SpeedLabel</h6>
+        <p class="text-muted">@Model.SpeedNote</p>
+    </div>
+
+    <!-- 💬 الملاحظات الذكية -->
+    <div class="dashboard-card p-4">
+        <h5 class="section-heading mb-3"><i class="bi bi-lightbulb"></i> الملاحظات الذكية</h5>
+        @foreach (var tip in Model.IndividualTips)
+        {
+            if (tip.Contains("تحذير"))
+            {
+                <div class="badge-tip danger"><i class="bi bi-exclamation-triangle-fill"></i> @tip</div>
+            }
+            else if (tip.Contains("تميّز") || tip.Contains("رائع"))
+            {
+                <div class="badge-tip success"><i class="bi bi-award-fill"></i> @tip</div>
+            }
+            else
+            {
+                <div class="badge-tip warn"><i class="bi bi-info-circle-fill"></i> @tip</div>
+            }
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const quantLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.QuantLabels ?? new List<string>()));
+        const quantCorrect = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.QuantCorrectCounts ?? new List<int>()));
+        const quantWrong = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.QuantWrongCounts ?? new List<int>()));
+
+        const verbalLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.VerbalLabels ?? new List<string>()));
+        const verbalCorrect = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.VerbalCorrectCounts ?? new List<int>()));
+        const verbalWrong = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.VerbalWrongCounts ?? new List<int>()));
+
+        const buildChart = (id, labels, correct, wrong, color1, color2) => {
+            new Chart(document.getElementById(id), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'صحيحة', data: correct, backgroundColor: color1, borderRadius: 8 },
+                        { label: 'خاطئة', data: wrong, backgroundColor: color2, borderRadius: 8 }
+                    ]
+                },
+            options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: 'top' } },
+            scales: {
+                y: { beginAtZero: true, ticks: { stepSize: 1 } }
+            }
+        }
+
+            });
+        };
+
+        buildChart('quantChart', quantLabels, quantCorrect, quantWrong, '#22c55e', '#ef4444');
+        buildChart('verbalChart', verbalLabels, verbalCorrect, verbalWrong, '#60a5fa', '#f87171');
+    </script>
+
+
+    <script>
+        window.addEventListener("beforeprint", () => {
+            for (const id of ["quantChart", "verbalChart"]) {
+                const canvas = document.getElementById(id);
+                if (canvas && canvas.chartInstance) {
+                    canvas.chartInstance.resize(800, 400);  // حجم ثابت وقت الطباعة
+                }
+            }
+        });
+
+        window.addEventListener("afterprint", () => {
+            for (const id of ["quantChart", "verbalChart"]) {
+                const canvas ً= document.getElementById(id);
+                if (canvas && canvas.chartInstance) {
+                    canvas.chartInstance.resize(); // يرجع للحجم الطبيعي بعد الطباعة
+                }
+            }
+        });
+    </script>
+    <script>
+
+
+                // ===============
+        //  ⏱️ نظام حساب الوقت لكل سؤال
+        // ===============
+
+        let questionStartTime = Date.now();
+        let reviewStartTime = null;
+        let totalReviewSeconds = 0;
+
+        // لحساب وقت السؤال الحالي
+        function getElapsedSeconds() {
+            return Math.floor((Date.now() - questionStartTime) / 1000);
+        }
+
+        // إعادة ضبط المؤقت عند تحميل سؤال جديد
+        function resetQuestionTimer() {
+            questionStartTime = Date.now();
+        }
+
+        // بدء وقت المراجعة
+        function startReviewTimer() {
+            reviewStartTime = Date.now();
+        }
+
+        // إيقاف وقت المراجعة وتحديث الإجمالي
+        function stopReviewTimer() {
+            if (reviewStartTime) {
+                totalReviewSeconds += Math.floor((Date.now() - reviewStartTime) / 1000);
+                reviewStartTime = null;
+            }
+        }
+
+        // إرجاع وقت المراجعة لإرساله عند إنهاء الاختبار
+        function getTotalReviewSeconds() {
+            stopReviewTimer();
+            return totalReviewSeconds;
+        }
+
+
+
+        // ===============
+        //  🚀 إرسال الإجابة والتنقل بين الأسئلة
+        // ===============
+
+        $(document).on("click", ".homework-nav-button", function () {
+
+            const nav = $(this).data("nav");
+            const selected = $("input[name='SelectedOption']:checked").val() || "";
+
+            const timeTakenSeconds = getElapsedSeconds(); // ⏱️ هنا السر!
+
+            $.ajax({
+                url: "/Students/Exams/SubmitExamAnswerFetch",
+                type: "POST",
+                data: {
+                    id: $("#homework-question-form").data("homework-id"),
+                    q: $("#homework-question-form").data("current-question-id"),
+                    nav: nav,
+                    SelectedOption: selected,
+                    timeTakenSeconds: timeTakenSeconds      // ⏱️ مهم جدًا
+                },
+                success: function (resp) {
+
+                    if (resp.success === false) {
+                        alert(resp.message);
+                        return;
+                    }
+
+                    $("#question-container").html(resp);
+
+                    // إعادة ضبط المؤقت بعد تحميل السؤال الجديد
+                    resetQuestionTimer();
+
+                    // عند دخول وضع المراجعة
+                    if (nav === "showReview") {
+                        startReviewTimer();
+                    }
+
+                    // عند الخروج من المراجعة (مثلاً الضغط على سؤال)
+                    if (nav !== "showReview" && reviewStartTime !== null) {
+                        stopReviewTimer();
+                    }
+                }
+            });
+        });
+
+
+
+
+        // ===============
+        //  ✔ عند إنهاء الاختبار
+        // ===============
+
+        $(document).on("click", "#submitHomework", function () {
+
+            const reviewSeconds = getTotalReviewSeconds();
+
+            $.ajax({
+                url: "/Students/Exams/SubmitFinalExam",
+                type: "POST",
+                data: {
+                    id: $("#homework-question-form").data("homework-id"),
+                    reviewSeconds: reviewSeconds
+                },
+                success: function (resp) {
+                    if (resp.success) window.location.href = resp.redirectUrl;
+                    else alert(resp.message);
+                }
+            });
+        });
+
+
+
+    </script>
+
+}

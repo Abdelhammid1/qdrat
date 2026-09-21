@@ -1,0 +1,764 @@
+@model IEnumerable<QdratNew.Entities.Branch>
+@using System.IO
+@inject IWebHostEnvironment Env
+
+@{
+    ViewData["Title"] = "إدارة الفروع";
+
+    var modelPath = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "MLModels", "branch_model.zip");
+    bool modelExists = System.IO.File.Exists(modelPath);
+
+    var currentFilter   = (string)(ViewBag.Filter ?? "active");
+
+    // للإحصائيات نحتاج كل الفروع — لكن Model مفلتر، نعرض ما يتوفر
+    var totalBranches   = Model.Count();
+    var partnerBranches = Model.Count(b => b.IsPartner);
+    var ownBranches     = totalBranches - partnerBranches;
+    var countries       = Model.Select(b => b.Country).Distinct().Count();
+    var activeBranches  = Model.Count(b => b.IsActive && !b.IsArchived);
+    var archivedCount   = Model.Count(b => b.IsArchived);
+}
+
+@section Styles {
+<style>
+/* ══════════════════════════════════════════════════
+   BRANCHES INDEX — Design Tokens
+══════════════════════════════════════════════════ */
+:root {
+    --br-primary:      #3b82f6;
+    --br-primary-dark: #1d4ed8;
+    --br-success:      #10b981;
+    --br-warning:      #f59e0b;
+    --br-danger:       #ef4444;
+    --br-purple:       #8b5cf6;
+    --br-teal:         #06b6d4;
+    --br-surface:      #ffffff;
+    --br-surface-2:    #f8fafc;
+    --br-border:       #e2e8f0;
+    --br-text-1:       #0f172a;
+    --br-text-2:       #475569;
+    --br-text-3:       #94a3b8;
+    --br-shadow-sm:    0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+    --br-shadow-md:    0 4px 16px rgba(0,0,0,.08);
+    --br-shadow-lg:    0 10px 40px rgba(0,0,0,.12);
+    --br-radius:       14px;
+    --br-radius-sm:    8px;
+    --br-transition:   0.22s cubic-bezier(.4,0,.2,1);
+}
+
+/* ── Page wrapper ── */
+.branches-page { font-family: 'Cairo', sans-serif; }
+
+/* ── Hero Header ── */
+.branches-hero {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #1d4ed8 100%);
+    border-radius: var(--br-radius);
+    padding: 2.2rem 2rem;
+    margin-bottom: 1.75rem;
+    position: relative;
+    overflow: hidden;
+    color: #fff;
+}
+.branches-hero::before {
+    content: '';
+    position: absolute;
+    top: -60px; left: -60px;
+    width: 260px; height: 260px;
+    background: radial-gradient(circle, rgba(59,130,246,.25) 0%, transparent 70%);
+    pointer-events: none;
+}
+.branches-hero::after {
+    content: '';
+    position: absolute;
+    bottom: -80px; right: -40px;
+    width: 320px; height: 320px;
+    background: radial-gradient(circle, rgba(139,92,246,.18) 0%, transparent 70%);
+    pointer-events: none;
+}
+.hero-icon-wrap {
+    width: 56px; height: 56px;
+    border-radius: 14px;
+    background: rgba(255,255,255,.12);
+    backdrop-filter: blur(8px);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem;
+    border: 1px solid rgba(255,255,255,.18);
+    flex-shrink: 0;
+}
+.hero-title  { font-size: 1.6rem; font-weight: 800; margin-bottom: 0.2rem; }
+.hero-subtitle { font-size: .875rem; color: rgba(255,255,255,.65); }
+.hero-badge {
+    display: inline-flex; align-items: center; gap: .4rem;
+    background: rgba(255,255,255,.12);
+    border: 1px solid rgba(255,255,255,.2);
+    border-radius: 50px;
+    padding: .3rem .85rem;
+    font-size: .8rem;
+    color: rgba(255,255,255,.9);
+}
+
+/* ── Stats Cards ── */
+.stat-card {
+    background: var(--br-surface);
+    border: 1px solid var(--br-border);
+    border-radius: var(--br-radius);
+    padding: 1.35rem 1.5rem;
+    box-shadow: var(--br-shadow-sm);
+    transition: transform var(--br-transition), box-shadow var(--br-transition);
+    position: relative;
+    overflow: hidden;
+}
+.stat-card:hover { transform: translateY(-3px); box-shadow: var(--br-shadow-md); }
+.stat-card::after {
+    content: '';
+    position: absolute;
+    top: 0; right: 0;
+    width: 4px;
+    height: 100%;
+    border-radius: 0 var(--br-radius) var(--br-radius) 0;
+    background: var(--sc-color, var(--br-primary));
+}
+.stat-icon {
+    width: 44px; height: 44px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.15rem;
+    background: var(--sc-bg, rgba(59,130,246,.1));
+    color: var(--sc-color, var(--br-primary));
+    flex-shrink: 0;
+}
+.stat-value { font-size: 2rem; font-weight: 800; color: var(--br-text-1); line-height: 1; }
+.stat-label { font-size: .8rem; color: var(--br-text-2); margin-top: .2rem; }
+
+/* ── AI Tools Panel ── */
+.ai-panel {
+    background: var(--br-surface);
+    border: 1px solid var(--br-border);
+    border-radius: var(--br-radius);
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.75rem;
+    box-shadow: var(--br-shadow-sm);
+}
+.ai-panel-title {
+    font-size: .95rem;
+    font-weight: 700;
+    color: var(--br-text-1);
+    display: flex; align-items: center; gap: .5rem;
+    margin-bottom: 1rem;
+}
+.ai-panel-title .badge-ai {
+    font-size: .68rem;
+    background: linear-gradient(135deg, #7c3aed, #3b82f6);
+    color: #fff;
+    padding: .15rem .6rem;
+    border-radius: 50px;
+    font-weight: 600;
+    letter-spacing: .03em;
+}
+.ai-btn {
+    display: inline-flex; align-items: center; gap: .5rem;
+    padding: .55rem 1.15rem;
+    border-radius: var(--br-radius-sm);
+    font-size: .82rem;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: all var(--br-transition);
+    font-family: 'Cairo', sans-serif;
+    text-decoration: none;
+}
+.ai-btn-primary   { background: var(--br-primary); color: #fff; }
+.ai-btn-primary:hover { background: var(--br-primary-dark); color: #fff; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(59,130,246,.35); }
+.ai-btn-warning   { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+.ai-btn-warning:hover { background: #fde68a; color: #78350f; }
+.ai-btn-info      { background: #e0f2fe; color: #0369a1; border: 1px solid #7dd3fc; }
+.ai-btn-info:hover { background: #bae6fd; color: #0c4a6e; }
+.ai-btn-dev       { background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; }
+.ai-btn-dev:hover { background: #e9d5ff; }
+
+.model-status {
+    display: inline-flex; align-items: center; gap: .4rem;
+    font-size: .8rem; padding: .3rem .8rem;
+    border-radius: 50px;
+}
+.model-status.ok     { background: #dcfce7; color: #15803d; }
+.model-status.warn   { background: #fef9c3; color: #854d0e; }
+
+/* ── Alerts ── */
+.br-alert {
+    border-radius: var(--br-radius-sm);
+    padding: .85rem 1.1rem;
+    font-size: .875rem;
+    font-weight: 600;
+    display: flex; align-items: center; gap: .6rem;
+    margin-bottom: 1rem;
+    border: none;
+}
+.br-alert.success { background: #dcfce7; color: #15803d; }
+.br-alert.info    { background: #e0f2fe; color: #0369a1; }
+
+/* ── Toolbar ── */
+.branches-toolbar {
+    display: flex; align-items: center;
+    gap: .75rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.25rem;
+}
+.btn-add {
+    display: inline-flex; align-items: center; gap: .5rem;
+    background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+    color: #fff;
+    padding: .6rem 1.3rem;
+    border-radius: var(--br-radius-sm);
+    font-size: .875rem;
+    font-weight: 700;
+    border: none;
+    cursor: pointer;
+    transition: all var(--br-transition);
+    text-decoration: none;
+    font-family: 'Cairo', sans-serif;
+}
+.btn-add:hover { background: linear-gradient(135deg, #1e40af, #2563eb); color: #fff; transform: translateY(-1px); box-shadow: 0 4px 14px rgba(59,130,246,.4); }
+.btn-dashboard {
+    display: inline-flex; align-items: center; gap: .5rem;
+    background: var(--br-surface);
+    color: var(--br-text-1);
+    padding: .6rem 1.2rem;
+    border-radius: var(--br-radius-sm);
+    font-size: .875rem;
+    font-weight: 600;
+    border: 1px solid var(--br-border);
+    cursor: pointer;
+    transition: all var(--br-transition);
+    text-decoration: none;
+    font-family: 'Cairo', sans-serif;
+}
+.btn-dashboard:hover { background: #f1f5f9; color: var(--br-text-1); border-color: #cbd5e1; box-shadow: var(--br-shadow-sm); }
+
+/* ── Table Card ── */
+.table-card {
+    background: var(--br-surface);
+    border: 1px solid var(--br-border);
+    border-radius: var(--br-radius);
+    box-shadow: var(--br-shadow-sm);
+    overflow: hidden;
+}
+.table-card-header {
+    padding: 1.1rem 1.5rem;
+    border-bottom: 1px solid var(--br-border);
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: .75rem;
+    background: #fafbfc;
+}
+.table-card-title {
+    font-size: .95rem;
+    font-weight: 700;
+    color: var(--br-text-1);
+    display: flex; align-items: center; gap: .5rem;
+}
+.branches-table { width: 100%; border-collapse: collapse; }
+.branches-table thead th {
+    padding: .8rem 1rem;
+    font-size: .78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--br-text-2);
+    background: #f8fafc;
+    border-bottom: 1px solid var(--br-border);
+    white-space: nowrap;
+}
+.branches-table tbody tr {
+    border-bottom: 1px solid #f1f5f9;
+    transition: background var(--br-transition);
+}
+.branches-table tbody tr:last-child { border-bottom: none; }
+.branches-table tbody tr:hover { background: #f8fafc; }
+.branches-table td {
+    padding: .9rem 1rem;
+    font-size: .875rem;
+    color: var(--br-text-1);
+    vertical-align: middle;
+}
+
+/* Branch name cell */
+.branch-name-cell { display: flex; align-items: center; gap: .65rem; }
+.branch-avatar {
+    width: 36px; height: 36px;
+    border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .9rem;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+    background: linear-gradient(135deg, #3b82f6, #6366f1);
+}
+.branch-name    { font-weight: 700; color: var(--br-text-1); font-size: .875rem; }
+.branch-location { font-size: .75rem; color: var(--br-text-3); margin-top: .1rem; }
+
+/* Location chips */
+.loc-chip {
+    display: inline-flex; align-items: center; gap: .3rem;
+    background: #f1f5f9;
+    border-radius: 50px;
+    padding: .2rem .7rem;
+    font-size: .76rem;
+    color: var(--br-text-2);
+}
+
+/* Partner badge */
+.partner-badge {
+    display: inline-flex; align-items: center; gap: .35rem;
+    padding: .25rem .75rem;
+    border-radius: 50px;
+    font-size: .76rem;
+    font-weight: 700;
+}
+.partner-badge.yes { background: #dcfce7; color: #15803d; }
+.partner-badge.no  { background: #fee2e2; color: #dc2626; }
+
+/* Date cell */
+.date-cell { font-size: .82rem; color: var(--br-text-2); }
+
+/* Action buttons */
+.actions-group { display: flex; align-items: center; gap: .4rem; }
+.act-btn {
+    width: 32px; height: 32px;
+    border-radius: 7px;
+    border: 1px solid var(--br-border);
+    background: var(--br-surface);
+    display: flex; align-items: center; justify-content: center;
+    font-size: .8rem;
+    color: var(--br-text-2);
+    cursor: pointer;
+    transition: all var(--br-transition);
+    text-decoration: none;
+}
+.act-btn:hover { background: #f1f5f9; color: var(--br-text-1); border-color: #cbd5e1; }
+.act-btn.ai    { color: #7c3aed; border-color: #ddd6fe; background: #faf5ff; }
+.act-btn.ai:hover { background: #ede9fe; border-color: #c4b5fd; color: #6d28d9; }
+.act-btn.edit  { color: #d97706; border-color: #fde68a; background: #fffbeb; }
+.act-btn.edit:hover { background: #fef3c7; border-color: #fcd34d; }
+.act-btn.del   { color: #dc2626; border-color: #fecaca; background: #fff5f5; }
+.act-btn.del:hover { background: #fee2e2; border-color: #fca5a5; }
+.act-btn.info  { color: #0369a1; border-color: #bae6fd; background: #f0f9ff; }
+.act-btn.info:hover { background: #e0f2fe; border-color: #7dd3fc; }
+
+/* DataTables overrides */
+.dataTables_wrapper { padding: 1rem 1.25rem 1.25rem; }
+.dataTables_filter input {
+    border: 1px solid var(--br-border);
+    border-radius: var(--br-radius-sm);
+    padding: .4rem .85rem;
+    font-size: .83rem;
+    font-family: 'Cairo', sans-serif;
+    outline: none;
+    transition: border-color var(--br-transition);
+}
+.dataTables_filter input:focus { border-color: var(--br-primary); box-shadow: 0 0 0 3px rgba(59,130,246,.12); }
+.dataTables_length select {
+    border: 1px solid var(--br-border);
+    border-radius: var(--br-radius-sm);
+    padding: .35rem .7rem;
+    font-family: 'Cairo', sans-serif;
+    font-size: .83rem;
+}
+.dataTables_info { font-size: .8rem; color: var(--br-text-3); }
+.paginate_button {
+    border-radius: 6px !important;
+    margin: 0 2px !important;
+    font-size: .82rem !important;
+    font-family: 'Cairo', sans-serif !important;
+}
+.paginate_button.current, .paginate_button.current:hover {
+    background: var(--br-primary) !important;
+    border-color: var(--br-primary) !important;
+    color: #fff !important;
+}
+div.dt-buttons { gap: .4rem; display: flex; flex-wrap: wrap; }
+.dt-button {
+    border-radius: var(--br-radius-sm) !important;
+    font-size: .8rem !important;
+    font-family: 'Cairo', sans-serif !important;
+    padding: .4rem .9rem !important;
+    border: 1px solid var(--br-border) !important;
+    background: var(--br-surface) !important;
+    color: var(--br-text-2) !important;
+    transition: all var(--br-transition) !important;
+}
+.dt-button:hover { background: #f1f5f9 !important; color: var(--br-text-1) !important; }
+
+/* Colours per avatar (based on id mod) */
+.av-blue   { background: linear-gradient(135deg, #3b82f6, #6366f1); }
+.av-green  { background: linear-gradient(135deg, #10b981, #059669); }
+.av-orange { background: linear-gradient(135deg, #f59e0b, #ef4444); }
+.av-purple { background: linear-gradient(135deg, #8b5cf6, #ec4899); }
+.av-teal   { background: linear-gradient(135deg, #06b6d4, #3b82f6); }
+
+/* Status badge */
+.status-badge {
+    display: inline-flex; align-items: center; gap: .35rem;
+    padding: .22rem .7rem;
+    border-radius: 50px;
+    font-size: .74rem;
+    font-weight: 700;
+}
+.status-badge.active   { background: #dcfce7; color: #15803d; }
+.status-badge.inactive { background: #fef9c3; color: #854d0e; }
+.status-badge.archived { background: #f3f4f6; color: #6b7280; }
+
+/* Toggle / Archive buttons */
+.act-btn.toggle-on  { color: #15803d; border-color: #86efac; background: #f0fdf4; }
+.act-btn.toggle-on:hover { background: #dcfce7; border-color: #4ade80; }
+.act-btn.toggle-off { color: #854d0e; border-color: #fcd34d; background: #fefce8; }
+.act-btn.toggle-off:hover { background: #fef9c3; border-color: #facc15; }
+.act-btn.archive    { color: #6b7280; border-color: #d1d5db; background: #f9fafb; }
+.act-btn.archive:hover { background: #f3f4f6; border-color: #9ca3af; }
+.act-btn.unarchive  { color: #0369a1; border-color: #7dd3fc; background: #f0f9ff; }
+.act-btn.unarchive:hover { background: #e0f2fe; border-color: #38bdf8; }
+
+/* Filter tabs */
+.filter-tabs {
+    display: flex; align-items: center; gap: .4rem;
+    flex-wrap: wrap;
+}
+.filter-tab {
+    display: inline-flex; align-items: center; gap: .4rem;
+    padding: .38rem .9rem;
+    border-radius: 50px;
+    font-size: .8rem;
+    font-weight: 600;
+    border: 1px solid var(--br-border);
+    background: var(--br-surface);
+    color: var(--br-text-2);
+    text-decoration: none;
+    transition: all var(--br-transition);
+    font-family: 'Cairo', sans-serif;
+}
+.filter-tab:hover { background: #f1f5f9; color: var(--br-text-1); }
+.filter-tab.active-tab { background: var(--br-primary); color: #fff; border-color: var(--br-primary); }
+.filter-tab .tab-count {
+    background: rgba(255,255,255,.25);
+    border-radius: 50px;
+    padding: .05rem .45rem;
+    font-size: .72rem;
+}
+.filter-tab:not(.active-tab) .tab-count {
+    background: #e2e8f0;
+    color: var(--br-text-2);
+}
+
+/* Responsive */
+@@media (max-width: 768px) {
+    .hero-title  { font-size: 1.25rem; }
+    .stat-value  { font-size: 1.6rem; }
+    .branches-toolbar { flex-direction: column; align-items: flex-start; }
+    .table-card-header { flex-direction: column; align-items: flex-start; }
+}
+
+/* Dark mode */
+@@media (prefers-color-scheme: dark) {
+    :root {
+        --br-surface:   #1e293b;
+        --br-surface-2: #0f172a;
+        --br-border:    #334155;
+        --br-text-1:    #f1f5f9;
+        --br-text-2:    #94a3b8;
+        --br-text-3:    #64748b;
+    }
+    .branches-table tbody tr:hover { background: #263347; }
+    .branches-table tbody tr { border-color: #1e293b; }
+    .branches-table thead th { background: #162032; }
+    .table-card-header { background: #172032; }
+}
+</style>
+}
+
+<div class="branches-page">
+
+    @* HERO HEADER *@
+    <div class="branches-hero">
+        <div class="d-flex align-items-start gap-3" style="position:relative;z-index:1">
+            <div class="hero-icon-wrap">
+                <i class="fas fa-building"></i>
+            </div>
+            <div class="flex-grow-1">
+                <div class="hero-title">إدارة الفروع</div>
+                <div class="hero-subtitle">نظرة شاملة على جميع فروع منصة قدرات نيو</div>
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                    <span class="hero-badge"><i class="fas fa-map-marker-alt"></i> @countries دول</span>
+                    <span class="hero-badge"><i class="fas fa-code-branch"></i> @totalBranches فرع</span>
+                    <span class="hero-badge"><i class="fas fa-handshake"></i> @partnerBranches شريك</span>
+                    <span class="hero-badge"><i class="fas fa-check-circle"></i> @activeBranches فعّال</span>
+                    @if (archivedCount > 0)
+                    {
+                        <span class="hero-badge" style="background:rgba(255,255,255,.08)"><i class="fas fa-archive"></i> @archivedCount مؤرشف</span>
+                    }
+                </div>
+            </div>
+            <a href="/Admin/Branches/Dashboard" class="btn-dashboard d-none d-md-flex" style="align-self:center;">
+                <i class="fas fa-chart-bar"></i> لوحة التحكم
+            </a>
+        </div>
+    </div>
+
+    @* STATS *@
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-md-3">
+            <div class="stat-card" style="--sc-color:#3b82f6;--sc-bg:rgba(59,130,246,.1)">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="stat-icon"><i class="fas fa-building"></i></div>
+                    <div>
+                        <div class="stat-value">@totalBranches</div>
+                        <div class="stat-label">إجمالي الفروع</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card" style="--sc-color:#10b981;--sc-bg:rgba(16,185,129,.1)">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="stat-icon"><i class="fas fa-handshake"></i></div>
+                    <div>
+                        <div class="stat-value">@partnerBranches</div>
+                        <div class="stat-label">فروع شريكة</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card" style="--sc-color:#8b5cf6;--sc-bg:rgba(139,92,246,.1)">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="stat-icon"><i class="fas fa-store"></i></div>
+                    <div>
+                        <div class="stat-value">@ownBranches</div>
+                        <div class="stat-label">فروع مباشرة</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card" style="--sc-color:#f59e0b;--sc-bg:rgba(245,158,11,.1)">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="stat-icon"><i class="fas fa-globe"></i></div>
+                    <div>
+                        <div class="stat-value">@countries</div>
+                        <div class="stat-label">دول مغطّاة</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    @* SUCCESS / INFO ALERTS *@
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="br-alert success">
+            <i class="fas fa-check-circle"></i>
+            @TempData["SuccessMessage"]
+        </div>
+    }
+    @if (TempData["ModelTrainingResult"] != null)
+    {
+        <div class="br-alert info">
+            <i class="fas fa-info-circle"></i>
+            @TempData["ModelTrainingResult"]
+        </div>
+    }
+
+    @* TOOLBAR *@
+    <div class="branches-toolbar">
+        <a asp-action="Create" class="btn-add">
+            <i class="fas fa-plus"></i> إضافة فرع جديد
+        </a>
+
+        <div class="filter-tabs me-auto">
+            <a asp-action="Index" asp-route-filter="active"
+               class="filter-tab @(currentFilter == "active" ? "active-tab" : "")">
+                <i class="fas fa-check-circle"></i> الفعّالة
+            </a>
+            <a asp-action="Index" asp-route-filter="inactive"
+               class="filter-tab @(currentFilter == "inactive" ? "active-tab" : "")">
+                <i class="fas fa-pause-circle"></i> الموقوفة
+            </a>
+            <a asp-action="Index" asp-route-filter="archived"
+               class="filter-tab @(currentFilter == "archived" ? "active-tab" : "")">
+                <i class="fas fa-archive"></i> المؤرشفة
+            </a>
+            <a asp-action="Index" asp-route-filter="all"
+               class="filter-tab @(currentFilter == "all" ? "active-tab" : "")">
+                <i class="fas fa-list"></i> الكل
+            </a>
+        </div>
+    </div>
+
+    @* TABLE CARD *@
+    <div class="table-card">
+        <div class="table-card-header">
+            <div class="table-card-title">
+                <i class="fas fa-table" style="color:var(--br-primary)"></i>
+                قائمة الفروع
+                <span style="font-size:.75rem;color:var(--br-text-3);font-weight:500">(@totalBranches فرع)</span>
+            </div>
+        </div>
+
+        <table id="branchesTable" class="branches-table" style="width:100%">
+            <thead>
+                <tr>
+                    <th>الفرع</th>
+                    <th>المدينة</th>
+                    <th>المحافظة</th>
+                    <th>الدولة</th>
+                    <th>شريك؟</th>
+                    <th>الحالة</th>
+                    <th>تاريخ الإنشاء</th>
+                    <th>الإجراءات</th>
+                </tr>
+            </thead>
+            <tbody>
+                @{
+                    var avatarClasses = new[] { "av-blue", "av-green", "av-orange", "av-purple", "av-teal" };
+                }
+                @foreach (var item in Model)
+                {
+                    var avClass = avatarClasses[item.Id % avatarClasses.Length];
+                    var initials = item.Name.Length >= 2 ? item.Name.Substring(0, 2) : item.Name;
+                    <tr>
+                        <td>
+                            <div class="branch-name-cell">
+                                <div class="branch-avatar @avClass">@initials</div>
+                                <div>
+                                    <div class="branch-name">@item.Name</div>
+                                    <div class="branch-location">
+                                        <i class="fas fa-map-marker-alt" style="font-size:.68rem"></i>
+                                        @item.Location
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                        <td><span class="loc-chip"><i class="fas fa-city"></i> @item.City</span></td>
+                        <td><span class="loc-chip"><i class="fas fa-flag"></i> @item.State</span></td>
+                        <td><span class="loc-chip"><i class="fas fa-globe"></i> @item.Country</span></td>
+                        <td>
+                            @if (item.IsPartner)
+                            {
+                                <span class="partner-badge yes"><i class="fas fa-check"></i> شريك</span>
+                            }
+                            else
+                            {
+                                <span class="partner-badge no"><i class="fas fa-times"></i> مباشر</span>
+                            }
+                        </td>
+                        <td>
+                            @if (item.IsArchived)
+                            {
+                                <span class="status-badge archived"><i class="fas fa-archive"></i> مؤرشف</span>
+                            }
+                            else if (item.IsActive)
+                            {
+                                <span class="status-badge active"><i class="fas fa-check-circle"></i> فعّال</span>
+                            }
+                            else
+                            {
+                                <span class="status-badge inactive"><i class="fas fa-pause-circle"></i> موقوف</span>
+                            }
+                        </td>
+                        <td>
+                            <span class="date-cell">
+                                <i class="fas fa-calendar-alt" style="color:var(--br-text-3);margin-left:.3rem"></i>
+                                @item.EstablishedDate.ToString("yyyy/MM/dd")
+                            </span>
+                        </td>
+                        <td>
+                            <div class="actions-group">
+                                @if (!item.IsArchived)
+                                {
+                                    <a class="act-btn ai"
+                                       title="تحليل ذكي"
+                                       asp-area="Admin"
+                                       asp-controller="BranchSmartReport"
+                                       asp-action="Analyze"
+                                       asp-route-id="@item.Id">
+                                        <i class="fas fa-brain"></i>
+                                    </a>
+                                    <a asp-action="Details" asp-route-id="@item.Id" class="act-btn info" title="التفاصيل">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a asp-action="Edit" asp-route-id="@item.Id" class="act-btn edit" title="تعديل">
+                                        <i class="fas fa-pen"></i>
+                                    </a>
+
+                                    @* زر تفعيل / إيقاف *@
+                                    <form asp-action="ToggleActive" asp-route-id="@item.Id" method="post" style="display:inline">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit"
+                                                class="act-btn @(item.IsActive ? "toggle-on" : "toggle-off")"
+                                                title="@(item.IsActive ? "إيقاف الفرع" : "تفعيل الفرع")">
+                                            <i class="fas @(item.IsActive ? "fa-toggle-on" : "fa-toggle-off")"></i>
+                                        </button>
+                                    </form>
+
+                                    @* زر الأرشفة *@
+                                    <form asp-action="Archive" asp-route-id="@item.Id" method="post" style="display:inline"
+                                          onsubmit="return confirm('هل تريد أرشفة فرع \'@item.Name\'؟ سيتم إيقافه وإخفاؤه من القوائم الرئيسية.')">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="act-btn archive" title="أرشفة الفرع">
+                                            <i class="fas fa-archive"></i>
+                                        </button>
+                                    </form>
+                                }
+                                else
+                                {
+                                    @* زر استعادة من الأرشيف *@
+                                    <form asp-action="Unarchive" asp-route-id="@item.Id" method="post" style="display:inline">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="act-btn unarchive" title="استعادة من الأرشيف">
+                                            <i class="fas fa-inbox"></i>
+                                        </button>
+                                    </form>
+                                }
+
+                                <a asp-action="Delete" asp-route-id="@item.Id" class="act-btn del" title="حذف نهائي">
+                                    <i class="fas fa-trash-alt"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+</div>
+
+@section Scripts {
+<script>
+$(document).ready(function () {
+    $('#branchesTable').DataTable({
+        language: {
+            emptyTable:    "لا توجد فروع مسجّلة",
+            info:          "عرض _START_ إلى _END_ من أصل _TOTAL_ فرع",
+            infoEmpty:     "لا توجد بيانات",
+            infoFiltered:  "(مفلترة من _MAX_ فرع)",
+            lengthMenu:    "عرض _MENU_ فروع",
+            loadingRecords:"جارٍ التحميل...",
+            processing:    "جارٍ المعالجة...",
+            search:        "بحث:",
+            zeroRecords:   "لا توجد نتائج مطابقة",
+            paginate: { first:"الأول", last:"الأخير", next:"التالي", previous:"السابق" },
+            buttons: { copy:"نسخ", excel:"تصدير Excel", print:"طباعة" }
+        },
+        dom: 'Bfrtip',
+        buttons: [
+            { extend: 'copy',  text: '<i class="fas fa-copy"></i> نسخ',         className: 'dt-button' },
+            { extend: 'excel', text: '<i class="fas fa-file-excel"></i> Excel',  className: 'dt-button' },
+            { extend: 'print', text: '<i class="fas fa-print"></i> طباعة',      className: 'dt-button' }
+        ],
+        responsive: true,
+        columnDefs: [{ orderable: false, targets: -1 }],
+        order: [[0, 'asc']]
+    });
+});
+</script>
+}

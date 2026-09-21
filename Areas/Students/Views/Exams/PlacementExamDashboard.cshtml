@@ -1,0 +1,215 @@
+﻿@model QdratNew.ViewModels.Students.PlacementExamDashboardViewModel
+@using QdratNew.Helpers
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+<div class="alert alert-info text-center shadow-sm rounded-3 mt-4 bg-qdrat text-white">
+    <div class="d-flex align-items-center">
+        <div class="me-3 text-light">
+            <i class="fa-solid fa-chart-line"></i>
+        </div>
+        <div>
+            <h5 class="fw-bold mb-1">لوحة اختبار تحديد المستوى 📊</h5>
+            <p class="mb-0" style="font-size: 0.95rem;">
+                مرحباً <b>@Model.StudentName</b> - المنهج: @Model.CurriculumTitle
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- ✅ الكروت -->
+<div class="row g-4 mt-4 text-center">
+    <div class="col-md-4">
+        <div class="card shadow-sm border-info text-center">
+            <div class="card-body">
+                <h6 class="fw-bold">الدرجة الأولى</h6>
+                <h3 class="text-info">@Model.InitialScore.ToString("F2") %</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm border-success text-center">
+            <div class="card-body">
+                <h6 class="fw-bold">آخر درجة</h6>
+                <h3 class="text-success">@Model.LatestScore.ToString("F2") %</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm border-warning text-center">
+            <div class="card-body">
+                <h6 class="fw-bold">نسبة التحسن</h6>
+                <h3 class="text-warning">
+                    @(Model.Improvement >= 0 ? "+" : "")@Model.Improvement.ToString("F2") %
+                </h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<hr />
+
+
+
+<!-- ✅ جدول الاختبارات -->
+<div class="card shadow-sm mt-4">
+    <div class="card-header bg-qdrat text-white fw-bold">📘 اختبارات تحديد المستوى</div>
+    <div class="card-body">
+        @if (Model.PlacementExams.Any())
+        {
+            <table class="table table-bordered text-center align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>عنوان الاختبار</th>
+                        <th>تاريخ الإرسال</th>
+                        <th>الحالة</th>
+                        <th>الإجراء</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var exam in Model.PlacementExams)
+                    {
+                        <tr>
+                            <td>@exam.Title</td>
+                            <td>@exam.AssignedAt.ToString("yyyy-MM-dd")</td>
+                            <td>
+                                @if (!exam.IsSubmitted)
+                                {
+                                    <span class="badge bg-warning text-dark">لم تبدأ بعد </span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-success">مُنجز</span>
+                                }
+                            </td>
+                            <td>
+                                @if (!exam.IsSubmitted)
+                                {
+                                    <a href="@Url.Action("StartExam", "Exams", new { area = "Students", examAssignmentId = exam.ExamAssignmentId })"
+                                       target="_blank"
+                                       class="btn btn-primary btn-sm start-exam-btn">
+                                        <i class="fa-solid fa-play"></i> بدء الاختبار
+                                    </a>
+
+                                }
+                                else
+                                {
+                                    <a asp-area="Students" asp-controller="Exams" asp-action="PlacementResult"
+                                       asp-route-assignmentId="@exam.ExamAssignmentId"
+                                       class="btn btn-success btn-sm">
+                                        <i class="fa-solid fa-chart-bar"></i> عرض النتيجة
+                                    </a>
+                                    <a asp-area="Students" asp-controller="Exams" asp-action="PlacementReport"
+                                       asp-route-assignmentId="@exam.ExamAssignmentId"
+                                       class="btn btn-secondary btn-sm">
+                                        <i class="fa-solid fa-file-alt"></i> تقرير مفصل
+                                    </a>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        else
+        {
+            <div class="alert alert-info text-center">⚠️ لم يتم تعيين أي اختبار تحديد المستوى بعد.</div>
+        }
+    </div>
+</div>
+
+
+<hr />
+<!-- ✅ رسم بياني للتطور -->
+<div class="card shadow-sm mt-4">
+    <div class="card-header bg-qdrat text-white fw-bold">📈 تطور الأداء عبر الوقت</div>
+    <div class="card-body">
+        <canvas id="progressChart" height="100"></canvas>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const ctx = document.getElementById('progressChart');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(
+                                                                Model.ProgressTimeline.Select(p => p.ExamDate.ToString("yyyy-MM-dd"))
+                                                )),
+            datasets: [{
+                label: 'الدرجة (%)',
+                data: @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(
+                                                                                Model.ProgressTimeline.Select(p => Math.Round(p.Score, 2))
+                                                                )),
+                borderColor: '#007bff',
+                backgroundColor: 'rgba(0,123,255,0.2)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 5,
+                pointBackgroundColor: '#007bff'
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: true } },
+            scales: { y: { min: 0, max: 100 } }
+        }
+    });
+</script>
+
+<hr />
+
+<!-- ✅ جدول الاختبار -->
+
+
+<!-- ✅ نقاط القوة والضعف -->
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card shadow-sm border-success">
+            <div class="card-header bg-success text-white fw-bold">✅ نقاط القوة</div>
+            <div class="card-body">
+                @if (Model.Strengths.Any())
+                {
+                    <ul>
+                        @foreach (var s in Model.Strengths)
+                        {
+                            <li>@s</li>
+                        }
+                    </ul>
+                }
+                else
+                {
+                    <p class="text-muted">لا توجد نقاط قوة مسجلة بعد.</p>
+                }
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow-sm border-danger">
+            <div class="card-header bg-danger text-white fw-bold">⚠️ نقاط الضعف</div>
+            <div class="card-body">
+                @if (Model.Weaknesses.Any())
+                {
+                    <ul>
+                        @foreach (var w in Model.Weaknesses)
+                        {
+                            <li>@w.SectionName - الدقة: @w.Accuracy.ToString("F2")%</li>
+                        }
+                    </ul>
+                }
+                else
+                {
+                    <p class="text-muted">لا توجد نقاط ضعف حالياً.</p>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<hr />
+
+<!-- ✅ توصية -->
+<div class="alert alert-info mt-4 shadow-sm">
+    <b>📌 توصية ذكية:</b> @Model.Recommendation
+</div>

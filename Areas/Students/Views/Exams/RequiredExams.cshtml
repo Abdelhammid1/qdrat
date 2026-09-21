@@ -1,0 +1,263 @@
+﻿@model List<QdratNew.ViewModels.Exam.ExamListVm>
+@{
+    ViewData["Title"] = "الاختبارات المطلوبة";
+
+    // ================================
+    // 🔹 الفلاتر الجديدة المتوافقة مع الخدمة
+    // ================================
+    var availableExams = Model
+        .Where(x =>
+            x.StatusText == "قادِم" ||
+            x.StatusText == "متاح الآن" ||
+            x.StatusText.Contains("سيتأخر"))
+        .OrderBy(x => x.ScheduledDate)
+        .ToList();
+
+    var expiredExams = Model
+        .Where(x => x.StatusText == "متأخر")
+        .OrderBy(x => x.ScheduledDate)
+        .ToList();
+}
+
+<div class="container mt-4">
+
+    <!-- 🔹 الكارت العلوي -->
+    <div class="row g-4 mb-4 text-center">
+        <div class="col-md-12">
+            <div class="card bg-warning text-dark shadow-sm border-0 rounded-3 h-100">
+                <div class="card-body">
+                    <h5 class="fw-bold">
+                        <i class="fa-solid fa-list-check me-2"></i>
+                        عدد الاختبارات المطلوبة
+                    </h5>
+
+                    <p class="display-6 fw-bold">@availableExams.Count</p>
+
+                    <p class="text-muted mb-0">
+                        📌 تأكد من حل الاختبارات في الوقت المحدد.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================================================= -->
+    <!-- 🟦 القسم الأول: الاختبارات المتاحة للحل -->
+    <!-- ======================================================= -->
+
+    <div class="card shadow-sm border-0 rounded-3 mb-5">
+        <div class="card-header bg-light fw-bold text-center py-3">
+            🧾 قائمة الاختبارات المتاحة للحل
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle text-center">
+                <thead class="table-primary">
+                    <tr>
+                        <th>العنوان</th>
+                        <th>تاريخ الإرسال</th>
+                        <th>تبدأ في</th>
+                        <th>تنتهي في</th>
+                        <th>النوع</th>
+                        <th>الحالة</th>
+                        <th>الإجراء</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    @if (availableExams.Any())
+                    {
+                        foreach (var exam in availableExams)
+                        {
+                            var start = exam.ScheduledDate ?? exam.AssignedAt;
+                            var end = exam.EndAt ?? start.AddMinutes(exam.DurationMinutes);
+
+                            <tr>
+                                <td>@exam.Title</td>
+
+                                <td>@exam.AssignedAt.ToString("yyyy-MM-dd")</td>
+
+                                <td>@start.ToString("yyyy-MM-dd HH:mm")</td>
+
+                                <td>@end.ToString("yyyy-MM-dd HH:mm")</td>
+
+                                <td>
+                                    @if (exam.IsIndividual)
+                                    {
+                                        <span class="badge bg-info text-dark">فردي</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-success">دفعة</span>
+                                    }
+                                </td>
+
+                                <td>
+                                    <span class="badge bg-warning text-dark px-3 py-2">
+                                        @exam.StatusText
+                                    </span>
+                                </td>
+
+                                <td>
+                                    @if (exam.IsIndividual)
+                                    {
+                                        <a asp-action="StartIndividualExam"
+                                           asp-route-examAssignmentId="@exam.ExamAssignmentId"
+                                           class="btn btn-success btn-sm rounded-pill px-3">
+                                            <i class="fa-solid fa-play me-1"></i> بدء الاختبار
+                                        </a>
+                                    }
+                                    else
+                                    {
+                                        <a asp-action="StartExam"
+                                           asp-route-examAssignmentId="@exam.ExamAssignmentId"
+                                           class="btn btn-success btn-sm rounded-pill px-3">
+                                            <i class="fa-solid fa-play me-1"></i> بدء الاختبار
+                                        </a>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="7" class="text-muted py-4">
+                                <i class="fa-solid fa-circle-info me-2"></i>
+                                لا توجد اختبارات مطلوبة للحل حالياً
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+
+    <!-- ======================================================= -->
+    <!-- 🟥 القسم الثاني: الاختبارات المنتهية -->
+    <!-- ======================================================= -->
+
+    <div class="card shadow-sm border-0 rounded-3 mb-5">
+        <div class="card-header bg-light fw-bold text-center py-3">
+            🔒 اختبارات انتهى وقتها
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle text-center">
+                <thead class="table-secondary">
+                    <tr>
+                        <th>العنوان</th>
+                        <th>تاريخ الإرسال</th>
+                        <th>تنتهي في</th>
+                        <th>النوع</th>
+                        <th>الحالة</th>
+                        <th>الإجراء</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    @if (expiredExams.Any())
+                    {
+                        foreach (var exam in expiredExams)
+                        {
+                            var start = exam.ScheduledDate ?? exam.AssignedAt;
+                            var end = exam.EndAt ?? start.AddMinutes(exam.DurationMinutes);
+
+                            <tr>
+                                <td>@exam.Title</td>
+
+                                <td>@exam.AssignedAt.ToString("yyyy-MM-dd")</td>
+
+                                <td>@end.ToString("yyyy-MM-dd HH:mm")</td>
+
+                                <td>
+                                    @if (exam.IsIndividual)
+                                    {
+                                        <span class="badge bg-info text-dark">فردي</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-success">دفعة</span>
+                                    }
+                                </td>
+
+                                <td>
+                                    <span class="badge bg-secondary px-3 py-2">
+                                        @exam.StatusText
+                                    </span>
+                                </td>
+
+                                <td>
+                                    @if (exam.IsIndividual)
+                                    {
+                                        <a asp-action="StartIndividualExam"
+                                           asp-controller="Exams"
+                                           asp-route-examAssignmentId="@exam.ExamAssignmentId"
+                                           class="btn btn-qdrat btn-sm rounded-pill px-3">
+                                            <i class="fa-solid fa-play me-1"></i> بدء
+                                        </a>
+                                    }
+                                    else
+                                    {
+                                        <a asp-action="StartExam"
+                                           asp-controller="Exams"
+                                           asp-route-examAssignmentId="@exam.ExamAssignmentId"
+                                           class="btn btn-qdrat btn-sm rounded-pill px-3">
+                                            <i class="fa-solid fa-play me-1"></i> بدء
+                                        </a>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="6" class="text-muted py-4">
+                                لا توجد اختبارات منتهية حالياً
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<!-- ==================== -->
+<!-- 🎨 تحسين التصميم للجوال -->
+<!-- ==================== -->
+<style>
+    @@media (max-width: 768px) {
+        table thead
+
+    {
+        display: none !important;
+    }
+
+    table tbody tr {
+        display: block !important;
+        margin-bottom: 1rem;
+        border: 1px solid #ddd;
+        border-radius: 10px;
+        padding: 12px;
+        background: #fff;
+    }
+
+    table tbody td {
+        display: flex !important;
+        justify-content: space-between !important;
+        padding: 6px 0 !important;
+        border: none !important;
+    }
+
+        table tbody td::before {
+            content: attr(data-label);
+            font-weight: bold;
+            color: #1ba098;
+        }
+
+    }
+</style>

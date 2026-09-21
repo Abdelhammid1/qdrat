@@ -1,0 +1,1203 @@
+@using System.Text.Encodings.Web
+@using System.Text.Json
+@model QdratNew.ViewModels.Admin.DecisionLab.InterventionTaskDetailsViewModel
+
+@functions {
+    // ── AfterSnapshot helpers ────────────────────────────────────
+    record AftItem(string Title, string Sub);
+
+    private static List<AftItem> ReadAftItems(JsonElement root, string key)
+    {
+        var list = new List<AftItem>();
+        if (!root.TryGetProperty(key, out var arr) || arr.ValueKind != JsonValueKind.Array)
+            return list;
+        foreach (var el in arr.EnumerateArray())
+        {
+            string title = TryStr(el, "QuestionTitle") ?? TryStr(el, "LessonTitle") ?? "";
+            string sub   = TryStr(el, "LessonTitle") is { Length: > 0 } lt && title != lt ? lt
+                         : TryStr(el, "SectionTitle") ?? "";
+            if (!string.IsNullOrWhiteSpace(title))
+                list.Add(new AftItem(title, sub));
+        }
+        return list;
+    }
+
+    private static string? TryStr(JsonElement el, string key)
+        => el.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+}
+
+@functions {
+    private static string FormatJson(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "[]";
+        try
+        {
+            using var doc = JsonDocument.Parse(value);
+            return JsonSerializer.Serialize(doc.RootElement,
+                new JsonSerializerOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping, WriteIndented = true });
+        }
+        catch { return value ?? "[]"; }
+    }
+
+    private static string PriorityClass(string p) => p switch
+    {
+        "High" or "عالية"   => "itd-pri-high",
+        "Medium" or "متوسطة" => "itd-pri-med",
+        _                    => "itd-pri-low"
+    };
+
+    private static string StatusClass(string s) => s switch
+    {
+        "Active" or "InProgress"  => "itd-st-active",
+        "Completed" or "Done"     => "itd-st-done",
+        "Cancelled" or "Rejected" => "itd-st-cancel",
+        _                         => "itd-st-pending"
+    };
+
+    private static string StatusIcon(string s) => s switch
+    {
+        "Active" or "InProgress"  => "fa-bolt",
+        "Completed" or "Done"     => "fa-circle-check",
+        "Cancelled" or "Rejected" => "fa-circle-xmark",
+        _                         => "fa-clock"
+    };
+}
+
+@{
+    var sc         = Model.SnapshotComparison;
+    var hasSc      = sc != null;
+    var daysActive = (int)(DateTime.Now - Model.CreatedAt).TotalDays;
+
+    double examBefore  = hasSc && sc!.SnapshotAvgExamScore.HasValue ? sc.SnapshotAvgExamScore!.Value : 0;
+    double examNow     = hasSc && sc!.CurrentAvgExamScore.HasValue  ? sc.CurrentAvgExamScore!.Value  : 0;
+    double examDelta   = examNow - examBefore;
+
+    double riskBefore  = hasSc && sc!.SnapshotAtRiskCount.HasValue  ? sc.SnapshotAtRiskCount!.Value  : 0;
+    double riskNow     = hasSc && sc!.CurrentAtRiskCount.HasValue   ? sc.CurrentAtRiskCount!.Value   : 0;
+    double riskDelta   = riskNow - riskBefore;
+
+    string trendLabel  = hasSc ? sc!.TrendLabel    : "ثبات";
+    string trendCss    = hasSc ? sc!.TrendCssClass : "secondary";
+    int    daysSince   = hasSc ? sc!.DaysSinceDecision : 0;
+}
+
+<style>
+:root {
+    --itd-bg:        #f0f2f8;
+    --itd-surface:   #ffffff;
+    --itd-border:    #e4e8f0;
+    --itd-text:      #0f172a;
+    --itd-muted:     #64748b;
+    --itd-accent:    #2563eb;
+    --itd-accent2:   #7c3aed;
+    --itd-success:   #16a34a;
+    --itd-danger:    #dc2626;
+    --itd-warning:   #d97706;
+    --itd-radius:    16px;
+    --itd-shadow:    0 2px 16px rgba(15,23,42,.07);
+    --itd-shadow-lg: 0 8px 40px rgba(15,23,42,.13);
+    --itd-font:      'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
+}
+
+/* ── base ── */
+.itd-page {
+    background: var(--itd-bg);
+    color: var(--itd-text);
+    direction: rtl;
+    font-family: var(--itd-font);
+    min-height: 100vh;
+    padding: 0 0 64px;
+}
+
+/* ── hero ── */
+.itd-hero {
+    background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 55%, #7c3aed 100%);
+    padding: 36px 32px 28px;
+    position: relative;
+    overflow: hidden;
+}
+.itd-hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+.itd-hero-inner {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    position: relative;
+    flex-wrap: wrap;
+}
+.itd-hero-eyebrow {
+    color: rgba(255,255,255,.65);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+}
+.itd-hero-title {
+    color: #fff;
+    font-size: clamp(22px,3vw,30px);
+    font-weight: 900;
+    margin: 0 0 6px;
+    line-height: 1.2;
+}
+.itd-hero-sub {
+    color: rgba(255,255,255,.7);
+    font-size: 14px;
+    margin: 0;
+}
+.itd-hero-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+}
+.itd-badge {
+    align-items: center;
+    border-radius: 999px;
+    display: inline-flex;
+    font-size: 13px;
+    font-weight: 700;
+    gap: 6px;
+    padding: 5px 14px;
+}
+.itd-st-active  { background: #dcfce7; color: #15803d; }
+.itd-st-done    { background: #dbeafe; color: #1d4ed8; }
+.itd-st-cancel  { background: #fee2e2; color: #b91c1c; }
+.itd-st-pending { background: #fef9c3; color: #92400e; }
+.itd-pri-high   { background: #fee2e2; color: #b91c1c; }
+.itd-pri-med    { background: #ffedd5; color: #c2410c; }
+.itd-pri-low    { background: #f0fdf4; color: #15803d; }
+.itd-badge-glass {
+    background: rgba(255,255,255,.18);
+    backdrop-filter: blur(8px);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,.25);
+}
+
+.itd-hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+.itd-btn {
+    align-items: center;
+    border-radius: 10px;
+    display: inline-flex;
+    font-family: var(--itd-font);
+    font-size: 13px;
+    font-weight: 700;
+    gap: 6px;
+    padding: 9px 18px;
+    text-decoration: none;
+    transition: all .2s ease;
+    cursor: pointer;
+    border: none;
+}
+.itd-btn-white {
+    background: #fff;
+    color: var(--itd-accent);
+    box-shadow: 0 2px 8px rgba(0,0,0,.15);
+}
+.itd-btn-white:hover { background: #f0f7ff; color: var(--itd-accent); transform: translateY(-1px); }
+.itd-btn-ghost {
+    background: rgba(255,255,255,.15);
+    border: 1px solid rgba(255,255,255,.3);
+    color: #fff;
+}
+.itd-btn-ghost:hover { background: rgba(255,255,255,.25); color: #fff; }
+
+/* ── kpi strip ── */
+.itd-kpi-strip {
+    background: var(--itd-surface);
+    border-bottom: 1px solid var(--itd-border);
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+}
+.itd-kpi-item {
+    border-left: 1px solid var(--itd-border);
+    padding: 18px 24px;
+    text-align: center;
+}
+.itd-kpi-item:last-child { border-left: none; }
+.itd-kpi-val {
+    font-size: 26px;
+    font-weight: 900;
+    color: var(--itd-accent);
+    display: block;
+    line-height: 1;
+}
+.itd-kpi-lbl {
+    color: var(--itd-muted);
+    font-size: 12px;
+    font-weight: 600;
+    margin-top: 4px;
+    display: block;
+}
+
+/* ── body layout ── */
+.itd-body {
+    padding: 28px 32px;
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 24px;
+    align-items: start;
+}
+
+/* ── cards ── */
+.itd-card {
+    background: var(--itd-surface);
+    border: 1px solid var(--itd-border);
+    border-radius: var(--itd-radius);
+    box-shadow: var(--itd-shadow);
+    overflow: hidden;
+}
+.itd-card-head {
+    align-items: center;
+    border-bottom: 1px solid var(--itd-border);
+    display: flex;
+    gap: 10px;
+    padding: 16px 20px;
+}
+.itd-card-head-icon {
+    align-items: center;
+    border-radius: 10px;
+    display: flex;
+    font-size: 16px;
+    height: 38px;
+    justify-content: center;
+    width: 38px;
+    flex-shrink: 0;
+}
+.itd-icon-blue   { background: #eff6ff; color: #2563eb; }
+.itd-icon-purple { background: #f5f3ff; color: #7c3aed; }
+.itd-icon-green  { background: #f0fdf4; color: #16a34a; }
+.itd-icon-amber  { background: #fffbeb; color: #d97706; }
+.itd-icon-rose   { background: #fff1f2; color: #e11d48; }
+
+.itd-card-title {
+    font-size: 15px;
+    font-weight: 800;
+    margin: 0;
+    color: var(--itd-text);
+}
+.itd-card-body { padding: 20px; }
+
+/* ── meta grid ── */
+.itd-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+.itd-meta-cell {
+    background: #f8fafc;
+    border: 1px solid var(--itd-border);
+    border-radius: 10px;
+    padding: 12px 14px;
+}
+.itd-meta-lbl {
+    color: var(--itd-muted);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    display: block;
+    margin-bottom: 4px;
+}
+.itd-meta-val {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--itd-text);
+    display: block;
+}
+
+/* ── text block ── */
+.itd-text-block {
+    background: #f8fafc;
+    border-radius: 10px;
+    border: 1px solid var(--itd-border);
+    font-size: 14px;
+    line-height: 1.85;
+    padding: 14px 16px;
+    color: var(--itd-text);
+    margin: 0;
+}
+.itd-text-block + .itd-text-block { margin-top: 10px; }
+
+/* ── section label ── */
+.itd-sec-lbl {
+    color: var(--itd-muted);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    margin: 0 0 8px;
+}
+
+/* ── impact panel ── */
+.itd-impact-card {
+    background: linear-gradient(160deg, #1e3a8a 0%, #2563eb 100%);
+    border-radius: var(--itd-radius);
+    box-shadow: var(--itd-shadow-lg);
+    color: #fff;
+    overflow: hidden;
+    margin-bottom: 24px;
+}
+.itd-impact-head {
+    padding: 20px 24px 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+.itd-impact-title {
+    font-size: 18px;
+    font-weight: 900;
+    margin: 0 0 4px;
+}
+.itd-impact-sub {
+    color: rgba(255,255,255,.7);
+    font-size: 13px;
+    margin: 0;
+}
+.itd-trend-pill {
+    align-items: center;
+    border-radius: 999px;
+    display: inline-flex;
+    font-size: 13px;
+    font-weight: 900;
+    gap: 6px;
+    padding: 6px 16px;
+}
+.itd-trend-success   { background: #dcfce7; color: #15803d; }
+.itd-trend-danger    { background: #fee2e2; color: #b91c1c; }
+.itd-trend-secondary { background: rgba(255,255,255,.2); color: #fff; }
+
+.itd-impact-metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    padding: 20px 24px 24px;
+}
+.itd-metric-box {
+    background: rgba(255,255,255,.1);
+    backdrop-filter: blur(6px);
+    border: 1px solid rgba(255,255,255,.18);
+    border-radius: 14px;
+    padding: 16px;
+}
+.itd-metric-name {
+    color: rgba(255,255,255,.75);
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    display: block;
+}
+.itd-metric-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.itd-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.itd-bar-lbl {
+    color: rgba(255,255,255,.65);
+    font-size: 11px;
+    font-weight: 600;
+    width: 42px;
+    flex-shrink: 0;
+    text-align: start;
+}
+.itd-bar-track {
+    flex: 1;
+    background: rgba(255,255,255,.15);
+    border-radius: 999px;
+    height: 8px;
+    overflow: hidden;
+}
+.itd-bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width .6s cubic-bezier(.4,0,.2,1);
+}
+.itd-bar-fill-before { background: rgba(255,255,255,.4); }
+.itd-bar-fill-after  { background: #4ade80; }
+.itd-bar-fill-risk-b { background: rgba(255,255,255,.4); }
+.itd-bar-fill-risk-a { background: #f87171; }
+
+.itd-bar-num {
+    color: #fff;
+    font-size: 12px;
+    font-weight: 800;
+    width: 40px;
+    text-align: start;
+    flex-shrink: 0;
+}
+.itd-delta-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 900;
+    padding: 4px 10px;
+    margin-top: 10px;
+}
+.itd-delta-up   { background: #dcfce7; color: #15803d; }
+.itd-delta-down { background: #fee2e2; color: #b91c1c; }
+.itd-delta-flat { background: rgba(255,255,255,.15); color: rgba(255,255,255,.8); }
+
+/* ── no-data ── */
+.itd-no-data {
+    padding: 32px;
+    text-align: center;
+}
+.itd-no-data-icon {
+    font-size: 40px;
+    color: rgba(255,255,255,.35);
+    margin-bottom: 12px;
+}
+.itd-no-data p {
+    color: rgba(255,255,255,.6);
+    font-size: 14px;
+    margin: 0;
+}
+
+/* ── timeline ── */
+.itd-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 4px 0;
+}
+.itd-tl-item {
+    display: flex;
+    gap: 14px;
+    position: relative;
+    padding-bottom: 20px;
+}
+.itd-tl-item:last-child { padding-bottom: 0; }
+.itd-tl-dot-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+}
+.itd-tl-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 3px solid var(--itd-border);
+    background: #fff;
+    flex-shrink: 0;
+    z-index: 1;
+    transition: border-color .2s;
+}
+.itd-tl-dot.done  { background: var(--itd-success); border-color: var(--itd-success); }
+.itd-tl-dot.active { background: var(--itd-accent); border-color: var(--itd-accent);
+    box-shadow: 0 0 0 4px rgba(37,99,235,.18); }
+.itd-tl-line {
+    flex: 1;
+    width: 2px;
+    background: var(--itd-border);
+    margin: 2px 0;
+    min-height: 16px;
+}
+.itd-tl-content { flex: 1; }
+.itd-tl-label {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--itd-text);
+    margin-bottom: 2px;
+}
+.itd-tl-date {
+    font-size: 12px;
+    color: var(--itd-muted);
+}
+.itd-tl-date.empty { color: #d1d5db; font-style: italic; }
+
+/* ── rec card ── */
+.itd-rec-type {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #f5f3ff;
+    color: #7c3aed;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 12px;
+    margin-bottom: 12px;
+}
+.itd-rec-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 10px;
+    background: #dcfce7;
+    color: #15803d;
+    margin-bottom: 12px;
+    margin-right: 6px;
+}
+.itd-blockquote {
+    border-right: 3px solid var(--itd-accent2);
+    background: #faf5ff;
+    border-radius: 0 10px 10px 0;
+    color: var(--itd-text);
+    font-size: 13px;
+    line-height: 1.8;
+    margin: 10px 0 0;
+    padding: 12px 14px;
+}
+
+/* ── json details ── */
+.itd-json-wrap {
+    margin-top: 24px;
+}
+.itd-json-toggle {
+    align-items: center;
+    background: var(--itd-surface);
+    border: 1px solid var(--itd-border);
+    border-radius: 12px;
+    cursor: pointer;
+    display: flex;
+    font-family: var(--itd-font);
+    font-size: 13px;
+    font-weight: 700;
+    gap: 10px;
+    padding: 14px 18px;
+    width: 100%;
+    color: var(--itd-text);
+    margin-bottom: 6px;
+    transition: background .15s;
+}
+.itd-json-toggle:hover { background: #f8fafc; }
+.itd-json-toggle[aria-expanded="true"] { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom-color: transparent; }
+.itd-json-arrow { margin-right: auto; transition: transform .2s; color: var(--itd-muted); font-size: 12px; }
+.itd-json-toggle[aria-expanded="true"] .itd-json-arrow { transform: rotate(180deg); }
+.itd-json-body {
+    background: #0f172a;
+    border: 1px solid var(--itd-border);
+    border-top: none;
+    border-radius: 0 0 12px 12px;
+    display: none;
+    direction: ltr;
+}
+.itd-json-body.open { display: block; }
+.itd-json-body pre {
+    color: #e2e8f0;
+    font-size: 12px;
+    line-height: 1.7;
+    margin: 0;
+    max-height: 380px;
+    overflow: auto;
+    padding: 18px;
+    text-align: left;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* ── sidebar right column ── */
+.itd-sidebar { display: flex; flex-direction: column; gap: 20px; }
+
+/* ── divider ── */
+.itd-divider { border: none; border-top: 1px solid var(--itd-border); margin: 16px 0; }
+
+/* ── stack ── */
+.itd-stack { display: flex; flex-direction: column; gap: 16px; }
+
+/* ── responsive ── */
+@@media (max-width: 1100px) {
+    .itd-body { grid-template-columns: 1fr; }
+    .itd-kpi-strip { grid-template-columns: repeat(2, 1fr); }
+    .itd-kpi-item:nth-child(2) { border-left: none; }
+}
+@@media (max-width: 640px) {
+    .itd-hero  { padding: 24px 16px 20px; }
+    .itd-body  { padding: 16px; }
+    .itd-kpi-strip { grid-template-columns: repeat(2, 1fr); }
+    .itd-meta-grid { grid-template-columns: 1fr; }
+    .itd-impact-metrics { grid-template-columns: 1fr; }
+    .itd-hero-inner { flex-direction: column; }
+    .itd-hero-actions { width: 100%; }
+}
+
+/* Dark mode */
+@@media (prefers-color-scheme: dark) {
+    :root {
+        --itd-bg:      #0f172a;
+        --itd-surface: #1e293b;
+        --itd-border:  #334155;
+        --itd-text:    #f1f5f9;
+        --itd-muted:   #94a3b8;
+    }
+    .itd-meta-cell   { background: #0f172a; }
+    .itd-text-block  { background: #0f172a; }
+    .itd-json-toggle { background: var(--itd-surface); }
+    .itd-json-toggle:hover { background: #263045; }
+    .itd-blockquote  { background: #1e1b4b; }
+    .itd-rec-type    { background: #1e1b4b; }
+    .itd-rec-status  { background: #064e3b; }
+}
+</style>
+
+<div class="itd-page">
+
+    <!-- ═══════ HERO ═══════ -->
+    <div class="itd-hero">
+        <div class="itd-hero-inner">
+            <div>
+                <div class="itd-hero-eyebrow">DecisionLab · مهمة تدخل</div>
+                <h1 class="itd-hero-title">@Model.Title</h1>
+                <p class="itd-hero-sub">@Model.BatchName &nbsp;·&nbsp; @(string.IsNullOrWhiteSpace(Model.CurriculumTitle) ? "—" : Model.CurriculumTitle)</p>
+                <div class="itd-hero-badges">
+                    <span class="itd-badge @StatusClass(Model.Status)">
+                        <i class="fas @StatusIcon(Model.Status)"></i>@Model.Status
+                    </span>
+                    <span class="itd-badge @PriorityClass(Model.Priority)">
+                        <i class="fas fa-flag"></i>@Model.Priority
+                    </span>
+                    <span class="itd-badge itd-badge-glass">
+                        <i class="fas fa-calendar-days"></i>
+                        @(Model.DueDate.HasValue ? Model.DueDate.Value.ToString("yyyy/MM/dd") : "بدون موعد")
+                    </span>
+                    @if (daysActive > 0)
+                    {
+                        <span class="itd-badge itd-badge-glass">
+                            <i class="fas fa-stopwatch"></i>نشطة منذ @daysActive يوم
+                        </span>
+                    }
+                </div>
+            </div>
+            <div class="itd-hero-actions">
+                <a class="itd-btn itd-btn-white"
+                   asp-area="Admin" asp-controller="Analytics"
+                   asp-action="BatchPerformanceDetails"
+                   asp-route-batchId="@Model.BatchId"
+                   asp-route-curriculumId="@Model.CurriculumId">
+                    <i class="fas fa-chart-bar"></i>تحليل الدفعة
+                </a>
+                @if (Model.DecisionRecommendationId.HasValue)
+                {
+                    <a class="itd-btn itd-btn-ghost"
+                       asp-area="Admin" asp-controller="DecisionLab"
+                       asp-action="RecommendationDetails"
+                       asp-route-id="@Model.DecisionRecommendationId.Value">
+                        <i class="fas fa-link"></i>التوصية المرتبطة
+                    </a>
+                }
+                <a class="itd-btn itd-btn-ghost"
+                   asp-area="Admin" asp-controller="DecisionLab"
+                   asp-action="SavedRecommendations">
+                    <i class="fas fa-bookmark"></i>التوصيات
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════ KPI STRIP ═══════ -->
+    <div class="itd-kpi-strip">
+        <div class="itd-kpi-item">
+            <span class="itd-kpi-val">@Model.TaskType</span>
+            <span class="itd-kpi-lbl">نوع المهمة</span>
+        </div>
+        <div class="itd-kpi-item">
+            <span class="itd-kpi-val">@Model.DeliveryMode</span>
+            <span class="itd-kpi-lbl">طريقة التنفيذ</span>
+        </div>
+        <div class="itd-kpi-item">
+            <span class="itd-kpi-val">@Model.TargetType</span>
+            <span class="itd-kpi-lbl">الجهة المستهدفة</span>
+        </div>
+        <div class="itd-kpi-item">
+            <span class="itd-kpi-val">@daysActive</span>
+            <span class="itd-kpi-lbl">أيام منذ الإنشاء</span>
+        </div>
+    </div>
+
+    <!-- ═══════ IMPACT CARD (full-width) ═══════ -->
+    <div style="padding: 28px 32px 0;">
+        <div class="itd-impact-card">
+            @if (hasSc)
+            {
+                <div class="itd-impact-head">
+                    <div>
+                        <h2 class="itd-impact-title"><i class="fas fa-chart-line me-2"></i>قياس الأثر</h2>
+                        <p class="itd-impact-sub">مقارنة أداء الدفعة قبل وبعد القرار · <strong style="color:#fff">@daysSince يوم</strong> منذ اتخاذ القرار</p>
+                    </div>
+                    <span class="itd-trend-pill itd-trend-@trendCss">
+                        @if (trendLabel == "تحسن")      { <i class="fas fa-arrow-trend-up"></i> }
+                        else if (trendLabel == "تراجع") { <i class="fas fa-arrow-trend-down"></i> }
+                        else                            { <i class="fas fa-minus"></i> }
+                        @trendLabel
+                    </span>
+                </div>
+
+                <div class="itd-impact-metrics">
+                    <!-- Exam Score -->
+                    <div class="itd-metric-box">
+                        <span class="itd-metric-name"><i class="fas fa-percent me-1"></i>متوسط الأداء في الاختبارات</span>
+                        <div class="itd-metric-bars">
+                            <div class="itd-bar-row">
+                                <span class="itd-bar-lbl">قبل</span>
+                                <div class="itd-bar-track">
+                                    <div class="itd-bar-fill itd-bar-fill-before"
+                                         style="width:@(Math.Min(examBefore,100).ToString("F0"))%"></div>
+                                </div>
+                                <span class="itd-bar-num">@examBefore.ToString("F1")%</span>
+                            </div>
+                            <div class="itd-bar-row">
+                                <span class="itd-bar-lbl">بعد</span>
+                                <div class="itd-bar-track">
+                                    <div class="itd-bar-fill itd-bar-fill-after"
+                                         style="width:@(Math.Min(examNow,100).ToString("F0"))%"></div>
+                                </div>
+                                <span class="itd-bar-num">@examNow.ToString("F1")%</span>
+                            </div>
+                        </div>
+                        @{
+                            string examDeltaCss  = examDelta > 2 ? "itd-delta-up" : examDelta < -2 ? "itd-delta-down" : "itd-delta-flat";
+                            string examDeltaIcon = examDelta > 2 ? "fa-arrow-up"  : examDelta < -2 ? "fa-arrow-down"  : "fa-minus";
+                        }
+                        <div class="itd-delta-badge @examDeltaCss">
+                            <i class="fas @examDeltaIcon"></i>
+                            @(examDelta >= 0 ? "+" : "")@examDelta.ToString("F1")%
+                        </div>
+                    </div>
+
+                    <!-- At Risk Count -->
+                    <div class="itd-metric-box">
+                        <span class="itd-metric-name"><i class="fas fa-triangle-exclamation me-1"></i>عدد الدروس الضعيفة</span>
+                        @{
+                            double maxRisk      = Math.Max(riskBefore, Math.Max(riskNow, 1));
+                            double riskBeforePct = riskBefore / maxRisk * 100;
+                            double riskNowPct    = riskNow    / maxRisk * 100;
+                        }
+                        <div class="itd-metric-bars">
+                            <div class="itd-bar-row">
+                                <span class="itd-bar-lbl">قبل</span>
+                                <div class="itd-bar-track">
+                                    <div class="itd-bar-fill itd-bar-fill-risk-b"
+                                         style="width:@riskBeforePct.ToString("F0")%"></div>
+                                </div>
+                                <span class="itd-bar-num">@((int)riskBefore)</span>
+                            </div>
+                            <div class="itd-bar-row">
+                                <span class="itd-bar-lbl">بعد</span>
+                                <div class="itd-bar-track">
+                                    <div class="itd-bar-fill itd-bar-fill-risk-a"
+                                         style="width:@riskNowPct.ToString("F0")%"></div>
+                                </div>
+                                <span class="itd-bar-num">@((int)riskNow)</span>
+                            </div>
+                        </div>
+                        @{
+                            string riskDeltaCss  = riskDelta < 0 ? "itd-delta-up" : riskDelta > 0 ? "itd-delta-down" : "itd-delta-flat";
+                            string riskDeltaIcon = riskDelta < 0 ? "fa-arrow-down" : riskDelta > 0 ? "fa-arrow-up" : "fa-minus";
+                            string riskDeltaLbl  = riskDelta < 0 ? "انخفض ↓ جيد"   : riskDelta > 0 ? "ارتفع ↑ راجع" : "ثبات";
+                        }
+                        <div class="itd-delta-badge @riskDeltaCss">
+                            <i class="fas @riskDeltaIcon"></i>@riskDeltaLbl
+                        </div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="itd-no-data">
+                    <div class="itd-no-data-icon"><i class="fas fa-chart-line"></i></div>
+                    <p>لا توجد بيانات مقارنة بعد — ستظهر هنا بعد مرور بعض الوقت على القرار.</p>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- ═══════ BODY GRID ═══════ -->
+    <div class="itd-body">
+
+        <!-- ── Main column ── -->
+        <div class="itd-stack">
+
+            <!-- Task metadata -->
+            <div class="itd-card">
+                <div class="itd-card-head">
+                    <div class="itd-card-head-icon itd-icon-blue"><i class="fas fa-list-check"></i></div>
+                    <h3 class="itd-card-title">بيانات المهمة</h3>
+                </div>
+                <div class="itd-card-body">
+                    <div class="itd-meta-grid">
+                        <div class="itd-meta-cell">
+                            <span class="itd-meta-lbl">الدفعة</span>
+                            <span class="itd-meta-val">@Model.BatchName</span>
+                        </div>
+                        <div class="itd-meta-cell">
+                            <span class="itd-meta-lbl">المنهج</span>
+                            <span class="itd-meta-val">@(string.IsNullOrWhiteSpace(Model.CurriculumTitle) ? "—" : Model.CurriculumTitle)</span>
+                        </div>
+                        <div class="itd-meta-cell">
+                            <span class="itd-meta-lbl">المدرب</span>
+                            <span class="itd-meta-val">@(string.IsNullOrWhiteSpace(Model.InstructorName) ? "—" : Model.InstructorName)</span>
+                        </div>
+                        <div class="itd-meta-cell">
+                            <span class="itd-meta-lbl">محاضرة التنفيذ</span>
+                            <span class="itd-meta-val">@(string.IsNullOrWhiteSpace(Model.LectureTitle) ? "—" : Model.LectureTitle)</span>
+                        </div>
+                        <div class="itd-meta-cell">
+                            <span class="itd-meta-lbl">طريقة التنفيذ</span>
+                            <span class="itd-meta-val">@Model.DeliveryMode</span>
+                        </div>
+                        <div class="itd-meta-cell">
+                            <span class="itd-meta-lbl">نوع المهمة</span>
+                            <span class="itd-meta-val">@Model.TaskType</span>
+                        </div>
+                        <div class="itd-meta-cell">
+                            <span class="itd-meta-lbl">الجهة المستهدفة</span>
+                            <span class="itd-meta-val">@Model.TargetType</span>
+                        </div>
+                        <div class="itd-meta-cell">
+                            <span class="itd-meta-lbl">الأولوية</span>
+                            <span class="itd-meta-val">@Model.Priority</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Description -->
+            <div class="itd-card">
+                <div class="itd-card-head">
+                    <div class="itd-card-head-icon itd-icon-purple"><i class="fas fa-align-right"></i></div>
+                    <h3 class="itd-card-title">وصف المهمة</h3>
+                </div>
+                <div class="itd-card-body">
+                    <p class="itd-text-block">@Model.Description</p>
+                </div>
+            </div>
+
+            <!-- Owner instructions -->
+            <div class="itd-card">
+                <div class="itd-card-head">
+                    <div class="itd-card-head-icon itd-icon-amber"><i class="fas fa-user-tie"></i></div>
+                    <h3 class="itd-card-title">تعليمات المالك</h3>
+                </div>
+                <div class="itd-card-body">
+                    <p class="itd-text-block">@(string.IsNullOrWhiteSpace(Model.OwnerInstructions) ? "لا توجد تعليمات إضافية." : Model.OwnerInstructions)</p>
+                </div>
+            </div>
+
+            <!-- Recommendation -->
+            <div class="itd-card">
+                <div class="itd-card-head">
+                    <div class="itd-card-head-icon itd-icon-rose"><i class="fas fa-wand-magic-sparkles"></i></div>
+                    <h3 class="itd-card-title">التوصية المرتبطة</h3>
+                </div>
+                <div class="itd-card-body">
+                    <span class="itd-rec-type"><i class="fas fa-tag"></i>@Model.RecommendationType</span>
+                    <span class="itd-rec-status"><i class="fas fa-circle-check"></i>@Model.RecommendationStatus</span>
+
+                    <p class="itd-sec-lbl" style="margin-top:12px">الملخص</p>
+                    <blockquote class="itd-blockquote">@Model.RecommendationSummary</blockquote>
+
+                    <p class="itd-sec-lbl" style="margin-top:14px">السبب</p>
+                    <p class="itd-text-block">@Model.RecommendationReason</p>
+                </div>
+            </div>
+
+            <!-- ═══ COMPLETION REPORT ═══ -->
+            @if (!string.IsNullOrWhiteSpace(Model.AfterSnapshotJson))
+            {
+                JsonElement aft = default;
+                bool aftParsed = false;
+                try { using var d = JsonDocument.Parse(Model.AfterSnapshotJson); aft = d.RootElement.Clone(); aftParsed = true; } catch { }
+
+                if (aftParsed)
+                {
+                    var lecQs   = ReadAftItems(aft, "SolvedInLecture");
+                    var hwQs    = ReadAftItems(aft, "SentAsHomework");
+                    var lecLs   = ReadAftItems(aft, "LectureLessons");
+                    int stuCount = aft.TryGetProperty("StudentCount", out var stuEl) && stuEl.ValueKind == JsonValueKind.Number ? stuEl.GetInt32() : 0;
+                    string sentTo = aft.TryGetProperty("SentTo", out var st) && st.ValueKind == JsonValueKind.String ? st.GetString() ?? "" : "";
+                    string hwTitle = aft.TryGetProperty("HomeworkTitle", out var ht) && ht.ValueKind == JsonValueKind.String ? ht.GetString() ?? "" : "";
+                    string execNotes = aft.TryGetProperty("ExecutionNotes", out var en) && en.ValueKind == JsonValueKind.String ? en.GetString() ?? "" : "";
+                    int hwSetId = aft.TryGetProperty("HomeworkSetId", out var hsi) && hsi.ValueKind == JsonValueKind.Number ? hsi.GetInt32() : 0;
+
+                    <div class="itd-card" style="border-top:3px solid #059669;margin-bottom:24px">
+                        <div class="itd-card-head">
+                            <div class="itd-card-head-icon itd-icon-green"><i class="fas fa-clipboard-check"></i></div>
+                            <h3 class="itd-card-title">تقرير إتمام المهمة</h3>
+                            @if (hwSetId > 0)
+                            {
+                                <span style="margin-right:auto;background:#f0fdf4;color:#059669;border-radius:8px;padding:4px 12px;font-size:12px;font-weight:700">
+                                    <i class="fas fa-paper-plane me-1"></i>واجب #@hwSetId أُرسل
+                                </span>
+                            }
+                        </div>
+                        <div class="itd-card-body">
+
+                            @* Summary strip *@
+                            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px">
+                                <div class="itd-meta-cell" style="text-align:center">
+                                    <span class="itd-meta-lbl">تمّ في المحاضرة</span>
+                                    <span style="font-size:24px;font-weight:900;color:#059669;display:block">@lecQs.Count</span>
+                                    <span style="font-size:11px;color:var(--itd-muted)">سؤال</span>
+                                </div>
+                                <div class="itd-meta-cell" style="text-align:center">
+                                    <span class="itd-meta-lbl">أُرسل كواجب</span>
+                                    <span style="font-size:24px;font-weight:900;color:#2563eb;display:block">@hwQs.Count</span>
+                                    <span style="font-size:11px;color:var(--itd-muted)">سؤال</span>
+                                </div>
+                                <div class="itd-meta-cell" style="text-align:center">
+                                    <span class="itd-meta-lbl">المستفيدون</span>
+                                    <span style="font-size:24px;font-weight:900;color:#7c3aed;display:block">@stuCount</span>
+                                    <span style="font-size:11px;color:var(--itd-muted)">
+                                        @(sentTo == "Batch" ? "الدفعة كاملة" : "طالب محدد")
+                                    </span>
+                                </div>
+                            </div>
+
+                            @* Homework title *@
+                            @if (!string.IsNullOrWhiteSpace(hwTitle))
+                            {
+                                <div style="background:#eff6ff;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px">
+                                    <i class="fas fa-paper-plane me-2 text-primary"></i>
+                                    <strong>عنوان الواجب المُرسل:</strong> @hwTitle
+                                </div>
+                            }
+
+                            @* Two columns: lecture / homework *@
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+                                <div>
+                                    <p class="itd-sec-lbl" style="margin-bottom:8px">
+                                        <i class="fas fa-chalkboard-user me-1" style="color:#059669"></i>
+                                        حُلّت في المحاضرة (@lecQs.Count)
+                                    </p>
+                                    @if (lecQs.Any())
+                                    {
+                                        <div style="display:flex;flex-direction:column;gap:6px">
+                                            @foreach (var q in lecQs)
+                                            {
+                                                <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 12px">
+                                                    <div style="font-size:12px;font-weight:700;color:#166534">@q.Title</div>
+                                                    @if (!string.IsNullOrWhiteSpace(q.Sub))
+                                                    {
+                                                        <div style="font-size:11px;color:#4b7a58;margin-top:2px">@q.Sub</div>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                    else { <p style="color:var(--itd-muted);font-size:13px">لا يوجد</p> }
+                                </div>
+                                <div>
+                                    <p class="itd-sec-lbl" style="margin-bottom:8px">
+                                        <i class="fas fa-paper-plane me-1" style="color:#2563eb"></i>
+                                        أُرسلت كواجب (@hwQs.Count)
+                                    </p>
+                                    @if (hwQs.Any())
+                                    {
+                                        <div style="display:flex;flex-direction:column;gap:6px">
+                                            @foreach (var q in hwQs)
+                                            {
+                                                <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 12px">
+                                                    <div style="font-size:12px;font-weight:700;color:#1e40af">@q.Title</div>
+                                                    @if (!string.IsNullOrWhiteSpace(q.Sub))
+                                                    {
+                                                        <div style="font-size:11px;color:#3b5fa0;margin-top:2px">@q.Sub</div>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                    else { <p style="color:var(--itd-muted);font-size:13px">لا يوجد</p> }
+                                </div>
+                            </div>
+
+                            @* Lessons covered *@
+                            @if (lecLs.Any())
+                            {
+                                <p class="itd-sec-lbl" style="margin-bottom:8px">
+                                    <i class="fas fa-book-open me-1" style="color:#7c3aed"></i>
+                                    المؤشرات التي غُطّيت في المحاضرة (@lecLs.Count)
+                                </p>
+                                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px">
+                                    @foreach (var l in lecLs)
+                                    {
+                                        <span style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:700;color:#5b21b6">
+                                            <i class="fas fa-book me-1"></i>@l.Title
+                                        </span>
+                                    }
+                                </div>
+                            }
+
+                            @* Execution notes *@
+                            @if (!string.IsNullOrWhiteSpace(execNotes))
+                            {
+                                <p class="itd-sec-lbl" style="margin-bottom:6px">ملاحظات المدرب</p>
+                                <p class="itd-text-block">@execNotes</p>
+                            }
+                        </div>
+                    </div>
+                }
+            }
+
+            <!-- JSON panels -->
+            <div class="itd-json-wrap">
+                <button class="itd-json-toggle" onclick="toggleJson('json-lessons',this)" aria-expanded="false">
+                    <i class="fas fa-book-open" style="color:var(--itd-accent)"></i>
+                    الدروس المستهدفة (TargetLessonsJson)
+                    <span class="itd-json-arrow"><i class="fas fa-chevron-down"></i></span>
+                </button>
+                <div id="json-lessons" class="itd-json-body">
+                    <pre>@FormatJson(Model.TargetLessonsJson)</pre>
+                </div>
+
+                <button class="itd-json-toggle" onclick="toggleJson('json-questions',this)" aria-expanded="false" style="margin-top:8px">
+                    <i class="fas fa-circle-question" style="color:var(--itd-accent2)"></i>
+                    الأسئلة المستهدفة (TargetQuestionsJson)
+                    <span class="itd-json-arrow"><i class="fas fa-chevron-down"></i></span>
+                </button>
+                <div id="json-questions" class="itd-json-body">
+                    <pre>@FormatJson(Model.TargetQuestionsJson)</pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Sidebar ── -->
+        <aside class="itd-sidebar">
+
+            <!-- Timeline -->
+            <div class="itd-card">
+                <div class="itd-card-head">
+                    <div class="itd-card-head-icon itd-icon-green"><i class="fas fa-timeline"></i></div>
+                    <h3 class="itd-card-title">سير المهمة</h3>
+                </div>
+                <div class="itd-card-body">
+                    <div class="itd-timeline">
+                        @{
+                            bool created   = true;
+                            bool assigned  = Model.AssignedAt.HasValue;
+                            bool started   = Model.StartedAt.HasValue;
+                            bool completed = Model.CompletedAt.HasValue;
+                        }
+                        <div class="itd-tl-item">
+                            <div class="itd-tl-dot-col">
+                                <div class="itd-tl-dot done"></div>
+                                <div class="itd-tl-line"></div>
+                            </div>
+                            <div class="itd-tl-content">
+                                <div class="itd-tl-label">إنشاء المهمة</div>
+                                <div class="itd-tl-date">@Model.CreatedAt.ToString("yyyy/MM/dd HH:mm")</div>
+                            </div>
+                        </div>
+                        <div class="itd-tl-item">
+                            <div class="itd-tl-dot-col">
+                                <div class="itd-tl-dot @(assigned ? "done" : "")"></div>
+                                <div class="itd-tl-line"></div>
+                            </div>
+                            <div class="itd-tl-content">
+                                <div class="itd-tl-label">الإسناد للمدرب</div>
+                                @if (assigned)
+                                {
+                                    <div class="itd-tl-date">@Model.AssignedAt!.Value.ToString("yyyy/MM/dd HH:mm")</div>
+                                }
+                                else
+                                {
+                                    <div class="itd-tl-date empty">لم يُسند بعد</div>
+                                }
+                            </div>
+                        </div>
+                        <div class="itd-tl-item">
+                            <div class="itd-tl-dot-col">
+                                <div class="itd-tl-dot @(started ? "done" : assigned ? "active" : "")"></div>
+                                <div class="itd-tl-line"></div>
+                            </div>
+                            <div class="itd-tl-content">
+                                <div class="itd-tl-label">بدء التنفيذ</div>
+                                @if (started)
+                                {
+                                    <div class="itd-tl-date">@Model.StartedAt!.Value.ToString("yyyy/MM/dd HH:mm")</div>
+                                }
+                                else
+                                {
+                                    <div class="itd-tl-date empty">لم يبدأ بعد</div>
+                                }
+                            </div>
+                        </div>
+                        <div class="itd-tl-item">
+                            <div class="itd-tl-dot-col">
+                                <div class="itd-tl-dot @(completed ? "done" : started ? "active" : "")"></div>
+                            </div>
+                            <div class="itd-tl-content">
+                                <div class="itd-tl-label">الإنجاز</div>
+                                @if (completed)
+                                {
+                                    <div class="itd-tl-date">@Model.CompletedAt!.Value.ToString("yyyy/MM/dd HH:mm")</div>
+                                }
+                                else
+                                {
+                                    <div class="itd-tl-date empty">لم يُكتمل بعد</div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick info -->
+            <div class="itd-card">
+                <div class="itd-card-head">
+                    <div class="itd-card-head-icon itd-icon-blue"><i class="fas fa-circle-info"></i></div>
+                    <h3 class="itd-card-title">معلومات سريعة</h3>
+                </div>
+                <div class="itd-card-body">
+                    <div style="display:flex;flex-direction:column;gap:10px">
+                        <div class="itd-meta-cell">
+                            <span class="itd-meta-lbl">رقم المهمة</span>
+                            <span class="itd-meta-val">#@Model.Id</span>
+                        </div>
+                        <div class="itd-meta-cell">
+                            <span class="itd-meta-lbl">رقم الدفعة</span>
+                            <span class="itd-meta-val">@Model.BatchId</span>
+                        </div>
+                        @if (Model.DecisionRecommendationId.HasValue)
+                        {
+                            <div class="itd-meta-cell">
+                                <span class="itd-meta-lbl">رقم التوصية</span>
+                                <span class="itd-meta-val">#@Model.DecisionRecommendationId.Value</span>
+                            </div>
+                        }
+                        <div class="itd-meta-cell">
+                            <span class="itd-meta-lbl">الحالة الحالية</span>
+                            <span class="itd-meta-val">
+                                <span class="itd-badge @StatusClass(Model.Status)" style="font-size:12px;padding:3px 10px">
+                                    <i class="fas @StatusIcon(Model.Status)"></i>@Model.Status
+                                </span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </aside>
+    </div>
+</div>
+
+<script>
+    function toggleJson(id, btn) {
+        var body = document.getElementById(id);
+        var open = body.classList.toggle('open');
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+</script>

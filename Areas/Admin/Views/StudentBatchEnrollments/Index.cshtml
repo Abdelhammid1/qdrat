@@ -1,0 +1,1479 @@
+﻿@using QdratNew.ViewModels.StudentBatchEnrollments
+@model IEnumerable<StudentBatchEnrollmentListViewModel>
+
+@{
+    ViewData["Title"] = "ربط الطلاب بالدفعات";
+
+    var enrollments = Model != null
+        ? Model.ToList()
+        : new List<StudentBatchEnrollmentListViewModel>();
+
+    var totalEnrollments = enrollments.Count;
+
+    var activeEnrollments = enrollments.Count(e =>
+        !string.IsNullOrWhiteSpace(e.Status)
+        && (e.Status == "نشط" || e.Status == "Active"));
+
+    var inactiveEnrollments = totalEnrollments - activeEnrollments;
+
+    var todayEnrollments = enrollments.Count(e => e.EnrolledAt.Date == DateTime.Today);
+
+    var thisWeekStart = DateTime.Today.AddDays(-6);
+    var thisWeekEnrollments = enrollments.Count(e => e.EnrolledAt.Date >= thisWeekStart);
+
+    var uniqueStudents = enrollments
+        .Where(e => !string.IsNullOrWhiteSpace(e.StudentName))
+        .Select(e => e.StudentName)
+        .Distinct()
+        .Count();
+
+    var uniqueBatches = enrollments
+        .Where(e => !string.IsNullOrWhiteSpace(e.BatchName))
+        .Select(e => e.BatchName)
+        .Distinct()
+        .Count();
+
+    var statuses = enrollments
+        .Where(e => !string.IsNullOrWhiteSpace(e.Status))
+        .Select(e => e.Status)
+        .Distinct()
+        .OrderBy(x => x)
+        .ToList();
+
+    string SafeText(string? value, string fallback = "غير محدد")
+    {
+        return string.IsNullOrWhiteSpace(value) ? fallback : value;
+    }
+
+    string BuildAvatar(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return "ط";
+        }
+
+        var cleaned = name.Trim();
+        var parts = cleaned.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        if (parts.Length >= 2)
+        {
+            return (parts[0].Substring(0, 1) + parts[1].Substring(0, 1)).ToUpper();
+        }
+
+        return cleaned.Substring(0, Math.Min(2, cleaned.Length)).ToUpper();
+    }
+
+    string ResolveStatusCss(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status))
+        {
+            return "neutral";
+        }
+
+        if (status == "نشط" || status == "Active")
+        {
+            return "active";
+        }
+
+        if (status.Contains("موقوف") || status.Contains("غير") || status.Contains("Inactive"))
+        {
+            return "danger";
+        }
+
+        return "warning";
+    }
+
+    string ResolveRecentCss(DateTime enrolledAt)
+    {
+        if (enrolledAt.Date == DateTime.Today)
+        {
+            return "today";
+        }
+
+        if (enrolledAt.Date >= DateTime.Today.AddDays(-6))
+        {
+            return "week";
+        }
+
+        return "old";
+    }
+
+    string ResolveRecentText(DateTime enrolledAt)
+    {
+        if (enrolledAt.Date == DateTime.Today)
+        {
+            return "اليوم";
+        }
+
+        if (enrolledAt.Date >= DateTime.Today.AddDays(-6))
+        {
+            return "هذا الأسبوع";
+        }
+
+        return "سابق";
+    }
+}
+
+<div class="enrollments-index-page" dir="rtl">
+
+    <div class="enrollments-topbar">
+        <div class="enrollments-brand">
+            <div class="enrollments-brand-icon">
+                <i class="fas fa-link"></i>
+            </div>
+            <div>
+                <div class="enrollments-brand-title">ربط الطلاب بالدفعات</div>
+                <div class="enrollments-brand-sub">إدارة علاقات الطلاب بالدفعات ومتابعة حالة كل ربط داخل المنصة</div>
+            </div>
+        </div>
+
+        <div class="enrollments-top-actions">
+            <a asp-area="Admin"
+               asp-controller="StudentBatchEnrollments"
+               asp-action="Create"
+               class="btn-add">
+                <i class="fas fa-plus-circle"></i>
+                ربط طالب بدفعة
+            </a>
+        </div>
+    </div>
+
+    <div class="enrollments-kpis">
+
+        <div class="kpi-card kpi-blue">
+            <div class="kpi-ico ico-blue">
+                <i class="fas fa-link"></i>
+            </div>
+            <div>
+                <div class="kpi-label">إجمالي الروابط</div>
+                <div class="kpi-val">@totalEnrollments</div>
+                <div class="kpi-hint">كل علاقات الطلاب بالدفعات</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-emerald">
+            <div class="kpi-ico ico-emerald">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <div>
+                <div class="kpi-label">روابط نشطة</div>
+                <div class="kpi-val">@activeEnrollments</div>
+                <div class="kpi-hint">@((totalEnrollments > 0 ? Math.Round((activeEnrollments / (double)totalEnrollments) * 100, 1) : 0).ToString("0.#"))% من الإجمالي</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-amber">
+            <div class="kpi-ico ico-amber">
+                <i class="fas fa-user-clock"></i>
+            </div>
+            <div>
+                <div class="kpi-label">غير نشطة</div>
+                <div class="kpi-val">@inactiveEnrollments</div>
+                <div class="kpi-hint">تحتاج مراجعة حالة الربط</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-violet">
+            <div class="kpi-ico ico-violet">
+                <i class="fas fa-user-graduate"></i>
+            </div>
+            <div>
+                <div class="kpi-label">طلاب مرتبطون</div>
+                <div class="kpi-val">@uniqueStudents</div>
+                <div class="kpi-hint">عدد الطلاب الفريدين في النتائج</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-cyan">
+            <div class="kpi-ico ico-cyan">
+                <i class="fas fa-users"></i>
+            </div>
+            <div>
+                <div class="kpi-label">دفعات مستخدمة</div>
+                <div class="kpi-val">@uniqueBatches</div>
+                <div class="kpi-hint">عدد الدفعات الفريدة</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-slate">
+            <div class="kpi-ico ico-slate">
+                <i class="fas fa-calendar-day"></i>
+            </div>
+            <div>
+                <div class="kpi-label">إضافات اليوم</div>
+                <div class="kpi-val">@todayEnrollments</div>
+                <div class="kpi-hint">@thisWeekEnrollments روابط خلال آخر 7 أيام</div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="enrollments-filter-card">
+        <div class="enrollments-filter-title">
+            <i class="fas fa-sliders-h"></i>
+            تصفية روابط الطلاب والدفعات
+        </div>
+
+        <div class="enrollments-filter-grid">
+
+            <div class="enrollments-field">
+                <label>
+                    <i class="fas fa-search"></i>
+                    بحث عام
+                </label>
+                <input type="text"
+                       id="enrollmentsSearch"
+                       class="enrollments-input"
+                       placeholder="ابحث باسم الطالب، الدفعة، الحالة..." />
+            </div>
+
+            <div class="enrollments-field">
+                <label>
+                    <i class="fas fa-toggle-on"></i>
+                    حالة الربط
+                </label>
+                <select id="statusFilter" class="enrollments-select">
+                    <option value="">كل الحالات</option>
+                    @foreach (var status in statuses)
+                    {
+                        <option value="@status">@status</option>
+                    }
+                </select>
+            </div>
+
+            <div class="enrollments-field">
+                <label>
+                    <i class="fas fa-calendar-alt"></i>
+                    وقت الإضافة
+                </label>
+                <select id="dateFilter" class="enrollments-select">
+                    <option value="">كل الفترات</option>
+                    <option value="today">اليوم</option>
+                    <option value="week">آخر 7 أيام</option>
+                    <option value="old">أقدم من ذلك</option>
+                </select>
+            </div>
+
+            <div class="enrollments-field filter-actions-field">
+                <button type="button" id="resetFilters" class="btn-reset">
+                    <i class="fas fa-undo-alt"></i>
+                    إعادة ضبط
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="enrollments-insight-grid">
+
+        <div class="insight-card">
+            <div class="insight-head">
+                <div>
+                    <span>قراءة تشغيلية</span>
+                    <h2>ملخص الربط الحالي</h2>
+                </div>
+                <i class="fas fa-chart-pie"></i>
+            </div>
+
+            <div class="mini-stats-grid">
+
+                <div class="mini-stat">
+                    <div class="mini-stat-top">
+                        <span>نشط</span>
+                        <strong>@activeEnrollments</strong>
+                    </div>
+                    <div class="mini-bar green">
+                        <div style="width:@((totalEnrollments > 0 ? Math.Round((activeEnrollments / (double)totalEnrollments) * 100, 0) : 0))%"></div>
+                    </div>
+                </div>
+
+                <div class="mini-stat">
+                    <div class="mini-stat-top">
+                        <span>غير نشط</span>
+                        <strong>@inactiveEnrollments</strong>
+                    </div>
+                    <div class="mini-bar amber">
+                        <div style="width:@((totalEnrollments > 0 ? Math.Round((inactiveEnrollments / (double)totalEnrollments) * 100, 0) : 0))%"></div>
+                    </div>
+                </div>
+
+                <div class="mini-stat">
+                    <div class="mini-stat-top">
+                        <span>اليوم</span>
+                        <strong>@todayEnrollments</strong>
+                    </div>
+                    <div class="mini-bar blue">
+                        <div style="width:@((totalEnrollments > 0 ? Math.Round((todayEnrollments / (double)totalEnrollments) * 100, 0) : 0))%"></div>
+                    </div>
+                </div>
+
+                <div class="mini-stat">
+                    <div class="mini-stat-top">
+                        <span>هذا الأسبوع</span>
+                        <strong>@thisWeekEnrollments</strong>
+                    </div>
+                    <div class="mini-bar purple">
+                        <div style="width:@((totalEnrollments > 0 ? Math.Round((thisWeekEnrollments / (double)totalEnrollments) * 100, 0) : 0))%"></div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <div class="decision-card">
+            <div class="insight-head">
+                <div>
+                    <span>تنبيهات</span>
+                    <h2>ما الذي يحتاج مراجعة؟</h2>
+                </div>
+                <i class="fas fa-bell"></i>
+            </div>
+
+            <div class="decision-list">
+                @if (inactiveEnrollments > 0)
+                {
+                    <div class="decision-item warning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <div>
+                            <strong>روابط غير نشطة</strong>
+                            <span>يوجد @inactiveEnrollments ربط غير نشط. راجع سبب الإيقاف أو عدم التفعيل.</span>
+                        </div>
+                    </div>
+                }
+
+                @if (todayEnrollments > 0)
+                {
+                    <div class="decision-item good">
+                        <i class="fas fa-calendar-check"></i>
+                        <div>
+                            <strong>نشاط ربط اليوم</strong>
+                            <span>تم إنشاء @todayEnrollments ربط اليوم.</span>
+                        </div>
+                    </div>
+                }
+
+                @if (totalEnrollments == 0)
+                {
+                    <div class="decision-item neutral">
+                        <i class="fas fa-info-circle"></i>
+                        <div>
+                            <strong>لا توجد روابط</strong>
+                            <span>ابدأ بربط الطلاب بالدفعات حتى تظهر البيانات التشغيلية.</span>
+                        </div>
+                    </div>
+                }
+
+                @if (totalEnrollments > 0 && inactiveEnrollments == 0)
+                {
+                    <div class="decision-item good">
+                        <i class="fas fa-check-circle"></i>
+                        <div>
+                            <strong>حالة الربط مستقرة</strong>
+                            <span>كل الروابط المعروضة نشطة ولا توجد حالات تحتاج تدخل مباشر.</span>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+    </div>
+
+    <div class="enrollments-table-card">
+
+        <div class="enrollments-table-topbar">
+            <div>
+                <div class="table-title">قائمة روابط الطلاب بالدفعات</div>
+                <div class="table-sub">كل صف يمثل علاقة طالب بدفعة واحدة</div>
+            </div>
+
+            <div class="table-tools">
+                <div class="enrollments-count-badge">
+                    المعروض:
+                    <strong id="visibleEnrollmentsCount">@totalEnrollments</strong>
+                    من
+                    <strong>@totalEnrollments</strong>
+                </div>
+            </div>
+        </div>
+
+        <div class="enrollments-table-wrap">
+            <table id="enrollmentsTable" class="enrollments-table">
+                <thead>
+                    <tr>
+                        <th style="width:30%; text-align:right;">الطالب</th>
+                        <th style="width:28%; text-align:right;">الدفعة</th>
+                        <th style="width:15%;">تاريخ الربط</th>
+                        <th style="width:12%;">الفترة</th>
+                        <th style="width:10%;">الحالة</th>
+                        <th style="width:5%;">الإجراءات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in enrollments)
+                    {
+                        var statusCss = ResolveStatusCss(item.Status);
+                        var recentCss = ResolveRecentCss(item.EnrolledAt);
+                        var recentText = ResolveRecentText(item.EnrolledAt);
+                        var searchableText = $"{item.StudentName} {item.BatchName} {item.Status} {item.EnrolledAt:yyyy/MM/dd}".ToLower();
+
+                        <tr class="enrollment-row"
+                            data-search="@searchableText"
+                            data-status="@SafeText(item.Status, "")"
+                            data-date="@recentCss">
+
+                            <td style="text-align:right;">
+                                <div class="entity-cell">
+                                    <div class="entity-avatar student">
+                                        @BuildAvatar(item.StudentName)
+                                    </div>
+
+                                    <div class="entity-main-info">
+                                        <div class="entity-name">@SafeText(item.StudentName, "طالب غير محدد")</div>
+                                        <div class="entity-sub">
+                                            <i class="fas fa-user-graduate"></i>
+                                            طالب مرتبط بدفعة
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+
+                            <td style="text-align:right;">
+                                <div class="entity-cell">
+                                    <div class="entity-avatar batch">
+                                        <i class="fas fa-users"></i>
+                                    </div>
+
+                                    <div class="entity-main-info">
+                                        <div class="entity-name">@SafeText(item.BatchName, "دفعة غير محددة")</div>
+                                        <div class="entity-sub">
+                                            <i class="fas fa-layer-group"></i>
+                                            دفعة تعليمية
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+
+                            <td>
+                                <span class="date-pill">
+                                    <i class="fas fa-calendar-alt"></i>
+                                    @item.EnrolledAt.ToString("yyyy/MM/dd")
+                                </span>
+                            </td>
+
+                            <td>
+                                <span class="recent-pill @recentCss">
+                                    <i class="fas fa-clock"></i>
+                                    @recentText
+                                </span>
+                            </td>
+
+                            <td>
+                                <span class="status-pill @statusCss">
+                                    <i class="fas fa-circle"></i>
+                                    @SafeText(item.Status)
+                                </span>
+                            </td>
+
+                            <td>
+                                <div class="enrollments-actions">
+
+                                    <a asp-area="Admin"
+                                       asp-controller="StudentBatchEnrollments"
+                                       asp-action="Details"
+                                       asp-route-id="@item.Id"
+                                       class="act-btn act-view"
+                                       title="عرض التفاصيل">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+
+                                    <a asp-area="Admin"
+                                       asp-controller="StudentBatchEnrollments"
+                                       asp-action="Edit"
+                                       asp-route-id="@item.Id"
+                                       class="act-btn act-edit"
+                                       title="تعديل">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+
+                                    <a asp-area="Admin"
+                                       asp-controller="StudentBatchEnrollments"
+                                       asp-action="Delete"
+                                       asp-route-id="@item.Id"
+                                       class="act-btn act-delete"
+                                       title="حذف">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </a>
+
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (!enrollments.Any())
+        {
+            <div class="enrollments-empty">
+                <i class="fas fa-link-slash"></i>
+                <div class="enrollments-empty-title">لا توجد روابط بين الطلاب والدفعات</div>
+                <div class="enrollments-empty-sub">ابدأ بإنشاء ربط جديد بين طالب ودفعة</div>
+
+                <a asp-area="Admin"
+                   asp-controller="StudentBatchEnrollments"
+                   asp-action="Create"
+                   class="btn-add empty-btn">
+                    <i class="fas fa-plus-circle"></i>
+                    إنشاء ربط جديد
+                </a>
+            </div>
+        }
+        else
+        {
+            <div id="noFilteredEnrollments" class="enrollments-empty d-none">
+                <i class="fas fa-filter"></i>
+                <div class="enrollments-empty-title">لا توجد نتائج مطابقة</div>
+                <div class="enrollments-empty-sub">غيّر البحث أو أعد ضبط الفلاتر</div>
+            </div>
+        }
+
+    </div>
+
+</div>
+
+<style>
+    .enrollments-index-page {
+        --font: 'Cairo', 'Tahoma', sans-serif;
+        --ink: #0d1117;
+        --ink-3: #374151;
+        --mute: #6b7280;
+        --mute-2: #9ca3af;
+        --mute-3: #d1d5db;
+        --bg: #f4f6fb;
+        --bg-2: #eef1f8;
+        --surface: #ffffff;
+        --border: #e5e8f0;
+        --green: #059669;
+        --green-lt: #d1fae5;
+        --green-dk: #064e3b;
+        --blue: #2563eb;
+        --blue-lt: #dbeafe;
+        --blue-dk: #1e3a8a;
+        --amber: #d97706;
+        --amber-lt: #fef3c7;
+        --amber-dk: #78350f;
+        --red: #dc2626;
+        --red-lt: #fee2e2;
+        --red-dk: #7f1d1d;
+        --purple: #7c3aed;
+        --purple-lt: #ede9fe;
+        --purple-dk: #3b0764;
+        --cyan: #0891b2;
+        --cyan-lt: #cffafe;
+        --slate: #475569;
+        --slate-lt: #e2e8f0;
+        --radius: 14px;
+        --radius-lg: 20px;
+        --shadow: 0 2px 16px rgba(13, 17, 23, .07);
+        --shadow-sm: 0 1px 6px rgba(13, 17, 23, .05);
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: var(--font);
+        padding: 24px;
+    }
+
+        .enrollments-index-page *,
+        .enrollments-index-page *::before,
+        .enrollments-index-page *::after {
+            box-sizing: border-box;
+        }
+
+        .enrollments-index-page a {
+            text-decoration: none;
+        }
+
+    .enrollments-topbar {
+        background: var(--ink);
+        border-radius: var(--radius-lg);
+        padding: 18px 22px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        margin-bottom: 16px;
+        box-shadow: var(--shadow);
+    }
+
+    .enrollments-brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+    }
+
+    .enrollments-brand-icon {
+        width: 46px;
+        height: 46px;
+        border-radius: 14px;
+        background: linear-gradient(135deg, #0f766e, #0891b2);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        flex-shrink: 0;
+        box-shadow: 0 8px 22px rgba(8, 145, 178, .25);
+    }
+
+    .enrollments-brand-title {
+        color: #ffffff;
+        font-size: 19px;
+        font-weight: 900;
+        line-height: 1.2;
+    }
+
+    .enrollments-brand-sub {
+        color: rgba(255, 255, 255, .58);
+        font-size: 12px;
+        margin-top: 3px;
+    }
+
+    .enrollments-top-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .btn-add,
+    .btn-reset {
+        border: 0;
+        border-radius: 12px;
+        padding: 10px 15px;
+        font-size: 12.5px;
+        font-weight: 800;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        cursor: pointer;
+        transition: .15s;
+        font-family: var(--font);
+        white-space: nowrap;
+    }
+
+    .btn-add {
+        background: var(--cyan);
+        color: #fff;
+        box-shadow: 0 8px 20px rgba(8, 145, 178, .20);
+    }
+
+        .btn-add:hover {
+            color: #fff;
+            background: #0e7490;
+            transform: translateY(-1px);
+        }
+
+    .enrollments-kpis {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+
+    .kpi-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 16px;
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        min-height: 126px;
+        box-shadow: var(--shadow-sm);
+        position: relative;
+        overflow: hidden;
+        transition: .15s;
+    }
+
+        .kpi-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+        }
+
+        .kpi-card::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            right: 14px;
+            left: 14px;
+            height: 3px;
+            border-radius: 999px 999px 0 0;
+        }
+
+    .kpi-blue::after {
+        background: var(--blue);
+    }
+
+    .kpi-emerald::after {
+        background: var(--green);
+    }
+
+    .kpi-amber::after {
+        background: var(--amber);
+    }
+
+    .kpi-violet::after {
+        background: var(--purple);
+    }
+
+    .kpi-cyan::after {
+        background: var(--cyan);
+    }
+
+    .kpi-slate::after {
+        background: var(--slate);
+    }
+
+    .kpi-ico {
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 17px;
+        flex-shrink: 0;
+    }
+
+    .ico-blue {
+        background: var(--blue-lt);
+        color: var(--blue-dk);
+    }
+
+    .ico-emerald {
+        background: var(--green-lt);
+        color: var(--green-dk);
+    }
+
+    .ico-amber {
+        background: var(--amber-lt);
+        color: var(--amber-dk);
+    }
+
+    .ico-violet {
+        background: var(--purple-lt);
+        color: var(--purple-dk);
+    }
+
+    .ico-cyan {
+        background: var(--cyan-lt);
+        color: #155e75;
+    }
+
+    .ico-slate {
+        background: var(--slate-lt);
+        color: #334155;
+    }
+
+    .kpi-label {
+        color: var(--mute);
+        font-size: 12px;
+        font-weight: 800;
+        margin-bottom: 6px;
+    }
+
+    .kpi-val {
+        color: var(--ink);
+        font-size: 28px;
+        font-weight: 900;
+        line-height: 1;
+    }
+
+    .kpi-hint {
+        color: var(--mute-2);
+        font-size: 10.5px;
+        font-weight: 700;
+        margin-top: 7px;
+        line-height: 1.5;
+    }
+
+    .enrollments-filter-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 18px;
+        margin-bottom: 16px;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .enrollments-filter-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--ink);
+        font-size: 14px;
+        font-weight: 900;
+        margin-bottom: 14px;
+    }
+
+        .enrollments-filter-title i {
+            color: var(--cyan);
+        }
+
+    .enrollments-filter-grid {
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr auto;
+        gap: 12px;
+        align-items: end;
+    }
+
+    .enrollments-field label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--ink-3);
+        font-size: 11.5px;
+        font-weight: 800;
+        margin-bottom: 6px;
+    }
+
+        .enrollments-field label i {
+            color: var(--cyan);
+        }
+
+    .enrollments-input,
+    .enrollments-select {
+        width: 100%;
+        min-height: 42px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: #fff;
+        padding: 9px 12px;
+        color: var(--ink);
+        font-size: 12.5px;
+        font-family: var(--font);
+        outline: none;
+        transition: .15s;
+    }
+
+        .enrollments-input:focus,
+        .enrollments-select:focus {
+            border-color: var(--cyan);
+            box-shadow: 0 0 0 3px rgba(8, 145, 178, .10);
+        }
+
+    .btn-reset {
+        min-height: 42px;
+        background: var(--bg-2);
+        color: var(--ink-3);
+        border: 1px solid var(--border);
+    }
+
+        .btn-reset:hover {
+            background: var(--red-lt);
+            color: var(--red-dk);
+            border-color: rgba(220, 38, 38, .20);
+        }
+
+    .enrollments-insight-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 390px;
+        gap: 16px;
+        margin-bottom: 16px;
+    }
+
+    .insight-card,
+    .decision-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 18px;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .insight-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        margin-bottom: 14px;
+    }
+
+        .insight-head span {
+            color: var(--cyan);
+            font-size: 11px;
+            font-weight: 900;
+            display: block;
+            margin-bottom: 3px;
+        }
+
+        .insight-head h2 {
+            margin: 0;
+            color: var(--ink);
+            font-size: 15px;
+            font-weight: 900;
+        }
+
+        .insight-head > i {
+            color: var(--cyan);
+            background: var(--cyan-lt);
+            width: 38px;
+            height: 38px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+    .mini-stats-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+    }
+
+    .mini-stat {
+        background: var(--bg-2);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 13px;
+    }
+
+    .mini-stat-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+
+        .mini-stat-top span {
+            color: var(--mute);
+            font-size: 11.5px;
+            font-weight: 900;
+        }
+
+        .mini-stat-top strong {
+            color: var(--ink);
+            font-size: 18px;
+            font-weight: 900;
+        }
+
+    .mini-bar {
+        height: 7px;
+        background: var(--mute-3);
+        border-radius: 999px;
+        overflow: hidden;
+    }
+
+        .mini-bar div {
+            height: 100%;
+            border-radius: 999px;
+            background: var(--blue);
+        }
+
+        .mini-bar.green div {
+            background: var(--green);
+        }
+
+        .mini-bar.amber div {
+            background: var(--amber);
+        }
+
+        .mini-bar.purple div {
+            background: var(--purple);
+        }
+
+    .decision-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .decision-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        border-radius: 14px;
+        padding: 12px;
+        border: 1px solid var(--border);
+        background: var(--bg-2);
+    }
+
+        .decision-item i {
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            background: #fff;
+        }
+
+        .decision-item strong {
+            display: block;
+            color: var(--ink);
+            font-size: 12.5px;
+            font-weight: 900;
+            margin-bottom: 2px;
+        }
+
+        .decision-item span {
+            display: block;
+            color: var(--mute);
+            font-size: 11.5px;
+            line-height: 1.6;
+        }
+
+        .decision-item.good {
+            background: var(--green-lt);
+            border-color: rgba(5, 150, 105, .18);
+        }
+
+        .decision-item.warning {
+            background: var(--amber-lt);
+            border-color: rgba(217, 119, 6, .18);
+        }
+
+        .decision-item.neutral {
+            background: var(--bg-2);
+        }
+
+    .enrollments-table-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+    }
+
+    .enrollments-table-topbar {
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        background: linear-gradient(180deg, #ffffff, #f8fafc);
+    }
+
+    .table-title {
+        color: var(--ink);
+        font-size: 15px;
+        font-weight: 900;
+    }
+
+    .table-sub {
+        color: var(--mute);
+        font-size: 11.5px;
+        margin-top: 2px;
+    }
+
+    .table-tools {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .enrollments-count-badge {
+        background: var(--bg-2);
+        color: var(--ink-3);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 6px 10px;
+        font-size: 11.5px;
+        font-weight: 800;
+    }
+
+        .enrollments-count-badge strong {
+            color: var(--cyan);
+        }
+
+    .enrollments-table-wrap {
+        width: 100%;
+        overflow-x: auto;
+    }
+
+    .enrollments-table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 980px;
+    }
+
+        .enrollments-table th {
+            background: var(--bg-2);
+            color: var(--mute);
+            font-size: 11px;
+            font-weight: 900;
+            padding: 11px 16px;
+            border-bottom: 1px solid var(--border);
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .enrollments-table td {
+            color: var(--ink-3);
+            font-size: 12.5px;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        .enrollments-table tbody tr {
+            transition: .12s;
+        }
+
+            .enrollments-table tbody tr:hover td {
+                background: #f8fafc;
+            }
+
+    .entity-cell {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        min-width: 0;
+    }
+
+    .entity-avatar {
+        width: 42px;
+        height: 42px;
+        border-radius: 14px;
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 900;
+        flex-shrink: 0;
+    }
+
+        .entity-avatar.student {
+            background: linear-gradient(135deg, #1e3a8a, #2563eb);
+            box-shadow: 0 7px 18px rgba(37, 99, 235, .20);
+        }
+
+        .entity-avatar.batch {
+            background: linear-gradient(135deg, #0f766e, #0891b2);
+            box-shadow: 0 7px 18px rgba(8, 145, 178, .20);
+        }
+
+    .entity-main-info {
+        min-width: 0;
+    }
+
+    .entity-name {
+        color: var(--ink);
+        font-size: 13.5px;
+        font-weight: 900;
+        line-height: 1.3;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 330px;
+    }
+
+    .entity-sub {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        color: var(--mute);
+        font-size: 10.5px;
+        margin-top: 4px;
+    }
+
+    .date-pill,
+    .recent-pill,
+    .status-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        max-width: 170px;
+        border-radius: 999px;
+        padding: 5px 9px;
+        font-size: 11px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .date-pill {
+        background: var(--blue-lt);
+        color: var(--blue-dk);
+        border: 1px solid rgba(37, 99, 235, .16);
+    }
+
+    .recent-pill.today {
+        background: var(--green-lt);
+        color: var(--green-dk);
+        border: 1px solid rgba(5, 150, 105, .18);
+    }
+
+    .recent-pill.week {
+        background: var(--cyan-lt);
+        color: #155e75;
+        border: 1px solid rgba(8, 145, 178, .18);
+    }
+
+    .recent-pill.old {
+        background: var(--bg-2);
+        color: var(--mute);
+        border: 1px solid var(--border);
+    }
+
+    .status-pill i {
+        font-size: 7px;
+    }
+
+    .status-pill.active {
+        background: var(--green-lt);
+        color: var(--green-dk);
+        border: 1px solid rgba(5, 150, 105, .18);
+    }
+
+    .status-pill.warning {
+        background: var(--amber-lt);
+        color: var(--amber-dk);
+        border: 1px solid rgba(217, 119, 6, .18);
+    }
+
+    .status-pill.danger {
+        background: var(--red-lt);
+        color: var(--red-dk);
+        border: 1px solid rgba(220, 38, 38, .18);
+    }
+
+    .status-pill.neutral {
+        background: var(--bg-2);
+        color: var(--mute);
+        border: 1px solid var(--border);
+    }
+
+    .enrollments-actions {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+    }
+
+    .act-btn {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        border: 1px solid;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: .15s;
+        font-size: 13px;
+    }
+
+    .act-view {
+        background: var(--blue-lt);
+        color: var(--blue-dk);
+        border-color: rgba(37, 99, 235, .18);
+    }
+
+    .act-edit {
+        background: var(--amber-lt);
+        color: var(--amber-dk);
+        border-color: rgba(217, 119, 6, .18);
+    }
+
+    .act-delete {
+        background: var(--red-lt);
+        color: var(--red-dk);
+        border-color: rgba(220, 38, 38, .18);
+    }
+
+    .act-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: var(--shadow-sm);
+    }
+
+    .enrollments-empty {
+        padding: 46px 20px;
+        text-align: center;
+        color: var(--mute);
+    }
+
+        .enrollments-empty i {
+            font-size: 34px;
+            color: var(--mute-2);
+            margin-bottom: 10px;
+        }
+
+    .enrollments-empty-title {
+        color: var(--ink);
+        font-size: 16px;
+        font-weight: 900;
+        margin-bottom: 4px;
+    }
+
+    .enrollments-empty-sub {
+        font-size: 12px;
+        margin-bottom: 12px;
+    }
+
+    .empty-btn {
+        margin-top: 10px;
+    }
+
+    .d-none {
+        display: none !important;
+    }
+
+    @@media (max-width: 1300px) {
+        .enrollments-kpis {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .enrollments-filter-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .filter-actions-field {
+            grid-column: 1 / -1;
+        }
+
+        .enrollments-insight-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .mini-stats-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .enrollments-index-page {
+            padding: 14px;
+        }
+
+        .enrollments-topbar {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+        .enrollments-top-actions {
+            width: 100%;
+        }
+
+        .btn-add {
+            justify-content: center;
+            flex: 1;
+        }
+
+        .enrollments-kpis {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .enrollments-filter-grid,
+        .mini-stats-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .enrollments-table-topbar {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+        .table-tools {
+            width: 100%;
+        }
+    }
+
+    @@media (max-width: 520px) {
+        .enrollments-kpis {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const searchInput = document.getElementById('enrollmentsSearch');
+        const statusFilter = document.getElementById('statusFilter');
+        const dateFilter = document.getElementById('dateFilter');
+        const resetButton = document.getElementById('resetFilters');
+        const visibleCount = document.getElementById('visibleEnrollmentsCount');
+        const noFilteredEnrollments = document.getElementById('noFilteredEnrollments');
+        const rows = Array.from(document.querySelectorAll('#enrollmentsTable tbody .enrollment-row'));
+
+        function normalize(value) {
+            if (!value) {
+                return '';
+            }
+
+            return value.toString().trim().toLowerCase();
+        }
+
+        function applyFilters() {
+            const searchValue = normalize(searchInput ? searchInput.value : '');
+            const statusValue = normalize(statusFilter ? statusFilter.value : '');
+            const dateValue = normalize(dateFilter ? dateFilter.value : '');
+
+            let shown = 0;
+
+            rows.forEach(function (row) {
+                const rowSearch = normalize(row.getAttribute('data-search'));
+                const rowStatus = normalize(row.getAttribute('data-status'));
+                const rowDate = normalize(row.getAttribute('data-date'));
+
+                const matchSearch = searchValue === '' || rowSearch.indexOf(searchValue) !== -1;
+                const matchStatus = statusValue === '' || rowStatus === statusValue;
+                const matchDate = dateValue === '' || rowDate === dateValue;
+
+                const visible = matchSearch && matchStatus && matchDate;
+
+                row.style.display = visible ? '' : 'none';
+
+                if (visible) {
+                    shown++;
+                }
+            });
+
+            if (visibleCount) {
+                visibleCount.textContent = shown;
+            }
+
+            if (noFilteredEnrollments) {
+                noFilteredEnrollments.classList.toggle('d-none', shown !== 0);
+            }
+        }
+
+        if (searchInput) {
+            searchInput.addEventListener('input', applyFilters);
+        }
+
+        if (statusFilter) {
+            statusFilter.addEventListener('change', applyFilters);
+        }
+
+        if (dateFilter) {
+            dateFilter.addEventListener('change', applyFilters);
+        }
+
+        if (resetButton) {
+            resetButton.addEventListener('click', function () {
+                if (searchInput) {
+                    searchInput.value = '';
+                }
+
+                if (statusFilter) {
+                    statusFilter.value = '';
+                }
+
+                if (dateFilter) {
+                    dateFilter.value = '';
+                }
+
+                applyFilters();
+            });
+        }
+
+        applyFilters();
+    });
+</script>

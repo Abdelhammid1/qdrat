@@ -1,0 +1,1002 @@
+﻿@model QdratNew.ViewModels.Question.QuestionIndexViewModel
+@using QdratNew.Helpers
+@using System.Text.RegularExpressions
+@using System.Net
+
+@{
+    ViewData["Title"] = "أسئلة غير مكتملة";
+    var totalIncomplete = Model.Questions?.Count ?? 0;
+}
+
+@functions {
+    string CleanQuestionTitle(string? html, int maxLength = 100)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return "—";
+
+        var text = html;
+
+        text = Regex.Replace(text, @"<script[^>]*>[\s\S]*?</script>", "", RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, @"<style[^>]*>[\s\S]*?</style>", "", RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, @"<span[^>]*display\s*:\s*none[^>]*>[\s\S]*?</span>", "", RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, @"<[^>]+>", " ");
+        text = WebUtility.HtmlDecode(text);
+        text = Regex.Replace(text, @"\s+", " ").Trim();
+
+        if (text.Length > maxLength)
+            text = text.Substring(0, maxLength) + "...";
+
+        return text;
+    }
+}
+
+@section Styles {
+    <style>
+        :root {
+            --pr-bg: #f4f7fb;
+            --pr-surface: #111827;
+            --pr-accent: #2563eb;
+            --pr-warning: #f59e0b;
+            --pr-danger: #dc2626;
+            --pr-success: #16a34a;
+            --pr-radius: 14px;
+            --pr-radius-sm: 9px;
+            --pr-font: 'Cairo', sans-serif;
+            --pr-transition: .2s cubic-bezier(.4,0,.2,1);
+        }
+
+        body {
+            background: var(--pr-bg) !important;
+        }
+
+        .pr-page {
+            font-family: var(--pr-font);
+            min-height: 100vh;
+            padding: 28px 0 112px;
+            direction: rtl;
+        }
+
+        .pr-header {
+            background: #ffffff !important;
+            border: 1px solid #dbe4ef !important;
+            border-radius: var(--pr-radius) !important;
+            padding: 18px 22px !important;
+            box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06) !important;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .pr-header-title {
+            color: #0f172a !important;
+            font-size: 22px !important;
+            font-weight: 900 !important;
+            margin: 0;
+            line-height: 1.2;
+        }
+
+            .pr-header-title i {
+                color: var(--pr-danger) !important;
+            }
+
+        .pr-header-sub {
+            color: #475569 !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            margin-top: 5px;
+        }
+
+        .pr-header-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .btn-pr-primary {
+            background: var(--pr-accent);
+            border: 1px solid var(--pr-accent);
+            color: #ffffff;
+            font-size: 13px;
+            font-weight: 800;
+            border-radius: var(--pr-radius-sm);
+            padding: 8px 18px;
+            transition: var(--pr-transition);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+            .btn-pr-primary:hover {
+                background: #1d4ed8;
+                border-color: #1d4ed8;
+                color: #ffffff;
+                transform: translateY(-1px);
+                box-shadow: 0 6px 18px rgba(37,99,235,.25);
+                text-decoration: none;
+            }
+
+        .btn-pr-outline {
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            color: #334155;
+            font-size: 13px;
+            font-weight: 800;
+            border-radius: var(--pr-radius-sm);
+            padding: 8px 18px;
+            transition: var(--pr-transition);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+            .btn-pr-outline:hover {
+                background: #f1f5f9;
+                border-color: #94a3b8;
+                color: #0f172a;
+                text-decoration: none;
+            }
+
+        .pr-hero {
+            background: linear-gradient(135deg, #1a2540 0%, #1c3052 60%, #162440 100%);
+            border-radius: var(--pr-radius);
+            padding: 28px 32px;
+            margin-bottom: 24px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 14px 32px rgba(15, 23, 42, 0.18);
+        }
+
+            .pr-hero::before {
+                content: '';
+                position: absolute;
+                top: -70px;
+                left: -70px;
+                width: 240px;
+                height: 240px;
+                background: radial-gradient(circle, rgba(220,38,38,.18) 0%, transparent 70%);
+                pointer-events: none;
+            }
+
+        .pr-hero-label {
+            font-size: 13px;
+            color: #cbd5e1;
+            margin-bottom: 6px;
+            font-weight: 700;
+        }
+
+        .pr-hero-number {
+            font-size: 50px;
+            font-weight: 900;
+            line-height: 1;
+            color: #ffffff;
+        }
+
+        .pr-hero-note {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            background: rgba(220,38,38,.16);
+            color: #fecaca;
+            border: 1px solid rgba(220,38,38,.35);
+            border-radius: 20px;
+            padding: 5px 13px;
+            margin-top: 12px;
+            font-weight: 700;
+        }
+
+        .pr-alert-warning {
+            background: #fff7ed;
+            color: #9a3412;
+            border: 1px solid #fed7aa;
+            border-right: 4px solid #f97316;
+            border-radius: var(--pr-radius);
+            padding: 14px 18px;
+            font-size: 14px;
+            font-weight: 800;
+            margin-bottom: 20px;
+        }
+
+        .pr-alert-info {
+            background: #eff6ff;
+            color: #1e40af;
+            border: 1px solid #bfdbfe;
+            border-right: 4px solid #2563eb;
+            border-radius: var(--pr-radius);
+            padding: 14px 18px;
+            font-size: 14px;
+            font-weight: 800;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .pr-toolbar {
+            background: #111827;
+            border: 1px solid #243041;
+            border-radius: var(--pr-radius);
+            padding: 14px 20px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+        }
+
+        .pr-toolbar-title {
+            font-size: 14px;
+            font-weight: 900;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .pr-selected-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 800;
+            color: #fecaca;
+            background: rgba(220,38,38,.18);
+            border: 1px solid rgba(220,38,38,.35);
+            border-radius: 20px;
+            padding: 5px 13px;
+        }
+
+        .pr-table-panel {
+            background: #ffffff !important;
+            border: 1px solid #d8e0ec !important;
+            border-radius: var(--pr-radius) !important;
+            overflow: hidden;
+            box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+        }
+
+            .pr-table-panel .table,
+            .pr-table-panel table.dataTable {
+                background-color: #ffffff !important;
+                color: #1e293b !important;
+                margin: 0 !important;
+                width: 100% !important;
+            }
+
+                .pr-table-panel .table thead th,
+                .pr-table-panel table.dataTable thead th {
+                    background: #f1f5f9 !important;
+                    color: #0f172a !important;
+                    border-bottom: 1px solid #cbd5e1 !important;
+                    border-color: #dbe4ef !important;
+                    font-size: 12px !important;
+                    font-weight: 900 !important;
+                    padding: 12px 14px !important;
+                    white-space: nowrap;
+                    vertical-align: middle;
+                }
+
+                .pr-table-panel .table tbody td,
+                .pr-table-panel table.dataTable tbody td {
+                    background: #ffffff !important;
+                    color: #1e293b !important;
+                    border-color: #e2e8f0 !important;
+                    font-size: 13px !important;
+                    font-weight: 700 !important;
+                    padding: 12px 14px !important;
+                    vertical-align: middle !important;
+                }
+
+                .pr-table-panel .table tbody tr:hover td,
+                .pr-table-panel table.dataTable tbody tr:hover td {
+                    background: #f8fafc !important;
+                }
+
+                .pr-table-panel table.dataTable tbody tr.pr-row-selected td,
+                .pr-table-panel .table tbody tr.pr-row-selected td {
+                    background: #eef2ff !important;
+                }
+
+                .pr-table-panel table.dataTable tbody tr.pr-row-selected:hover td,
+                .pr-table-panel .table tbody tr.pr-row-selected:hover td {
+                    background: #e0e7ff !important;
+                }
+
+        .pr-select-col {
+            width: 46px !important;
+            min-width: 46px !important;
+            max-width: 46px !important;
+            text-align: center !important;
+        }
+
+        .pr-row-checkbox,
+        #questionsSelectAll {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--pr-accent);
+            cursor: pointer;
+        }
+
+        .pr-q-ref {
+            color: #334155 !important;
+            background: #eef2ff !important;
+            border: 1px solid #c7d2fe !important;
+            font-weight: 900 !important;
+            border-radius: 5px;
+            padding: 2px 8px;
+            font-family: monospace;
+            letter-spacing: .3px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .pr-q-title-text {
+            color: #0f172a !important;
+            font-weight: 800 !important;
+            line-height: 1.6;
+            white-space: normal;
+            min-width: 340px;
+            max-width: 620px;
+            display: inline-block;
+            text-align: right;
+        }
+
+        .pr-cell-text {
+            color: #334155;
+            font-weight: 800;
+        }
+
+        .dataTables_wrapper .dataTables_length label,
+        .dataTables_wrapper .dataTables_filter label,
+        .dataTables_wrapper .dataTables_info {
+            color: #334155 !important;
+            font-size: 13px !important;
+            font-weight: 800 !important;
+        }
+
+        .dataTables_wrapper .dataTables_length select,
+        .dataTables_wrapper .dataTables_filter input {
+            background: #ffffff !important;
+            border: 1px solid #94a3b8 !important;
+            color: #0f172a !important;
+            border-radius: 8px !important;
+            font-size: 13px !important;
+            font-weight: 700 !important;
+            padding: 5px 10px;
+        }
+
+        table.dataTable thead .sorting:before,
+        table.dataTable thead .sorting:after,
+        table.dataTable thead .sorting_asc:before,
+        table.dataTable thead .sorting_asc:after,
+        table.dataTable thead .sorting_desc:before,
+        table.dataTable thead .sorting_desc:after {
+            color: #475569 !important;
+            opacity: 1 !important;
+        }
+
+        .dataTables_wrapper .dataTables_paginate .paginate_button {
+            background: #ffffff !important;
+            border: 1px solid #cbd5e1 !important;
+            color: #334155 !important;
+            font-weight: 800 !important;
+            border-radius: 7px !important;
+            margin: 0 2px;
+            font-size: 12px;
+            padding: 4px 10px !important;
+        }
+
+            .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+            .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+                background: var(--pr-accent) !important;
+                border-color: var(--pr-accent) !important;
+                color: #ffffff !important;
+            }
+
+        .pr-bulk-footer {
+            position: fixed;
+            right: 50%;
+            bottom: 18px;
+            transform: translateX(50%);
+            z-index: 1050;
+            width: min(980px, calc(100% - 28px));
+            background: #0f172a;
+            color: #ffffff;
+            border: 1px solid rgba(255,255,255,.14);
+            border-radius: 16px;
+            box-shadow: 0 18px 45px rgba(15, 23, 42, .30);
+            padding: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+            .pr-bulk-footer.is-hidden {
+                display: none;
+            }
+
+        .pr-bulk-summary {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: auto;
+            font-size: 13px;
+            font-weight: 900;
+            color: #ffffff;
+            min-width: 170px;
+        }
+
+        .pr-bulk-count {
+            min-width: 30px;
+            height: 30px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--pr-accent);
+            color: #ffffff;
+            font-weight: 900;
+        }
+
+        .pr-bulk-btn {
+            border: 1px solid rgba(255,255,255,.14);
+            border-radius: 11px;
+            color: #ffffff;
+            font-size: 12px;
+            font-weight: 900;
+            padding: 8px 11px;
+            background: rgba(255,255,255,.08);
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            transition: var(--pr-transition);
+            cursor: pointer;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+
+            .pr-bulk-btn:hover {
+                background: rgba(255,255,255,.16);
+                color: #ffffff;
+                text-decoration: none;
+                transform: translateY(-1px);
+            }
+
+        .pr-bulk-btn-warning {
+            background: rgba(245, 158, 11, .18);
+            border-color: rgba(245, 158, 11, .35);
+            color: #fde68a;
+        }
+
+        .pr-bulk-btn-info {
+            background: rgba(8, 145, 178, .18);
+            border-color: rgba(8, 145, 178, .35);
+            color: #a5f3fc;
+        }
+
+        .pr-bulk-btn-primary {
+            background: var(--pr-accent);
+            border-color: transparent;
+        }
+
+            .pr-bulk-btn-primary:hover {
+                background: #1d4ed8;
+            }
+
+        .pr-bulk-clear {
+            width: 34px;
+            height: 34px;
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,.18);
+            background: rgba(255,255,255,.08);
+            color: #ffffff;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: var(--pr-transition);
+        }
+
+            .pr-bulk-clear:hover {
+                background: rgba(255,255,255,.16);
+            }
+
+        .pr-bulk-single-only.d-none {
+            display: none !important;
+        }
+
+        @@media (max-width: 1200px) {
+            .pr-bulk-footer {
+                width: min(900px, calc(100% - 24px));
+            }
+
+            .pr-bulk-summary {
+                width: 100%;
+                margin-left: 0;
+                justify-content: center;
+            }
+        }
+
+        @@media (max-width: 768px) {
+            .pr-page {
+                padding-bottom: 190px;
+            }
+
+            .pr-hero {
+                padding: 22px;
+            }
+
+            .pr-hero-number {
+                font-size: 36px;
+            }
+
+            .pr-q-title-text {
+                min-width: 240px;
+            }
+
+            .pr-toolbar {
+                align-items: flex-start;
+            }
+
+            .pr-bulk-footer {
+                bottom: 12px;
+                align-items: stretch;
+            }
+
+            .pr-bulk-btn {
+                flex: 1 1 auto;
+                justify-content: center;
+            }
+        }
+    </style>
+}
+
+<div class="pr-page container-fluid px-4" dir="rtl">
+
+    <div class="pr-header">
+        <div>
+            <h1 class="pr-header-title">
+                <i class="fas fa-triangle-exclamation me-2" style="font-size:18px;"></i>
+                الأسئلة غير المكتملة
+            </h1>
+            <div class="pr-header-sub">
+                هذه الصفحة تعرض الأسئلة التي تحتاج إلى استكمال بياناتها قبل أن تصبح جاهزة للمراجعة أو الاعتماد داخل بنك الأسئلة.
+            </div>
+        </div>
+
+        <div class="pr-header-actions">
+            <a asp-action="Dashboard" class="btn-pr-outline">
+                <i class="fas fa-chart-line"></i>
+                لوحة تحكم بنك الأسئلة
+            </a>
+
+            <a asp-action="Index" class="btn-pr-outline">
+                <i class="fas fa-database"></i>
+                بنك الأسئلة
+            </a>
+
+            <a asp-action="PendingReview" class="btn-pr-outline">
+                <i class="fas fa-shield-check"></i>
+                مركز الاعتماد
+            </a>
+
+            <a asp-action="Create" class="btn-pr-primary">
+                <i class="fas fa-plus"></i>
+                إضافة سؤال
+            </a>
+        </div>
+    </div>
+
+    <div class="pr-hero">
+        <div class="row g-4 align-items-center">
+            <div class="col-lg-5">
+                <div class="pr-hero-label">إجمالي الأسئلة غير المكتملة</div>
+                <div class="pr-hero-number">@totalIncomplete</div>
+                <div class="pr-hero-note">
+                    <i class="fas fa-screwdriver-wrench" style="font-size:11px;"></i>
+                    تحتاج إلى استكمال قبل الاعتماد
+                </div>
+            </div>
+
+            <div class="col-lg-7">
+                <div class="pr-alert-warning m-0">
+                    <i class="fas fa-circle-info me-2"></i>
+                    راجع السؤال وتأكد من العنوان، الخيارات، الإجابة الصحيحة، التصنيف، وربط المؤشر قبل الاعتماد.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (Model.Questions == null || !Model.Questions.Any())
+    {
+        <div class="pr-alert-info">
+            <i class="fas fa-check-circle me-2"></i>
+            لا توجد حالياً أي أسئلة غير مكتملة.
+        </div>
+    }
+    else
+    {
+        <div class="pr-alert-warning">
+            <i class="fas fa-triangle-exclamation me-2"></i>
+            هذه القائمة تعرض الأسئلة التي لم تكتمل بياناتها بعد، ويجب تعديلها قبل ظهورها في بنك الأسئلة المعتمد.
+        </div>
+
+        <div class="pr-toolbar">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="pr-toolbar-title">
+                    <i class="fas fa-table"></i>
+                    جدول الأسئلة غير المكتملة
+                </div>
+
+                <span class="pr-selected-badge">
+                    <i class="fas fa-hand-pointer"></i>
+                    حدد سؤالًا من الجدول لإظهار الإجراءات أسفل الصفحة
+                </span>
+            </div>
+
+            <div class="d-flex flex-wrap gap-2">
+                <a asp-action="Index" class="btn-pr-outline" style="background:transparent;color:#e2e8f0;border-color:#334155;">
+                    <i class="fas fa-arrow-right"></i>
+                    رجوع لبنك الأسئلة
+                </a>
+
+                <a asp-action="Create" class="btn-pr-primary">
+                    <i class="fas fa-plus-circle"></i>
+                    سؤال جديد
+                </a>
+            </div>
+        </div>
+
+        <div class="pr-table-panel">
+            <div class="table-responsive">
+                <table id="questionsTable" class="table table-hover text-center w-100">
+                    <thead>
+                        <tr>
+                            <th class="pr-select-col">
+                                <input type="checkbox"
+                                       id="questionsSelectAll"
+                                       aria-label="تحديد كل الأسئلة في الصفحة الحالية" />
+                            </th>
+                            <th style="width:90px;"># مرجع</th>
+                            <th style="min-width:420px;">عنوان السؤال</th>
+                            <th>القسم</th>
+                            <th>المحور</th>
+                            <th>المؤشر</th>
+                            <th>تاريخ الإضافة</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @foreach (var question in Model.Questions)
+                        {
+                            var safeTitle = CleanQuestionTitle(question.Title, 100);
+
+                            <tr>
+                                <td class="pr-select-col">
+                                    <input type="checkbox"
+                                           class="pr-row-checkbox"
+                                           value="@question.Id"
+                                           data-reference="@(question.ReferenceNumber ?? "")"
+                                           data-title="@safeTitle"
+                                           data-curriculum="@(question.CurriculumTitle ?? "")"
+                                           data-section="@(question.SectionTitle ?? "")"
+                                           data-lesson="@(question.LessonTitle ?? "")"
+                                           data-created-at="@question.CreatedAt.ToString("yyyy-MM-dd")"
+                                           aria-label="تحديد السؤال @(question.ReferenceNumber ?? "")" />
+                                </td>
+
+                                <td>
+                                    <span class="pr-q-ref">
+                                        @NumberHelper.ToIndicNumbersSafe(question.ReferenceNumber)
+                                    </span>
+                                </td>
+
+                                <td class="text-end">
+                                    <span class="pr-q-title-text">
+                                        @safeTitle
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="pr-cell-text">
+                                        @(question.CurriculumTitle ?? "—")
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="pr-cell-text">
+                                        @(question.SectionTitle ?? "—")
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="pr-cell-text">
+                                        @(question.LessonTitle ?? "—")
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="pr-cell-text">
+                                        @question.CreatedAt.ToString("yyyy-MM-dd")
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="pr-bulk-footer is-hidden" id="questionsBulkFooter">
+            <div class="pr-bulk-summary">
+                <span class="pr-bulk-count" id="questionsSelectedCount">0</span>
+                <span>سؤال محدد</span>
+            </div>
+
+            <button type="button"
+                    class="pr-bulk-btn pr-bulk-btn-warning pr-bulk-single-only"
+                    onclick="editSelectedQuestion()">
+                <i class="fas fa-edit"></i>
+                تعديل واستكمال
+            </button>
+
+            <button type="button"
+                    class="pr-bulk-btn pr-bulk-btn-info pr-bulk-single-only"
+                    onclick="detailsSelectedQuestion()">
+                <i class="fas fa-eye"></i>
+                معاينة
+            </button>
+
+            <button type="button"
+                    class="pr-bulk-btn pr-bulk-btn-primary"
+                    onclick="exportSelectedQuestions()">
+                <i class="fas fa-download"></i>
+                تصدير المحدد
+            </button>
+
+            <button type="button"
+                    class="pr-bulk-clear"
+                    onclick="clearQuestionsSelection()"
+                    aria-label="إلغاء التحديد">
+                <i class="fas fa-xmark"></i>
+            </button>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        const selectedQuestionsMap = new Map();
+
+        function getSelectedQuestionsArray() {
+            return Array.from(selectedQuestionsMap.values());
+        }
+
+        function updateQuestionsBulkFooter() {
+            const selected = getSelectedQuestionsArray();
+            const footer = document.getElementById('questionsBulkFooter');
+            const count = document.getElementById('questionsSelectedCount');
+            const selectAll = document.getElementById('questionsSelectAll');
+            const singleOnlyButtons = document.querySelectorAll('.pr-bulk-single-only');
+
+            if (footer) {
+                footer.classList.toggle('is-hidden', selected.length === 0);
+            }
+
+            if (count) {
+                count.textContent = selected.length;
+            }
+
+            singleOnlyButtons.forEach(function (btn) {
+                btn.classList.toggle('d-none', selected.length !== 1);
+            });
+
+            const pageCheckboxes = Array.from(document.querySelectorAll('.pr-row-checkbox'));
+
+            if (selectAll) {
+                const checkedOnPage = pageCheckboxes.filter(function (cb) {
+                    return cb.checked;
+                }).length;
+
+                selectAll.checked = pageCheckboxes.length > 0 && checkedOnPage === pageCheckboxes.length;
+                selectAll.indeterminate = checkedOnPage > 0 && checkedOnPage < pageCheckboxes.length;
+            }
+        }
+
+        function syncQuestionRowSelectionStyles() {
+            document.querySelectorAll('#questionsTable tbody tr').forEach(function (tr) {
+                const cb = tr.querySelector('.pr-row-checkbox');
+                tr.classList.toggle('pr-row-selected', !!cb && cb.checked);
+            });
+        }
+
+        function setQuestionSelectedFromCheckbox(cb) {
+            if (!cb) {
+                return;
+            }
+
+            const questionId = cb.value;
+
+            if (!questionId) {
+                return;
+            }
+
+            if (cb.checked) {
+                selectedQuestionsMap.set(questionId, {
+                    id: questionId,
+                    referenceNumber: cb.dataset.reference || '',
+                    title: cb.dataset.title || '',
+                    curriculum: cb.dataset.curriculum || '',
+                    section: cb.dataset.section || '',
+                    lesson: cb.dataset.lesson || '',
+                    createdAt: cb.dataset.createdAt || ''
+                });
+            } else {
+                selectedQuestionsMap.delete(questionId);
+            }
+
+            syncQuestionRowSelectionStyles();
+            updateQuestionsBulkFooter();
+        }
+
+        function clearQuestionsSelection() {
+            selectedQuestionsMap.clear();
+
+            document.querySelectorAll('.pr-row-checkbox').forEach(function (cb) {
+                cb.checked = false;
+            });
+
+            const selectAll = document.getElementById('questionsSelectAll');
+
+            if (selectAll) {
+                selectAll.checked = false;
+                selectAll.indeterminate = false;
+            }
+
+            syncQuestionRowSelectionStyles();
+            updateQuestionsBulkFooter();
+        }
+
+        function getSingleSelectedQuestion() {
+            const selected = getSelectedQuestionsArray();
+
+            if (selected.length !== 1) {
+                alert('اختر سؤالًا واحدًا فقط لتنفيذ هذا الإجراء.');
+                return null;
+            }
+
+            return selected[0];
+        }
+
+        function editSelectedQuestion() {
+            const selected = getSingleSelectedQuestion();
+
+            if (!selected) {
+                return;
+            }
+
+            window.location.href = `/Admin/Questions/Edit/${selected.id}`;
+        }
+
+        function detailsSelectedQuestion() {
+            const selected = getSingleSelectedQuestion();
+
+            if (!selected) {
+                return;
+            }
+
+            window.location.href = `/Admin/Questions/Details/${selected.id}`;
+        }
+
+        function exportSelectedQuestions() {
+            const selected = getSelectedQuestionsArray();
+
+            if (!selected.length) {
+                alert('اختر سؤالًا واحدًا على الأقل للتصدير.');
+                return;
+            }
+
+            const csvRows = [[
+                'المرجع',
+                'عنوان السؤال',
+                'القسم',
+                'المحور',
+                'المؤشر',
+                'تاريخ الإضافة'
+            ]];
+
+            selected.forEach(function (item) {
+                csvRows.push([
+                    item.referenceNumber || '',
+                    item.title || '',
+                    item.curriculum || '',
+                    item.section || '',
+                    item.lesson || '',
+                    item.createdAt || ''
+                ]);
+            });
+
+            const csv = '\uFEFF' + csvRows.map(function (items) {
+                return items.map(function (item) {
+                    return '"' + String(item || '').replace(/"/g, '""') + '"';
+                }).join(',');
+            }).join('\r\n');
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+
+            link.href = url;
+            link.download = 'incomplete_questions.csv';
+            link.click();
+
+            URL.revokeObjectURL(url);
+        }
+
+        $(document).ready(function () {
+            $('#questionsTable').DataTable({
+                pageLength: 25,
+                order: [[6, 'desc']],
+                columnDefs: [
+                    {
+                        targets: 0,
+                        orderable: false,
+                        searchable: false
+                    }
+                ],
+                language: {
+                    url: "//cdn.datatables.net/plug-ins/1.13.5/i18n/ar.json"
+                },
+                drawCallback: function () {
+                    document.querySelectorAll('.pr-row-checkbox').forEach(function (cb) {
+                        cb.checked = selectedQuestionsMap.has(cb.value);
+                    });
+
+                    syncQuestionRowSelectionStyles();
+                    updateQuestionsBulkFooter();
+                }
+            });
+
+            $('#questionsTable').on('change', '.pr-row-checkbox', function () {
+                setQuestionSelectedFromCheckbox(this);
+            });
+
+            $('#questionsTable tbody').on('click', 'tr', function (event) {
+                const ignoredSelectors = 'a, button, input, i';
+
+                if ($(event.target).closest(ignoredSelectors).length) {
+                    return;
+                }
+
+                const cb = this.querySelector('.pr-row-checkbox');
+
+                if (!cb) {
+                    return;
+                }
+
+                cb.checked = !cb.checked;
+                setQuestionSelectedFromCheckbox(cb);
+            });
+
+            $('#questionsSelectAll').on('change', function () {
+                const isChecked = this.checked;
+
+                document.querySelectorAll('.pr-row-checkbox').forEach(function (cb) {
+                    cb.checked = isChecked;
+                    setQuestionSelectedFromCheckbox(cb);
+                });
+
+                syncQuestionRowSelectionStyles();
+                updateQuestionsBulkFooter();
+            });
+        });
+    </script>
+}

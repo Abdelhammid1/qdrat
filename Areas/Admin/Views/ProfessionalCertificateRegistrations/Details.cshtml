@@ -1,0 +1,147 @@
+@model QdratNew.ViewModels.Admin.ProfessionalCertificates.ProfessionalCertificateRegistrationDetailsViewModel
+@using QdratNew.Enums
+@{
+    ViewData["Title"] = "تفاصيل الطلب #" + Model.Id;
+    Layout = "~/Areas/Admin/Views/Shared/_AdminLayout.cshtml";
+    var (statusLabel, statusColor) = Model.Status switch {
+        ProfessionalCertificateRegistrationStatus.New => ("جديد", "primary"),
+        ProfessionalCertificateRegistrationStatus.Contacted => ("تم التواصل", "success"),
+        ProfessionalCertificateRegistrationStatus.NeedFollowUp => ("يحتاج متابعة", "warning"),
+        ProfessionalCertificateRegistrationStatus.Rejected => ("مرفوض", "danger"),
+        ProfessionalCertificateRegistrationStatus.Converted => ("مؤكد", "info"),
+        _ => ("—", "secondary")
+    };
+}
+
+<div class="container-fluid py-4">
+    <div class="d-flex align-items-center gap-2 mb-4">
+        <a asp-area="Admin" asp-controller="ProfessionalCertificateRegistrations" asp-action="Index"
+           class="btn btn-sm btn-outline-secondary rounded-3">
+            <i class="fas fa-arrow-right"></i>
+        </a>
+        <h4 class="mb-0 fw-bold">تفاصيل الطلب #@Model.Id</h4>
+        <span class="badge bg-@statusColor fs-6">@statusLabel</span>
+    </div>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success rounded-3 mb-4">
+            <i class="fas fa-circle-check me-1"></i> @TempData["Success"]
+        </div>
+    }
+
+    <div class="row g-4">
+        <div class="col-12 col-lg-7">
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-header bg-transparent fw-bold border-0 pt-4 px-4">
+                    <i class="fas fa-user me-2 text-primary"></i>بيانات المتقدم
+                </div>
+                <div class="card-body px-4">
+                    @{
+                        void Row(string label, string? value, bool ltr = false)
+                        {
+                            <div class="d-flex justify-content-between py-2 border-bottom">
+                                <span class="text-muted small">@label</span>
+                                <span class="fw-600 small @(ltr ? "font-monospace" : "")" dir="@(ltr ? "ltr" : "auto")">
+                                    @(string.IsNullOrEmpty(value) ? "—" : value)
+                                </span>
+                            </div>
+                        }
+                    }
+                    @{ Row("الاسم الكامل", Model.FullName); }
+                    @{ Row("رقم الجوال", Model.PhoneNumber, ltr: true); }
+                    @{ Row("رقم الهوية", Model.NationalId, ltr: true); }
+                    @{ Row("البريد الإلكتروني", Model.Email); }
+                    @{ Row("المدينة", Model.City); }
+                    @if (!string.IsNullOrEmpty(Model.Notes))
+                    {
+                        <div class="py-2 border-bottom">
+                            <div class="text-muted small mb-1">ملاحظات المتقدم</div>
+                            <div class="small bg-light rounded p-2">@Model.Notes</div>
+                        </div>
+                    }
+                    @{ Row("تاريخ الطلب", Model.SubmittedAt.ToString("dd/MM/yyyy — hh:mm tt")); }
+                    @{ Row("آخر تحديث", Model.LastUpdatedAt?.ToString("dd/MM/yyyy — hh:mm tt")); }
+                    @{ Row("IP", Model.IpAddress, ltr: true); }
+                    @if (!string.IsNullOrEmpty(Model.UserAgent))
+                    {
+                        <div class="py-2">
+                            <div class="text-muted small mb-1">User Agent</div>
+                            <div class="small text-muted font-monospace text-truncate" dir="ltr" title="@Model.UserAgent">
+                                @Model.UserAgent
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm rounded-4 mt-4">
+                <div class="card-header bg-transparent fw-bold border-0 pt-4 px-4">
+                    <i class="fas fa-certificate me-2 text-success"></i>
+                    الدورات المطلوبة
+                    <span class="badge bg-success ms-1">@Model.AllCourses.Count</span>
+                </div>
+                <div class="card-body px-4 pb-4">
+                    @foreach (var c in Model.AllCourses)
+                    {
+                        <div class="d-flex align-items-center gap-2 py-2 border-bottom">
+                            <i class="fas fa-circle-check text-success small flex-shrink-0"></i>
+                            <div>
+                                <div class="fw-bold small">@c.TitleAr</div>
+                                <code class="text-muted" style="font-size:0.75rem">@c.StandardCode</code>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-5">
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-header bg-transparent fw-bold border-0 pt-4 px-4">
+                    <i class="fas fa-sliders me-2 text-warning"></i>تحديث الحالة
+                </div>
+                <div class="card-body px-4 pb-4">
+                    <form asp-area="Admin" asp-controller="ProfessionalCertificateRegistrations"
+                          asp-action="UpdateStatus" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="RegistrationId" value="@Model.Id" />
+
+                        <div class="mb-3">
+                            <label class="form-label fw-600 small">الحالة الجديدة</label>
+                            <select name="NewStatus" class="form-select">
+                                <option value="1" selected="@(Model.Status == ProfessionalCertificateRegistrationStatus.New)">جديد</option>
+                                <option value="2" selected="@(Model.Status == ProfessionalCertificateRegistrationStatus.Contacted)">تم التواصل</option>
+                                <option value="3" selected="@(Model.Status == ProfessionalCertificateRegistrationStatus.NeedFollowUp)">يحتاج متابعة</option>
+                                <option value="4" selected="@(Model.Status == ProfessionalCertificateRegistrationStatus.Rejected)">مرفوض</option>
+                                <option value="5" selected="@(Model.Status == ProfessionalCertificateRegistrationStatus.Converted)">مؤكد</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-600 small">ملاحظات الأدمن</label>
+                            <textarea name="AdminNotes" class="form-control" rows="3">@Model.AdminNotes</textarea>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label fw-600 small">سبب الرفض (إن وجد)</label>
+                            <input type="text" name="RejectionReason" class="form-control"
+                                   value="@Model.RejectionReason" placeholder="سبب الرفض..." />
+                        </div>
+
+                        <button type="submit" class="btn btn-primary rounded-3 w-100">
+                            <i class="fas fa-save me-1"></i> حفظ التحديث
+                        </button>
+                    </form>
+
+                    @if (!string.IsNullOrEmpty(Model.HandledByName))
+                    {
+                        <div class="mt-3 pt-3 border-top text-muted small">
+                            <i class="fas fa-user-tie me-1"></i> آخر تعديل بواسطة: <strong>@Model.HandledByName</strong>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

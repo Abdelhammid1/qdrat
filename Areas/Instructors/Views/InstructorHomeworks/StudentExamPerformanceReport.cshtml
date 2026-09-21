@@ -1,0 +1,569 @@
+﻿@model QdratNew.ViewModels.Reports.StudentExamPerformanceReportVm
+@{
+    Layout = "~/Views/Shared/_ReportLayout.cshtml";
+    ViewData["Title"] = "📊 تقرير أداء الطالب في الاختبار";
+}
+
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;700;800&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+    :root {
+        --primary: #339999;
+        --secondary: #ff9933;
+        --neutral: #666666;
+        --bg: #f9fbfd;
+        --radius: 14px;
+        --shadow: 0 4px 15px rgba(0,0,0,0.08);
+    }
+
+    body {
+        background: var(--bg);
+        font-family: 'Cairo', sans-serif;
+        direction: rtl;
+    }
+
+    .container {
+        max-width: 1150px;
+        margin: 40px auto;
+        padding: 20px;
+    }
+
+    /* Header */
+    .report-header {
+        background: #fff;
+        border: 1px solid #e0e6f7;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 25px;
+        margin-bottom: 25px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+        .report-header h2 {
+            font-weight: 800;
+            color: var(--primary);
+            margin-bottom: 10px;
+        }
+
+    .chips span {
+        background: #eef2ff;
+        border: 1px solid #e0e6f7;
+        border-radius: 50px;
+        padding: 5px 12px;
+        color: var(--primary);
+        margin: 3px;
+        font-size: 13px;
+        font-weight: 600;
+        display: inline-block;
+    }
+
+    .btn-print {
+        background: var(--primary);
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        padding: 8px 14px;
+        cursor: pointer;
+        font-weight: 600;
+    }
+
+        .btn-print:hover {
+            background: #2a7c7c;
+        }
+
+    /* KPI Cards */
+    .stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit,minmax(160px,1fr));
+        gap: 18px;
+    }
+
+    .card {
+        background: #fff;
+        border: 1px solid #e0e6f7;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 18px;
+        text-align: center;
+    }
+
+    .stat-title {
+        color: var(--neutral);
+        font-size: 14px;
+    }
+
+    .stat-value {
+        font-size: 22px;
+        font-weight: 800;
+        color: var(--primary);
+    }
+
+        .stat-value.good {
+            color: var(--secondary);
+        }
+
+        .stat-value.weak {
+            color: var(--neutral);
+        }
+
+    /* Chart & Analysis */
+    .analysis-grid {
+        display: grid;
+        grid-template-columns: 1fr 0.8fr;
+        gap: 20px;
+        margin-top: 30px;
+    }
+
+    @@media(max - width:992px) {
+        .analysis-grid
+
+    {
+        grid-template-columns: 1fr;
+    }
+
+    }
+
+    .analysis-card {
+        background: #fff;
+        border: 1px solid #e0e6f7;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 20px;
+    }
+
+        .analysis-card h4 {
+            color: var(--primary);
+            font-weight: 700;
+            margin-bottom: 15px;
+        }
+
+    /* Progress Bar */
+    .progress-bar {
+        height: 20px;
+        background: #e9ecef;
+        border-radius: 12px;
+        overflow: hidden;
+        margin-bottom: 12px;
+    }
+
+    .progress-inner {
+        height: 100%;
+        background: var(--secondary);
+        color: #fff;
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 22px;
+        padding-right: 10px;
+    }
+
+    /* Table */
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 18px;
+    }
+
+    th, td {
+        border: 1px solid #dee2e6;
+        padding: 10px;
+        text-align: center;
+        font-size: 14px;
+    }
+
+    th {
+        background: #f1f4ff;
+        color: var(--primary);
+        font-weight: 700;
+    }
+
+    .weak {
+        color: var(--neutral);
+        font-weight: 700;
+    }
+
+    .good {
+        color: var(--secondary);
+        font-weight: 700;
+    }
+
+    @@media print {
+        .no-print, nav, header, footer, .sidebar
+
+    {
+        display: none !important;
+    }
+
+    body {
+        background: #fff !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+
+    }
+
+
+
+    /* 🖨️ تحسين الطباعة */
+@@media print {
+
+    /* إخفاء كل ما هو غير ضروري للطباعة */
+    .no-print, nav, header, footer, .sidebar {
+        display: none !important;
+        visibility: hidden !important;
+    }
+
+    body {
+        background: #fff !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    /* 🧩 منع تقسيم الكروت والتشارتات */
+    .analysis-card,
+    .card,
+    table,
+    canvas {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+    }
+
+    /* 🧾 جعل كل قسم يحتفظ بمساحته */
+    .analysis-grid {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        justify-content: space-between !important;
+        page-break-inside: avoid !important;
+    }
+
+    /* 🔹 تقليص حجم التشارت للطباعة */
+        #sectionsChart {
+            width: 100% !important;
+            height: 200px !important; /* ✅ تم زيادة 50px عن الارتفاع السابق */
+            display: block !important;
+            margin: 0 auto !important;
+        }
+
+    /* 🧾 ضبط الجدول ليظهر في صفحة واحدة إن أمكن */
+    table {
+        page-break-inside: avoid !important;
+        width: 100% !important;
+        font-size: 12px !important;
+    }
+
+    th, td {
+        padding: 6px !important;
+        line-height: 1.2 !important;
+    }
+
+    /* 🧱 توحيد الهوامش بين الصفحات */
+    @@page {
+        size: A4 portrait;
+        margin: 10mm;
+    }
+
+
+        /* وضع التشارت في صف منفصل أثناء الطباعة */
+    .analysis-grid {
+        display: block !important;
+        width: 100% !important;
+    }
+
+    .analysis-card {
+        width: 100% !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+    }
+
+    /* التأكد من ظهور الألوان في PDF */
+    body {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        background: #fff !important;
+    }
+
+    /* إزالة أي هوامش زائدة */
+    @@page {
+        size: A4 portrait;
+        margin: 10mm;
+    }
+
+
+
+
+
+}
+
+
+
+
+
+
+
+</style>
+<style>
+    /* تحسين عرض الجدول */
+    .performance-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 18px;
+        font-size: 15px;
+    }
+
+        .performance-table th {
+            background: #f1f4ff;
+            color: var(--primary);
+            padding: 12px;
+            font-weight: 700;
+            border: 1px solid #e0e6f7;
+        }
+
+        .performance-table td {
+            padding: 12px;
+            border: 1px solid #e0e6f7;
+            background: #fff;
+            vertical-align: middle;
+        }
+
+    /* تلوين نسبة النجاح تلقائيًا */
+    .percent-badge {
+        display: inline-block;
+        padding: 6px 12px;
+        border-radius: 8px;
+        font-weight: 700;
+        min-width: 60px;
+        text-align: center;
+        color: #fff;
+    }
+
+    .percent-good {
+        background: #28a745;
+    }
+
+    .percent-mid {
+        background: #ff9800;
+    }
+
+    .percent-weak {
+        background: #dc3545;
+    }
+
+    /* أزرار الإجراءات */
+    .action-btn {
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: none;
+        cursor: pointer;
+        color: white !important;
+        text-decoration: none !important;
+    }
+
+    .btn-questions {
+        background: #17a2b8;
+    }
+
+    .btn-lessons {
+        background: #6f42c1;
+    }
+
+    .action-btn:hover {
+        opacity: 0.9;
+    }
+
+@@media screen {
+    :root {
+        --report-bg-dark: #0b1020;
+        --report-card-dark: #121a2f;
+        --report-card-soft: #182238;
+        --report-border-dark: rgba(255,255,255,.10);
+        --report-text-dark: #f8fafc;
+        --report-muted-dark: #94a3b8;
+    }
+
+    body {
+        background: var(--report-bg-dark) !important;
+        color: var(--report-text-dark) !important;
+    }
+
+    .report-header,
+    .card,
+    .analysis-card,
+    .section-card,
+    .recommendation-card,
+    .table-card {
+        background: var(--report-card-dark) !important;
+        color: var(--report-text-dark) !important;
+        border-color: var(--report-border-dark) !important;
+        box-shadow: 0 12px 30px rgba(0,0,0,.22) !important;
+    }
+
+    .chips span,
+    .progress-bar,
+    th {
+        background: var(--report-card-soft) !important;
+        color: var(--report-text-dark) !important;
+        border-color: var(--report-border-dark) !important;
+    }
+
+    table,
+    th,
+    td {
+        border-color: var(--report-border-dark) !important;
+    }
+
+    .stat-title,
+    .weak,
+    .footer-note {
+        color: var(--report-muted-dark) !important;
+    }
+}
+</style>
+
+<div class="container">
+    <!-- Header -->
+    <div class="report-header">
+        <div>
+            <h2>@Model.StudentName</h2>
+            <div class="chips">
+                <span>@Model.ExamTitle</span>
+                <span>@Model.ExamDate.ToString("yyyy/MM/dd")</span>
+                <span>النسبة العامة: @Model.OverallPercent%</span>
+            </div>
+        </div>
+        <button class="btn-print no-print" onclick="window.print()">🖨️ طباعة</button>
+    </div>
+
+    <!-- KPIs -->
+    <div class="stats mb-4">
+        <div class="card"><div class="stat-title">عدد الأسئلة</div><div class="stat-value">@Model.TotalQuestions</div></div>
+        <div class="card"><div class="stat-title">إجابات صحيحة</div><div class="stat-value good">@Model.CorrectAnswers</div></div>
+        <div class="card"><div class="stat-title">إجابات خاطئة</div><div class="stat-value weak">@Model.WrongAnswers</div></div>
+        <div class="card"><div class="stat-title">متخطاة</div><div class="stat-value">@Model.SkippedQuestions</div></div>
+    </div>
+
+    <!-- Analysis -->
+    <div class="analysis-grid">
+        <div class="analysis-card">
+            <h4>تحليل المحاور في الاختبار</h4>
+            <canvas id="sectionsChart" height="140"></canvas>
+        </div>
+
+        <div class="analysis-card">
+            <h4>📈 توصيات ذكية</h4>
+            <div class="progress-bar">
+                <div class="progress-inner" style="width:@Model.OverallPercent%">نسبة الإنجاز: @Model.OverallPercent%</div>
+            </div>
+            <h5>🧠 @Model.SpeedLabel</h5>
+            <p>@Model.SpeedNote</p>
+            <h5>🎯 المسار التدريبي المقترح</h5>
+            <p><strong>@Model.TrackCard1:</strong> @Model.TrackCard1Desc</p>
+            <p><strong>@Model.TrackCard2:</strong> @Model.TrackCard2Desc</p>
+        </div>
+    </div>
+
+    <div class="analysis-card mt-4">
+        <h4>تفصيل الأداء حسب المحاور</h4>
+
+        <table class="performance-table">
+            <thead>
+                <tr>
+                    <th>المحور</th>
+                    <th>عدد الأسئلة</th>
+                    <th>صحيحة</th>
+                    <th>خاطئة</th>
+                    <th>متخطاة</th>
+                    <th>النسبة</th>
+                    <th>عرض الأسئلة</th>
+                    <th>عرض المؤشرات</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var s in Model.Sections)
+                {
+                    var percent = s.Total == 0 ? 0 : Math.Round((s.Correct / (double)s.Total) * 100, 1);
+                    string percentClass =
+                    percent >= 70 ? "percent-good" :
+                    percent >= 40 ? "percent-mid" : "percent-weak";
+
+                    <tr>
+                        <td>@s.SectionTitle</td>
+                        <td>@s.Total</td>
+                        <td class="good">@s.Correct</td>
+                        <td class="weak">@s.Wrong</td>
+                        <td>@s.Skipped</td>
+
+                        <!-- نسبة النجاح -->
+                        <td>
+                            <span class="percent-badge @percentClass">@percent%</span>
+                        </td>
+
+                        <!-- زر عرض الأسئلة -->
+                        <td>
+                            <a class="action-btn btn-questions"
+                               asp-area="Instructors"
+                               asp-controller="InstructorHomeworks"
+                               asp-action="SectionQuestions"
+                               asp-route-homeworkSetId="@Model.ExamAssignmentId"
+                               asp-route-studentId="@Model.StudentId"
+                               asp-route-sectionId="@s.SectionId">
+                                <i class="bi bi-eye"></i> عرض
+                            </a>
+                        </td>
+
+                        <!-- زر عرض المؤشرات -->
+                        <td>
+                            <a class="action-btn btn-lessons"
+                               asp-area="Instructors"
+                               asp-controller="InstructorHomeworks"
+                               asp-action="SectionLessons"
+                               asp-route-homeworkSetId="@Model.ExamAssignmentId"
+                               asp-route-sectionId="@s.SectionId">
+                                <i class="bi bi-layers"></i> مؤشرات
+                            </a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+
+    <!-- Print Button -->
+    <div class="text-center mt-4 no-print">
+        <button class="btn-print" onclick="window.print()">🖨️ طباعة / PDF</button>
+    </div>
+</div>
+
+<script>
+    const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Sections.Select(s => s.SectionTitle)));
+    const correct = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Sections.Select(s => s.Correct)));
+    const wrong = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Sections.Select(s => s.Wrong)));
+    const skipped = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Sections.Select(s => s.Skipped)));
+
+    new Chart(document.getElementById('sectionsChart'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                { label: 'صحيحة', data: correct, backgroundColor: '#339999' },
+                { label: 'خاطئة', data: wrong, backgroundColor: '#ff9933' },
+                { label: 'متخطاة', data: skipped, backgroundColor: '#666666' }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { position: 'bottom' } },
+            scales: {
+                x: { grid: { display: false } },
+                y: { beginAtZero: true, max: 20 }
+            }
+        }
+    });
+</script>

@@ -1,0 +1,346 @@
+﻿@model QdratNew.ViewModels.Homework.StudentHomeworkDashboardViewModel
+@using System.Text.Json
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+<div class="alert alert-info text-center shadow-sm rounded-3 mt-4 bg-qdrat text-white">
+    <div class="d-flex align-items-center">
+        <div class="me-3 text-light">
+            <i class="fa-solid fa-info-circle"></i>
+        </div>
+        <div>
+            <h5 class="fw-bold mb-1 ">لوحة متابعة الواجبات 📘</h5>
+            <p class="mb-0 " style="font-size: 0.95rem;">
+                في هذه الصفحة يمكنك متابعة جميع واجباتك: الواجبات المكلفة، التي قمت بحلها، المطلوب حلها، والمتأخرة.
+                كما ستجد إحصائيات رسومية وتقارير تساعدك على معرفة نقاط قوتك وضعفك في المناهج المختلفة.
+            </p>
+        </div>
+    </div>
+</div>
+<!-- ✅ الكروت -->
+<div class="row g-4 mt-4">
+
+    <!-- 🟢 كل الواجبات -->
+    <div class="col-md-3">
+        <a asp-action="AllHomeworks" class="text-decoration-none">
+            <div class="card shadow-sm rounded-4 text-center bg-q-green text-white stat-card">
+                <div class="icon-circle">
+                    <i class="fa-solid fa-book-open"></i>
+                </div>
+                <h6 class="fw-bold mt-2">كل الواجبات</h6>
+                <h2 class="fw-bold">@Model.TotalAssigned</h2>
+            </div>
+        </a>
+    </div>
+
+    <!-- ⚪ المحلولة -->
+    <div class="col-md-3">
+        <a asp-action="SolvedHomeworks" class="text-decoration-none">
+            <div class="card shadow-sm rounded-4 text-center bg-q-gray text-white stat-card">
+                <div class="icon-circle">
+                    <i class="fa-solid fa-check-circle"></i>
+                </div>
+                <h6 class="fw-bold mt-2">المحلولة</h6>
+                <h2 class="fw-bold">@Model.Completed</h2>
+            </div>
+        </a>
+    </div>
+
+    <!-- 🟠 المطلوب حلها -->
+    <div class="col-md-3">
+        <a asp-action="RequiredHomeworks" class="text-decoration-none">
+            <div class="card shadow-sm rounded-4 text-center bg-q-orange text-white stat-card">
+                <div class="icon-circle">
+                    <i class="fa-solid fa-tasks"></i>
+                </div>
+                <h6 class="fw-bold mt-2">المطلوبة</h6>
+                <h2 class="fw-bold">@Model.Pending</h2>
+            </div>
+        </a>
+    </div>
+
+    <!-- 🟠 المتأخرة -->
+    <div class="col-md-3">
+        <a asp-action="LateHomeworks" class="text-decoration-none">
+            <div class="card shadow-sm rounded-4 text-center bg-q-orange text-white stat-card">
+                <div class="icon-circle">
+                    <i class="fa-solid fa-clock"></i>
+                </div>
+                <h6 class="fw-bold mt-2">المتأخرة</h6>
+                <h2 class="fw-bold">@Model.Late</h2>
+            </div>
+        </a>
+    </div>
+
+</div>
+
+
+
+<hr />
+
+<!-- ✅ التشارتات -->
+<div class="row g-4 mt-4">
+    <div class="mt-2">
+        <button class="btn btn-outline-dark btn-sm me-2" onclick="loadCurriculumData(0)">كل المناهج</button>
+        @foreach (var curriculum in Model.Curriculums)
+        {
+            <button class="btn btn-outline-primary btn-sm me-2"
+                    onclick="loadCurriculumData(@curriculum.Id)">
+                @curriculum.Title
+            </button>
+        }
+    </div>
+    <!-- 🔹 تحليل المحاور + أزرار المناهج -->
+    <div class="col-md-6">
+        <div class="card shadow-sm mb-4" style="border: 1px solid #ddd; border-radius: 12px;">
+            <div class="card-header bg-qdrat text-center fw-bold">
+                تحليل الأداء حسب المحاور
+            
+            </div>
+            <div class="card-body">
+                <canvas id="radarChart" height="400"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🔹 إحصائيات الواجبات -->
+    <div class="col-md-6">
+        <div class="card shadow-sm mb-5" style="border: 1px solid #ddd; border-radius: 12px;">
+            <div class="card-header bg-qdrat text-center fw-bold">إحصائيات الواجبات</div>
+
+            <div class="row text-center mb-5">
+                <div class="col-md-12 p-2">
+                    <h6 class="fw-bold">📘 تطور الأداء في الواجبات</h6>
+                    <canvas id="homeworkProgressChart" style="max-height: 220px;padding:10px;"></canvas>
+                </div>
+
+                <div class="col-md-12 p-2">
+                    <h6 class="fw-bold">📘 مقارنة نتائج الواجبات مع متوسط الدفعة</h6>
+                    <canvas id="homeworkComparisonChart" style="max-height: 220px;padding:10px;"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+<hr />
+
+<!-- 🔹 توصيات ذكية -->
+<div class="col-md-4">
+    <div class="card border-0 shadow-sm rounded-4 smart-tips-card">
+        <div class="card-header bg-q-green text-white fw-bold text-center py-3 rounded-top-4">
+            <i class="fa-solid fa-brain me-2"></i> توصيات ذكية
+        </div>
+
+        <div class="card-body p-4">
+
+            @if (Model.Recommendation != null)
+            {
+                <p class="fw-bold text-q-green mb-2">
+                    🧠 @Model.Recommendation.SpeedNote
+                </p>
+
+                <p class="text-muted small">@Model.Recommendation.PerformanceSummary</p>
+
+                <hr />
+
+                @if (Model.Recommendation.IndividualTips != null && Model.Recommendation.IndividualTips.Any())
+                {
+                    @foreach (var tip in Model.Recommendation.IndividualTips)
+                    {
+                        <div class="tip-card shadow-sm mb-3 p-3 rounded-4">
+                            <div class="d-flex align-items-start">
+                                <div class="tip-icon me-3">
+                                    <i class="fa-solid fa-lightbulb"></i>
+                                </div>
+                                <p class="mb-0 text-muted">@tip</p>
+                            </div>
+                        </div>
+                    }
+                }
+            }
+            else
+            {
+                <div class="text-center text-muted py-4">
+                    <i class="fa-regular fa-face-smile fs-3 d-block mb-2"></i>
+                    لا توجد توصيات حالياً
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+
+
+
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    console.log("🎨 Applying Qdrat Homework Dashboard Colors");
+
+    // 🎨 هوية الألوان الرسمية
+    const qGreen = "#339999";
+    const qGreenSoft = "rgba(51,153,153,0.35)";
+    const qGreenVerySoft = "rgba(51,153,153,0.15)";
+
+    const qOrange = "#da784d";
+    const qOrangeSoft = "rgba(218,120,77,0.35)";
+    const qOrangeVerySoft = "rgba(218,120,77,0.15)";
+
+    const qGraySoft = "rgba(136,136,136,0.35)";
+
+    var radarChart, homeworkProgressChart, homeworkComparisonChart;
+
+    // ===========================================
+    // 1️⃣ رادار تحليل المحاور
+    // ===========================================
+    function renderRadarChart(labels, studentScores, batchAverages) {
+        if (radarChart) radarChart.destroy();
+
+        radarChart = new Chart(document.getElementById('radarChart').getContext('2d'), {
+            type: 'radar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: "أداء الطالب",
+                        data: studentScores,
+                        backgroundColor: qGreenVerySoft,
+                        borderColor: qGreen,
+                        borderWidth: 2,
+                        pointBackgroundColor: qGreen,
+                        pointBorderColor: "#fff"
+                    },
+                    {
+                        label: "متوسط الدفعة",
+                        data: batchAverages,
+                        backgroundColor: qOrangeVerySoft,
+                        borderColor: qOrange,
+                        borderWidth: 2,
+                        pointBackgroundColor: qOrange,
+                        pointBorderColor: "#fff"
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { position: "bottom" } },
+                scales: {
+                    r: {
+                        suggestedMin: 0,
+                        suggestedMax: 100,
+                        angleLines: { color: "#ccc" },
+                        grid: { color: "#ddd" },
+                        pointLabels: { color: "#333", font: { size: 12 } }
+                    }
+                }
+            }
+        });
+    }
+
+    // ===========================================
+    // 2️⃣ تطور أداء الواجبات (صحيحة – خطأ)
+    // ===========================================
+    function renderHomeworkProgress(labels, correct, remaining) {
+        if (homeworkProgressChart) homeworkProgressChart.destroy();
+
+        homeworkProgressChart = new Chart(document.getElementById('homeworkProgressChart'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'إجابات صحيحة',
+                        data: correct,
+                        backgroundColor: qGreen,
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'إجابات خاطئة / متبقية',
+                        data: remaining,
+                        backgroundColor: qOrangeSoft,
+                        borderRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { position: "bottom" } },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { color: "#333" }
+                    },
+                    x: {
+                        ticks: { color: "#333" }
+                    }
+                }
+            }
+        });
+    }
+
+    // ===========================================
+    // 3️⃣ مقارنة الواجبات مع متوسط الدفعة
+    // ===========================================
+    function renderHomeworkComparison(labels, studentScores, batchScores) {
+        if (homeworkComparisonChart) homeworkComparisonChart.destroy();
+
+        homeworkComparisonChart = new Chart(document.getElementById('homeworkComparisonChart'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'درجة الطالب',
+                        data: studentScores,
+                        backgroundColor: qGreen,
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'متوسط الدفعة',
+                        data: batchScores,
+                        backgroundColor: qOrange,
+                        borderRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { position: "bottom" } },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: { color: "#333" }
+                    },
+                    x: {
+                        ticks: { color: "#333" }
+                    }
+                }
+            }
+        });
+    }
+
+    // ===========================================
+    // 🔄 تحميل البيانات
+    // ===========================================
+    function loadCurriculumData(curriculumId) {
+        fetch(`/Students/StudentHomeworkDashboard/GetCurriculumData?curriculumId=${curriculumId}`)
+            .then(r => r.json())
+            .then(data => {
+                renderRadarChart(data.sectionLabels, data.studentScores, data.batchAverages);
+                renderHomeworkProgress(data.homeworkTitles, data.correctAnswers, data.remainingQuestions);
+                renderHomeworkComparison(data.homeworkTitles, data.studentHomeworkScores, data.batchHomeworkAverages);
+            })
+            .catch(err => console.error("Error loading data:", err));
+    }
+
+    // 🚀 تحميل أولي
+    loadCurriculumData(0);
+</script>
+

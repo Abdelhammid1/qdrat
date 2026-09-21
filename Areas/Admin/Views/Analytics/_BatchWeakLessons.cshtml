@@ -1,0 +1,354 @@
+@model QdratNew.ViewModels.Admin.Analytics.BatchPerformanceDetailsVM
+@* ═══════════════════════════════════════════════════════════════════
+   _BatchWeakLessons — Accordion lesson cards + horizontal ranked bar
+   Identity: Red/amber danger accent · Chart: Top-10 weakness bar
+   فلسفة: "الدرس الأضعف هو بوابة التدخل — رتّبه واجعله مرئيًا"
+═══════════════════════════════════════════════════════════════════ *@
+@{
+    var hasLessons = Model?.WeakLessons != null && Model.WeakLessons.Any();
+    var top10      = Model?.WeakLessons?.Take(10).ToList() ?? new();
+}
+<style>
+    .bwl-section { margin-bottom: 24px; }
+    .bwl-card {
+        background:    var(--bpd-surface);
+        border:        1.5px solid var(--bpd-border);
+        border-radius: var(--bpd-radius);
+        padding:       26px 28px;
+        box-shadow:    var(--bpd-shadow-sm);
+    }
+    .bwl-hd-ico   { background: var(--bpd-danger-bg); color: var(--bpd-danger); }
+    .bwl-hd-title { color: var(--bpd-danger); }
+
+    /* Chart wrap */
+    .bwl-chart-wrap {
+        background:    #fef2f2;
+        border:        1.5px solid var(--bpd-danger-mid);
+        border-radius: var(--bpd-radius-sm);
+        padding:       18px 20px;
+        margin-bottom: 22px;
+    }
+    .bwl-chart-label {
+        font-size:   12.5px;
+        font-weight: 800;
+        color:       var(--bpd-danger);
+        margin-bottom:12px;
+        display:     flex;
+        align-items: center;
+        gap:         6px;
+    }
+
+    /* Lesson accordion */
+    .bwl-lesson {
+        border:        1.5px solid var(--bpd-border);
+        border-radius: var(--bpd-radius-sm);
+        overflow:      hidden;
+        margin-bottom: 10px;
+        transition:    border-color .2s;
+    }
+    .bwl-lesson:hover { border-color: var(--bpd-danger-mid); }
+    .bwl-lesson-hd {
+        background:  #f8fafc;
+        padding:     14px 18px;
+        display:     flex;
+        align-items: center;
+        gap:         12px;
+        cursor:      pointer;
+        user-select: none;
+        transition:  background .15s;
+    }
+    .bwl-lesson-hd:hover { background: #f0f2f5; }
+    .bwl-rank {
+        width:          30px;
+        height:         30px;
+        border-radius:  50%;
+        background:     var(--bpd-danger-bg);
+        color:          var(--bpd-danger);
+        display:        flex;
+        align-items:    center;
+        justify-content:center;
+        font-size:      13px;
+        font-weight:    900;
+        flex-shrink:    0;
+        border:         1.5px solid var(--bpd-danger-mid);
+    }
+    .bwl-lesson-name { font-size: 15px; font-weight: 800; flex: 1; }
+    .bwl-lesson-meta { font-size: 12.5px; color: var(--bpd-muted); margin-top: 2px; }
+
+    .bwl-toggle { color: var(--bpd-muted); font-size: 13px; transition: transform .25s; }
+    .collapsed .bwl-toggle { transform: rotate(180deg); }
+
+    .bwl-lesson-body { padding: 16px 20px; }
+
+    .bwl-weak-bar-row {
+        display:     flex;
+        align-items: center;
+        gap:         12px;
+        margin-bottom: 14px;
+    }
+    .bwl-bar-label { font-size: 11.5px; font-weight: 800; color: var(--bpd-muted); white-space:nowrap; }
+    .bwl-bar-pct   { font-size: 12px; font-weight: 900; white-space:nowrap; }
+
+    /* Question card */
+    .bwl-q-title   { font-size: 12.5px; font-weight: 800; color: var(--bpd-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom: 8px; }
+    .bwl-q-card {
+        background:  #fff;
+        border:      1.5px solid var(--bpd-danger-mid);
+        border-radius:var(--bpd-radius-sm);
+        padding:     13px 16px;
+        margin-bottom:8px;
+        transition:  box-shadow .15s;
+    }
+    .bwl-q-card:hover { box-shadow: 0 2px 10px rgba(220,38,38,.1); }
+    .bwl-q-card:last-child { margin-bottom: 0; }
+    .bwl-q-ref {
+        display:       inline-flex;
+        align-items:   center;
+        background:    var(--bpd-primary-bg);
+        color:         var(--bpd-primary);
+        border-radius: 6px;
+        padding:       2px 8px;
+        font-size:     12.5px;
+        font-weight:   800;
+        margin-bottom: 5px;
+    }
+    .bwl-q-text  { font-size: 14.5px; font-weight: 600; line-height: 1.6; color: var(--bpd-text); }
+    .bwl-q-stats { display: flex; gap: 14px; flex-wrap:wrap; margin-top: 8px; }
+    .bwl-q-stat  { font-size: 12.5px; color: var(--bpd-muted); display:flex; align-items:center; gap:4px; }
+    .bwl-q-pct   { font-size: 22px; font-weight: 900; line-height: 1; }
+</style>
+
+<div class="bwl-section">
+    <div class="bwl-card">
+
+        <div class="bpd-sec-hd">
+            <div class="bpd-sec-ico bwl-hd-ico"><i class="bi bi-exclamation-diamond-fill"></i></div>
+            <div>
+                <div class="bpd-sec-title bwl-hd-title">الدروس الضعيفة داخل الدفعة</div>
+            </div>
+        </div>
+        <div class="bpd-sec-sub">الدروس التي تجاوزت نسبة الضعف فيها 50% — مرتبة تنازليًا بأسئلتها عالية الخطأ</div>
+
+        @if (!hasLessons)
+        {
+            <div class="bpd-empty" style="background:var(--bpd-success-bg);">
+                <i class="bi bi-check2-circle" style="color:var(--bpd-success);opacity:.7;"></i>
+                <div class="bpd-empty-t" style="color:var(--bpd-success);">لا توجد دروس حرجة</div>
+                <div class="bpd-empty-s">أداء الدروس ضمن المعدل المقبول</div>
+            </div>
+        }
+        else
+        {
+            @* ── Chart ── *@
+            <div class="bwl-chart-wrap">
+                <div class="bwl-chart-label">
+                    <i class="bi bi-bar-chart-steps"></i>
+                    أعلى @top10.Count درس من حيث نسبة الضعف (%)
+                </div>
+                <canvas id="lessonsBarChart" style="max-height:280px;width:100%;"></canvas>
+            </div>
+
+            @* ── Accordion ── *@
+            @foreach (var lessonRow in Model!.WeakLessons.Select((lesson, index) => new { Lesson = lesson, Rank = index + 1 }))
+            {
+                var lesson = lessonRow.Lesson;
+                var rank = lessonRow.Rank;
+
+                var lColor = lesson.WeaknessPercentage >= 70 ? "var(--bpd-danger)" : "var(--bpd-warning)";
+                var lBadge = lesson.WeaknessPercentage >= 70 ? "badge-d" : "badge-w";
+                var colId = $"bwl-collapse-{rank}";
+
+                <div class="bwl-lesson">
+                    <div class="bwl-lesson-hd"
+                         data-bs-toggle="collapse"
+                         data-bs-target="#@colId"
+                         aria-expanded="@(rank == 1 ? "true" : "false")">
+                        <div class="bwl-rank">@rank</div>
+
+                        <div class="flex-grow-1">
+                            <div class="bwl-lesson-name">@lesson.LessonName</div>
+                            <div class="bwl-lesson-meta">
+                                <i class="bi bi-person-fill me-1"></i>@lesson.InstructorName
+                                &nbsp;·&nbsp;
+                                <i class="bi bi-people-fill me-1"></i>@lesson.AffectedStudents طالب متأثر
+                                &nbsp;·&nbsp;
+                                @lesson.TotalAttempts محاولة
+                            </div>
+                        </div>
+
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="bpd-badge @lBadge" style="font-size:13px;padding:5px 14px;">
+                                ضعف @lesson.WeaknessPercentage.ToString("0.#")%
+                            </span>
+                            <i class="bi bi-chevron-up bwl-toggle"></i>
+                        </div>
+                    </div>
+
+                    <div class="collapse @(rank == 1 ? "show" : "")" id="@colId">
+                        <div class="bwl-lesson-body">
+                            <div class="bwl-weak-bar-row">
+                                <div class="bwl-bar-label">نسبة الضعف</div>
+
+                                <div class="bpd-bar flex-grow-1" style="height:10px;">
+                                    <div class="bpd-bar-fill"
+                                         style="width:@lesson.WeaknessPercentage%;background:@lColor;height:10px;"></div>
+                                </div>
+
+                                <div class="bwl-bar-pct" style="color:@lColor;">
+                                    @lesson.WeaknessPercentage.ToString("0.#")%
+                                </div>
+                            </div>
+
+                            @if (lesson.HighRiskQuestions == null || !lesson.HighRiskQuestions.Any())
+                            {
+                                <div style="font-size:13px;color:var(--bpd-muted);padding:8px 0;">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    لا توجد أسئلة تجاوزت 60% أخطاء في هذا الدرس.
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="bwl-q-title">
+                                    <i class="bi bi-question-diamond-fill me-1" style="color:var(--bpd-danger);"></i>
+                                    الأسئلة عالية الخطأ (@lesson.HighRiskQuestions.Count)
+                                </div>
+
+                                @foreach (var questionRow in lesson.HighRiskQuestions.Select((question, index) => new { Question = question, Rank = index + 1 }))
+                                {
+                                    var q = questionRow.Question;
+                                    var qr = questionRow.Rank;
+                                    var qColor = q.ErrorPercentage >= 80 ? "var(--bpd-danger)" : "var(--bpd-warning)";
+
+                                    <div class="bwl-q-card">
+                                        <div class="d-flex align-items-start gap-3">
+                                            <div style="font-size:12px;font-weight:900;color:var(--bpd-muted);flex-shrink:0;padding-top:3px;">
+                                                #@qr
+                                            </div>
+
+                                            <div class="flex-grow-1">
+                                                @if (!string.IsNullOrWhiteSpace(q.ReferenceNumber))
+                                                {
+                                                    <div class="bwl-q-ref">
+                                                        <i class="bi bi-hash"></i> @q.ReferenceNumber
+                                                    </div>
+                                                }
+
+                                                <div class="bwl-q-text">@Html.Raw(q.QuestionTitle)</div>
+
+                                                <div class="bwl-q-stats">
+                                                    <div class="bwl-q-stat">
+                                                        <i class="bi bi-x-circle-fill" style="color:var(--bpd-danger);"></i>
+                                                        @q.WrongAttempts خطأ
+                                                    </div>
+
+                                                    <div class="bwl-q-stat">
+                                                        <i class="bi bi-check-circle-fill" style="color:var(--bpd-success);"></i>
+                                                        @q.CorrectAttempts صحيح
+                                                    </div>
+
+                                                    <div class="bwl-q-stat">
+                                                        <i class="bi bi-list-check" style="color:var(--bpd-primary);"></i>
+                                                        @q.TotalAttempts محاولة
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="text-end flex-shrink-0">
+                                                <div class="bwl-q-pct" style="color:@qColor;">
+                                                    @q.ErrorPercentage.ToString("0.#")%
+                                                </div>
+
+                                                <div style="font-size:10px;color:var(--bpd-muted);">
+                                                    نسبة الخطأ
+                                                </div>
+
+                                                <div class="bpd-bar mt-2" style="width:64px;">
+                                                    <div class="bpd-bar-fill"
+                                                         style="width:@q.ErrorPercentage%;background:@qColor;"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@if (hasLessons && top10.Any())
+{
+    <script>
+    (function () {
+        var labels = [
+            @Html.Raw(string.Join(",", top10.Select(l =>
+                "'" + l.LessonName.Replace("'","\'").Replace("\\","\\\\") + "'")))
+        ];
+        var data = [
+            @Html.Raw(string.Join(",", top10.Select(l =>
+                l.WeaknessPercentage.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))))
+        ];
+        var colors = data.map(function(v) {
+            return v >= 70 ? '#ef4444' : '#f59e0b';
+        });
+        var borders = data.map(function(v) {
+            return v >= 70 ? '#dc2626' : '#d97706';
+        });
+
+        var ctx = document.getElementById('lessonsBarChart');
+        if (!ctx || typeof Chart === 'undefined') return;
+
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label:           'نسبة الضعف %',
+                    data:            data,
+                    backgroundColor: colors,
+                    borderColor:     borders,
+                    borderWidth:     1.5,
+                    borderRadius:    6,
+                    borderSkipped:   false
+                }]
+            },
+            options: {
+                indexAxis:  'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        rtl: true,
+                        callbacks: {
+                            label: function(c) { return ' الضعف: ' + c.parsed.x.toFixed(1) + '%'; }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        min: 0, max: 100,
+                        grid: { color: '#fef2f2' },
+                        ticks: {
+                            font:     { family: 'Cairo', size: 11 },
+                            color:    '#94a3b8',
+                            callback: function(v) { return v + '%'; }
+                        }
+                    },
+                    y: {
+                        grid: { display: false },
+                        ticks: {
+                            font:  { family: 'Cairo', size: 11, weight: '700' },
+                            color: '#374151'
+                        }
+                    }
+                },
+                animation: { duration: 900 }
+            }
+        });
+    }());
+    </script>
+}

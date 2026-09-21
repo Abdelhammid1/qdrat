@@ -1,0 +1,1584 @@
+﻿@model QdratNew.ViewModels.Admin.DecisionLab.DecisionLabRecommendationPreviewViewModel?
+<link rel="stylesheet" href="~/css/decision-analytics-ui.css" asp-append-version="true" />
+
+@{
+    var safeReturnUrl = (!string.IsNullOrWhiteSpace(Model?.SourceContext.ReturnUrl) && Url.IsLocalUrl(Model.SourceContext.ReturnUrl))
+        ? Model.SourceContext.ReturnUrl
+        : Url.Action("Index", "DecisionLab", new { area = "Admin" })!;
+
+    var priority = Model?.Priority ?? "";
+    var priorityColor = priority == "عاجل" ? "#dc2626" : priority == "مرتفع" ? "#d97706" : priority == "متوسط" ? "#ca8a04" : "#16a34a";
+    var priorityBg   = priority == "عاجل" ? "#fee2e2" : priority == "مرتفع" ? "#fef3c7" : priority == "متوسط" ? "#fef9c3" : "#dcfce7";
+    var priorityLevel = priority == "عاجل" ? 4 : priority == "مرتفع" ? 3 : priority == "متوسط" ? 2 : 1;
+
+    var itType = Model?.InterventionType ?? "";
+    var intIcon  = itType == "DataReview"         ? "fa-database"         :
+                   itType == "AttendanceFollowUp"  ? "fa-user-clock"       :
+                   itType == "HomeworkSupport"     ? "fa-clipboard-list"   :
+                   itType == "ShortRemedialExam"   ? "fa-file-pen"         :
+                   itType == "InstructorGuidance"  ? "fa-chalkboard-user"  :
+                   itType == "MixedIntervention"   ? "fa-layer-group"      :
+                   itType == "MonitorOnly"         ? "fa-eye"              : "fa-circle-info";
+    var intColor = itType == "DataReview"         ? "#0891b2" :
+                   itType == "AttendanceFollowUp"  ? "#d97706" :
+                   itType == "HomeworkSupport"     ? "#1e40af" :
+                   itType == "ShortRemedialExam"   ? "#7c3aed" :
+                   itType == "InstructorGuidance"  ? "#16a34a" :
+                   itType == "MixedIntervention"   ? "#dc2626" : "#6b7280";
+    var intLabel = itType == "DataReview"         ? "مراجعة البيانات"   :
+                   itType == "AttendanceFollowUp"  ? "متابعة الحضور"     :
+                   itType == "HomeworkSupport"     ? "دعم الواجبات"      :
+                   itType == "ShortRemedialExam"   ? "اختبار تشخيصي"    :
+                   itType == "InstructorGuidance"  ? "توجيه المعلم"      :
+                   itType == "MixedIntervention"   ? "تدخل مختلط"        :
+                   itType == "MonitorOnly"         ? "مراقبة فقط"        : itType;
+
+    var score      = Model?.ImpactScore ?? 0;
+    var gaugeColor = score >= 75 ? "#dc2626" : score >= 50 ? "#d97706" : score >= 25 ? "#ca8a04" : "#16a34a";
+    var scoreDesc  = score >= 75 ? "تأثير حرج — تدخل فوري"         :
+                     score >= 50 ? "تأثير مرتفع — أولوية عالية"    :
+                     score >= 25 ? "تأثير متوسط — مراجعة مطلوبة"   : "تأثير منخفض — متابعة مستمرة";
+
+    var isSaved = Model?.SavedRecommendationId.HasValue == true;
+}
+
+<div class="qd-page" dir="rtl">
+
+    <!-- ═══════════ BREADCRUMB ═══════════ -->
+    <nav aria-label="breadcrumb" class="rp-breadcrumb mb-2">
+        <ol class="breadcrumb mb-0">
+            <li class="breadcrumb-item">
+                <a asp-area="Admin" asp-controller="Home" asp-action="Index">
+                    <i class="fas fa-home me-1"></i>الرئيسية
+                </a>
+            </li>
+            <li class="breadcrumb-item">
+                <a asp-area="Admin" asp-controller="Analytics" asp-action="AdvancedDashboard">Analytics</a>
+            </li>
+            @if (Model?.BatchId.HasValue == true)
+            {
+                <li class="breadcrumb-item">
+                    <a asp-area="Admin" asp-controller="Analytics" asp-action="BatchPerformanceDetails"
+                       asp-route-batchId="@Model.BatchId" asp-route-curriculumId="@Model.CurriculumId">
+                        دفعة @Model.BatchId
+                    </a>
+                </li>
+            }
+            <li class="breadcrumb-item">
+                <a asp-area="Admin" asp-controller="DecisionLab" asp-action="Index">مختبر القرار</a>
+            </li>
+            <li class="breadcrumb-item active" aria-current="page">معاينة التوصية</li>
+        </ol>
+    </nav>
+
+    <!-- ═══════════ SOURCE CONTEXT BAR ═══════════ -->
+    @if (!string.IsNullOrWhiteSpace(Model?.SourceContext.SourceMetric))
+    {
+        <div class="source-context-bar mb-2">
+            <i class="fas fa-location-arrow me-1"></i>
+            <span>قادم من: <strong>@Model.SourceContext.SourcePage</strong></span>
+            <span class="source-context-sep">|</span>
+            <span>المقياس: <strong>@Model.SourceContext.SourceMetric</strong></span>
+        </div>
+    }
+
+    <!-- ═══════════ ANALYTICS CONTEXT BANNER ═══════════ -->
+    @if (Model?.SourceContext != null &&
+         Model.SourceContext.SourceController == "Analytics" &&
+         Model.SourceContext.SourceAction == "MetricDecisionDetails")
+    {
+        <div class="alert d-flex align-items-center gap-3 mb-4"
+             style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:.85rem;padding:1rem 1.25rem;">
+            <i class="bi bi-bar-chart-fill text-primary fs-5"></i>
+            <div class="flex-grow-1 small">
+                <strong class="d-block" style="color:#1e40af;">أتيت من لوحة تحليل المؤشرات</strong>
+                <span style="color:#3b82f6;">
+                    المؤشر: @(!string.IsNullOrWhiteSpace(Model.SourceContext.SourceMetric)
+                        ? Model.SourceContext.SourceMetric
+                        : "عام")
+                </span>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Model.SourceContext.ReturnUrl))
+            {
+                <a href="@Model.SourceContext.ReturnUrl"
+                   class="btn btn-sm btn-outline-primary"
+                   style="border-radius:.65rem;white-space:nowrap;">
+                    <i class="bi bi-arrow-right me-1"></i>
+                    العودة للمؤشر
+                </a>
+            }
+        </div>
+    }
+
+    <!-- ═══════════ HEADER ═══════════ -->
+    <section class="dl-header">
+        <div class="d-flex align-items-start justify-content-between flex-wrap gap-3" style="position:relative;z-index:1">
+            <div>
+                <div class="dl-eyebrow mb-1">
+                    <i class="fas fa-brain me-1"></i>DecisionLab · معاينة التوصية
+                </div>
+                <h1 class="mb-1">@(Model?.Title ?? "معاينة التوصية")</h1>
+                <p class="mb-0">قراءة تشغيلية للتوصية المقترحة — راجع التفاصيل قبل الحفظ والاعتماد</p>
+            </div>
+            <div class="d-flex gap-2 flex-wrap align-items-center">
+                @if (Model?.BatchId.HasValue == true)
+                {
+                    <a class="btn btn-light btn-sm"
+                       asp-area="Admin" asp-controller="DecisionLab" asp-action="BatchAnalysis"
+                       asp-route-batchId="@Model.BatchId" asp-route-curriculumId="@Model.CurriculumId">
+                        <i class="fas fa-chart-bar me-1"></i>تحليل DecisionLab
+                    </a>
+                    <a class="btn btn-outline-light btn-sm"
+                       asp-area="Admin" asp-controller="Analytics" asp-action="BatchPerformanceDetails"
+                       asp-route-batchId="@Model.BatchId" asp-route-curriculumId="@Model.CurriculumId">
+                        <i class="fas fa-chart-line me-1"></i>تحليل Analytics
+                    </a>
+                }
+                <a class="btn btn-outline-light btn-sm" href="@safeReturnUrl">
+                    <i class="fas fa-arrow-right me-1"></i>رجوع
+                </a>
+            </div>
+        </div>
+    </section>
+
+
+
+    @* ═══════ خطة العلاج التفصيلية ═══════ *@
+    <div class="dl-recommendation mb-3">
+        <div class="rp-multiview-header">
+            <i class="fas fa-layer-group me-2"></i>خطة العلاج التفصيلية
+            <span class="rp-multiview-subtitle">اختر الفيو المناسب لفهم المسار التنفيذي الكامل</span>
+        </div>
+
+        <div class="rp-tabs d-flex gap-2 flex-wrap mb-4">
+            <button type="button" class="rp-tab-btn" data-tab="diagnosis">🔍 تشخيص الضعف</button>
+            <button type="button" class="rp-tab-btn" data-tab="proposal">💡 المقترح والأسباب</button>
+            <button type="button" class="rp-tab-btn" data-tab="execution">⚙️ آلية التنفيذ</button>
+            <button type="button" class="rp-tab-btn" data-tab="routing">📤 التوجيه والإرسال</button>
+        </div>
+
+        @* ── TAB 1: تشخيص الضعف ── *@
+        <div id="panel-diagnosis" class="rp-tab-panel">
+            <div class="row g-3">
+                <div class="col-md-5">
+                    <div class="rp-sub-panel">
+                        <div class="rp-block-label mb-2"><i class="fas fa-magnifying-glass me-1"></i>نقاط الضعف المكتشفة</div>
+                        <ul class="rp-weakness-list">
+                            @if (itType == "MixedIntervention")
+                            {
+                                <li><i class="fas fa-user-clock text-warning"></i><span>انخفاض نسبة الحضور عن 70%</span></li>
+                                <li><i class="fas fa-clipboard-list text-primary"></i><span>تدني معدل تسليم الواجبات أو انخفاض الدرجات</span></li>
+                                <li><i class="fas fa-file-pen" style="color:#7c3aed"></i><span>وجود دروس ضعيفة وأسئلة عالية الخطر</span></li>
+                                <li><i class="fas fa-chalkboard-user text-success"></i><span>انخفاض مشاركة الاختبارات أو تدني درجاتها</span></li>
+                            }
+                            else if (itType == "AttendanceFollowUp")
+                            {
+                                <li><i class="fas fa-user-clock text-warning"></i><span>انخفاض نسبة الحضور عن 70%</span></li>
+                            }
+                            else if (itType == "HomeworkSupport")
+                            {
+                                <li><i class="fas fa-clipboard-list text-primary"></i><span>تدني معدل تسليم الواجبات أو انخفاض الدرجات</span></li>
+                            }
+                            else if (itType == "ShortRemedialExam")
+                            {
+                                <li><i class="fas fa-file-pen" style="color:#7c3aed"></i><span>وجود دروس ضعيفة وأسئلة عالية الخطر</span></li>
+                            }
+                            else if (itType == "InstructorGuidance")
+                            {
+                                <li><i class="fas fa-chalkboard-user text-success"></i><span>انخفاض مشاركة الاختبارات أو تدني درجاتها</span></li>
+                            }
+                            else if (itType == "DataReview")
+                            {
+                                <li><i class="fas fa-database" style="color:#0891b2"></i><span>بيانات غير مكتملة أو غير كافية للتحليل</span></li>
+                            }
+                            else
+                            {
+                                <li><i class="fas fa-eye text-secondary"></i><span>لا توجد إشارات خطر واضحة — مراقبة مستمرة</span></li>
+                            }
+                        </ul>
+                    </div>
+                </div>
+                <div class="col-md-7">
+                    <div class="rp-sub-panel">
+                        <div class="rp-block-label mb-2"><i class="fas fa-gauge-high me-1"></i>حدة التأثير</div>
+                        <div class="rp-impact-bar-wrap">
+                            <div class="rp-impact-bar" style="width:@Model.ImpactScore%;background:@gaugeColor"></div>
+                        </div>
+                        <div class="d-flex justify-content-between mt-1">
+                            <small class="text-muted fw-bold">0%</small>
+                            <small class="fw-bold" style="color:@gaugeColor">@Model.ImpactScore%</small>
+                            <small class="text-muted fw-bold">100%</small>
+                        </div>
+                        <div class="rp-block-label mt-3 mb-2"><i class="fas fa-bell me-1"></i>مستوى الاستعجال</div>
+                        <span class="rp-urgency-badge" style="background:@priorityBg;color:@priorityColor;border:1.5px solid @priorityColor">
+                            <i class="fas fa-circle-dot me-1"></i>@Model.Priority
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* ── TAB 2: المقترح والأسباب ── *@
+        <div id="panel-proposal" class="rp-tab-panel">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="rp-sub-panel h-100">
+                        <div class="rp-block-label mb-3"><i class="fas fa-sitemap me-1"></i>الأسباب الجذرية</div>
+                        <ol class="rp-causes-list">
+                            @if (itType == "MixedIntervention")
+                            {
+                                <li>
+                                    <i class="fas fa-calendar-xmark text-danger"></i>
+                                    <div><strong>ضعف الالتزام الأكاديمي</strong><br><small class="text-muted">تراكم الغياب مع تأخر تسليم الواجبات</small></div>
+                                </li>
+                                <li>
+                                    <i class="fas fa-book me-1" style="color:#7c3aed"></i>
+                                    <div><strong>فجوات في المحتوى</strong><br><small class="text-muted">دروس لم تُستوعب بالشكل الكافي</small></div>
+                                </li>
+                                <li>
+                                    <i class="fas fa-arrow-trend-down text-warning"></i>
+                                    <div><strong>ضعف الأداء في الاختبارات</strong><br><small class="text-muted">انعكاس مباشر للفجوات المعرفية</small></div>
+                                </li>
+                            }
+                            else if (itType == "AttendanceFollowUp")
+                            {
+                                <li>
+                                    <i class="fas fa-calendar-xmark text-danger"></i>
+                                    <div><strong>الانقطاع المتكرر</strong><br><small class="text-muted">يؤثر على استيعاب المحتوى والأداء العام</small></div>
+                                </li>
+                            }
+                            else if (itType == "HomeworkSupport")
+                            {
+                                <li>
+                                    <i class="fas fa-clipboard-list text-primary"></i>
+                                    <div><strong>إهمال الممارسة</strong><br><small class="text-muted">الواجبات أساس تثبيت المهارات</small></div>
+                                </li>
+                            }
+                            else if (itType == "ShortRemedialExam")
+                            {
+                                <li>
+                                    <i class="fas fa-file-pen" style="color:#7c3aed"></i>
+                                    <div><strong>فجوات معرفية محددة</strong><br><small class="text-muted">دروس بعينها لم تُفهم جيداً</small></div>
+                                </li>
+                            }
+                            else if (itType == "InstructorGuidance")
+                            {
+                                <li>
+                                    <i class="fas fa-chalkboard-user text-success"></i>
+                                    <div><strong>ضعف المخرجات التقييمية</strong><br><small class="text-muted">انخفاض عام في نتائج الاختبارات</small></div>
+                                </li>
+                            }
+                            else if (itType == "DataReview")
+                            {
+                                <li>
+                                    <i class="fas fa-database" style="color:#0891b2"></i>
+                                    <div><strong>نقص البيانات</strong><br><small class="text-muted">لا يمكن اتخاذ قرار بدون بيانات كافية</small></div>
+                                </li>
+                            }
+                            else
+                            {
+                                <li>
+                                    <i class="fas fa-eye text-secondary"></i>
+                                    <div><strong>لا توجد مشكلة حالية</strong><br><small class="text-muted">المتابعة وقائية</small></div>
+                                </li>
+                            }
+                        </ol>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="rp-sub-panel h-100">
+                        <div class="rp-block-label mb-2"><i class="fas fa-lightbulb me-1"></i>المقترح</div>
+                        <div class="rp-proposal-box">
+                            <i class="fas fa-lightbulb text-warning me-2"></i>@Model.SuggestedAction
+                        </div>
+                        <div class="rp-block-label mt-3 mb-1">درجة الثقة في المقترح</div>
+                        <div class="rp-confidence-bar-wrap">
+                            <div class="rp-confidence-bar" style="width:@Model.ImpactScore%"></div>
+                        </div>
+                        <small class="fw-bold text-muted">الثقة: @Model.ImpactScore%</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* ── TAB 3: آلية التنفيذ ── *@
+        <div id="panel-execution" class="rp-tab-panel">
+            <div class="rp-exec-timeline">
+                @if (itType == "MixedIntervention")
+                {
+                    <div class="rp-exec-step">
+                        <div class="rp-exec-num">1</div>
+                        <div class="rp-exec-body">
+                            <div class="rp-exec-title">مراجعة بيانات الدفعة</div>
+                            <div class="rp-exec-desc">التحقق من اكتمال بيانات الحضور والواجبات والاختبارات</div>
+                            <span class="rp-exec-time">⏱ 15 دقيقة</span>
+                        </div>
+                    </div>
+                    <div class="rp-exec-step">
+                        <div class="rp-exec-num">2</div>
+                        <div class="rp-exec-body">
+                            <div class="rp-exec-title">تحديد الطلاب المتأثرين</div>
+                            <div class="rp-exec-desc">تصفية الطلاب بناءً على مؤشرات الخطر</div>
+                            <span class="rp-exec-time">⏱ 10 دقيقة</span>
+                        </div>
+                    </div>
+                    <div class="rp-exec-step">
+                        <div class="rp-exec-num">3</div>
+                        <div class="rp-exec-body">
+                            <div class="rp-exec-title">إعداد خطة التدخل</div>
+                            <div class="rp-exec-desc">تخصيص التدخل لكل طالب حسب نوع إشارة الخطر لديه</div>
+                            <span class="rp-exec-time">⏱ 30 دقيقة</span>
+                        </div>
+                    </div>
+                    <div class="rp-exec-step">
+                        <div class="rp-exec-num">4</div>
+                        <div class="rp-exec-body">
+                            <div class="rp-exec-title">إشعار الأطراف المعنية</div>
+                            <div class="rp-exec-desc">إرسال الإشعارات للمدرب والطلاب المستهدفين</div>
+                            <span class="rp-exec-time">⏱ 5 دقيقة</span>
+                        </div>
+                    </div>
+                    <div class="rp-exec-step rp-exec-last">
+                        <div class="rp-exec-num">5</div>
+                        <div class="rp-exec-body">
+                            <div class="rp-exec-title">متابعة الاستجابة</div>
+                            <div class="rp-exec-desc">مراقبة التغيير في الأداء خلال 2-4 أسابيع</div>
+                            <span class="rp-exec-time">⏱ أسبوعياً</span>
+                        </div>
+                    </div>
+                }
+                else if (itType == "AttendanceFollowUp")
+                {
+                    <div class="rp-exec-step">
+                        <div class="rp-exec-num">1</div>
+                        <div class="rp-exec-body">
+                            <div class="rp-exec-title">مراجعة سجل الحضور</div>
+                            <div class="rp-exec-desc">التحقق من سجل غياب الطلاب وتحديد المتأثرين</div>
+                            <span class="rp-exec-time">⏱ 15 دقيقة</span>
+                        </div>
+                    </div>
+                    <div class="rp-exec-step">
+                        <div class="rp-exec-num">2</div>
+                        <div class="rp-exec-body">
+                            <div class="rp-exec-title">التواصل مع الطلاب الغائبين</div>
+                            <div class="rp-exec-desc">إرسال إشعارات للطلاب وأولياء أمورهم</div>
+                            <span class="rp-exec-time">⏱ 10 دقيقة</span>
+                        </div>
+                    </div>
+                    <div class="rp-exec-step rp-exec-last">
+                        <div class="rp-exec-num">3</div>
+                        <div class="rp-exec-body">
+                            <div class="rp-exec-title">متابعة الاستجابة</div>
+                            <div class="rp-exec-desc">مراقبة تحسن نسبة الحضور أسبوعياً</div>
+                            <span class="rp-exec-time">⏱ أسبوعياً</span>
+                        </div>
+                    </div>
+                }
+                else if (itType == "HomeworkSupport")
+                {
+                    <div class="rp-exec-step">
+                        <div class="rp-exec-num">1</div>
+                        <div class="rp-exec-body">
+                            <div class="rp-exec-title">مراجعة سجل تسليم الواجبات</div>
+                            <div class="rp-exec-desc">تحديد الطلاب ذوي معدل التسليم المنخفض</div>
+                            <span class="rp-exec-time">⏱ 10 دقيقة</span>
+                        </div>
+                    </div>
+                    <div class="rp-exec-step">
+                        <div class="rp-exec-num">2</div>
+                        <div class="rp-exec-body">
+                            <div class="rp-exec-title">إرسال واجبات تعويضية</div>
+                            <div class="rp-exec-desc">تخصيص واجبات مناسبة للطلاب المتأثرين</div>
+                            <span class="rp-exec-time">⏱ 20 دقيقة</span>
+                        </div>
+                    </div>
+                    <div class="rp-exec-step rp-exec-last">
+                        <div class="rp-exec-num">3</div>
+                        <div class="rp-exec-body">
+                            <div class="rp-exec-title">متابعة التسليم</div>
+                            <div class="rp-exec-desc">مراقبة تحسن نسبة التسليم</div>
+                            <span class="rp-exec-time">⏱ أسبوعياً</span>
+                        </div>
+                    </div>
+                }
+                else if (itType == "ShortRemedialExam")
+                {
+                    <div class="rp-exec-step">
+                        <div class="rp-exec-num">1</div>
+                        <div class="rp-exec-body">
+                            <div class="rp-exec-title">تحديد الدروس الضعيفة</div>
+                            <div class="rp-exec-desc">مراجعة نتائج الاختبارات لتحديد الدروس عالية الخطر</div>
+                            <span class="rp-exec-time">⏱ 20 دقيقة</span>
+                        </div>
+                    </div>
+                    <div class="rp-exec-step">
+                        <div class="rp-exec-num">2</div>
+                        <div class="rp-exec-body">
+                            <div class="rp-exec-title">إعداد الاختبار التشخيصي</div>
+                            <div class="rp-exec-desc">بناء أسئلة مستهدفة للدروس الضعيفة</div>
+                            <span class="rp-exec-time">⏱ 30 دقيقة</span>
+                        </div>
+                    </div>
+                    <div class="rp-exec-step">
+                        <div class="rp-exec-num">3</div>
+                        <div class="rp-exec-body">
+                            <div class="rp-exec-title">إجراء الاختبار</div>
+                            <div class="rp-exec-desc">تطبيق الاختبار على الطلاب المستهدفين</div>
+                            <span class="rp-exec-time">⏱ 45 دقيقة</span>
+                        </div>
+                    </div>
+                    <div class="rp-exec-step rp-exec-last">
+                        <div class="rp-exec-num">4</div>
+                        <div class="rp-exec-body">
+                            <div class="rp-exec-title">تحليل النتائج</div>
+                            <div class="rp-exec-desc">قراءة نتائج الاختبار وتحديد الخطوة التالية</div>
+                            <span class="rp-exec-time">⏱ 15 دقيقة</span>
+                        </div>
+                    </div>
+                }
+                else if (itType == "InstructorGuidance")
+                {
+                    <div class="rp-exec-step">
+                        <div class="rp-exec-num">1</div>
+                        <div class="rp-exec-body">
+                            <div class="rp-exec-title">مراجعة تقرير الأداء</div>
+                            <div class="rp-exec-desc">قراءة تفصيلية لنتائج الاختبارات والمشاركة</div>
+                            <span class="rp-exec-time">⏱ 15 دقيقة</span>
+                        </div>
+                    </div>
+                    <div class="rp-exec-step">
+                        <div class="rp-exec-num">2</div>
+                        <div class="rp-exec-body">
+                            <div class="rp-exec-title">جلسة توجيه مع المدرب</div>
+                            <div class="rp-exec-desc">مناقشة نتائج الدفعة وتقديم التوجيه المناسب</div>
+                            <span class="rp-exec-time">⏱ 30 دقيقة</span>
+                        </div>
+                    </div>
+                    <div class="rp-exec-step rp-exec-last">
+                        <div class="rp-exec-num">3</div>
+                        <div class="rp-exec-body">
+                            <div class="rp-exec-title">تعديل خطة التدريس</div>
+                            <div class="rp-exec-desc">تحديث استراتيجية التدريس بناءً على التوجيه</div>
+                            <span class="rp-exec-time">⏱ أسبوع</span>
+                        </div>
+                    </div>
+                }
+                else if (itType == "DataReview")
+                {
+                    <div class="rp-exec-step">
+                        <div class="rp-exec-num">1</div>
+                        <div class="rp-exec-body">
+                            <div class="rp-exec-title">تحديد الفجوات في البيانات</div>
+                            <div class="rp-exec-desc">تحديد ما هو مفقود من بيانات الحضور والواجبات والاختبارات</div>
+                            <span class="rp-exec-time">⏱ 20 دقيقة</span>
+                        </div>
+                    </div>
+                    <div class="rp-exec-step">
+                        <div class="rp-exec-num">2</div>
+                        <div class="rp-exec-body">
+                            <div class="rp-exec-title">طلب تكملة البيانات</div>
+                            <div class="rp-exec-desc">التواصل مع المدربين لإكمال البيانات الناقصة</div>
+                            <span class="rp-exec-time">⏱ 24 ساعة</span>
+                        </div>
+                    </div>
+                    <div class="rp-exec-step rp-exec-last">
+                        <div class="rp-exec-num">3</div>
+                        <div class="rp-exec-body">
+                            <div class="rp-exec-title">إعادة التحليل</div>
+                            <div class="rp-exec-desc">تشغيل التوصيات بعد اكتمال البيانات</div>
+                            <span class="rp-exec-time">⏱ 15 دقيقة</span>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="rp-exec-step">
+                        <div class="rp-exec-num">1</div>
+                        <div class="rp-exec-body">
+                            <div class="rp-exec-title">مراجعة المؤشرات الحالية</div>
+                            <div class="rp-exec-desc">التحقق من مؤشرات الأداء الأساسية</div>
+                            <span class="rp-exec-time">⏱ 10 دقيقة</span>
+                        </div>
+                    </div>
+                    <div class="rp-exec-step">
+                        <div class="rp-exec-num">2</div>
+                        <div class="rp-exec-body">
+                            <div class="rp-exec-title">ضبط تنبيهات المراقبة</div>
+                            <div class="rp-exec-desc">تفعيل التنبيهات التلقائية عند تجاوز العتبات</div>
+                            <span class="rp-exec-time">⏱ 5 دقيقة</span>
+                        </div>
+                    </div>
+                    <div class="rp-exec-step rp-exec-last">
+                        <div class="rp-exec-num">3</div>
+                        <div class="rp-exec-body">
+                            <div class="rp-exec-title">جدولة المراجعة الدورية</div>
+                            <div class="rp-exec-desc">تحديد موعد المراجعة القادمة</div>
+                            <span class="rp-exec-time">⏱ شهرياً</span>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* ── TAB 4: التوجيه والإرسال ── *@
+        <div id="panel-routing" class="rp-tab-panel">
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <div class="rp-route-card text-center" data-route="student">
+                        <i class="fas fa-user-graduate fa-2x mb-2" style="color:#1e40af"></i>
+                        <div class="fw-bold">إرسال للطالب مباشرة</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="rp-route-card text-center" data-route="instructor">
+                        <i class="fas fa-chalkboard-user fa-2x mb-2" style="color:#16a34a"></i>
+                        <div class="fw-bold">إرسال للمدرب مباشرة</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="rp-route-card text-center @(itType == "MixedIntervention" ? "rp-route-selected" : "")" data-route="both">
+                        <i class="fas fa-layer-group fa-2x mb-2" style="color:#d97706"></i>
+                        <div class="fw-bold">توزيع المهام</div>
+                        <small class="text-muted">بعضها للطالب، بعضها للمدرب</small>
+                    </div>
+                </div>
+            </div>
+
+            <div id="matrix-both" class="rp-matrix">
+                <table class="table table-sm rp-matrix-table">
+                    <thead>
+                        <tr>
+                            <th><i class="fas fa-chalkboard-user me-1 text-success"></i>المدرب يتولى</th>
+                            <th><i class="fas fa-user-graduate me-1 text-primary"></i>الطالب يتولى</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>مراجعة سجل الحضور</td><td>الالتزام بالحضور في الحصص القادمة</td></tr>
+                        <tr><td>إرسال واجبات تعويضية</td><td>تسليم الواجبات خلال 48 ساعة</td></tr>
+                        <tr><td>إعداد اختبار تشخيصي</td><td>حضور جلسة مراجعة مخصصة</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div id="matrix-student" class="rp-matrix" style="display:none">
+                <ul class="rp-weakness-list">
+                    <li><i class="fas fa-check text-primary"></i><span>الالتزام بالحضور في الحصص القادمة</span></li>
+                    <li><i class="fas fa-check text-primary"></i><span>تسليم الواجبات خلال 48 ساعة</span></li>
+                    <li><i class="fas fa-check text-primary"></i><span>حضور جلسة مراجعة مخصصة</span></li>
+                </ul>
+            </div>
+            <div id="matrix-instructor" class="rp-matrix" style="display:none">
+                <ul class="rp-weakness-list">
+                    <li><i class="fas fa-check text-success"></i><span>مراجعة سجل الحضور</span></li>
+                    <li><i class="fas fa-check text-success"></i><span>إرسال واجبات تعويضية</span></li>
+                    <li><i class="fas fa-check text-success"></i><span>إعداد اختبار تشخيصي</span></li>
+                </ul>
+            </div>
+
+            <div class="rp-routing-cta">
+                <span>سيتم توجيه التوصية إلى: <strong id="routingTarget">@(itType == "MixedIntervention" ? "المدرب والطالب" : "—")</strong></span>
+                <button id="applyRoutingBtn" class="btn btn-outline-primary" @(itType == "MixedIntervention" ? "" : "disabled")>
+                    <i class="fas fa-paper-plane me-1"></i>تطبيق هذا التوجيه عند الاعتماد
+                </button>
+                <small class="text-muted">سيُفعَّل بعد اعتماد التوصية من المشرف</small>
+            </div>
+        </div>
+    </div>
+
+
+
+    
+    @if (isSaved)
+    {
+        <div class="rp-saved-banner">
+            <i class="fas fa-circle-check fa-2x flex-shrink-0"></i>
+            <div>
+                <div class="rp-saved-title">تم حفظ التوصية للمراجعة بنجاح</div>
+                <div class="rp-saved-sub">
+                    رقم التوصية: <strong>#@Model!.SavedRecommendationId!.Value</strong>
+                    — بانتظار الاعتماد من المشرف
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (Model == null)
+    {
+        
+        <div class="dl-empty">
+            <i class="fas fa-circle-exclamation fa-3x mb-3 d-block"></i>
+            لا توجد توصية متاحة لهذا التحليل حاليًا.
+        </div>
+    }
+    else
+    {
+        
+        <div class="row g-3 mb-3">
+
+            
+            <div class="col-lg-8">
+                <div class="dl-recommendation h-100 d-flex flex-column gap-3">
+
+                    
+                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                        <span class="rp-cat-badge">
+                            <i class="fas fa-tag me-1"></i>@Model.Category
+                        </span>
+                        <span class="rp-pri-badge" style="background:@priorityBg;color:@priorityColor;border-color:@priorityColor">
+                            <i class="fas fa-circle-dot me-1"></i>الأولوية: @Model.Priority
+                        </span>
+                    </div>
+
+                    
+                    <div>
+                        <div class="rp-bar-labels">
+                            <span>منخفض</span>
+                            <span>متوسط</span>
+                            <span>مرتفع</span>
+                            <span>عاجل</span>
+                        </div>
+                        <div class="rp-priority-bar">
+                            @for (int seg = 1; seg <= 4; seg++)
+                            {
+                                var segColor = seg == 1 ? "#16a34a" : seg == 2 ? "#ca8a04" : seg == 3 ? "#d97706" : "#dc2626";
+                                var isActive = priorityLevel >= seg;
+                                var radius   = seg == 1 ? "8px 0 0 8px" : seg == 4 ? "0 8px 8px 0" : "0";
+                                <div class="rp-bar-seg @(isActive ? "rp-bar-seg-active" : "")"
+                                     style="background:@(isActive ? segColor : "#e5e7eb");border-radius:@radius">
+                                    @if (priorityLevel == seg)
+                                    {
+                                        <div class="rp-bar-dot"></div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    
+                    <div class="rp-reason-block flex-grow-1">
+                        <div class="rp-block-label">
+                            <i class="fas fa-clipboard-question me-1"></i>سبب التوصية
+                        </div>
+                        <p class="rp-reason-text mb-0">@Model.Reason</p>
+                    </div>
+
+                    
+                    <div class="rp-intervention" style="border-inline-start-color:@intColor">
+                        <div class="rp-int-icon" style="background:@(intColor + "20");color:@intColor">
+                            <i class="fas @intIcon fa-lg"></i>
+                        </div>
+                        <div>
+                            <div class="rp-int-lbl">نوع التدخل</div>
+                            <div class="rp-int-val">@intLabel</div>
+                            <code class="rp-int-code">@Model.InterventionType</code>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            
+            <div class="col-lg-4">
+                <div class="dl-recommendation h-100 d-flex flex-column align-items-center justify-content-between gap-3">
+
+                    <div class="rp-gauge-lbl">درجة التأثير المتوقع</div>
+
+                    <div class="rp-gauge-wrap">
+                        <canvas id="impactGaugeChart" width="220" height="130"></canvas>
+                        <div class="rp-gauge-num" style="color:@gaugeColor">
+                            @Model.ImpactScore<span class="rp-gauge-pct">%</span>
+                        </div>
+                    </div>
+
+                    <div class="rp-gauge-desc">@scoreDesc</div>
+
+                    <div class="w-100 rp-metrics-box">
+                        <div class="rp-metric-row">
+                            <span>
+                                <i class="fas fa-shield-check text-primary me-1"></i>يتطلب اعتمادًا
+                            </span>
+                            <strong style="color:@(Model.RequiresApproval ? "#dc2626" : "#16a34a")">
+                                @(Model.RequiresApproval ? "نعم" : "لا")
+                            </strong>
+                        </div>
+                        <div class="rp-metric-row">
+                            <span>
+                                <i class="fas fa-file-pen me-1" style="color:#7c3aed"></i>ينشئ مسودة اختبار
+                            </span>
+                            <strong style="color:@(Model.CanCreateExamDraft ? "#1e40af" : "#6b7280")">
+                                @(Model.CanCreateExamDraft ? "نعم" : "لا")
+                            </strong>
+                        </div>
+                        <div class="rp-metric-row">
+                            <span>
+                                <i class="fas fa-hashtag text-muted me-1"></i>كود التوصية
+                            </span>
+                            <code class="rp-code-badge">@Model.Code</code>
+                        </div>
+                    </div>
+
+                    <hr class="rp-chart-divider w-100 my-2">
+                    <div class="rp-risk-lbl">توزيع إشارات الخطر</div>
+                    <div class="rp-risk-wrap">
+                        <canvas id="riskSignalsChart" width="200" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        
+        <div class="dl-recommendation mb-3 rp-action-card">
+            <div class="d-flex align-items-start gap-3">
+                <div class="rp-action-icon">
+                    <i class="fas fa-bolt fa-lg"></i>
+                </div>
+                <div class="flex-grow-1">
+                    <div class="rp-action-lbl">الإجراء المقترح</div>
+                    <p class="rp-action-txt mb-0">@Model.SuggestedAction</p>
+                </div>
+            </div>
+        </div>
+
+        
+        @if (!string.IsNullOrWhiteSpace(Model.WarningMessage))
+        {
+            <div class="dl-warning rp-warning-card mb-3">
+                <i class="fas fa-triangle-exclamation fa-xl flex-shrink-0"></i>
+                <div>@Model.WarningMessage</div>
+            </div>
+        }
+
+
+
+        <div class="dl-recommendation">
+
+            <div class="rp-workflow-label">مسار التوصية</div>
+
+            <div class="rp-workflow">
+                
+                <div class="rp-step rp-step-done">
+                    <div class="rp-step-circle rp-circle-done">
+                        <i class="fas fa-check"></i>
+                    </div>
+                    <div class="rp-step-lbl">معاينة</div>
+                </div>
+                <div class="rp-step-line rp-line-done"></div>
+
+                
+                @if (isSaved)
+                {
+                    <div class="rp-step rp-step-done">
+                        <div class="rp-step-circle rp-circle-done">
+                            <i class="fas fa-check"></i>
+                        </div>
+                        <div class="rp-step-lbl">حفظ للمراجعة</div>
+                    </div>
+                    <div class="rp-step-line rp-line-pending"></div>
+                }
+                else
+                {
+                    <div class="rp-step rp-step-active">
+                        <div class="rp-step-circle rp-circle-active">2</div>
+                        <div class="rp-step-lbl">حفظ للمراجعة</div>
+                    </div>
+                    <div class="rp-step-line rp-line-pending"></div>
+                }
+
+                
+                <div class="rp-step rp-step-pending">
+                    <div class="rp-step-circle rp-circle-pending">3</div>
+                    <div class="rp-step-lbl">اعتماد</div>
+                </div>
+                <div class="rp-step-line rp-line-pending"></div>
+
+                
+                <div class="rp-step rp-step-pending">
+                    <div class="rp-step-circle rp-circle-pending">4</div>
+                    <div class="rp-step-lbl">تنفيذ</div>
+                </div>
+            </div>
+
+            <div class="rp-cta-area mt-4">
+                @if (!isSaved)
+                {
+                    <form method="post"
+                          asp-area="Admin" asp-controller="DecisionLab" asp-action="SaveRecommendation"
+                          class="rp-action-bar">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="batchId"             value="@Model.BatchId" />
+                        <input type="hidden" name="curriculumId"        value="@Model.CurriculumId" />
+                        <input type="hidden" name="recommendationCode"  value="@Model.Code" />
+                        <input type="hidden" name="sourceArea"          value="@Model.SourceContext.SourceArea" />
+                        <input type="hidden" name="sourceController"    value="@Model.SourceContext.SourceController" />
+                        <input type="hidden" name="sourceAction"        value="@Model.SourceContext.SourceAction" />
+                        <input type="hidden" name="sourceMetric"        value="@Model.SourceContext.SourceMetric" />
+                        <input type="hidden" name="sourcePage"          value="@Model.SourceContext.SourcePage" />
+                        <input type="hidden" name="returnUrl"           value="@Model.SourceContext.ReturnUrl" />
+                        <input type="hidden" name="routingChoice" id="routingChoiceInput" />
+
+                        <!-- زر رجوع -->
+                        <a href="@safeReturnUrl" class="btn btn-outline-secondary rp-bar-btn">
+                            <i class="fas fa-arrow-right me-1"></i>رجوع
+                        </a>
+
+                        <!-- وسط: معاينة التحليل -->
+                        @if (Model.BatchId.HasValue)
+                        {
+                            <a class="btn btn-outline-primary rp-bar-btn"
+                               asp-area="Admin" asp-controller="DecisionLab" asp-action="BatchAnalysis"
+                               asp-route-batchId="@Model.BatchId" asp-route-curriculumId="@Model.CurriculumId">
+                                <i class="fas fa-chart-bar me-1"></i>معاينة التحليل
+                            </a>
+                        }
+                        <div class="rp-bar-spacer"></div>
+
+                        <!-- يمين: حفظ التوصية -->
+                        <button type="submit" class="btn btn-primary btn-lg rp-save-btn">
+                            <i class="fas fa-bookmark me-2"></i>احفظ هذه التوصية
+                            <i class="fas fa-arrow-left ms-2"></i>
+                        </button>
+                    </form>
+                    <div class="rp-cta-hint mt-2">
+                        <i class="fas fa-info-circle me-1"></i>ستُحفظ فقط ولن تُنفَّذ تلقائيًا
+                    </div>
+                }
+                else
+                {
+                    <div class="rp-action-bar">
+                        <!-- زر رجوع -->
+                        <a href="@safeReturnUrl" class="btn btn-outline-secondary rp-bar-btn">
+                            <i class="fas fa-arrow-right me-1"></i>رجوع
+                        </a>
+
+                        <!-- وسط: معاينة التحليل -->
+                        @if (Model.BatchId.HasValue)
+                        {
+                            <a class="btn btn-outline-primary rp-bar-btn"
+                               asp-area="Admin" asp-controller="DecisionLab" asp-action="BatchAnalysis"
+                               asp-route-batchId="@Model.BatchId" asp-route-curriculumId="@Model.CurriculumId">
+                                <i class="fas fa-chart-bar me-1"></i>معاينة التحليل
+                            </a>
+                        }
+                        <div class="rp-bar-spacer"></div>
+
+                        <!-- يمين: عرض التوصية المحفوظة -->
+                        <a asp-area="Admin" asp-controller="DecisionLab"
+                           asp-action="RecommendationDetails"
+                           asp-route-id="@Model.SavedRecommendationId!.Value"
+                           class="btn btn-success btn-lg px-4">
+                            <i class="fas fa-eye me-2"></i>عرض التوصية المحفوظة
+                            <i class="fas fa-arrow-left ms-2"></i>
+                        </a>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+
+<script>
+    (function () {
+        const canvas = document.getElementById('impactGaugeChart');
+        if (!canvas || typeof Chart === 'undefined') return;
+        const score = @score;
+        const color = '@gaugeColor';
+        new Chart(canvas, {
+            type: 'doughnut',
+            data: {
+                datasets: [{
+                    data: [score, 100 - score],
+                    backgroundColor: [color, '#f3f4f6'],
+                    borderWidth: 0,
+                    circumference: 180,
+                    rotation: 270
+                }]
+            },
+            options: {
+                responsive: false,
+                cutout: '72%',
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { enabled: false }
+                },
+                animation: { duration: 900, easing: 'easeInOutQuart' }
+            }
+        });
+    })();
+
+    // ── Risk Signals Chart ──
+    (function () {
+        const canvas2 = document.getElementById('riskSignalsChart');
+        if (!canvas2 || typeof Chart === 'undefined') return;
+        const interventionType = "@Model.InterventionType";
+        const impactScore = @Model.ImpactScore;
+        const priorityMap = { "عاجل": 1.0, "مرتفع": 0.8, "متوسط": 0.55, "منخفض": 0.3 };
+        const base = priorityMap["@Model.Priority"] ?? 0.5;
+        const isMixed = interventionType === "MixedIntervention";
+        const signals = [
+            interventionType.includes("Attendance") || isMixed ? Math.round(impactScore * base) : Math.round(impactScore * base * 0.3),
+            interventionType.includes("Homework")   || isMixed ? Math.round(impactScore * base) : Math.round(impactScore * base * 0.3),
+            interventionType.includes("Exam")       || isMixed ? Math.round(impactScore * base) : Math.round(impactScore * base * 0.3),
+            interventionType.includes("Instructor") || isMixed ? Math.round(impactScore * base) : Math.round(impactScore * base * 0.3),
+        ];
+        new Chart(canvas2, {
+            type: 'polarArea',
+            data: {
+                labels: ['الحضور', 'الواجبات', 'الاختبارات', 'المحتوى'],
+                datasets: [{
+                    data: signals,
+                    backgroundColor: ['rgba(59,130,246,0.7)', 'rgba(245,158,11,0.7)', 'rgba(16,185,129,0.7)', 'rgba(139,92,246,0.7)'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: false,
+                plugins: {
+                    legend: { position: 'bottom', labels: { font: { family: 'Cairo', size: 11 }, boxWidth: 12, padding: 8 } },
+                    tooltip: { enabled: true }
+                },
+                scales: { r: { ticks: { display: false }, grid: { color: '#f3f4f6' } } },
+                animation: { duration: 900, easing: 'easeInOutQuart' }
+            }
+        });
+    })();
+
+    // ── Tab switching ──
+    document.querySelectorAll('[data-tab]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('[data-tab]').forEach(function (b) { b.classList.remove('active'); });
+            document.querySelectorAll('.rp-tab-panel').forEach(function (p) { p.classList.remove('active'); });
+            btn.classList.add('active');
+            var panel = document.getElementById('panel-' + btn.dataset.tab);
+            if (panel) panel.classList.add('active');
+        });
+    });
+    document.querySelector('[data-tab="diagnosis"]')?.click();
+
+    // ── Routing card selection ──
+    document.querySelectorAll('.rp-route-card').forEach(function (card) {
+        card.addEventListener('click', function () {
+            document.querySelectorAll('.rp-route-card').forEach(function (c) { c.classList.remove('rp-route-selected'); });
+            card.classList.add('rp-route-selected');
+            var val = card.dataset.route;
+            var input = document.getElementById('routingChoiceInput');
+            if (input) input.value = val;
+            var btn = document.getElementById('applyRoutingBtn');
+            if (btn) btn.disabled = false;
+            var target = document.getElementById('routingTarget');
+            if (target) {
+                target.textContent = val === 'student' ? 'الطالب' : val === 'instructor' ? 'المدرب' : 'المدرب والطالب';
+            }
+            document.querySelectorAll('.rp-matrix').forEach(function (m) { m.style.display = 'none'; });
+            var matrix = document.getElementById('matrix-' + val);
+            if (matrix) matrix.style.display = 'block';
+        });
+    });
+    // Trigger default for MixedIntervention
+    var defaultCard = document.querySelector('.rp-route-card.rp-route-selected') || document.querySelector('.rp-route-card');
+    if (defaultCard) defaultCard.click();
+</script>
+
+
+<style>
+    /* ── Saved Banner ── */
+    .rp-saved-banner {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        background: #ecfdf5;
+        border: 1px solid #a7f3d0;
+        border-radius: 16px;
+        color: #065f46;
+        padding: 20px 24px;
+        margin-bottom: 16px;
+    }
+    .rp-saved-banner i { color: #16a34a; }
+    .rp-saved-title { font-weight: 900; font-size: 16px; }
+    .rp-saved-sub   { font-size: 14px; color: #047857; margin-top: 2px; }
+
+    /* ── Category & Priority Badges ── */
+    .rp-cat-badge {
+        background: #f0f9ff;
+        border: 1px solid #bae6fd;
+        border-radius: 999px;
+        color: #0369a1;
+        font-size: 13px;
+        font-weight: 900;
+        padding: 5px 14px;
+    }
+    .rp-pri-badge {
+        border: 1.5px solid;
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 900;
+        padding: 5px 14px;
+    }
+
+    /* ── Priority Bar ── */
+    .rp-bar-labels {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        color: #9ca3af;
+        font-weight: 700;
+        margin-bottom: 6px;
+    }
+    .rp-priority-bar {
+        display: flex;
+        gap: 3px;
+        height: 10px;
+    }
+    .rp-bar-seg {
+        flex: 1;
+        position: relative;
+        transition: background .3s;
+    }
+    .rp-bar-dot {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 14px;
+        height: 14px;
+        background: #fff;
+        border-radius: 50%;
+        border: 2px solid currentColor;
+        box-shadow: 0 0 0 3px rgba(0,0,0,.12);
+    }
+
+    /* ── Reason Block ── */
+    .rp-reason-block {
+        background: #f8fafc;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 16px 18px;
+    }
+    .rp-block-label {
+        font-size: 12px;
+        font-weight: 900;
+        color: #6b7280;
+        margin-bottom: 8px;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+    }
+    .rp-reason-text {
+        color: #1f2937;
+        font-weight: 700;
+        line-height: 1.9;
+        font-size: 15px;
+    }
+
+    /* ── Intervention Card ── */
+    .rp-intervention {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        background: #f8fafc;
+        border: 1px solid #e5e7eb;
+        border-inline-start: 4px solid;
+        border-radius: 12px;
+        padding: 14px 16px;
+    }
+    .rp-int-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+    .rp-int-lbl {
+        font-size: 11px;
+        font-weight: 900;
+        color: #9ca3af;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+    }
+    .rp-int-val {
+        font-size: 16px;
+        font-weight: 900;
+        color: #111827;
+        margin: 2px 0;
+    }
+    .rp-int-code {
+        font-size: 11px;
+        color: #6b7280;
+        background: #f3f4f6;
+        padding: 2px 6px;
+        border-radius: 4px;
+    }
+
+    /* ── Impact Gauge ── */
+    .rp-gauge-lbl {
+        font-size: 13px;
+        font-weight: 900;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+    }
+    .rp-gauge-wrap {
+        position: relative;
+        width: 220px;
+        height: 130px;
+    }
+    .rp-gauge-num {
+        position: absolute;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 44px;
+        font-weight: 900;
+        line-height: 1;
+        font-family: 'Cairo', Tahoma, Arial, sans-serif;
+    }
+    .rp-gauge-pct { font-size: 20px; font-weight: 700; }
+    .rp-gauge-desc {
+        font-size: 13px;
+        font-weight: 800;
+        color: #4b5563;
+        background: #f3f4f6;
+        border-radius: 999px;
+        padding: 4px 14px;
+    }
+
+    /* ── Metrics Box ── */
+    .rp-metrics-box {
+        background: #f8fafc;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 4px 0;
+    }
+    .rp-metric-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 16px;
+        font-size: 13px;
+        font-weight: 700;
+        border-bottom: 1px solid #f3f4f6;
+    }
+    .rp-metric-row:last-child { border-bottom: 0; }
+    .rp-metric-row span { color: #6b7280; }
+    .rp-code-badge {
+        font-size: 11px;
+        background: #ede9fe;
+        color: #5b21b6;
+        padding: 2px 8px;
+        border-radius: 4px;
+    }
+
+    /* ── Suggested Action ── */
+    .rp-action-card { border-inline-start: 4px solid #d97706 !important; }
+    .rp-action-icon {
+        width: 44px;
+        height: 44px;
+        background: #fef3c7;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        color: #d97706;
+    }
+    .rp-action-lbl {
+        font-size: 12px;
+        font-weight: 900;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        margin-bottom: 6px;
+    }
+    .rp-action-txt {
+        font-weight: 700;
+        line-height: 1.9;
+        color: #1f2937;
+        font-size: 15px;
+    }
+
+    /* ── Warning Card ── */
+    .rp-warning-card {
+        display: flex !important;
+        align-items: center;
+        gap: 14px;
+        font-weight: 700;
+    }
+
+    /* ── Workflow Steps ── */
+    .rp-workflow-label {
+        font-size: 12px;
+        font-weight: 900;
+        color: #9ca3af;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        margin-bottom: 20px;
+    }
+    .rp-workflow {
+        display: flex;
+        align-items: center;
+        gap: 0;
+    }
+    .rp-step {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+    }
+    .rp-step-circle {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 900;
+        font-size: 16px;
+        transition: all .3s;
+    }
+    .rp-circle-done {
+        background: #16a34a;
+        color: #fff;
+        box-shadow: 0 0 0 4px #dcfce7;
+    }
+    .rp-circle-active {
+        background: #1e40af;
+        color: #fff;
+        box-shadow: 0 0 0 4px #dbeafe;
+        animation: rpPulse 1.8s infinite;
+    }
+    .rp-circle-pending {
+        background: #f3f4f6;
+        color: #9ca3af;
+        border: 2px solid #e5e7eb;
+    }
+    .rp-step-lbl {
+        font-size: 12px;
+        font-weight: 900;
+        color: #4b5563;
+        white-space: nowrap;
+    }
+    .rp-step-done .rp-step-lbl  { color: #16a34a; }
+    .rp-step-active .rp-step-lbl { color: #1e40af; }
+    .rp-step-pending .rp-step-lbl { color: #9ca3af; }
+    .rp-step-line {
+        flex: 1;
+        height: 3px;
+        margin-bottom: 20px;
+        min-width: 32px;
+    }
+    .rp-line-done    { background: #16a34a; }
+    .rp-line-pending { background: #e5e7eb; }
+
+    @@keyframes rpPulse {
+        0%, 100% { box-shadow: 0 0 0 4px #dbeafe; }
+        50%       { box-shadow: 0 0 0 8px rgba(30,64,175,.15); }
+    }
+
+    /* ── Save CTA ── */
+    .rp-save-btn {
+        padding-inline: 36px;
+        border-radius: 12px !important;
+        font-size: 16px;
+        font-weight: 900;
+        box-shadow: 0 4px 14px rgba(30,64,175,.35);
+        transition: transform .18s, box-shadow .18s;
+    }
+    .rp-save-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(30,64,175,.45);
+    }
+    .rp-cta-hint {
+        font-size: 13px;
+        color: #6b7280;
+        font-weight: 700;
+    }
+
+    /* ── Breadcrumb ── */
+    .rp-breadcrumb .breadcrumb {
+        background: transparent;
+        padding: 0;
+        font-size: 13px;
+        font-weight: 700;
+    }
+    .rp-breadcrumb .breadcrumb-item a {
+        color: #1e40af;
+        text-decoration: none;
+    }
+    .rp-breadcrumb .breadcrumb-item a:hover { text-decoration: underline; }
+    .rp-breadcrumb .breadcrumb-item.active { color: #6b7280; }
+    .rp-breadcrumb .breadcrumb-item + .breadcrumb-item::before {
+        color: #9ca3af;
+    }
+
+    /* ── Source Context Bar ── */
+    .source-context-bar {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: #f0f9ff;
+        border: 1px solid #bae6fd;
+        border-radius: 999px;
+        color: #0369a1;
+        font-size: 13px;
+        font-weight: 700;
+        padding: 5px 14px;
+    }
+    .source-context-sep { color: #93c5fd; }
+
+    /* ── Action Bar (3-button footer) ── */
+    .rp-action-bar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+    .rp-bar-btn {
+        font-weight: 800;
+        font-size: 14px;
+        border-radius: 10px !important;
+        padding: 8px 18px;
+    }
+    .rp-bar-spacer { flex: 1; }
+
+    /* ── Responsive ── */
+    @@media (max-width: 768px) {
+        .rp-workflow { gap: 0; }
+        .rp-step-line { min-width: 16px; }
+        .rp-gauge-wrap { width: 180px; height: 108px; }
+        .rp-gauge-num { font-size: 34px; }
+        .rp-action-bar { flex-direction: column; align-items: stretch; }
+        .rp-bar-spacer { display: none; }
+    }
+
+    /* ── Risk Signals Chart ── */
+    .rp-chart-divider { border-color: #e5e7eb; }
+    .rp-risk-lbl {
+        font-size: 12px;
+        font-weight: 900;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        margin-bottom: 8px;
+        align-self: flex-start;
+    }
+    .rp-risk-wrap { width: 200px; }
+
+    /* ── Treatment Plan Section ── */
+    .rp-multiview-header {
+        font-size: 17px;
+        font-weight: 900;
+        color: #111827;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    .rp-multiview-subtitle {
+        font-size: 13px;
+        font-weight: 600;
+        color: #6b7280;
+        margin-right: 8px;
+    }
+
+    /* ── Tab Buttons ── */
+    .rp-tabs { margin-bottom: 16px; }
+    .rp-tab-btn {
+        border: none;
+        border-radius: 999px;
+        padding: 8px 20px;
+        font-weight: 700;
+        font-size: 13px;
+        font-family: 'Cairo', Tahoma, Arial, sans-serif;
+        background: #f3f4f6;
+        color: #6b7280;
+        cursor: pointer;
+        transition: background .2s, color .2s;
+    }
+    .rp-tab-btn.active {
+        background: #1e40af;
+        color: #fff;
+    }
+    .rp-tab-btn:hover:not(.active) { background: #e5e7eb; color: #374151; }
+
+    /* ── Tab Panels ── */
+    .rp-tab-panel { display: none; }
+    .rp-tab-panel.active {
+        display: block;
+        animation: rpFade .25s ease;
+    }
+    @@keyframes rpFade {
+        from { opacity: 0; transform: translateY(4px); }
+        to   { opacity: 1; transform: none; }
+    }
+
+    /* ── Sub-panels inside tabs ── */
+    .rp-sub-panel {
+        background: #f8fafc;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 16px 18px;
+    }
+
+    /* ── Weakness List (shared) ── */
+    .rp-weakness-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+    .rp-weakness-list li {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 0;
+        border-bottom: 1px solid #f3f4f6;
+        font-weight: 700;
+        font-size: 14px;
+    }
+    .rp-weakness-list li:last-child { border-bottom: 0; }
+    .rp-weakness-list li i { flex-shrink: 0; font-size: 15px; }
+
+    /* ── Impact bar ── */
+    .rp-impact-bar-wrap {
+        background: #e5e7eb;
+        border-radius: 999px;
+        height: 10px;
+        overflow: hidden;
+    }
+    .rp-impact-bar {
+        height: 100%;
+        border-radius: 999px;
+        transition: width .6s ease;
+    }
+
+    /* ── Urgency Badge ── */
+    .rp-urgency-badge {
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 900;
+        padding: 5px 16px;
+        display: inline-flex;
+        align-items: center;
+    }
+
+    /* ── Causes List ── */
+    .rp-causes-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        counter-reset: causes;
+    }
+    .rp-causes-list li {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        margin-bottom: 14px;
+        font-size: 14px;
+    }
+    .rp-causes-list li i { margin-top: 3px; flex-shrink: 0; }
+
+    /* ── Proposal Box ── */
+    .rp-proposal-box {
+        background: #fffbeb;
+        border-right: 4px solid #d97706;
+        border-radius: 10px;
+        padding: 14px 16px;
+        font-weight: 700;
+        font-size: 14px;
+        line-height: 1.8;
+        color: #1f2937;
+    }
+
+    /* ── Confidence Bar ── */
+    .rp-confidence-bar-wrap {
+        background: #e5e7eb;
+        border-radius: 999px;
+        height: 6px;
+        overflow: hidden;
+        margin-bottom: 4px;
+    }
+    .rp-confidence-bar {
+        height: 100%;
+        background: #1e40af;
+        border-radius: 999px;
+        transition: width .6s ease;
+    }
+
+    /* ── Execution Timeline ── */
+    .rp-exec-timeline { padding: 8px 0; }
+    .rp-exec-step {
+        display: flex;
+        gap: 14px;
+        margin-bottom: 0;
+        position: relative;
+        padding-bottom: 20px;
+    }
+    .rp-exec-step::after {
+        content: '';
+        position: absolute;
+        right: 19px;
+        top: 40px;
+        width: 2px;
+        height: calc(100% - 20px);
+        background: #e5e7eb;
+    }
+    .rp-exec-step.rp-exec-last { padding-bottom: 0; }
+    .rp-exec-step.rp-exec-last::after { display: none; }
+    .rp-exec-num {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: #1e40af;
+        color: #fff;
+        font-weight: 900;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        box-shadow: 0 0 0 4px #dbeafe;
+    }
+    .rp-exec-body { padding-top: 6px; }
+    .rp-exec-title { font-weight: 900; font-size: 15px; color: #111827; margin-bottom: 4px; }
+    .rp-exec-desc  { font-size: 13px; color: #6b7280; font-weight: 700; margin-bottom: 6px; }
+    .rp-exec-time  { font-size: 12px; font-weight: 800; color: #1e40af; background: #eff6ff; border-radius: 999px; padding: 2px 10px; }
+
+    /* ── Routing Cards ── */
+    .rp-route-card {
+        background: #fff;
+        border: 2px solid #e5e7eb;
+        border-radius: 14px;
+        padding: 20px 16px;
+        cursor: pointer;
+        transition: border-color .2s, background .2s, transform .15s;
+    }
+    .rp-route-card:hover { border-color: #93c5fd; transform: translateY(-2px); }
+    .rp-route-card.rp-route-selected { border-color: #1e40af; background: #eff6ff; }
+
+    /* ── Routing Matrix ── */
+    .rp-matrix { margin-top: 8px; }
+    .rp-matrix-table { border-radius: 10px; overflow: hidden; }
+    .rp-matrix-table thead th {
+        background: #f0f9ff;
+        font-weight: 900;
+        font-size: 13px;
+        color: #1e40af;
+        border-bottom: 2px solid #bfdbfe;
+    }
+    .rp-matrix-table tbody td { font-size: 13px; font-weight: 700; color: #374151; }
+
+    /* ── Routing CTA ── */
+    .rp-routing-cta {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+        margin-top: 1rem;
+        padding: 1rem;
+        background: #f8fafc;
+        border-radius: 12px;
+        font-size: 14px;
+        font-weight: 700;
+    }
+</style>
+

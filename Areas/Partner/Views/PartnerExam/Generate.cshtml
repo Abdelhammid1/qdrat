@@ -1,0 +1,178 @@
+﻿@model QdratNew.ViewModels.Partner.Exam.GenerateExamRequestVM
+
+@{
+    ViewData["Title"] = "إنشاء نموذج اختبار";
+}
+
+<h3 class="mb-4">إنشاء نموذج اختبار</h3>
+
+<form asp-action="Preview" method="post">
+    @Html.AntiForgeryToken()
+
+    <div class="card mb-4">
+        <div class="card-header">معلومات الاختبار</div>
+        <div class="card-body">
+
+            <div class="mb-3">
+                <label class="form-label">عنوان الاختبار</label>
+                <input asp-for="ExamTitle" class="form-control" required />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">الدورة</label>
+                <select id="courseSelect"
+                        asp-for="CourseId"
+                        class="form-control"
+                        required>
+                    <option value="">-- اختر الدورة --</option>
+                </select>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">المناهج داخل الدورة</div>
+        <div class="card-body">
+
+            <div id="curriculumsContainer"></div>
+
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary btn-lg">
+        توليد ومعاينة
+    </button>
+</form>
+
+@section Scripts {
+    <script>
+
+        const courseSelect = document.getElementById('courseSelect');
+        const container = document.getElementById('curriculumsContainer');
+
+        fetch('/Partner/PartnerExam/GetCourses')
+            .then(r => r.json())
+            .then(data => {
+                data.forEach(c => {
+                    courseSelect.add(new Option(c.name ?? c.Name, c.id ?? c.Id));
+                });
+            });
+
+        courseSelect.addEventListener('change', () => {
+
+            container.innerHTML = '';
+            if (!courseSelect.value) return;
+
+            fetch(`/Partner/PartnerExam/GetCurriculumsByCourse?courseId=${courseSelect.value}`)
+                .then(r => r.json())
+                .then(data => {
+
+                    data.forEach((c, curriculumIndex) => {
+
+                        container.insertAdjacentHTML('beforeend', `
+        <div class="border rounded p-3 mb-4">
+
+            <h5 class="mb-3">${c.title ?? c.Title}</h5>
+
+            <input type="hidden"
+                   name="Curriculums[${curriculumIndex}].CurriculumId"
+                   value="${c.id ?? c.Id}" />
+
+            <input type="hidden"
+                   name="Curriculums[${curriculumIndex}].CurriculumTitle"
+                   value="${c.title ?? c.Title}" />
+
+            <div id="sections_${curriculumIndex}"></div>
+
+        </div>
+                        `);
+
+                        loadSections(c.id ?? c.Id, curriculumIndex);
+                    });
+                });
+        });
+
+        function loadSections(curriculumId, curriculumIndex) {
+
+            const sectionContainer = document.getElementById(`sections_${curriculumIndex}`);
+
+            fetch(`/Partner/PartnerExam/GetSectionsByCurriculum?curriculumId=${curriculumId}`)
+                .then(r => r.json())
+                .then(sections => {
+
+                    sections.forEach((s, sectionIndex) => {
+
+                        sectionContainer.insertAdjacentHTML('beforeend', `
+        <div class="card mb-3">
+
+            <div class="card-header fw-bold">
+                ${s.title ?? s.Title}
+            </div>
+
+            <div class="card-body">
+
+                <input type="hidden"
+                       name="Curriculums[${curriculumIndex}].Sections[${sectionIndex}].SectionId"
+                       value="${s.id ?? s.Id}" />
+
+                <input type="hidden"
+                       name="Curriculums[${curriculumIndex}].Sections[${sectionIndex}].SectionTitle"
+                       value="${s.title ?? s.Title}" />
+
+                <div id="lessons_${curriculumIndex}_${sectionIndex}"></div>
+
+            </div>
+
+        </div>
+                        `);
+
+                        loadLessons(s.id ?? s.Id, curriculumIndex, sectionIndex);
+                    });
+                });
+        }
+
+        function loadLessons(sectionId, curriculumIndex, sectionIndex) {
+
+            const lessonContainer = document.getElementById(
+                `lessons_${curriculumIndex}_${sectionIndex}`
+            );
+
+            fetch(`/Partner/PartnerExam/GetLessonsBySection?sectionId=${sectionId}`)
+                .then(r => r.json())
+                .then(lessons => {
+
+                    lessons.forEach((l, lessonIndex) => {
+
+                        lessonContainer.insertAdjacentHTML('beforeend', `
+        <div class="row mb-2 align-items-center">
+
+            <div class="col-md-8">
+                ${l.title ?? l.Title}
+
+                <input type="hidden"
+                       name="Curriculums[${curriculumIndex}].Sections[${sectionIndex}].Lessons[${lessonIndex}].LessonId"
+                       value="${l.id ?? l.Id}" />
+
+                <input type="hidden"
+                       name="Curriculums[${curriculumIndex}].Sections[${sectionIndex}].Lessons[${lessonIndex}].LessonTitle"
+                       value="${l.title ?? l.Title}" />
+            </div>
+
+            <div class="col-md-4">
+                <input type="number"
+                       name="Curriculums[${curriculumIndex}].Sections[${sectionIndex}].Lessons[${lessonIndex}].QuestionCount"
+                       class="form-control"
+                       min="0"
+                       value="0"
+                       placeholder="عدد الأسئلة" />
+            </div>
+
+        </div>
+                        `);
+                    });
+                });
+        }
+
+    </script>
+}

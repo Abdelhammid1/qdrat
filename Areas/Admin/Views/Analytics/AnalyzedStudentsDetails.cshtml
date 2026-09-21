@@ -1,0 +1,1572 @@
+@model QdratNew.ViewModels.Admin.Analytics.AdvancedAnalyticsDashboardVM
+@using System.Text.Json
+@{
+    Layout = "~/Areas/Admin/Views/Shared/_AdminLayout.cshtml";
+    ViewData["Title"] = "تحليل الطلاب المفصّل";
+
+    var students = Model?.Students?.OrderBy(x => x.ExamScore).ToList()
+                   ?? new List<QdratNew.ViewModels.Admin.Analytics.StudentAnalyticsVM>();
+
+    var highCount   = students.Count(x => x.Priority == "High");
+    var medCount    = students.Count(x => x.Priority == "Medium");
+    var lowCount    = students.Count(x => x.Priority == "Low");
+    var totalCount  = students.Count;
+
+    var avgExam  = Math.Round(Model?.AvgExamScore    ?? 0, 1);
+    var avgHw    = Math.Round(Model?.AvgHomeworkScore ?? 0, 1);
+    var avgAtt   = Math.Round(Model?.AvgAttendance   ?? 0, 1);
+
+    // ─── Chart data ────────────────────────────────────────────────────────────
+    var topLessons    = Model?.Lessons?.Take(8).ToList() ?? new();
+    var lessonLabels  = JsonSerializer.Serialize(topLessons.Select(l => l.LessonName.Length > 22 ? l.LessonName[..22] + "…" : l.LessonName).ToList());
+    var lessonPctData = JsonSerializer.Serialize(topLessons.Select(l => Math.Round(l.WeakPercentage, 1)).ToList());
+    var lessonAffData = JsonSerializer.Serialize(topLessons.Select(l => l.AffectedStudents).ToList());
+
+    var instrNames  = JsonSerializer.Serialize(Model?.InstructorNames ?? new List<string>());
+    var instrScores = JsonSerializer.Serialize((Model?.InstructorScores ?? new List<double>()).Select(s => Math.Round(s, 1)).ToList());
+
+    var instructorOptions = JsonSerializer.Serialize(
+        Model?.InstructorsFilter?
+            .Select(i => new
+            {
+                id = i.Id,
+                name = i.Name
+            })
+            .Cast<object>()
+            .ToList()
+        ?? new List<object>());
+
+    // priority %
+    var highPct = totalCount > 0 ? (int)Math.Round(highCount * 100.0 / totalCount) : 0;
+    var medPct  = totalCount > 0 ? (int)Math.Round(medCount  * 100.0 / totalCount) : 0;
+    var lowPct  = totalCount > 0 ? 100 - highPct - medPct : 0;
+}
+
+@* ══════════════════════════════════════════════════════════════
+   STYLES — scoped prefix: .asd-
+   ══════════════════════════════════════════════════════════════ *@
+<style>
+    :root {
+        --asd-bg:        #F1F5F9;
+        --asd-surface:   #FFFFFF;
+        --asd-border:    #E2E8F0;
+        --asd-primary:   #2563EB;
+        --asd-primary-l: #DBEAFE;
+        --asd-indigo:    #4F46E5;
+        --asd-indigo-l:  #EEF2FF;
+        --asd-success:   #059669;
+        --asd-success-l: #D1FAE5;
+        --asd-warning:   #D97706;
+        --asd-warning-l: #FEF3C7;
+        --asd-danger:    #DC2626;
+        --asd-danger-l:  #FEE2E2;
+        --asd-violet:    #7C3AED;
+        --asd-violet-l:  #EDE9FE;
+        --asd-text:      #0F172A;
+        --asd-muted:     #64748B;
+        --asd-r:         14px;
+        --asd-r-sm:      10px;
+        --asd-shadow:    0 4px 24px rgba(15,23,42,.08);
+        --asd-shadow-sm: 0 2px 12px rgba(15,23,42,.05);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    .asd-page {
+        direction:   rtl;
+        font-family: 'Cairo', sans-serif;
+        background:  var(--asd-bg);
+        padding:     28px 24px;
+        min-height:  100vh;
+        color:       var(--asd-text);
+    }
+
+    /* ── Breadcrumb ─────────────────────────────────── */
+    .asd-breadcrumb {
+        display:     flex;
+        align-items: center;
+        gap:         6px;
+        font-size:   13px;
+        color:       var(--asd-muted);
+        margin-bottom: 18px;
+        flex-wrap:   wrap;
+    }
+    .asd-breadcrumb a {
+        color: var(--asd-muted);
+        text-decoration: none;
+        transition: color .15s;
+    }
+    .asd-breadcrumb a:hover { color: var(--asd-primary); }
+    .asd-breadcrumb .sep    { opacity: .4; }
+    .asd-breadcrumb .current{ color: var(--asd-text); font-weight: 700; }
+
+    /* ── Page header ────────────────────────────────── */
+    .asd-page-header {
+        background:    linear-gradient(135deg, #1E3A8A 0%, #2563EB 55%, #3B82F6 100%);
+        border-radius: 20px;
+        padding:       28px 30px;
+        color:         #fff;
+        position:      relative;
+        overflow:      hidden;
+        margin-bottom: 22px;
+    }
+    .asd-page-header::before {
+        content:  '';
+        position: absolute; inset: 0;
+        background: radial-gradient(circle at 10% 50%, rgba(255,255,255,.07) 0%, transparent 60%);
+        pointer-events: none;
+    }
+    .asd-page-header::after {
+        content:  '';
+        position: absolute;
+        top: -40px; left: -40px;
+        width: 200px; height: 200px;
+        border-radius: 50%;
+        border: 40px solid rgba(255,255,255,.06);
+        pointer-events: none;
+    }
+    .asd-ph-icon {
+        width: 52px; height: 52px;
+        border-radius: 16px;
+        background: rgba(255,255,255,.15);
+        backdrop-filter: blur(6px);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 26px;
+        flex-shrink: 0;
+    }
+    .asd-ph-title {
+        font-size:   24px;
+        font-weight: 900;
+        margin:      0 0 4px;
+        letter-spacing: -.3px;
+    }
+    .asd-ph-sub {
+        font-size: 14px;
+        color: rgba(255,255,255,.72);
+        margin:    0;
+    }
+    .asd-btn-back {
+        display:     inline-flex;
+        align-items: center;
+        gap:         6px;
+        background:  rgba(255,255,255,.15);
+        color:       #fff;
+        border:      1px solid rgba(255,255,255,.25);
+        border-radius: 10px;
+        padding:     9px 20px;
+        font-size:   14px;
+        font-weight: 700;
+        text-decoration: none;
+        transition:  background .2s;
+        backdrop-filter: blur(4px);
+        white-space: nowrap;
+    }
+    .asd-btn-back:hover { background: rgba(255,255,255,.26); color: #fff; }
+
+    /* ── Filter bar ─────────────────────────────────── */
+    .asd-filter-bar {
+        background:    var(--asd-surface);
+        border-radius: var(--asd-r);
+        border:        1px solid var(--asd-border);
+        box-shadow:    var(--asd-shadow-sm);
+        padding:       16px 22px;
+        margin-bottom: 22px;
+        display:       flex;
+        align-items:   center;
+        gap:           12px;
+        flex-wrap:     wrap;
+    }
+    .asd-filter-label {
+        font-size:   13px;
+        font-weight: 700;
+        color:       var(--asd-muted);
+        white-space: nowrap;
+        display:     flex;
+        align-items: center;
+        gap:         6px;
+    }
+    .asd-filter-bar select,
+    .asd-filter-bar input[type=text] {
+        border:        1px solid var(--asd-border);
+        border-radius: 8px;
+        padding:       8px 12px;
+        font-size:     14px;
+        font-family:   'Cairo', sans-serif;
+        color:         var(--asd-text);
+        background:    #FAFBFC;
+        min-width:     160px;
+        outline:       none;
+        transition:    border .2s, box-shadow .2s;
+    }
+    .asd-filter-bar select:focus,
+    .asd-filter-bar input[type=text]:focus {
+        border-color: var(--asd-primary);
+        box-shadow:   0 0 0 3px rgba(37,99,235,.12);
+        background:   #fff;
+    }
+    .asd-btn-filter {
+        background:    var(--asd-primary);
+        color:         #fff;
+        border:        none;
+        border-radius: 8px;
+        padding:       9px 20px;
+        font-size:     14px;
+        font-weight:   700;
+        font-family:   'Cairo', sans-serif;
+        cursor:        pointer;
+        display:       inline-flex;
+        align-items:   center;
+        gap:           6px;
+        transition:    background .2s, transform .15s;
+    }
+    .asd-btn-filter:hover { background: #1D4ED8; transform: translateY(-1px); }
+    .asd-btn-clear {
+        color:       var(--asd-muted);
+        font-size:   14px;
+        font-weight: 600;
+        text-decoration: none;
+        padding:     9px 14px;
+        border-radius: 8px;
+        transition:  background .15s;
+    }
+    .asd-btn-clear:hover { background: #F1F5F9; color: var(--asd-danger); }
+
+    /* ── KPI grid ───────────────────────────────────── */
+    .asd-kpi-grid {
+        display:               grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap:                   16px;
+        margin-bottom:         22px;
+    }
+    @@media (max-width: 1199px) {
+        .asd-kpi-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+    @@media (max-width: 767px) {
+        .asd-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @@media (max-width: 479px) {
+        .asd-kpi-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    .asd-kpi {
+        background:    var(--asd-surface);
+        border-radius: var(--asd-r);
+        border:        1px solid var(--asd-border);
+        box-shadow:    var(--asd-shadow-sm);
+        padding:       20px 18px;
+        position:      relative;
+        overflow:      hidden;
+        transition:    transform .18s, box-shadow .18s;
+    }
+    .asd-kpi:hover { transform: translateY(-3px); box-shadow: var(--asd-shadow); }
+    .asd-kpi::before {
+        content:       '';
+        position:      absolute;
+        bottom:        0; right: 0; left: 0;
+        height:        3px;
+        border-radius: 0 0 var(--asd-r) var(--asd-r);
+    }
+    .asd-kpi.k-blue::before    { background: var(--asd-primary); }
+    .asd-kpi.k-red::before     { background: var(--asd-danger); }
+    .asd-kpi.k-amber::before   { background: var(--asd-warning); }
+    .asd-kpi.k-green::before   { background: var(--asd-success); }
+    .asd-kpi.k-indigo::before  { background: var(--asd-indigo); }
+    .asd-kpi.k-violet::before  { background: var(--asd-violet); }
+
+    .asd-kpi-icon {
+        width:         40px; height: 40px;
+        border-radius: 12px;
+        display:       flex; align-items: center; justify-content: center;
+        font-size:     20px;
+        margin-bottom: 14px;
+    }
+    .asd-kpi-value {
+        font-size:   30px;
+        font-weight: 900;
+        line-height: 1;
+        margin-bottom: 5px;
+    }
+    .asd-kpi-label {
+        font-size:   13px;
+        font-weight: 700;
+        color:       var(--asd-muted);
+    }
+    .asd-kpi-sub {
+        font-size:   11px;
+        color:       var(--asd-muted);
+        margin-top:  3px;
+    }
+
+    /* ── Charts row ─────────────────────────────────── */
+    .asd-charts-row {
+        display:               grid;
+        grid-template-columns: 300px 1fr 1fr;
+        gap:                   18px;
+        margin-bottom:         22px;
+        align-items:           start;
+    }
+    @@media (max-width: 1199px) {
+        .asd-charts-row { grid-template-columns: 1fr 1fr; }
+    }
+    @@media (max-width: 767px) {
+        .asd-charts-row { grid-template-columns: 1fr; }
+    }
+
+    .asd-card {
+        background:    var(--asd-surface);
+        border-radius: var(--asd-r);
+        border:        1px solid var(--asd-border);
+        box-shadow:    var(--asd-shadow-sm);
+        padding:       22px;
+    }
+    .asd-card-title {
+        font-size:   15px;
+        font-weight: 800;
+        color:       var(--asd-text);
+        display:     flex;
+        align-items: center;
+        gap:         8px;
+        margin-bottom: 4px;
+    }
+    .asd-card-title .ct-icon {
+        width:         30px; height: 30px;
+        border-radius: 8px;
+        display:       flex; align-items: center; justify-content: center;
+        font-size:     16px;
+        flex-shrink:   0;
+    }
+    .asd-card-sub {
+        font-size:     12px;
+        color:         var(--asd-muted);
+        margin-bottom: 14px;
+        padding-right: 38px;
+    }
+
+    /* ── Students section ───────────────────────────── */
+    .asd-students-section {
+        background:    var(--asd-surface);
+        border-radius: var(--asd-r);
+        border:        1px solid var(--asd-border);
+        box-shadow:    var(--asd-shadow-sm);
+        overflow:      hidden;
+        margin-bottom: 100px; /* space for floating bar */
+    }
+
+    .asd-students-toolbar {
+        padding:       18px 22px;
+        border-bottom: 1px solid var(--asd-border);
+        display:       flex;
+        align-items:   center;
+        gap:           12px;
+        flex-wrap:     wrap;
+        background:    #FAFBFC;
+    }
+    .asd-stu-title {
+        font-size:   16px;
+        font-weight: 800;
+        display:     flex;
+        align-items: center;
+        gap:         8px;
+        margin-left: auto;
+    }
+    .asd-stu-title .st-icon {
+        width:         32px; height: 32px;
+        border-radius: 8px;
+        background:    var(--asd-primary-l);
+        color:         var(--asd-primary);
+        display:       flex; align-items: center; justify-content: center;
+        font-size:     16px;
+    }
+
+    .asd-pri-tabs {
+        display:    flex;
+        gap:        6px;
+        flex-wrap:  wrap;
+    }
+    .asd-pri-tab {
+        padding:       7px 16px;
+        border-radius: 20px;
+        border:        1px solid var(--asd-border);
+        font-size:     13px;
+        font-weight:   700;
+        cursor:        pointer;
+        background:    #fff;
+        color:         var(--asd-muted);
+        transition:    all .18s;
+        font-family:   'Cairo', sans-serif;
+    }
+    .asd-pri-tab.active,
+    .asd-pri-tab:hover { border-color: var(--asd-primary); color: var(--asd-primary); background: var(--asd-primary-l); }
+    .asd-pri-tab.tab-red.active  { border-color: var(--asd-danger);  color: var(--asd-danger);  background: var(--asd-danger-l); }
+    .asd-pri-tab.tab-amber.active{ border-color: var(--asd-warning); color: var(--asd-warning); background: var(--asd-warning-l); }
+    .asd-pri-tab.tab-green.active{ border-color: var(--asd-success); color: var(--asd-success); background: var(--asd-success-l); }
+
+    .asd-search {
+        border:        1px solid var(--asd-border);
+        border-radius: 8px;
+        padding:       8px 14px 8px 14px;
+        font-size:     14px;
+        font-family:   'Cairo', sans-serif;
+        width:         220px;
+        outline:       none;
+        background:    #fff;
+        transition:    border .2s, box-shadow .2s;
+    }
+    .asd-search:focus {
+        border-color: var(--asd-primary);
+        box-shadow:   0 0 0 3px rgba(37,99,235,.12);
+    }
+
+    /* ── Table ──────────────────────────────────────── */
+    .asd-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .asd-table thead th {
+        background:     #F8FAFC;
+        color:          var(--asd-muted);
+        font-weight:    700;
+        font-size:      12px;
+        text-transform: uppercase;
+        letter-spacing: .4px;
+        padding:        12px 14px;
+        border-bottom:  2px solid var(--asd-border);
+        white-space:    nowrap;
+        position:       sticky;
+        top:            0;
+    }
+    .asd-table tbody td {
+        padding:       13px 14px;
+        border-bottom: 1px solid #F1F5F9;
+        vertical-align: middle;
+    }
+    .asd-table tbody tr:last-child td { border-bottom: none; }
+    .asd-table tbody tr {
+        transition: background .12s;
+    }
+    .asd-table tbody tr:hover { background: #F8FAFC; }
+    .asd-table tbody tr.row-selected { background: #EFF6FF; }
+
+    /* ── Checkbox ───────────────────────────────────── */
+    .asd-cb {
+        width:         17px; height: 17px;
+        accent-color:  var(--asd-primary);
+        cursor:        pointer;
+    }
+
+    /* ── Avatar ─────────────────────────────────────── */
+    .asd-avatar {
+        width:         36px; height: 36px;
+        border-radius: 50%;
+        display:       flex; align-items: center; justify-content: center;
+        font-size:     14px;
+        font-weight:   800;
+        flex-shrink:   0;
+    }
+
+    /* ── Score cell ─────────────────────────────────── */
+    .asd-score-num {
+        font-size:   15px;
+        font-weight: 800;
+        line-height: 1;
+    }
+    .asd-prog {
+        height:        5px;
+        border-radius: 20px;
+        background:    #EEF2F6;
+        overflow:      hidden;
+        margin-top:    5px;
+    }
+    .asd-prog-bar {
+        height:        100%;
+        border-radius: 20px;
+        transition:    width .4s ease;
+    }
+
+    /* ── Badge ──────────────────────────────────────── */
+    .asd-badge {
+        display:       inline-flex;
+        align-items:   center;
+        gap:           4px;
+        padding:       4px 11px;
+        border-radius: 20px;
+        font-size:     12px;
+        font-weight:   700;
+        white-space:   nowrap;
+    }
+    .asd-badge.b-red    { background: var(--asd-danger-l);  color: #991B1B; }
+    .asd-badge.b-amber  { background: var(--asd-warning-l); color: #92400E; }
+    .asd-badge.b-green  { background: var(--asd-success-l); color: #065F46; }
+
+    /* ── Action chip ────────────────────────────────── */
+    .asd-action-chip {
+        display:       inline-block;
+        background:    #F8FAFC;
+        border:        1px solid var(--asd-border);
+        border-radius: 7px;
+        padding:       5px 10px;
+        font-size:     12px;
+        color:         var(--asd-text);
+        font-weight:   600;
+        line-height:   1.4;
+        max-width:     190px;
+        white-space:   normal;
+    }
+
+    /* ── Empty state ────────────────────────────────── */
+    .asd-empty {
+        padding:       60px 20px;
+        text-align:    center;
+        color:         var(--asd-muted);
+    }
+    .asd-empty i    { font-size: 48px; opacity: .25; display: block; margin-bottom: 14px; }
+    .asd-empty-title{ font-size: 16px; font-weight: 700; color: var(--asd-text); margin-bottom: 6px; }
+    .asd-empty-sub  { font-size: 14px; }
+
+    /* ── Floating action bar ────────────────────────── */
+    .asd-fab {
+        position:      fixed;
+        bottom:        28px;
+        right:         50%;
+        transform:     translateX(50%);
+        z-index:       1000;
+        background:    #0F172A;
+        border-radius: 16px;
+        padding:       14px 22px;
+        display:       flex;
+        align-items:   center;
+        gap:           14px;
+        box-shadow:    0 8px 40px rgba(15,23,42,.35);
+        flex-wrap:     wrap;
+        transition:    opacity .25s, transform .25s;
+        max-width:     90vw;
+    }
+    .asd-fab.fab-hidden { opacity: 0; pointer-events: none; transform: translate(50%, 20px); }
+    .asd-fab-info {
+        color:       rgba(255,255,255,.7);
+        font-size:   14px;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+    .asd-fab-info strong { color: #fff; font-size: 16px; }
+    .asd-fab-divider {
+        width:        1px;
+        height:       30px;
+        background:   rgba(255,255,255,.15);
+        flex-shrink:  0;
+    }
+    .asd-fab-btn {
+        display:       inline-flex;
+        align-items:   center;
+        gap:           6px;
+        padding:       9px 18px;
+        border-radius: 10px;
+        border:        none;
+        font-size:     13px;
+        font-weight:   700;
+        font-family:   'Cairo', sans-serif;
+        cursor:        pointer;
+        transition:    background .18s, transform .15s;
+        white-space:   nowrap;
+    }
+    .asd-fab-btn:hover { transform: translateY(-1px); }
+    .asd-fab-btn.fb-primary  { background: var(--asd-primary); color: #fff; }
+    .asd-fab-btn.fb-amber    { background: #B45309; color: #fff; }
+    .asd-fab-btn.fb-green    { background: var(--asd-success); color: #fff; }
+    .asd-fab-btn.fb-ghost    { background: rgba(255,255,255,.1); color: rgba(255,255,255,.85); }
+    .asd-fab-btn.fb-ghost:hover { background: rgba(255,255,255,.18); }
+    .asd-fab-close {
+        background:  rgba(255,255,255,.08);
+        border:      none;
+        color:       rgba(255,255,255,.6);
+        border-radius: 8px;
+        width:       30px; height: 30px;
+        display:     flex; align-items: center; justify-content: center;
+        cursor:      pointer;
+        font-size:   16px;
+        transition:  background .15s;
+        margin-right: -4px;
+    }
+    .asd-fab-close:hover { background: rgba(255,255,255,.18); color: #fff; }
+
+    /* ── Decision Gateway Modal ─────────────────────── */
+    .asd-modal-overlay {
+        position:    fixed;
+        inset:       0;
+        background:  rgba(15,23,42,.5);
+        z-index:     1050;
+        display:     flex;
+        align-items: center;
+        justify-content: center;
+        padding:     20px;
+        opacity:     0;
+        pointer-events: none;
+        transition:  opacity .22s;
+        backdrop-filter: blur(3px);
+    }
+    .asd-modal-overlay.open { opacity: 1; pointer-events: all; }
+    .asd-modal {
+        background:    #fff;
+        border-radius: 20px;
+        width:         100%;
+        max-width:     560px;
+        box-shadow:    0 24px 80px rgba(15,23,42,.22);
+        overflow:      hidden;
+        transform:     translateY(20px);
+        transition:    transform .22s;
+    }
+    .asd-modal-overlay.open .asd-modal { transform: translateY(0); }
+    .asd-modal-header {
+        padding:       22px 26px 18px;
+        border-bottom: 1px solid var(--asd-border);
+        display:       flex;
+        align-items:   center;
+        gap:           12px;
+    }
+    .asd-modal-header-icon {
+        width:         46px; height: 46px;
+        border-radius: 14px;
+        display:       flex; align-items: center; justify-content: center;
+        font-size:     22px;
+        flex-shrink:   0;
+    }
+    .asd-modal-title {
+        font-size:   18px;
+        font-weight: 800;
+    }
+    .asd-modal-sub {
+        font-size: 13px;
+        color:     var(--asd-muted);
+        margin:    2px 0 0;
+    }
+    .asd-modal-close-btn {
+        margin-right: auto;
+        background:   #F1F5F9;
+        border:       none;
+        border-radius: 8px;
+        width:        32px; height: 32px;
+        display:      flex; align-items: center; justify-content: center;
+        cursor:       pointer;
+        font-size:    16px;
+        color:        var(--asd-muted);
+        transition:   background .15s;
+    }
+    .asd-modal-close-btn:hover { background: #E2E8F0; color: var(--asd-text); }
+    .asd-modal-body { padding: 22px 26px; }
+    .asd-modal-footer {
+        padding:      16px 26px 22px;
+        display:      flex;
+        gap:          10px;
+        justify-content: flex-end;
+    }
+    .asd-selected-list {
+        background:    #F8FAFC;
+        border:        1px solid var(--asd-border);
+        border-radius: 10px;
+        padding:       12px 14px;
+        max-height:    160px;
+        overflow-y:    auto;
+        margin-bottom: 16px;
+    }
+    .asd-sel-item {
+        display:     flex;
+        align-items: center;
+        gap:         8px;
+        padding:     6px 0;
+        border-bottom: 1px solid #EEF2F6;
+        font-size:   13px;
+        font-weight: 600;
+    }
+    .asd-sel-item:last-child { border-bottom: none; }
+    .asd-sel-dot {
+        width:         8px; height: 8px;
+        border-radius: 50%;
+        background:    var(--asd-primary);
+        flex-shrink:   0;
+    }
+    .asd-form-group { margin-bottom: 14px; }
+    .asd-form-label {
+        font-size:     13px;
+        font-weight:   700;
+        margin-bottom: 6px;
+        display:       block;
+    }
+    .asd-form-control {
+        width:         100%;
+        border:        1px solid var(--asd-border);
+        border-radius: 8px;
+        padding:       9px 13px;
+        font-size:     14px;
+        font-family:   'Cairo', sans-serif;
+        color:         var(--asd-text);
+        background:    #FAFBFC;
+        outline:       none;
+        transition:    border .2s, box-shadow .2s;
+    }
+    .asd-form-control:focus {
+        border-color: var(--asd-primary);
+        box-shadow:   0 0 0 3px rgba(37,99,235,.12);
+        background:   #fff;
+    }
+    textarea.asd-form-control { resize: vertical; min-height: 90px; }
+    .asd-btn-submit {
+        background:  var(--asd-primary);
+        color:       #fff;
+        border:      none;
+        border-radius: 10px;
+        padding:     10px 26px;
+        font-size:   14px;
+        font-weight: 700;
+        font-family: 'Cairo', sans-serif;
+        cursor:      pointer;
+        transition:  background .18s;
+    }
+    .asd-btn-submit:hover { background: #1D4ED8; }
+    .asd-btn-cancel {
+        background:  #F1F5F9;
+        color:       var(--asd-muted);
+        border:      none;
+        border-radius: 10px;
+        padding:     10px 22px;
+        font-size:   14px;
+        font-weight: 700;
+        font-family: 'Cairo', sans-serif;
+        cursor:      pointer;
+        transition:  background .18s;
+    }
+    .asd-btn-cancel:hover { background: #E2E8F0; color: var(--asd-text); }
+
+    /* ── Table footer ───────────────────────────────── */
+    .asd-table-footer {
+        padding:       14px 22px;
+        border-top:    1px solid var(--asd-border);
+        display:       flex;
+        align-items:   center;
+        justify-content: space-between;
+        flex-wrap:     wrap;
+        gap:           10px;
+        background:    #FAFBFC;
+    }
+    .asd-footer-text { font-size: 13px; color: var(--asd-muted); font-weight: 600; }
+    .asd-footer-text strong { color: var(--asd-text); }
+
+    /* ── Priority distribution strip ─────────────────── */
+    .asd-dist-strip {
+        background:    var(--asd-surface);
+        border-radius: var(--asd-r);
+        border:        1px solid var(--asd-border);
+        box-shadow:    var(--asd-shadow-sm);
+        padding:       14px 22px;
+        margin-bottom: 22px;
+        display:       flex;
+        align-items:   center;
+        gap:           16px;
+        flex-wrap:     wrap;
+    }
+    .asd-dist-label { font-size: 12px; font-weight: 700; color: var(--asd-muted); white-space: nowrap; }
+    .asd-dist-bar {
+        flex: 1; min-width: 120px;
+        height: 8px;
+        border-radius: 20px;
+        background:    #EEF2F6;
+        overflow:      hidden;
+        display:       flex;
+    }
+    .asd-dist-seg { height: 100%; transition: width .5s ease; }
+    .asd-dist-legend {
+        display:  flex;
+        gap:      14px;
+        flex-wrap: wrap;
+    }
+    .asd-dist-legend-item {
+        display:     flex;
+        align-items: center;
+        gap:         5px;
+        font-size:   12px;
+        font-weight: 700;
+    }
+    .asd-dist-dot {
+        width:         8px; height: 8px;
+        border-radius: 50%;
+    }
+</style>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+
+<div class="asd-page">
+
+    @* ── Breadcrumb ──────────────────────────────────────────────────────────── *@
+    <nav class="asd-breadcrumb">
+        <i class="bi bi-house-fill"></i>
+        <a asp-area="Admin" asp-controller="Home" asp-action="Index">لوحة التحكم</a>
+        <span class="sep">‹</span>
+        <a asp-area="Admin" asp-controller="Analytics" asp-action="AdvancedDashboard">التحليلات المتقدمة</a>
+        <span class="sep">‹</span>
+        <span class="current">تحليل الطلاب المفصّل</span>
+    </nav>
+
+    @* ── Page Header ─────────────────────────────────────────────────────────── *@
+    <div class="asd-page-header mb-3">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;position:relative;z-index:1;">
+            <div style="display:flex;align-items:center;gap:16px;">
+                <div class="asd-ph-icon"><i class="bi bi-bar-chart-steps"></i></div>
+                <div>
+                    <h1 class="asd-ph-title">تحليل الطلاب المفصّل</h1>
+                    <p class="asd-ph-sub">
+                        تشخيص أداء الطلاب المحتاجين للمتابعة — اختبارات، واجبات، وحضور
+                        @if (totalCount > 0)
+                        {
+                            <span style="margin-right:10px;background:rgba(255,255,255,.15);border-radius:20px;padding:2px 10px;font-size:13px;font-weight:700;">
+                                @totalCount طالب محلَّل
+                            </span>
+                        }
+                    </p>
+                </div>
+            </div>
+            <a asp-area="Admin" asp-controller="Analytics" asp-action="AdvancedDashboard" class="asd-btn-back">
+                <i class="bi bi-arrow-right"></i> رجوع للتحليلات
+            </a>
+        </div>
+    </div>
+
+    @* ── Filter Bar ───────────────────────────────────────────────────────────── *@
+    <form method="get" asp-area="Admin" asp-controller="Analytics" asp-action="AnalyzedStudentsDetails">
+        <div class="asd-filter-bar">
+            <span class="asd-filter-label"><i class="bi bi-funnel-fill"></i> تصفية:</span>
+
+            <select name="curriculumId" style="min-width:150px;">
+                <option value="">كل المناهج</option>
+                @foreach (var c in Model?.CurriculumsFilter ?? new())
+                {
+                    <option value="@c.Id" selected="@(Model?.SelectedCurriculumId == c.Id)">@c.Name</option>
+                }
+            </select>
+
+            <select name="batchId" style="min-width:150px;">
+                <option value="">كل الدفعات</option>
+                @foreach (var b in Model?.BatchesFilter ?? new())
+                {
+                    <option value="@b.Id" selected="@(Model?.SelectedBatchId == b.Id)">@b.Name</option>
+                }
+            </select>
+
+            <select name="instructorId" style="min-width:150px;">
+                <option value="">كل المدرسين</option>
+                @foreach (var i in Model?.InstructorsFilter ?? new())
+                {
+                    <option value="@i.Id" selected="@(Model?.SelectedInstructorId == i.Id)">@i.Name</option>
+                }
+            </select>
+
+            <button type="submit" class="asd-btn-filter">
+                <i class="bi bi-search"></i> تطبيق
+            </button>
+
+            @if (Model?.SelectedCurriculumId.HasValue == true || Model?.SelectedBatchId.HasValue == true || Model?.SelectedInstructorId.HasValue == true)
+            {
+                <a asp-area="Admin" asp-controller="Analytics" asp-action="AnalyzedStudentsDetails" class="asd-btn-clear">
+                    <i class="bi bi-x-circle"></i> مسح الفلتر
+                </a>
+            }
+        </div>
+    </form>
+
+    @* ── KPI Grid ─────────────────────────────────────────────────────────────── *@
+    <div class="asd-kpi-grid">
+
+        <div class="asd-kpi k-blue">
+            <div class="asd-kpi-icon" style="background:var(--asd-primary-l);color:var(--asd-primary);">
+                <i class="bi bi-people-fill"></i>
+            </div>
+            <div class="asd-kpi-value" style="color:var(--asd-primary);">@totalCount</div>
+            <div class="asd-kpi-label">إجمالي الطلاب</div>
+            <div class="asd-kpi-sub">خضعوا للتحليل</div>
+        </div>
+
+        <div class="asd-kpi k-red">
+            <div class="asd-kpi-icon" style="background:var(--asd-danger-l);color:var(--asd-danger);">
+                <i class="bi bi-person-fill-exclamation"></i>
+            </div>
+            <div class="asd-kpi-value" style="color:var(--asd-danger);">@highCount</div>
+            <div class="asd-kpi-label">أولوية عالية</div>
+            <div class="asd-kpi-sub">تدخل فوري مطلوب</div>
+        </div>
+
+        <div class="asd-kpi k-amber">
+            <div class="asd-kpi-icon" style="background:var(--asd-warning-l);color:var(--asd-warning);">
+                <i class="bi bi-person-fill-dash"></i>
+            </div>
+            <div class="asd-kpi-value" style="color:var(--asd-warning);">@medCount</div>
+            <div class="asd-kpi-label">أولوية متوسطة</div>
+            <div class="asd-kpi-sub">تحتاج متابعة مركزة</div>
+        </div>
+
+        <div class="asd-kpi k-green">
+            <div class="asd-kpi-icon" style="background:var(--asd-success-l);color:var(--asd-success);">
+                <i class="bi bi-person-check-fill"></i>
+            </div>
+            <div class="asd-kpi-value" style="color:var(--asd-success);">@lowCount</div>
+            <div class="asd-kpi-label">أولوية منخفضة</div>
+            <div class="asd-kpi-sub">متابعة دورية فقط</div>
+        </div>
+
+        <div class="asd-kpi k-indigo">
+            <div class="asd-kpi-icon" style="background:var(--asd-indigo-l);color:var(--asd-indigo);">
+                <i class="bi bi-pencil-square"></i>
+            </div>
+            <div class="asd-kpi-value" style="color:var(--asd-indigo);">@avgExam<small style="font-size:18px;">%</small></div>
+            <div class="asd-kpi-label">متوسط الاختبارات</div>
+            <div class="asd-kpi-sub">عبر الطلاب المحللين</div>
+        </div>
+
+        <div class="asd-kpi k-violet">
+            <div class="asd-kpi-icon" style="background:var(--asd-violet-l);color:var(--asd-violet);">
+                <i class="bi bi-calendar-check-fill"></i>
+            </div>
+            <div class="asd-kpi-value" style="color:var(--asd-violet);">@avgAtt<small style="font-size:18px;">%</small></div>
+            <div class="asd-kpi-label">متوسط الحضور</div>
+            <div class="asd-kpi-sub">نسبة الحضور الإجمالية</div>
+        </div>
+
+    </div>
+
+    @* ── Priority distribution strip ─────────────────────────────────────────── *@
+    @if (totalCount > 0)
+    {
+        <div class="asd-dist-strip">
+            <span class="asd-dist-label">توزيع الأولويات</span>
+            <div class="asd-dist-bar">
+                <div class="asd-dist-seg" style="width:@highPct%;background:var(--asd-danger);"></div>
+                <div class="asd-dist-seg" style="width:@medPct%;background:var(--asd-warning);"></div>
+                <div class="asd-dist-seg" style="width:@lowPct%;background:var(--asd-success);"></div>
+            </div>
+            <div class="asd-dist-legend">
+                <div class="asd-dist-legend-item">
+                    <div class="asd-dist-dot" style="background:var(--asd-danger);"></div>
+                    <span>عالية <span style="color:var(--asd-muted);font-weight:400;">@highPct%</span></span>
+                </div>
+                <div class="asd-dist-legend-item">
+                    <div class="asd-dist-dot" style="background:var(--asd-warning);"></div>
+                    <span>متوسطة <span style="color:var(--asd-muted);font-weight:400;">@medPct%</span></span>
+                </div>
+                <div class="asd-dist-legend-item">
+                    <div class="asd-dist-dot" style="background:var(--asd-success);"></div>
+                    <span>منخفضة <span style="color:var(--asd-muted);font-weight:400;">@lowPct%</span></span>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* ── Charts Row ───────────────────────────────────────────────────────────── *@
+    <div class="asd-charts-row">
+
+        @* Chart 1: Donut — Student priority distribution *@
+        <div class="asd-card">
+            <div class="asd-card-title">
+                <div class="ct-icon" style="background:var(--asd-primary-l);color:var(--asd-primary);">
+                    <i class="bi bi-pie-chart-fill"></i>
+                </div>
+                توزيع الأولويات
+            </div>
+            <p class="asd-card-sub">تصنيف الطلاب حسب مستوى الخطر</p>
+            <div id="chartPriority" style="min-height:240px;"></div>
+        </div>
+
+        @* Chart 2: Horizontal bar — Top weak lessons *@
+        <div class="asd-card">
+            <div class="asd-card-title">
+                <div class="ct-icon" style="background:var(--asd-danger-l);color:var(--asd-danger);">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                </div>
+                الدروس الأكثر ضعفاً
+            </div>
+            <p class="asd-card-sub">أعلى @topLessons.Count درس من حيث نسبة الإجابات الخاطئة</p>
+            <div id="chartWeakLessons" style="min-height:240px;"></div>
+        </div>
+
+        @* Chart 3: Column — Instructor avg score *@
+        <div class="asd-card">
+            <div class="asd-card-title">
+                <div class="ct-icon" style="background:var(--asd-indigo-l);color:var(--asd-indigo);">
+                    <i class="bi bi-person-video3"></i>
+                </div>
+                أداء المدرسين
+            </div>
+            <p class="asd-card-sub">متوسط درجات الطلاب لكل مدرس</p>
+            <div id="chartInstructors" style="min-height:240px;"></div>
+        </div>
+
+    </div>
+
+    @* ── Students Table ───────────────────────────────────────────────────────── *@
+    <div class="asd-students-section">
+
+        <div class="asd-students-toolbar">
+            <div class="asd-stu-title">
+                <div class="st-icon"><i class="bi bi-table"></i></div>
+                قائمة الطلاب
+                @if (totalCount > 0)
+                {
+                    <span class="asd-badge b-red" style="font-size:11px;">@totalCount طالب</span>
+                }
+            </div>
+            <div class="asd-pri-tabs" id="priorityTabs">
+                <button class="asd-pri-tab active" onclick="filterByPriority('all',this)">الكل</button>
+                <button class="asd-pri-tab tab-red"   onclick="filterByPriority('High',this)">
+                    <i class="bi bi-circle-fill" style="font-size:8px;"></i> عالية (@highCount)
+                </button>
+                <button class="asd-pri-tab tab-amber" onclick="filterByPriority('Medium',this)">
+                    <i class="bi bi-circle-fill" style="font-size:8px;"></i> متوسطة (@medCount)
+                </button>
+                <button class="asd-pri-tab tab-green" onclick="filterByPriority('Low',this)">
+                    <i class="bi bi-circle-fill" style="font-size:8px;"></i> منخفضة (@lowCount)
+                </button>
+            </div>
+            <input type="text" class="asd-search" id="studentSearch"
+                   placeholder="&#xF52A; ابحث باسم الطالب..."
+                   oninput="onSearch(this.value)" />
+        </div>
+
+        @if (!students.Any())
+        {
+            <div class="asd-empty">
+                <i class="bi bi-person-slash"></i>
+                <div class="asd-empty-title">لا توجد بيانات طلاب</div>
+                <div class="asd-empty-sub">سيظهر التحليل بعد توفر محاولات الطلاب في النظام</div>
+            </div>
+        }
+        else
+        {
+            <div style="overflow-x:auto;">
+                <table class="asd-table" id="studentsTable">
+                    <thead>
+                        <tr>
+                            <th style="width:44px;">
+                                <input type="checkbox" class="asd-cb" id="selectAll" onchange="toggleAll(this)">
+                            </th>
+                            <th style="min-width:180px;">الطالب</th>
+                            <th style="min-width:120px;">الاختبارات</th>
+                            <th style="min-width:120px;">الواجبات</th>
+                            <th style="min-width:120px;">الحضور</th>
+                            <th style="min-width:150px;">سبب الضعف</th>
+                            <th style="min-width:100px;">الأولوية</th>
+                            <th style="min-width:200px;">الإجراء المطلوب</th>
+                        </tr>
+                    </thead>
+                    <tbody id="studentsBody">
+                        @foreach (var s in students)
+                        {
+                            var examColor = s.ExamScore >= 70 ? "var(--asd-success)" : s.ExamScore >= 50 ? "var(--asd-warning)" : "var(--asd-danger)";
+                            var hwColor   = s.HomeworkScore >= 70 ? "var(--asd-success)" : s.HomeworkScore >= 50 ? "var(--asd-warning)" : "var(--asd-danger)";
+                            var attColor  = s.Attendance >= 70 ? "var(--asd-success)" : s.Attendance >= 50 ? "var(--asd-warning)" : "var(--asd-danger)";
+                            var priClass  = s.Priority == "High" ? "b-red" : s.Priority == "Medium" ? "b-amber" : "b-green";
+                            var priIcon   = s.Priority == "High" ? "bi-arrow-up-circle-fill" : s.Priority == "Medium" ? "bi-dash-circle-fill" : "bi-arrow-down-circle-fill";
+                            var priLabel  = s.Priority == "High" ? "عالية" : s.Priority == "Medium" ? "متوسطة" : "منخفضة";
+                            var avatarBg  = s.Priority == "High" ? "var(--asd-danger-l)" : s.Priority == "Medium" ? "var(--asd-warning-l)" : "var(--asd-success-l)";
+                            var avatarFg  = s.Priority == "High" ? "var(--asd-danger)" : s.Priority == "Medium" ? "var(--asd-warning)" : "var(--asd-success)";
+                            var initial   = string.IsNullOrWhiteSpace(s.StudentName) ? "؟" : s.StudentName.Trim().Substring(0,1);
+
+                            <tr class="stu-row" data-priority="@s.Priority" data-name="@s.StudentName.ToLower()">
+                                <td>
+                                    <input type="checkbox" class="asd-cb stu-cb"
+                                           data-id="@s.StudentId"
+                                           data-name="@s.StudentName"
+                                           data-priority="@s.Priority"
+                                           data-exam="@s.ExamScore"
+                                           onchange="onCheckboxChange()">
+                                </td>
+                                <td>
+                                    <div style="display:flex;align-items:center;gap:10px;">
+                                        <div class="asd-avatar" style="background:@avatarBg;color:@avatarFg;">@initial</div>
+                                        <div>
+                                            <div class="stu-name" style="font-weight:700;font-size:14px;">@s.StudentName</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="asd-score-num" style="color:@examColor;">@s.ExamScore%</div>
+                                    <div class="asd-prog">
+                                        <div class="asd-prog-bar" style="width:@s.ExamScore%;background:@examColor;"></div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="asd-score-num" style="color:@hwColor;">@s.HomeworkScore%</div>
+                                    <div class="asd-prog">
+                                        <div class="asd-prog-bar" style="width:@s.HomeworkScore%;background:@hwColor;"></div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="asd-score-num" style="color:@attColor;">@s.Attendance%</div>
+                                    <div class="asd-prog">
+                                        <div class="asd-prog-bar" style="width:@s.Attendance%;background:@attColor;"></div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span style="font-size:13px;font-weight:600;color:var(--asd-text);">@s.WeakReason</span>
+                                </td>
+                                <td>
+                                    <span class="asd-badge @priClass">
+                                        <i class="bi @priIcon"></i> @priLabel
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="asd-action-chip">@s.ActionRequired</span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="asd-table-footer">
+                <span class="asd-footer-text">
+                    إجمالي: <strong>@totalCount</strong> طالب — مرتبون تصاعدياً حسب الاختبارات
+                </span>
+                <span class="asd-footer-text" id="filteredInfo"></span>
+            </div>
+        }
+    </div>
+
+</div>
+
+@* ── Floating Action Bar ──────────────────────────────────────────────────────── *@
+<div class="asd-fab fab-hidden" id="fabBar">
+    <div class="asd-fab-info">
+        <strong id="fabCount">0</strong> طالب محدد
+    </div>
+    <div class="asd-fab-divider"></div>
+
+    <button class="asd-fab-btn fb-primary" onclick="openActionModal('notify')">
+        <i class="bi bi-bell-fill"></i> إرسال إشعار
+    </button>
+    <button class="asd-fab-btn fb-amber" onclick="openActionModal('session')">
+        <i class="bi bi-calendar-plus-fill"></i> جدولة جلسة
+    </button>
+    <button class="asd-fab-btn fb-green" onclick="openActionModal('teacher')">
+        <i class="bi bi-person-plus-fill"></i> تعيين مدرس
+    </button>
+    <button class="asd-fab-btn fb-ghost" onclick="openActionModal('export')">
+        <i class="bi bi-download"></i> تصدير
+    </button>
+
+    <button class="asd-fab-close" onclick="clearSelection()" title="إلغاء التحديد">
+        <i class="bi bi-x"></i>
+    </button>
+</div>
+
+@* ── Decision Gateway Modal ───────────────────────────────────────────────────── *@
+<div class="asd-modal-overlay" id="actionModalOverlay">
+    <div class="asd-modal" id="actionModal" role="dialog" aria-modal="true">
+        <div class="asd-modal-header">
+            <div class="asd-modal-header-icon" id="modalIcon"></div>
+            <div>
+                <div class="asd-modal-title" id="modalTitle"></div>
+                <div class="asd-modal-sub" id="modalSub"></div>
+            </div>
+            <button class="asd-modal-close-btn" onclick="closeActionModal()">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <div class="asd-modal-body">
+            <div style="font-size:12px;font-weight:700;color:var(--asd-muted);margin-bottom:8px;">
+                الطلاب المحددون
+            </div>
+            <div class="asd-selected-list" id="modalStudentList"></div>
+            <div id="modalFormContent"></div>
+        </div>
+        <div class="asd-modal-footer">
+            <button class="asd-btn-cancel" onclick="closeActionModal()">إلغاء</button>
+            <button class="asd-btn-submit" id="modalSubmitBtn"></button>
+        </div>
+    </div>
+</div>
+
+@Html.AntiForgeryToken()
+
+@* ── Scripts ──────────────────────────────────────────────────────────────────── *@
+<script>
+    var _instructorOptions = @Html.Raw(instructorOptions);
+
+    function _buildInstrOptions() {
+        if (!_instructorOptions || _instructorOptions.length === 0)
+            return '<option value="0">-- لا يوجد مدرسون --</option>';
+        return '<option value="0">-- اختر مدرساً --</option>' +
+            _instructorOptions.map(function(i) { return '<option value="' + i.id + '">' + i.name + '</option>'; }).join('');
+    }
+
+    /* ── Chart 1: Priority Donut ─────────────────────────── */
+    (function () {
+        var high = @highCount, med = @medCount, low = @lowCount;
+        if (high + med + low === 0) { document.getElementById('chartPriority').innerHTML = '<div style="padding:60px;text-align:center;color:#94A3B8;">لا توجد بيانات</div>'; return; }
+        new ApexCharts(document.getElementById('chartPriority'), {
+            chart: { type: 'donut', height: 240, fontFamily: 'Cairo, sans-serif', toolbar: { show: false } },
+            series: [high, med, low],
+            labels: ['أولوية عالية', 'أولوية متوسطة', 'أولوية منخفضة'],
+            colors: ['#DC2626', '#D97706', '#059669'],
+            legend: { position: 'bottom', fontSize: '13px', fontWeight: 600 },
+            dataLabels: { style: { fontSize: '13px', fontFamily: 'Cairo, sans-serif', fontWeight: '700' } },
+            plotOptions: { pie: { donut: { size: '65%', labels: {
+                show: true,
+                total: { show: true, label: 'الإجمالي', fontSize: '13px', fontWeight: '700', color: '#64748B',
+                    formatter: function(w){ return w.globals.seriesTotals.reduce((a,b) => a+b, 0) + ' طالب'; }
+                }
+            } } } },
+            tooltip: { style: { fontFamily: 'Cairo, sans-serif' } }
+        }).render();
+    })();
+
+    /* ── Chart 2: Weak Lessons Horizontal Bar ─────────────── */
+    (function () {
+        var labels = @Html.Raw(lessonLabels);
+        var pctData = @Html.Raw(lessonPctData);
+        var affData = @Html.Raw(lessonAffData);
+        if (!labels || labels.length === 0) { document.getElementById('chartWeakLessons').innerHTML = '<div style="padding:60px;text-align:center;color:#94A3B8;">لا توجد دروس ضعيفة</div>'; return; }
+        new ApexCharts(document.getElementById('chartWeakLessons'), {
+            chart: { type: 'bar', height: 240, fontFamily: 'Cairo, sans-serif', toolbar: { show: false } },
+            plotOptions: { bar: { horizontal: true, borderRadius: 5, dataLabels: { position: 'top' } } },
+            series: [{ name: 'نسبة الضعف %', data: pctData }],
+            xaxis: {
+                categories: labels,
+                max: 100,
+                labels: { style: { fontSize: '12px', fontFamily: 'Cairo, sans-serif' },
+                          formatter: v => v + '%' }
+            },
+            yaxis: { labels: { style: { fontSize: '11px', fontFamily: 'Cairo, sans-serif' } } },
+            colors: ['#DC2626'],
+            dataLabels: { enabled: true, formatter: v => v + '%', style: { fontSize: '11px', fontFamily: 'Cairo, sans-serif', colors: ['#fff'] } },
+            tooltip: {
+                style: { fontFamily: 'Cairo, sans-serif' },
+                custom: function({ series, seriesIndex, dataPointIndex, w }) {
+                    return '<div style="padding:8px 12px;font-family:Cairo,sans-serif;direction:rtl;font-size:13px;">' +
+                        '<b>' + w.globals.labels[dataPointIndex] + '</b><br>' +
+                        'نسبة الضعف: <b>' + series[seriesIndex][dataPointIndex] + '%</b><br>' +
+                        'طلاب متأثرون: <b>' + affData[dataPointIndex] + '</b>' +
+                        '</div>';
+                }
+            },
+            grid: { borderColor: '#E2E8F0' }
+        }).render();
+    })();
+
+    /* ── Chart 3: Instructor Column Chart ─────────────────── */
+    (function () {
+        var names  = @Html.Raw(instrNames);
+        var scores = @Html.Raw(instrScores);
+        if (!names || names.length === 0) { document.getElementById('chartInstructors').innerHTML = '<div style="padding:60px;text-align:center;color:#94A3B8;">لا توجد بيانات مدرسين</div>'; return; }
+        var colors = scores.map(s => s >= 70 ? '#059669' : s >= 50 ? '#D97706' : '#DC2626');
+        new ApexCharts(document.getElementById('chartInstructors'), {
+            chart: { type: 'bar', height: 240, fontFamily: 'Cairo, sans-serif', toolbar: { show: false } },
+            plotOptions: { bar: { borderRadius: 6, columnWidth: '55%', distributed: true } },
+            series: [{ name: 'متوسط الدرجة %', data: scores }],
+            xaxis: {
+                categories: names,
+                labels: { style: { fontSize: '11px', fontFamily: 'Cairo, sans-serif' }, rotate: -30 }
+            },
+            yaxis: { max: 100, labels: { style: { fontSize: '12px', fontFamily: 'Cairo, sans-serif' }, formatter: v => v + '%' } },
+            colors: colors,
+            legend: { show: false },
+            dataLabels: { enabled: true, formatter: v => v + '%', style: { fontSize: '11px', fontFamily: 'Cairo, sans-serif' } },
+            tooltip: { style: { fontFamily: 'Cairo, sans-serif' }, y: { formatter: v => v + '%' } },
+            grid: { borderColor: '#E2E8F0' },
+            annotations: { yaxis: [{ y: 60, borderColor: '#94A3B8', borderWidth: 1, strokeDashArray: 4, label: { text: 'حد القبول 60%', style: { fontFamily: 'Cairo, sans-serif', fontSize: '11px' } } }] }
+        }).render();
+    })();
+
+    /* ── Student filtering ───────────────────────────────── */
+    var currentPriority = 'all';
+    var currentSearch   = '';
+
+    function applyFilters() {
+        var rows    = document.querySelectorAll('.stu-row');
+        var visible = 0;
+        rows.forEach(function(row) {
+            var name = row.dataset.name || '';
+            var pri  = row.dataset.priority || '';
+            var matchPri  = currentPriority === 'all' || pri === currentPriority;
+            var matchSrch = !currentSearch || name.includes(currentSearch);
+            var show = matchPri && matchSrch;
+            row.style.display = show ? '' : 'none';
+            if (show) visible++;
+        });
+        var info = document.getElementById('filteredInfo');
+        if (info) {
+            info.textContent = (currentPriority !== 'all' || currentSearch)
+                ? ('النتائج: ' + visible + ' طالب')
+                : '';
+        }
+    }
+
+    function filterByPriority(pri, btn) {
+        currentPriority = pri;
+        document.querySelectorAll('.asd-pri-tab').forEach(function(t) { t.classList.remove('active'); });
+        btn.classList.add('active');
+        applyFilters();
+    }
+
+    function onSearch(val) {
+        currentSearch = val.trim().toLowerCase();
+        applyFilters();
+    }
+
+    /* ── Checkbox & FAB logic ────────────────────────────── */
+    function getSelected() {
+        return Array.from(document.querySelectorAll('.stu-cb:checked'));
+    }
+
+    function onCheckboxChange() {
+        var checked = getSelected();
+        var fab     = document.getElementById('fabBar');
+        var cnt     = document.getElementById('fabCount');
+        if (checked.length > 0) {
+            fab.classList.remove('fab-hidden');
+            cnt.textContent = checked.length;
+        } else {
+            fab.classList.add('fab-hidden');
+        }
+        // visual highlight
+        document.querySelectorAll('.stu-row').forEach(function(row) {
+            var cb = row.querySelector('.stu-cb');
+            row.classList.toggle('row-selected', cb && cb.checked);
+        });
+        // sync select-all
+        var all  = document.querySelectorAll('.stu-cb:not([style*="none"])').length;
+        var chk  = getSelected().length;
+        var sa   = document.getElementById('selectAll');
+        if (sa) { sa.indeterminate = chk > 0 && chk < all; sa.checked = chk === all && all > 0; }
+    }
+
+    function toggleAll(masterCb) {
+        document.querySelectorAll('.stu-cb').forEach(function(cb) {
+            var row = cb.closest('.stu-row');
+            if (row && row.style.display !== 'none') {
+                cb.checked = masterCb.checked;
+                row.classList.toggle('row-selected', masterCb.checked);
+            }
+        });
+        onCheckboxChange();
+    }
+
+    function clearSelection() {
+        document.querySelectorAll('.stu-cb').forEach(function(cb) { cb.checked = false; });
+        var sa = document.getElementById('selectAll');
+        if (sa) { sa.checked = false; sa.indeterminate = false; }
+        document.querySelectorAll('.stu-row').forEach(function(r) { r.classList.remove('row-selected'); });
+        document.getElementById('fabBar').classList.add('fab-hidden');
+    }
+
+    /* ── Decision Gateway Modal ──────────────────────────── */
+    var currentActionType = null;
+
+    function _getActionConfigs() {
+        var instrOpts = _buildInstrOptions();
+        return {
+            notify: {
+                icon:   '<i class="bi bi-bell-fill" style="color:#2563EB;font-size:22px;"></i>',
+                iconBg: '#DBEAFE',
+                title:  'إرسال إشعار للطلاب',
+                sub:    'سيتلقى الطلاب المحددون رسالة تنبيه فورية',
+                submit: 'إرسال الإشعار',
+                form:   '<div class="asd-form-group"><label class="asd-form-label">نوع الإشعار</label><select class="asd-form-control" name="notificationType"><option value="تحذير أداء">تحذير أداء</option><option value="طلب مراجعة">طلب مراجعة</option><option value="دعوة لحضور جلسة">دعوة لحضور جلسة</option></select></div><div class="asd-form-group"><label class="asd-form-label">نص الرسالة <span style="color:#DC2626">*</span></label><textarea class="asd-form-control" name="message" placeholder="أكتب رسالتك هنا..." required></textarea></div>'
+            },
+            session: {
+                icon:   '<i class="bi bi-calendar-plus-fill" style="color:#B45309;font-size:22px;"></i>',
+                iconBg: '#FEF3C7',
+                title:  'جدولة جلسة تدارك',
+                sub:    'حجز جلسة مراجعة مع الطلاب المحددين',
+                submit: 'تأكيد الجدولة',
+                form:   '<div class="asd-form-group"><label class="asd-form-label">تاريخ الجلسة <span style="color:#DC2626">*</span></label><input type="date" class="asd-form-control" name="sessionDate" required></div><div class="asd-form-group"><label class="asd-form-label">الوقت</label><input type="time" class="asd-form-control" name="sessionTime"></div><div class="asd-form-group"><label class="asd-form-label">المدرس المسؤول</label><select class="asd-form-control" name="instructorId">' + instrOpts + '</select></div><div class="asd-form-group"><label class="asd-form-label">ملاحظات</label><textarea class="asd-form-control" name="notes" placeholder="تفاصيل الجلسة..."></textarea></div>'
+            },
+            teacher: {
+                icon:   '<i class="bi bi-person-plus-fill" style="color:#059669;font-size:22px;"></i>',
+                iconBg: '#D1FAE5',
+                title:  'تعيين مدرس مساعد',
+                sub:    'ربط الطلاب المحددين بمدرس مساعد للمتابعة',
+                submit: 'تعيين المدرس',
+                form:   '<div class="asd-form-group"><label class="asd-form-label">المدرس المساعد <span style="color:#DC2626">*</span></label><select class="asd-form-control" name="instructorId">' + instrOpts + '</select></div><div class="asd-form-group"><label class="asd-form-label">نوع المتابعة</label><select class="asd-form-control" name="followupType"><option value="متابعة يومية">متابعة يومية</option><option value="متابعة أسبوعية">متابعة أسبوعية</option><option value="مراجعة الواجبات فقط">مراجعة الواجبات فقط</option></select></div>'
+            },
+            export: {
+                icon:   '<i class="bi bi-file-earmark-arrow-down-fill" style="color:#4F46E5;font-size:22px;"></i>',
+                iconBg: '#EEF2FF',
+                title:  'تصدير بيانات الطلاب',
+                sub:    'تصدير تقرير CSV للطلاب المحددين',
+                submit: 'تصدير الآن',
+                form:   '<div class="asd-form-group"><label class="asd-form-label">البيانات المضمَّنة</label><div style="display:flex;flex-direction:column;gap:8px;padding:10px;background:#F8FAFC;border-radius:8px;border:1px solid #E2E8F0;"><label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;"><input type="checkbox" name="incExam" checked> درجات الاختبارات</label><label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;"><input type="checkbox" name="incHw" checked> درجات الواجبات</label><label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;"><input type="checkbox" name="incAtt" checked> نسب الحضور</label><label style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;"><input type="checkbox" name="incReason" checked> سبب الضعف والإجراء المطلوب</label></div></div>'
+            }
+        };
+    }
+
+    function openActionModal(type) {
+        var cfgs = _getActionConfigs();
+        var cfg  = cfgs[type];
+        var sel  = getSelected();
+        if (sel.length === 0) return;
+
+        currentActionType = type;
+
+        var iconEl = document.getElementById('modalIcon');
+        iconEl.innerHTML = cfg.icon;
+        iconEl.style.background = cfg.iconBg;
+
+        document.getElementById('modalTitle').textContent = cfg.title;
+        document.getElementById('modalSub').textContent   = cfg.sub;
+
+        var submitBtn = document.getElementById('modalSubmitBtn');
+        submitBtn.textContent    = cfg.submit;
+        submitBtn.disabled       = false;
+        submitBtn.style.opacity  = '1';
+        submitBtn.style.display  = '';
+
+        document.getElementById('modalFormContent').innerHTML = cfg.form;
+
+        var listHtml = sel.map(function(cb) {
+            var priMap = { High: 'b-red', Medium: 'b-amber', Low: 'b-green' };
+            var priLbl = { High: 'عالية', Medium: 'متوسطة', Low: 'منخفضة' };
+            return '<div class="asd-sel-item"><div class="asd-sel-dot"></div>' +
+                cb.dataset.name +
+                ' <span class="asd-badge ' + (priMap[cb.dataset.priority] || '') + '" style="font-size:10px;padding:2px 8px;margin-right:auto;">' + (priLbl[cb.dataset.priority] || '') + '</span>' +
+                '</div>';
+        }).join('');
+        document.getElementById('modalStudentList').innerHTML = listHtml;
+
+        // clear any previous result message
+        var existing = document.getElementById('modalResultMsg');
+        if (existing) existing.remove();
+
+        document.getElementById('actionModalOverlay').classList.add('open');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeActionModal() {
+        document.getElementById('actionModalOverlay').classList.remove('open');
+        document.body.style.overflow = '';
+    }
+
+    document.getElementById('modalSubmitBtn').addEventListener('click', function() {
+        handleModalSubmit();
+    });
+
+    function handleModalSubmit() {
+        var sel = getSelected();
+        if (!sel.length || !currentActionType) return;
+
+        var submitBtn = document.getElementById('modalSubmitBtn');
+
+        if (currentActionType === 'export') {
+            exportStudentsCsv(sel);
+            closeActionModal();
+            return;
+        }
+
+        var studentIds = sel.map(function(cb) { return cb.dataset.id; }).filter(function(id) { return id && parseInt(id) > 0; });
+        if (!studentIds.length) {
+            showModalMessage('error', 'لم يتم تحديد طلاب صالحين (يجب أن تحتوي السجلات على معرف)');
+            return;
+        }
+
+        var formData = new FormData();
+        studentIds.forEach(function(id) { formData.append('studentIds', id); });
+
+        var token = document.querySelector('input[name="__RequestVerificationToken"]');
+        if (token) formData.append('__RequestVerificationToken', token.value);
+
+        var url = '';
+        if (currentActionType === 'notify') {
+            url = '/Admin/Analytics/SendBulkNotification';
+            var msgEl  = document.querySelector('#modalFormContent [name="message"]');
+            var typeEl = document.querySelector('#modalFormContent [name="notificationType"]');
+            if (!msgEl || !msgEl.value.trim()) { showModalMessage('error', 'يرجى كتابة نص الرسالة'); return; }
+            formData.append('message', msgEl.value.trim());
+            formData.append('notificationType', typeEl ? typeEl.value : 'تحذير أداء');
+
+        } else if (currentActionType === 'session') {
+            url = '/Admin/Analytics/ScheduleAnalyticsSession';
+            var dateEl  = document.querySelector('#modalFormContent [name="sessionDate"]');
+            var timeEl  = document.querySelector('#modalFormContent [name="sessionTime"]');
+            var instrEl = document.querySelector('#modalFormContent [name="instructorId"]');
+            var notesEl = document.querySelector('#modalFormContent [name="notes"]');
+            if (!dateEl || !dateEl.value) { showModalMessage('error', 'يرجى تحديد تاريخ الجلسة'); return; }
+            formData.append('sessionDate', dateEl.value);
+            formData.append('sessionTime', timeEl ? timeEl.value : '');
+            formData.append('instructorId', instrEl ? instrEl.value : '0');
+            formData.append('notes', notesEl ? notesEl.value : '');
+
+        } else if (currentActionType === 'teacher') {
+            url = '/Admin/Analytics/AssignAnalyticsInstructor';
+            var instrEl   = document.querySelector('#modalFormContent [name="instructorId"]');
+            var followEl  = document.querySelector('#modalFormContent [name="followupType"]');
+            if (!instrEl || !instrEl.value || instrEl.value === '0') { showModalMessage('error', 'يرجى اختيار مدرس'); return; }
+            formData.append('instructorId', instrEl.value);
+            formData.append('followupType', followEl ? followEl.value : 'متابعة أسبوعية');
+        }
+
+        submitBtn.disabled    = true;
+        submitBtn.style.opacity = '0.6';
+        submitBtn.textContent = 'جارٍ التنفيذ...';
+
+        fetch(url, { method: 'POST', body: formData })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.success) {
+                    showModalMessage('success', data.message || 'تمت العملية بنجاح');
+                    submitBtn.disabled = true;
+                    submitBtn.style.opacity = '0.4';
+                    setTimeout(function() { closeActionModal(); }, 2200);
+                } else {
+                    showModalMessage('error', data.error || 'حدث خطأ');
+                    submitBtn.disabled    = false;
+                    submitBtn.style.opacity = '1';
+                    var cfgs = _getActionConfigs();
+                    submitBtn.textContent = cfgs[currentActionType].submit;
+                }
+            })
+            .catch(function() {
+                showModalMessage('error', 'حدث خطأ في الاتصال بالخادم');
+                submitBtn.disabled    = false;
+                submitBtn.style.opacity = '1';
+                var cfgs = _getActionConfigs();
+                submitBtn.textContent = cfgs[currentActionType].submit;
+            });
+    }
+
+    function showModalMessage(type, text) {
+        var existing = document.getElementById('modalResultMsg');
+        if (existing) existing.remove();
+        var isSuccess = type === 'success';
+        var el = document.createElement('div');
+        el.id = 'modalResultMsg';
+        el.style.cssText = 'margin-top:14px;padding:12px 16px;border-radius:10px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px;' +
+            (isSuccess ? 'background:#D1FAE5;color:#065F46;' : 'background:#FEE2E2;color:#991B1B;');
+        el.innerHTML = '<i class="bi ' + (isSuccess ? 'bi-check-circle-fill' : 'bi-exclamation-triangle-fill') + '"></i>' + text;
+        document.getElementById('modalFormContent').appendChild(el);
+    }
+
+    function exportStudentsCsv(sel) {
+        var rows = [['الاسم', 'الاختبارات%', 'الواجبات%', 'الحضور%', 'سبب الضعف', 'الأولوية']];
+        sel.forEach(function(cb) {
+            var row = cb.closest('.stu-row');
+            if (!row) return;
+            var cells = row.querySelectorAll('td');
+            var name  = cb.dataset.name || '';
+            var exam  = cells[2] ? cells[2].querySelector('.asd-score-num')?.textContent.replace('%','').trim() : '';
+            var hw    = cells[3] ? cells[3].querySelector('.asd-score-num')?.textContent.replace('%','').trim() : '';
+            var att   = cells[4] ? cells[4].querySelector('.asd-score-num')?.textContent.replace('%','').trim() : '';
+            var reason = cells[5] ? cells[5].textContent.trim() : '';
+            var pri   = cb.dataset.priority === 'High' ? 'عالية' : cb.dataset.priority === 'Medium' ? 'متوسطة' : 'منخفضة';
+            rows.push([name, exam, hw, att, reason, pri]);
+        });
+        var csv = '﻿' + rows.map(function(r) { return r.map(function(c) { return '"' + (c||'').replace(/"/g,'""') + '"'; }).join(','); }).join('\r\n');
+        var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        var url  = URL.createObjectURL(blob);
+        var a    = document.createElement('a');
+        a.href = url; a.download = 'analyzed_students.csv'; a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    document.getElementById('actionModalOverlay').addEventListener('click', function(e) {
+        if (e.target === this) closeActionModal();
+    });
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeActionModal();
+    });
+</script>

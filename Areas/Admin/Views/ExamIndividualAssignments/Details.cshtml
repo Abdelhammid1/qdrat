@@ -1,0 +1,191 @@
+﻿@model QdratNew.ViewModels.Exam.IndividualExamDetailsVm
+
+@{
+    ViewData["Title"] = "تفاصيل الاختبار الفردي";
+}
+
+<div class="container mt-4" dir="rtl">
+
+    <h3 class="fw-bold text-primary mb-4">
+        <i class="fa-solid fa-file-lines me-2"></i>
+        تفاصيل الاختبار الفردي
+    </h3>
+    <div class="mb-3 text-end">
+        <a href="/Admin/ExamIndividualAssignments/Index"
+           class="btn btn-secondary fw-bold">
+            <i class="fa-solid fa-arrow-right-long ms-1"></i>
+            العودة إلى قائمة الاختبارات الفردية
+        </a>
+    </div>
+
+    <!-- رسائل النظام -->
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger">@TempData["Error"]</div>
+    }
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success">@TempData["Success"]</div>
+    }
+
+    <!-- ===== بطاقة معلومات الاختبار ===== -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-primary text-white fw-bold">
+            معلومات عامة عن الاختبار
+        </div>
+
+        <div class="card-body row">
+
+            <div class="col-md-6 mb-2">
+                <strong>عنوان الاختبار:</strong> @Model.ExamTitle
+            </div>
+
+            <div class="col-md-6 mb-2">
+                <strong>الطالب:</strong> @Model.StudentName
+            </div>
+
+            <div class="col-md-6 mb-2">
+                <strong>الرقم المرجعي:</strong> @Model.ReferenceCode
+            </div>
+
+            <div class="col-md-6 mb-2">
+                <strong>المنهج:</strong> @Model.CurriculumTitle
+            </div>
+
+            <div class="col-md-6 mb-2">
+                <strong>المحور:</strong> @Model.SectionTitle
+            </div>
+
+            <div class="col-md-6 mb-2">
+                <strong>تاريخ البدء:</strong> @Model.ScheduledDate
+            </div>
+
+            <div class="col-md-6 mb-2">
+                <strong>تاريخ النهاية:</strong> @Model.EndAt
+            </div>
+
+            <div class="col-md-6 mb-2">
+                <strong>المدة:</strong> @Model.DurationMinutes دقيقة
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ===== جدول الأسئلة (DataTable) ===== -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-dark text-white fw-bold">
+            قائمة الأسئلة المرسلة
+        </div>
+
+        <div class="card-body">
+
+            <table class="table table-bordered text-center align-middle" id="questionsTable">
+                <thead class="table-secondary">
+                    <tr>
+                        <th>#</th>
+                        <th>السؤال</th>
+                        <th>المحور</th>
+                        <th>الصعوبة</th>
+                        <th>ملاحظة داخلية</th>
+                        <th>استبدال</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    @foreach (var q in Model.Questions)
+                    {
+                        <tr>
+                            <td>@q.Order</td>
+
+                            <!-- زر معاينة + جزء من السؤال -->
+                            <td class="text-start">
+
+                                <button type="button"
+                                        class="btn btn-outline-info btn-sm rounded-circle"
+                                        title="معاينة السؤال"
+                                        onclick="loadQuestionPreview('@q.QuestionId')">
+                                    <i class="fa-solid fa-eye"></i>
+                                </button>
+
+                                <span class="ms-2">
+                                    @(q.Title?.Length > 20 ? q.Title.Substring(0, 20) + "..." : q.Title)
+                                </span>
+
+                            </td>
+
+                            <td>@q.SectionTitle</td>
+
+                            <td>
+                                <span class="badge bg-secondary">@q.Difficulty</span>
+                            </td>
+
+                            <!-- Internal note -->
+                            <td class="text-danger fw-bold">
+                                @(!string.IsNullOrWhiteSpace(q.InternalNote) ? q.InternalNote : "—")
+                            </td>
+
+                            <td>
+                                <a href="/Admin/ExamIndividualAssignments/ReplaceQuestionView?assignmentId=@Model.AssignmentId&questionId=@q.QuestionId"
+                                   class="btn btn-sm btn-warning">
+                                    استبدال
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+        </div>
+    </div>
+
+</div>
+
+
+<!-- ========== Modal للمعاينة ========== -->
+<div class="modal fade" id="previewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content text-end">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title">
+                    <i class="fa-solid fa-eye"></i> معاينة السؤال
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body" id="previewModalBody">
+                <div class="text-center">جاري التحميل...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+@section Scripts {
+
+    <!-- DataTable -->
+    <script>
+        $(document).ready(function () {
+            $('#questionsTable').DataTable({
+                language: {
+                    url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json"
+                },
+                pageLength: 10
+            });
+        });
+    </script>
+
+    <!-- معاينة السؤال -->
+    <script>
+        function loadQuestionPreview(id) {
+            fetch(`/Admin/Questions/Preview/${id}`)
+                .then(res => res.text())
+                .then(html => {
+                    document.getElementById("previewModalBody").innerHTML = html;
+                    new bootstrap.Modal(document.getElementById("previewModal")).show();
+                })
+                .catch(() => {
+                    alert("حدث خطأ أثناء تحميل السؤال.");
+                });
+        }
+    </script>
+}

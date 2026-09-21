@@ -1,0 +1,270 @@
+@model ParentDashboardViewModel
+@{
+    ViewData["Title"] = "الرئيسية";
+    var insight = Model.CurrentInsight;
+}
+
+<div class="mb-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+    <div>
+        <h2 style="font-size:18px;font-weight:800;color:var(--parent-primary);margin:0;">
+            أهلاً، @Model.ParentName
+        </h2>
+        <p style="color:#6b7c93;font-size:13px;margin:2px 0 0;">متابعة ذكية لمسيرة أبنائك التعليمية</p>
+    </div>
+
+    @if (Model.Children.Count > 1)
+    {
+        <form method="get"
+              asp-action="Index"
+              asp-controller="Dashboard"
+              asp-area="Parents"
+              class="d-flex gap-2 align-items-center">
+
+            <label for="studentId" style="font-size:13px;color:#6b7c93;">
+                تابع:
+            </label>
+
+            <select id="studentId"
+                    name="studentId"
+                    onchange="this.form.submit()"
+                    style="border:1.5px solid #d0dcea;border-radius:8px;padding:6px 12px;font-family:var(--font-main);font-size:13px;background:#fff;color:var(--parent-primary);">
+
+                @foreach (var child in Model.Children)
+                {
+                    <option value="@child.StudentId"
+                            selected="@(child.StudentId == Model.SelectedStudentId)">
+                        @child.StudentName
+                    </option>
+                }
+
+            </select>
+        </form>
+    }
+</div>
+
+@if (insight == null)
+{
+    <div class="parent-card text-center py-5">
+        <i class="fas fa-users-slash fa-3x mb-3" style="color:#c0ccd8;"></i>
+        <p style="color:#7a8ba0;">لا يوجد طلاب مرتبطون بحسابك. تواصل مع المعهد لإتمام الربط.</p>
+    </div>
+    return;
+}
+
+<!-- ====== البطاقة الرئيسية: أفضل خطوة الآن ====== -->
+<div class="action-box mb-4">
+    <p class="action-title"><i class="fas fa-lightbulb me-1"></i> أفضل خطوة الآن</p>
+    <p class="action-text">@Model.BestActionNow</p>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="@Model.BestActionUrl" class="btn-parent-white">
+            <i class="fas fa-arrow-left"></i>
+            ساعد ابني اليوم
+        </a>
+        <a asp-area="Parents" asp-controller="SmartPractice" asp-action="Create"
+           asp-route-studentId="@Model.SelectedStudentId" class="btn-parent-white">
+            <i class="fas fa-brain"></i>
+            تدريب ذكي
+        </a>
+    </div>
+</div>
+
+<!-- ====== بطاقات الإحصاء ====== -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+        <div class="stat-card @(insight.StatusColor == "success" ? "success" : insight.StatusColor == "warning" ? "warning" : "danger")">
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <i class="fas fa-circle-check" style="color:var(--parent-@(insight.StatusColor == "success" ? "success" : insight.StatusColor == "warning" ? "warning" : "danger"));"></i>
+                <span style="font-size:11px;color:#7a8ba0;font-weight:600;">حالة الطالب</span>
+            </div>
+            <div class="stat-value" style="font-size:18px;">@insight.OverallStatus</div>
+            <div class="stat-label">@insight.StudentName</div>
+        </div>
+    </div>
+
+    <div class="col-6 col-lg-3">
+        <div class="stat-card @(insight.CommitmentPercent >= 75 ? "success" : insight.CommitmentPercent >= 50 ? "warning" : "danger")">
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <i class="fas fa-tasks" style="color:var(--parent-accent);"></i>
+                <span style="font-size:11px;color:#7a8ba0;font-weight:600;">الالتزام</span>
+            </div>
+            <div class="stat-value">@insight.CommitmentPercent%</div>
+            <div class="progress-parent mt-1">
+                <div class="fill @(insight.CommitmentPercent >= 75 ? "success" : insight.CommitmentPercent >= 50 ? "warning" : "danger")"
+                     style="width:@insight.CommitmentPercent%"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-6 col-lg-3">
+        <div class="stat-card">
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <i class="fas @insight.TrendIcon @insight.TrendColor"></i>
+                <span style="font-size:11px;color:#7a8ba0;font-weight:600;">اتجاه الأداء</span>
+            </div>
+            <div class="stat-value" style="font-size:18px;">@insight.LearningTrend</div>
+            <div class="stat-label">مقارنة بالفترة السابقة</div>
+        </div>
+    </div>
+
+    <div class="col-6 col-lg-3">
+        <div class="stat-card @(Model.UnreadNotificationCount > 0 ? "warning" : "")">
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <i class="fas fa-bell" style="color:var(--parent-warning);"></i>
+                <span style="font-size:11px;color:#7a8ba0;font-weight:600;">إشعارات</span>
+            </div>
+            <div class="stat-value">@Model.UnreadNotificationCount</div>
+            <div class="stat-label">غير مقروءة</div>
+        </div>
+    </div>
+</div>
+
+<!-- ====== الشبكة الرئيسية ====== -->
+<div class="row g-3">
+    <!-- نقاط تحتاج متابعة -->
+    @if (!string.IsNullOrEmpty(insight.SafeWeaknessSummary))
+    {
+        <div class="col-12 col-lg-6">
+            <div class="parent-card h-100">
+                <div class="section-header">
+                    <div class="section-icon"><i class="fas fa-search"></i></div>
+                    <h2>ما يحتاج متابعة</h2>
+                </div>
+                <div style="background:#fef9e7;border-radius:10px;padding:14px 16px;border-right:3px solid var(--parent-warning);">
+                    <p style="margin:0;font-size:14px;color:#7a5c00;">@insight.SafeWeaknessSummary</p>
+                </div>
+                <div class="mt-3">
+                    <a asp-area="Parents" asp-controller="SmartPractice" asp-action="Create"
+                       asp-route-studentId="@Model.SelectedStudentId"
+                       class="btn-parent-primary" style="font-size:13px;">
+                        <i class="fas fa-brain"></i>
+                        ابدأ تدريباً مخصصاً
+                    </a>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- خطة المعهد -->
+    @if (Model.HasInstitutePlan)
+    {
+        <div class="col-12 col-lg-6">
+            <div class="parent-card h-100">
+                <div class="section-header">
+                    <div class="section-icon"><i class="fas fa-clipboard-list"></i></div>
+                    <h2>خطة المعهد المعتمدة</h2>
+                </div>
+                <p style="font-size:13px;color:#5a6a7e;margin:0 0 12px;">
+                    @Model.InstitutePlanSummary
+                </p>
+                <div class="mb-2">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span style="font-size:12px;color:#7a8ba0;">نسبة الإنجاز</span>
+                        <span style="font-size:12px;font-weight:700;color:var(--parent-primary);">@Model.InstitutePlanProgress%</span>
+                    </div>
+                    <div class="progress-parent">
+                        <div class="fill success" style="width:@Model.InstitutePlanProgress%"></div>
+                    </div>
+                </div>
+                <a asp-area="Parents" asp-controller="InstitutePlanFollowUp" asp-action="Index"
+                   asp-route-studentId="@Model.SelectedStudentId"
+                   class="btn-parent-primary mt-2" style="font-size:13px;">
+                    <i class="fas fa-eye"></i>
+                    عرض التفاصيل
+                </a>
+            </div>
+        </div>
+    }
+
+    <!-- آخر الإشعارات -->
+    @if (Model.RecentNotifications.Any())
+    {
+        <div class="col-12">
+            <div class="parent-card">
+                <div class="section-header">
+                    <div class="section-icon"><i class="fas fa-bell"></i></div>
+                    <h2>آخر الإشعارات</h2>
+                </div>
+                <div class="d-flex flex-column gap-2">
+                    @foreach (var notif in Model.RecentNotifications)
+                    {
+                        <div class="d-flex align-items-start gap-3 p-2 rounded-3"
+                             style="background:@(notif.IsRead ? "transparent" : "#f0f7ff");border:1px solid @(notif.IsRead ? "#e8edf3" : "#c6dff8");">
+                            <div style="width:32px;height:32px;background:var(--parent-accent-light);border-radius:8px;display:grid;place-items:center;flex-shrink:0;">
+                                <i class="fas @notif.IconClass" style="color:var(--parent-accent);font-size:13px;"></i>
+                            </div>
+                            <div class="flex-1">
+                                <p style="margin:0;font-size:13.5px;color:#1a2332;">@notif.Message</p>
+                                <span style="font-size:11px;color:#9aa8b8;">@notif.TimeAgo</span>
+                            </div>
+                            @if (!notif.IsRead)
+                            {
+                                <span class="status-pill primary" style="font-size:10px;flex-shrink:0;">جديد</span>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="mt-3">
+                    <a asp-area="Parents" asp-controller="Notifications" asp-action="Index"
+                       style="font-size:13px;color:var(--parent-accent);text-decoration:none;font-weight:600;">
+                        عرض كل الإشعارات <i class="fas fa-arrow-left me-1"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- روابط سريعة -->
+    <div class="col-12">
+        <div class="parent-card">
+            <div class="section-header">
+                <div class="section-icon"><i class="fas fa-bolt"></i></div>
+                <h2>وصول سريع</h2>
+            </div>
+            <div class="row g-2">
+                @{
+                    var sid = Model.SelectedStudentId;
+                }
+                <div class="col-6 col-md-3">
+                    <a asp-area="Parents" asp-controller="HomeworkFollowUp" asp-action="Index"
+                       asp-route-studentId="@sid"
+                       class="d-flex flex-column align-items-center gap-2 p-3 rounded-3 text-decoration-none"
+                       style="background:#f0f7ff;border:1.5px solid #c6dff8;transition:all .2s;"
+                       onmouseover="this.style.background='#d6ebff'" onmouseout="this.style.background='#f0f7ff'">
+                        <i class="fas fa-book-open fa-lg" style="color:var(--parent-accent);"></i>
+                        <span style="font-size:12.5px;font-weight:600;color:var(--parent-primary);">الواجبات</span>
+                    </a>
+                </div>
+                <div class="col-6 col-md-3">
+                    <a asp-area="Parents" asp-controller="ExamFollowUp" asp-action="Index"
+                       asp-route-studentId="@sid"
+                       class="d-flex flex-column align-items-center gap-2 p-3 rounded-3 text-decoration-none"
+                       style="background:#f0f9f4;border:1.5px solid #b7e5cc;transition:all .2s;"
+                       onmouseover="this.style.background='#d6f0e2'" onmouseout="this.style.background='#f0f9f4'">
+                        <i class="fas fa-file-alt fa-lg" style="color:var(--parent-success);"></i>
+                        <span style="font-size:12.5px;font-weight:600;color:var(--parent-primary);">الاختبارات</span>
+                    </a>
+                </div>
+                <div class="col-6 col-md-3">
+                    <a asp-area="Parents" asp-controller="Reports" asp-action="Weekly"
+                       asp-route-studentId="@sid"
+                       class="d-flex flex-column align-items-center gap-2 p-3 rounded-3 text-decoration-none"
+                       style="background:#fffaf0;border:1.5px solid #f5d98c;transition:all .2s;"
+                       onmouseover="this.style.background='#fff0c6'" onmouseout="this.style.background='#fffaf0'">
+                        <i class="fas fa-chart-bar fa-lg" style="color:var(--parent-warning);"></i>
+                        <span style="font-size:12.5px;font-weight:600;color:var(--parent-primary);">التقرير الأسبوعي</span>
+                    </a>
+                </div>
+                <div class="col-6 col-md-3">
+                    <a asp-area="Parents" asp-controller="Messages" asp-action="Create"
+                       asp-route-studentId="@sid"
+                       class="d-flex flex-column align-items-center gap-2 p-3 rounded-3 text-decoration-none"
+                       style="background:#fdf0f0;border:1.5px solid #f5b8b8;transition:all .2s;"
+                       onmouseover="this.style.background='#fad6d6'" onmouseout="this.style.background='#fdf0f0'">
+                        <i class="fas fa-paper-plane fa-lg" style="color:var(--parent-danger);"></i>
+                        <span style="font-size:12.5px;font-weight:600;color:var(--parent-primary);">راسل المعهد</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,159 @@
+﻿@model QdratNew.ViewModels.ConfirmHomeworkViewModel
+
+@{
+    ViewData["Title"] = "تأكيد توليد الواجبات";
+    var totalManual = Model.Lessons.Where(l => (l.IsManualSelection ?? false)).Sum(l => l.ManuallySelectedQuestionsCount);
+    var totalAuto = Model.Lessons.Where(l => !(l.IsManualSelection ?? false)).Sum(l => l.QuestionsToUse);
+    var totalCount = totalManual + totalAuto;
+}
+
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-warning text-center fw-bold">
+        <i class="fas fa-exclamation-triangle"></i> @Html.Raw(TempData["Error"]) <br />
+        <span class="text-muted small">
+            🧠 ملاحظة: لتوفير عدد كافٍ من الأسئلة، يُفضل مراجعة عدد المؤشرات المختارة
+            أو التأكد من أن كل مؤشر يحتوي على أسئلة مكتملة ومُراجعة.
+        </span>
+    </div>
+}
+
+@if (TempData["AllowForceGenerate"] != null)
+{
+    <form asp-action="ConfirmHomework" method="post" class="text-center mt-2">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="ForceGenerateAnyway" value="true" />
+        <input type="hidden" name="BatchId" value="@Model.BatchId" />
+        <input type="hidden" name="CurriculumId" value="@Model.CurriculumId" />
+        @for (int i = 0; i < Model.Lessons.Count; i++)
+        {
+            <input type="hidden" name="Lessons[@i].LessonId" value="@Model.Lessons[i].LessonId" />
+            <input type="hidden" name="Lessons[@i].IsManualSelection" value="@Model.Lessons[i].IsManualSelection.ToString().ToLower()" />
+            <input type="hidden" name="Lessons[@i].ManuallySelectedQuestionsCount" value="@Model.Lessons[i].ManuallySelectedQuestionsCount" />
+            <input type="hidden" name="Lessons[@i].QuestionsToUse" value="@Model.Lessons[i].QuestionsToUse" />
+        }
+
+        <button type="submit" class="btn btn-warning shadow mt-3">
+            <i class="fas fa-check-circle"></i> اعتماد العدد المتاح على مسؤوليتي
+        </button>
+    </form>
+}
+
+<div class="alert alert-info text-center fw-bold">
+    <i class="fas fa-info-circle"></i> سيتم إرسال إجمالي
+    <span class="text-primary">@totalCount</span> سؤالًا للطلاب:
+    <span class="badge bg-dark">يدوي: @totalManual</span>
+    <span class="badge bg-success">تلقائي: @totalAuto</span>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success text-center fw-bold">
+        @TempData["Success"]
+    </div>
+}
+
+<div class="text-center">
+    <a href="@Url.Action("SelectLessons", "BatchLessonCompletions", new { batchId = Model.BatchId })"
+       class="btn btn-outline-warning">
+        <i class="fas fa-edit"></i> تعديل قائمة المؤشرات
+    </a>
+</div>
+
+<div class="container mt-4" dir="rtl">
+    <h2 class="text-center text-primary mb-4"><i class="fas fa-check-circle"></i> تأكيد توليد الواجبات للدفعة: @Model.BatchName</h2>
+    <div class="mb-3">
+    <label class="form-label fw-bold">عنوان تسجيل المؤشرات:</label>
+    <input type="text" class="form-control" asp-for="CompletionTitle" readonly />
+</div>
+
+
+
+
+    <form asp-action="ConfirmHomework" method="post">
+        @Html.AntiForgeryToken()
+
+        <input type="hidden" asp-for="BatchId" />
+        <input type="hidden" asp-for="CurriculumId" />
+        <input type="hidden" asp-for="BatchName" />
+        <input type="hidden" asp-for="CompletionTitle" />
+
+        <div class="row g-4">
+            @for (int i = 0; i < Model.Lessons.Count; i++)
+            {
+                var lesson = Model.Lessons[i];
+                var isManual = lesson.IsManualSelection ?? false;
+                var manualCount = lesson.ManuallySelectedQuestionsCount;
+                var cardClass = isManual ? "border border-dark shadow" : "border border-secondary shadow-sm";
+                var totalToSend = isManual ? manualCount : lesson.QuestionsToUse;
+
+                <div class="col-md-4">
+                    <div class="card h-100 @cardClass">
+                        <div class="card-header bg-light fw-bold d-flex justify-content-between">
+                            <span><i class="fas fa-book-open text-primary"></i> @lesson.LessonTitle</span>
+                            <span class="badge @(isManual ? "bg-dark" : "bg-success")">
+                                @(isManual ? $"يدوي: {manualCount} سؤال" : $"تلقائي: {lesson.QuestionsToUse} سؤال")
+                            </span>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>إجمالي الأسئلة:</strong> @lesson.TotalQuestions</p>
+                            <p class="text-success"><strong>تمت مراجعتها:</strong> @lesson.ReviewedQuestions</p>
+                            <p class="text-danger"><strong>غير مراجعة:</strong> @(lesson.TotalQuestions - lesson.ReviewedQuestions)</p>
+
+                            <div class="mb-2">
+                                <label class="form-label">عدد الأسئلة المطلوب إرسالها:</label>
+                                <input type="number" class="form-control text-center fw-bold"
+                                       min="0" max="@lesson.ReviewedQuestions"
+                                       name="Lessons[@i].QuestionsToUse"
+                                       value="@totalToSend" />
+                            </div>
+
+                            <!-- ✅ Hidden fields -->
+                            <input type="hidden" name="Lessons[@i].LessonId" value="@lesson.LessonId" />
+                            <input type="hidden" name="Lessons[@i].LessonTitle" value="@lesson.LessonTitle" />
+                            <input type="hidden" name="Lessons[@i].TotalQuestions" value="@lesson.TotalQuestions" />
+                            <input type="hidden" name="Lessons[@i].ReviewedQuestions" value="@lesson.ReviewedQuestions" />
+                            <input type="hidden" name="Lessons[@i].SectionId" value="@lesson.SectionId" />
+                            <input type="hidden" name="Lessons[@i].IsManualSelection" value="@lesson.IsManualSelection.ToString().ToLower()" />
+                            <input type="hidden" name="Lessons[@i].ManuallySelectedQuestionsCount" value="@lesson.ManuallySelectedQuestionsCount" />
+
+                            <div class="d-flex flex-wrap justify-content-between mt-3 gap-2">
+                                <a class="btn btn-sm btn-outline-primary w-100"
+                                   href="@Url.Action("ByLesson", "QuestionReview", new { lessonId = lesson.LessonId })" target="_blank">
+                                    <i class="fas fa-eye"></i> راجع الأسئلة
+                                </a>
+
+                                <a class="btn btn-sm btn-outline-secondary w-100"
+                                   href="@Url.Action("ReviewByLesson", "QuestionReview", new {
+                                       lessonId = lesson.LessonId,
+                                       sectionId = lesson.SectionId,
+                                       curriculumId = Model.CurriculumId,
+                                       batchId = Model.BatchId
+                                   })">
+                                    <i class="fas fa-tasks"></i> اختيار يدوي
+                                </a>
+
+                                <a class="btn btn-sm btn-danger w-100"
+                                   target="_blank"
+                                   asp-area="Admin"
+                                   asp-controller="Questions"
+                                   asp-action="Create"
+                                   asp-route-curriculumId="@Model.CurriculumId"
+                                   asp-route-sectionId="@lesson.SectionId"
+                                   asp-route-lessonId="@lesson.LessonId">
+                                    <i class="fas fa-plus-circle"></i> أضف سؤال
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="text-center mt-4">
+            <button type="submit" class="btn btn-success btn-lg px-5 shadow">
+                <i class="fas fa-check-circle"></i> توليد الواجبات الآن
+            </button>
+        </div>
+    </form>
+</div>

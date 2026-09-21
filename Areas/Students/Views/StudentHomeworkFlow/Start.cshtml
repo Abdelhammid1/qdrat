@@ -1,0 +1,306 @@
+@model QdratNew.ViewModels.Homework.HomeworkSolveViewModel
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+@{
+    ViewData["Title"] = "حل الواجب";
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="google" content="notranslate" />
+    <title>حل الواجب</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet" />
+    <link href="~/css/site.css" rel="stylesheet" />
+    
+    <style>
+        @@font-face {
+            font-family: 'ZA-Roots';
+            src: url('/fonts/ZA-roots.woff2') format('woff2'),
+                 url('/fonts/ZA-roots.woff') format('woff'),
+                 url('/fonts/ZA-roots.TTF') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+            font-display: swap;
+        }
+        @@font-face {
+            font-family: 'ZA-roots';
+            src: url('/fonts/ZA-roots.woff2') format('woff2'),
+                 url('/fonts/ZA-roots.woff') format('woff'),
+                 url('/fonts/ZA-roots.TTF') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+            font-display: swap;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 0; background: #f1f5f9; font-family: 'Cairo', 'Tajawal', system-ui, sans-serif; }
+        .hw-error-bar { background: #fee2e2; color: #991b1b; padding: 12px 20px; text-align: center; font-weight: 700; font-size: .95rem; }
+        @@keyframes hwSpinBtn { to { transform: rotate(360deg); } }
+        .btn-spinner {
+            display: inline-block; width: 13px; height: 13px;
+            border: 2px solid currentColor; border-top-color: transparent;
+            border-radius: 50%; animation: hwSpinBtn .65s linear infinite;
+            vertical-align: middle; margin-inline-end: 6px;
+        }
+    </style>
+</head>
+<body>
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="hw-error-bar">@TempData["ErrorMessage"]</div>
+}
+
+<div id="question-container">
+    @await Html.PartialAsync("_SolveHomeworkQuestionPartial", Model)
+</div>
+
+@await Html.PartialAsync("_TranslationGuardOverlay")
+<script src="~/js/translation-guard.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        TranslationGuard.init({
+            attemptType: 1,
+            attemptEntityId: @Model.HomeworkSetId,
+            antiForgeryToken: '@Antiforgery.GetAndStoreTokens(Context).RequestToken'
+        });
+    });
+</script>
+
+<script>
+    /* =========================================
+       GLOBAL STATE
+    ========================================= */
+    // إشارة للـ partial بأن Start.cshtml يتولى إدارة التايمر
+    window.HWManager = {};
+
+    let HomeworkState = window.HomeworkState = {
+        questionStartTime: Date.now(),
+        isSubmitting: false,
+        isFinalSubmitting: false
+    };
+
+    let _timerInterval = null;
+
+    function getTimeTakenSeconds() {
+        return Math.floor((Date.now() - HomeworkState.questionStartTime) / 1000);
+    }
+
+    function resetQuestionTimer() {
+        HomeworkState.questionStartTime = window.HomeworkState.questionStartTime = Date.now();
+    }
+
+    /* =========================================
+       TIMER — يُشغَّل من هنا بعد كل inject
+    ========================================= */
+    function startQuestionTimer() {
+        if (_timerInterval) clearInterval(_timerInterval);
+
+        const timerEl   = document.getElementById('hw-timer-val');
+        const timerDisp = document.getElementById('hw-timer-display');
+        const ring      = document.getElementById('hw-timer-ring');
+
+        if (!timerEl) return;
+
+        const startMs = HomeworkState.questionStartTime;
+
+        function tick() {
+            const elapsed = Math.floor((Date.now() - startMs) / 1000);
+            const m = Math.floor(elapsed / 60).toString().padStart(2, '0');
+            const s = (elapsed % 60).toString().padStart(2, '0');
+            timerEl.textContent = m + ':' + s;
+
+            if (ring) {
+                const pct = Math.min(elapsed / 120, 1);
+                ring.style.strokeDashoffset = (125.66 * (1 - pct)).toFixed(2);
+            }
+
+            if (elapsed > 120 && timerDisp) timerDisp.classList.add('warning');
+        }
+
+        tick();
+        _timerInterval = setInterval(tick, 1000);
+    }
+
+    /* =========================================
+       DOM READY
+    ========================================= */
+    document.addEventListener("DOMContentLoaded", () => {
+
+        const container = document.getElementById("question-container");
+
+        // تشغيل التايمر على أول تحميل
+        startQuestionTimer();
+
+        /* ===============================
+           AUTO SAVE ON ANSWER CHANGE
+        =============================== */
+        document.body.addEventListener("change", async (e) => {
+            if (!e.target.matches('input[name="SelectedOption"]')) return;
+
+            // تحديث بصري فوري — قبل أي await
+            document.querySelectorAll('#hw-options-list .hw-option').forEach(opt => {
+                opt.classList.remove('selected');
+                opt.setAttribute('aria-checked', 'false');
+            });
+            const selectedLabel = e.target.closest('.hw-option');
+            if (selectedLabel) {
+                selectedLabel.classList.add('selected');
+                selectedLabel.setAttribute('aria-checked', 'true');
+            }
+
+            const form = document.getElementById("homework-question-form");
+            if (!form) return;
+
+            const fd = new FormData(form);
+            fd.append("nav", "stay");
+            fd.append("keepReview", "1");
+            fd.append("timeTakenSeconds", getTimeTakenSeconds());
+
+            try {
+                await fetch(`/Students/StudentHomeworkFlow/SubmitAnswerFetch?id=${form.dataset.homeworkId}&q=${form.dataset.currentQuestionId}`, {
+                    method: "POST",
+                    body: fd,
+                    credentials: "include"
+                });
+            } catch {
+                Swal.fire("⚠️", "ضعف الاتصال أثناء حفظ الإجابة.", "warning");
+            }
+        });
+
+        /* ===============================
+           NAVIGATION HANDLER
+        =============================== */
+        document.body.addEventListener("click", async (e) => {
+
+            const btn = e.target.closest(".homework-nav-button, .review-jump");
+            if (!btn) return;
+
+            e.preventDefault();
+
+            const form = document.getElementById("homework-question-form");
+            if (!form) return;
+
+            if (HomeworkState.isSubmitting) return;
+            HomeworkState.isSubmitting = true;
+
+            document.querySelectorAll(".homework-nav-button, .review-jump").forEach(b => {
+                b.disabled = true;
+                b.style.opacity = "0.55";
+            });
+            const originalText = btn.innerHTML;
+            btn.innerHTML = `<span class="btn-spinner"></span>${originalText}`;
+
+            const fd = new FormData(form);
+            fd.append("timeTakenSeconds", getTimeTakenSeconds());
+
+            if (btn.classList.contains("review-jump")) {
+                fd.append("nav", "goto");
+                fd.append("target", btn.dataset.target);
+                fd.append("keepReview", "1");
+            } else {
+                fd.append("nav", btn.dataset.nav);
+                if (btn.dataset.nav === "showReview")
+                    fd.append("keepReview", "1");
+            }
+
+            try {
+                const res = await fetch(
+                    `/Students/StudentHomeworkFlow/SubmitAnswerFetch?id=${form.dataset.homeworkId}&q=${form.dataset.currentQuestionId}`,
+                    { method: "POST", body: fd, credentials: "include" }
+                );
+
+                if (!res.ok) throw new Error();
+
+                const html = await res.text();
+                resetQuestionTimer();
+                container.innerHTML = html;
+                startQuestionTimer();
+
+                window.scrollTo({ top: 0, behavior: "smooth" });
+
+            } catch {
+                document.querySelectorAll(".homework-nav-button, .review-jump").forEach(b => {
+                    b.disabled = false;
+                    b.style.opacity = "";
+                });
+                btn.innerHTML = originalText;
+                Swal.fire("⚠️", "فشل تحميل السؤال، يرجى المحاولة مرة أخرى.", "warning");
+            } finally {
+                HomeworkState.isSubmitting = false;
+            }
+        });
+
+        /* ===============================
+           FINAL SUBMIT
+        =============================== */
+        document.body.addEventListener("click", async (e) => {
+
+            const btn = e.target.closest("#submitHomework");
+            if (!btn) return;
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (HomeworkState.isFinalSubmitting) return;
+            HomeworkState.isFinalSubmitting = true;
+
+            const form = document.querySelector("form[data-homework-id]");
+            if (!form) return;
+
+            try {
+                const res = await fetch(
+                    `/Students/StudentHomeworkFlow/SubmitFinal?id=${form.dataset.homeworkId}`,
+                    { method: "POST", headers: { "Accept": "application/json" }, credentials: "include" }
+                );
+
+                const result = await res.json();
+
+                if (result.success === "incomplete") {
+                    HomeworkState.isFinalSubmitting = false;
+
+                    Swal.fire({
+                        icon: "warning",
+                        title: "أسئلة غير مُجابة",
+                        html: `لم تُجب على <strong>${result.notAnswered}</strong> سؤال.`,
+                        showCancelButton: true,
+                        confirmButtonText: "إنهاء وتسليم",
+                        cancelButtonText: "العودة"
+                    }).then(async (r) => {
+                        if (!r.isConfirmed) return;
+
+                        const force = await fetch(
+                            `/Students/StudentHomeworkFlow/SubmitFinal?id=${form.dataset.homeworkId}&forceSubmit=true`,
+                            { method: "POST", headers: { "Accept": "application/json" }, credentials: "include" }
+                        );
+
+                        const final = await force.json();
+                        if (final.success) location.href = final.redirectUrl;
+                    });
+
+                    return;
+                }
+
+                if (result.success === true) {
+                    Swal.fire("✅", "تم تسليم الواجب بنجاح", "success")
+                        .then(() => location.href = result.redirectUrl);
+                    return;
+                }
+
+                throw new Error();
+
+            } catch {
+                HomeworkState.isFinalSubmitting = false;
+                Swal.fire("⚠️", "فشل تسليم الواجب.", "warning");
+            }
+        });
+
+    });
+</script>
+
+</body>
+</html>

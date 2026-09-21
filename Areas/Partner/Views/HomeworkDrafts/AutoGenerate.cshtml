@@ -1,0 +1,253 @@
+﻿@model QdratNew.ViewModels.Partner.Homework.HomeworkAutoGenerateVM
+
+@{
+    ViewData["Title"] = "توليد واجب تلقائي";
+}
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="alert alert-danger">
+        <strong>تعذّر إنشاء الواجب</strong>
+        <ul class="mb-0">
+            @foreach (var error in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+            {
+                <li>@error.ErrorMessage</li>
+            }
+        </ul>
+    </div>
+}
+
+<div class="container mt-4" dir="rtl">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-bold mb-0">⚙️ توليد واجب تلقائي</h3>
+        <a asp-action="Create" class="btn btn-outline-secondary">رجوع</a>
+    </div>
+
+    <form asp-action="AutoGenerate" method="post"
+          class="card shadow-sm border-0 rounded-4 p-4">
+
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="CourseId" />
+
+        <!-- عنوان الواجب -->
+        <div class="mb-4">
+            <label class="form-label fw-bold">عنوان الواجب</label>
+            <input asp-for="Title" class="form-control" />
+        </div>
+
+        <!-- اختيار المنهج -->
+        <div class="mb-4">
+            <label class="form-label fw-bold">المنهج</label>
+            <select id="curriculumSelect" class="form-select">
+                <option value="">-- اختر المنهج --</option>
+            </select>
+        </div>
+
+        <!-- اختيار المحور -->
+        <div class="mb-4">
+            <label class="form-label fw-bold">المحور</label>
+            <select id="sectionSelect" class="form-select">
+                <option value="">-- اختر المحور --</option>
+            </select>
+        </div>
+
+        <!-- المؤشرات -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <h6 class="fw-bold mb-2">المؤشرات المتاحة (فعّالة)</h6>
+                <ul id="availableLessons" class="list-group min-vh-25"></ul>
+                <div id="noLessonsMsg" class="text-muted small mt-2 d-none">
+                    لا توجد مؤشرات فعالة لهذا المحور.
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <h6 class="fw-bold mb-2">المؤشرات المختارة</h6>
+                <ul id="selectedLessons" class="list-group min-vh-25"></ul>
+            </div>
+        </div>
+
+        <!-- Hidden Inputs -->
+        <div id="selectedLessonsInputs"></div>
+
+        <!-- عدد الأسئلة -->
+        <div class="mb-4">
+            <label class="form-label fw-bold">عدد الأسئلة من كل مؤشر</label>
+            <input asp-for="QuestionsPerLesson"
+                   type="number"
+                   min="1"
+                  
+                   class="form-control" />
+        </div>
+
+        <!-- مصدر الأسئلة -->
+        <div class="mb-4">
+            <label class="form-label fw-bold">مصدر الأسئلة</label>
+
+            <div class="form-check">
+                <input asp-for="UsePlatformQuestionBank" class="form-check-input" />
+                <label class="form-check-label">بنك أسئلة المنصة</label>
+            </div>
+
+            <div class="form-check">
+                <input asp-for="UsePrivateQuestionBank" class="form-check-input" />
+                <label class="form-check-label">بنك أسئلة المدرسة</label>
+            </div>
+        </div>
+
+        <!-- أزرار -->
+        <div class="d-flex justify-content-end gap-2">
+            <button type="submit" class="btn btn-primary px-4">
+                ⚡ توليد الواجب
+            </button>
+            <a asp-action="Create" class="btn btn-outline-secondary px-4">
+                إلغاء
+            </a>
+        </div>
+
+    </form>
+</div>
+
+@section Scripts {
+    <script>
+
+        const courseId = @Model.CourseId;
+
+        // ===============================
+        // تحميل المناهج
+        // ===============================
+        document.addEventListener("DOMContentLoaded", async () => {
+
+            const curriculumSelect = document.getElementById("curriculumSelect");
+
+            const res = await fetch(`/Partner/HomeworkDrafts/GetCurriculums?courseId=${courseId}`);
+            const data = await res.json();
+
+            data.forEach(c => {
+                const opt = document.createElement("option");
+                opt.value = c.id;
+                opt.textContent = c.name;
+                curriculumSelect.appendChild(opt);
+            });
+        });
+
+        // ===============================
+        // تحميل المحاور
+        // ===============================
+        document.getElementById("curriculumSelect")
+            .addEventListener("change", async function () {
+
+                const curriculumId = this.value;
+                const sectionSelect = document.getElementById("sectionSelect");
+
+                sectionSelect.innerHTML = '<option value="">-- اختر المحور --</option>';
+
+                if (!curriculumId) return;
+
+                const res = await fetch(`/Partner/HomeworkDrafts/GetSections?curriculumId=${curriculumId}`);
+                const sections = await res.json();
+
+                sections.forEach(s => {
+                    const opt = document.createElement("option");
+                    opt.value = s.id;
+                    opt.textContent = s.name;
+                    sectionSelect.appendChild(opt);
+                });
+            });
+
+        // ===============================
+        // تحميل المؤشرات
+        // ===============================
+        document.getElementById("sectionSelect")
+         .addEventListener("change", async function () {
+
+             const sectionId = this.value;
+             const available = document.getElementById("availableLessons");
+             const noLessonsMsg = document.getElementById("noLessonsMsg");
+
+             available.innerHTML = '';
+             noLessonsMsg.classList.add("d-none");
+
+             if (!sectionId) return;
+
+             const res = await fetch(`/Partner/HomeworkDrafts/GetActiveLessons?sectionId=${sectionId}`);
+             const lessons = await res.json();
+
+             if (lessons.length === 0) {
+                 noLessonsMsg.classList.remove("d-none");
+                 return;
+             }
+
+             lessons.forEach(l => {
+                 // ✅ منع التكرار
+                 if (document.getElementById(`lesson_${l.id}`)) return;
+
+                 addLesson(l.id, l.title, available, true);
+             });
+         });
+
+
+        function addLesson(id, title, container, isAvailable) {
+
+            const li = document.createElement("li");
+            li.className = "list-group-item d-flex justify-content-between align-items-center";
+            li.dataset.id = id;
+
+            const span = document.createElement("span");
+            span.textContent = title;
+
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = isAvailable
+                ? "btn btn-sm btn-outline-primary"
+                : "btn btn-sm btn-outline-danger";
+
+            btn.textContent = isAvailable ? "➕" : "➖";
+            btn.onclick = () => toggleLesson(id, title, isAvailable);
+
+            li.appendChild(span);
+            li.appendChild(btn);
+            container.appendChild(li);
+        }
+
+        function toggleLesson(id, title, fromAvailable) {
+
+            const available = document.getElementById("availableLessons");
+            const selected = document.getElementById("selectedLessons");
+            const inputs = document.getElementById("selectedLessonsInputs");
+
+            if (fromAvailable) {
+
+                // إزالة من available
+                const item = available.querySelector(`li[data-id='${id}']`);
+                if (item) item.remove();
+
+                // إضافة إلى selected
+                addLesson(id, title, selected, false);
+
+                // إضافة hidden input
+                if (!document.getElementById(`lesson_${id}`)) {
+                    const input = document.createElement("input");
+                    input.type = "hidden";
+                    input.name = "SelectedLessonIds";
+                    input.value = id;
+                    input.id = `lesson_${id}`;
+                    inputs.appendChild(input);
+                }
+
+            } else {
+
+                // إزالة من selected فقط
+                const item = selected.querySelector(`li[data-id='${id}']`);
+                if (item) item.remove();
+
+                // إزالة hidden input
+                document.getElementById(`lesson_${id}`)?.remove();
+
+                // ❌ لا نعيده إلى available
+                // لأن available مرتبط بمحور مؤقت
+            }
+        }
+
+    </script>
+}

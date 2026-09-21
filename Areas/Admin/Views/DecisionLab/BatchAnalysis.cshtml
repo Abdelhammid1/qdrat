@@ -1,0 +1,465 @@
+@model QdratNew.ViewModels.Admin.DecisionLab.DecisionLabBatchAnalysisViewModel
+@{
+    ViewData["Title"] = $"تحليل الدفعة — {Model.BatchName}";
+
+    string RiskClass(string level) => (level ?? "").ToLower() switch
+    {
+        "critical" or "high" or "حرج" or "عالي" => "is-critical",
+        "elevated" or "medium" or "متوسط" or "مرتفع" => "is-elevated",
+        "moderate" or "low" or "منخفض" => "is-moderate",
+        _ => "is-stable"
+    };
+
+    string RiskLabel(string level) => (level ?? "").ToLower() switch
+    {
+        "critical" or "حرج" => "حرج",
+        "high" or "عالي" => "عالي",
+        "elevated" or "مرتفع" => "مرتفع",
+        "medium" or "متوسط" => "متوسط",
+        "moderate" => "متوسط",
+        "low" or "منخفض" => "منخفض",
+        "stable" => "مستقر",
+        _ => string.IsNullOrWhiteSpace(level) ? "غير محدد" : level
+    };
+
+    string PriorityClass(string priority) => (priority ?? "").ToLower() switch
+    {
+        "critical" or "high" or "عاجل" or "عالي" => "is-priority-high",
+        "medium" or "متوسط" => "is-priority-medium",
+        _ => "is-priority-low"
+    };
+}
+
+<link rel="stylesheet" href="~/css/admin-decisionlab.css" asp-append-version="true" />
+
+<div class="dl-ba-page" dir="rtl">
+
+    <header class="dl-ba-header">
+        <nav class="dl-ba-breadcrumb">
+            <a asp-area="Admin" asp-controller="DecisionLab" asp-action="Index">
+                <i class="fas fa-flask"></i><span>مختبر القرار</span>
+            </a>
+            <i class="fas fa-chevron-left dl-ba-breadcrumb__sep"></i>
+            <span>تحليل دفعة</span>
+        </nav>
+
+        <div class="dl-ba-header__main">
+            <div class="dl-ba-header__title">
+                <span class="dl-ba-eyebrow">DecisionLab Analysis</span>
+                <h1>@Model.BatchName</h1>
+                <p class="dl-ba-header__sub">
+                    <i class="fas fa-book"></i><span>@Model.CourseName</span>
+                    @if (!string.IsNullOrWhiteSpace(Model.CurriculumTitle))
+                    {
+                        <span class="dl-ba-header__divider">•</span>
+                        <i class="fas fa-layer-group"></i><span>@Model.CurriculumTitle</span>
+                    }
+                </p>
+            </div>
+
+            <div class="dl-ba-header__actions">
+                <a class="dl-ba-btn dl-ba-btn--ghost"
+                   asp-area="Admin" asp-controller="DecisionLab" asp-action="Index"
+                   asp-route-batchId="@Model.BatchId" asp-route-curriculumId="@Model.CurriculumId">
+                    <i class="fas fa-arrow-right"></i><span>رجوع</span>
+                </a>
+                <button type="button" class="dl-ba-btn dl-ba-btn--ghost" onclick="window.print()">
+                    <i class="fas fa-print"></i><span>طباعة</span>
+                </button>
+                <a class="dl-ba-btn dl-ba-btn--ghost"
+                   asp-area="Admin" asp-controller="Analytics" asp-action="BatchPerformanceDetails"
+                   asp-route-batchId="@Model.BatchId" asp-route-curriculumId="@Model.CurriculumId">
+                    <i class="fas fa-chart-line"></i><span>فتح تحليل Analytics</span>
+                </a>
+                <a class="dl-ba-btn dl-ba-btn--primary"
+                   asp-area="Admin" asp-controller="DecisionLab" asp-action="RecommendationPreview"
+                   asp-route-batchId="@Model.BatchId" asp-route-curriculumId="@Model.CurriculumId">
+                    <i class="fas fa-wand-magic-sparkles"></i><span>معاينة التوصية الكاملة</span>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <section class="dl-ba-hero @RiskClass(Model.RiskLevel)">
+        <div class="dl-ba-hero__gauge-wrap">
+            <div class="dl-ba-gauge">
+                <canvas id="dlBaRiskGauge" width="220" height="220"
+                        data-score="@Model.RiskScore" data-level="@Model.RiskLevel"></canvas>
+                <div class="dl-ba-gauge__center">
+                    <span class="dl-ba-gauge__value">@Model.RiskScore.ToString("0.#")<small>%</small></span>
+                    <span class="dl-ba-gauge__label">مؤشر الخطر</span>
+                </div>
+            </div>
+            <span class="dl-ba-pill dl-ba-pill--lg @RiskClass(Model.RiskLevel)">
+                <i class="fas fa-circle-exclamation"></i>@RiskLabel(Model.RiskLevel)
+            </span>
+        </div>
+
+        <div class="dl-ba-hero__decision">
+            <span class="dl-ba-eyebrow">قرار النظام</span>
+            <h2 class="dl-ba-hero__msg">@Model.DecisionMessage</h2>
+            @if (!string.IsNullOrWhiteSpace(Model.DecisionSummary)
+                 && !string.Equals(Model.DecisionSummary, Model.DecisionMessage, StringComparison.OrdinalIgnoreCase))
+            {
+                <p class="dl-ba-hero__summary">@Model.DecisionSummary</p>
+            }
+
+            <div class="dl-ba-hero__quick">
+                <div class="dl-ba-quick">
+                    <i class="fas fa-users"></i>
+                    <div><strong>@Model.ActiveStudentsCount</strong><span>طالب نشط</span></div>
+                </div>
+                <div class="dl-ba-quick">
+                    <i class="fas fa-check-double"></i>
+                    <div><strong>@Model.CompletedLessonsCount</strong><span>درس مكتمل</span></div>
+                </div>
+                <div class="dl-ba-quick">
+                    <i class="fas fa-circle-question"></i>
+                    <div><strong>@Model.TotalQuestionAttempts.ToString("N0")</strong><span>محاولة محللة</span></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="dl-ba-kpis">
+        <article class="dl-ba-kpi">
+            <div class="dl-ba-kpi__icon" data-tone="blue"><i class="fas fa-calendar-check"></i></div>
+            <div class="dl-ba-kpi__body">
+                <span class="dl-ba-kpi__label">نسبة الحضور</span>
+                <strong class="dl-ba-kpi__value">@Model.AttendancePercent.ToString("0.#")<small>%</small></strong>
+                <div class="dl-ba-kpi__bar"><span style="width:@(Math.Min(100, Math.Max(0, Model.AttendancePercent)).ToString("0.#"))%"></span></div>
+            </div>
+        </article>
+        <article class="dl-ba-kpi">
+            <div class="dl-ba-kpi__icon" data-tone="violet"><i class="fas fa-file-pen"></i></div>
+            <div class="dl-ba-kpi__body">
+                <span class="dl-ba-kpi__label">تسليم الواجبات</span>
+                <strong class="dl-ba-kpi__value">@Model.HomeworkSubmissionPercent.ToString("0.#")<small>%</small></strong>
+                <span class="dl-ba-kpi__sub">@Model.SentHomeworkSetsCount واجب • متوسط @Model.AverageHomeworkScore.ToString("0.#")</span>
+            </div>
+        </article>
+        <article class="dl-ba-kpi">
+            <div class="dl-ba-kpi__icon" data-tone="teal"><i class="fas fa-clipboard-question"></i></div>
+            <div class="dl-ba-kpi__body">
+                <span class="dl-ba-kpi__label">مشاركة الاختبارات</span>
+                <strong class="dl-ba-kpi__value">@Model.ExamParticipationPercent.ToString("0.#")<small>%</small></strong>
+                <span class="dl-ba-kpi__sub">@Model.SentExamsCount اختبار • متوسط @Model.AverageExamScore.ToString("0.#")</span>
+            </div>
+        </article>
+        <article class="dl-ba-kpi">
+            <div class="dl-ba-kpi__icon" data-tone="amber"><i class="fas fa-triangle-exclamation"></i></div>
+            <div class="dl-ba-kpi__body">
+                <span class="dl-ba-kpi__label">دروس ضعيفة</span>
+                <strong class="dl-ba-kpi__value">@Model.WeakLessonsCount</strong>
+                <span class="dl-ba-kpi__sub">تحتاج مراجعة فورية</span>
+            </div>
+        </article>
+        <article class="dl-ba-kpi">
+            <div class="dl-ba-kpi__icon" data-tone="red"><i class="fas fa-circle-radiation"></i></div>
+            <div class="dl-ba-kpi__body">
+                <span class="dl-ba-kpi__label">أسئلة عالية الخطر</span>
+                <strong class="dl-ba-kpi__value">@Model.HighRiskQuestionsCount</strong>
+                <span class="dl-ba-kpi__sub">نسبة خطأ مرتفعة</span>
+            </div>
+        </article>
+        <article class="dl-ba-kpi">
+            <div class="dl-ba-kpi__icon" data-tone="green"><i class="fas fa-bullseye"></i></div>
+            <div class="dl-ba-kpi__body">
+                <span class="dl-ba-kpi__label">المحاولات الكلية</span>
+                <strong class="dl-ba-kpi__value">@Model.TotalQuestionAttempts.ToString("N0")</strong>
+                <span class="dl-ba-kpi__sub">على @Model.ActiveStudentsCount طالب</span>
+            </div>
+        </article>
+    </section>
+
+    <section class="dl-ba-section">
+        <header class="dl-ba-section__head">
+            <div>
+                <h2><i class="fas fa-chart-pie"></i> تشريح الخطر</h2>
+                <p>توزيع مؤشر الخطر على 5 محاور رئيسية للدفعة.</p>
+            </div>
+        </header>
+
+        <div class="dl-ba-breakdown">
+            <div class="dl-ba-breakdown__chart">
+                <canvas id="dlBaRiskRadar"
+                        data-attendance="@Model.RiskBreakdown.AttendanceRiskScore"
+                        data-homework="@Model.RiskBreakdown.HomeworkRiskScore"
+                        data-exam="@Model.RiskBreakdown.ExamRiskScore"
+                        data-lessons="@Model.RiskBreakdown.WeakLessonRiskScore"
+                        data-questions="@Model.RiskBreakdown.QuestionRiskScore"></canvas>
+            </div>
+
+            <div class="dl-ba-breakdown__signals">
+                @{
+                    var signals = new[]
+                    {
+                        ("الحضور",         Model.RiskBreakdown.AttendanceRiskScore,  Model.RiskBreakdown.AttendanceSignal,  "fa-calendar-check",     "blue"),
+                        ("الواجبات",       Model.RiskBreakdown.HomeworkRiskScore,    Model.RiskBreakdown.HomeworkSignal,    "fa-file-pen",           "violet"),
+                        ("الاختبارات",     Model.RiskBreakdown.ExamRiskScore,        Model.RiskBreakdown.ExamSignal,        "fa-clipboard-question", "teal"),
+                        ("الدروس الضعيفة", Model.RiskBreakdown.WeakLessonRiskScore,  Model.RiskBreakdown.WeakLessonSignal,  "fa-triangle-exclamation","amber"),
+                        ("الأسئلة الحرجة", Model.RiskBreakdown.QuestionRiskScore,    Model.RiskBreakdown.QuestionSignal,    "fa-circle-radiation",    "red")
+                    };
+                }
+
+                @foreach (var (name, score, signal, icon, tone) in signals)
+                {
+                    var pct = Math.Min(100, Math.Max(0, score));
+                    string toneClass = score switch
+                    {
+                        >= 70 => "is-critical",
+                        >= 40 => "is-elevated",
+                        >= 20 => "is-moderate",
+                        _ => "is-stable"
+                    };
+
+                    <div class="dl-ba-signal @toneClass">
+                        <div class="dl-ba-signal__head">
+                            <span class="dl-ba-signal__icon" data-tone="@tone"><i class="fas @icon"></i></span>
+                            <div class="dl-ba-signal__meta">
+                                <strong>@name</strong>
+                                <span>@(string.IsNullOrWhiteSpace(signal) ? "—" : signal)</span>
+                            </div>
+                            <span class="dl-ba-signal__score">@score.ToString("0.#")<small>%</small></span>
+                        </div>
+                        <div class="dl-ba-signal__bar"><span style="width:@pct.ToString("0.#")%"></span></div>
+                    </div>
+                }
+            </div>
+        </div>
+    </section>
+
+    @if (Model.Recommendations is { Count: > 0 })
+    {
+        <section class="dl-ba-section">
+            <header class="dl-ba-section__head">
+                <div>
+                    <h2><i class="fas fa-lightbulb"></i> توصيات النظام</h2>
+                    <p>إجراءات مقترحة بناءً على تحليل بيانات الدفعة.</p>
+                </div>
+                <span class="dl-ba-counter">@Model.Recommendations.Count توصية</span>
+            </header>
+
+            <div class="dl-ba-recos">
+                @foreach (var reco in Model.Recommendations)
+                {
+                    <article class="dl-ba-reco @PriorityClass(reco.Priority)">
+                        <div class="dl-ba-reco__head">
+                            <div class="dl-ba-reco__title">
+                                <span class="dl-ba-reco__code">@reco.Code</span>
+                                <h3>@reco.Title</h3>
+                            </div>
+                            <div class="dl-ba-reco__badges">
+                                <span class="dl-ba-tag dl-ba-tag--cat">@reco.Category</span>
+                                <span class="dl-ba-tag dl-ba-tag--prio">@reco.Priority</span>
+                            </div>
+                        </div>
+
+                        @if (!string.IsNullOrWhiteSpace(reco.Reason))
+                        {
+                            <p class="dl-ba-reco__reason"><i class="fas fa-circle-info"></i> @reco.Reason</p>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(reco.SuggestedAction))
+                        {
+                            <div class="dl-ba-reco__action"><i class="fas fa-arrow-trend-up"></i><span>@reco.SuggestedAction</span></div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(reco.WarningMessage))
+                        {
+                            <div class="dl-ba-reco__warning"><i class="fas fa-triangle-exclamation"></i><span>@reco.WarningMessage</span></div>
+                        }
+
+                        <footer class="dl-ba-reco__foot">
+                            <div class="dl-ba-reco__impact">
+                                <span>درجة التأثير</span>
+                                <strong>@reco.ImpactScore<small>/100</small></strong>
+                            </div>
+                            <a class="dl-ba-btn dl-ba-btn--primary dl-ba-btn--sm"
+                               asp-area="Admin" asp-controller="DecisionLab" asp-action="RecommendationPreview"
+                               asp-route-batchId="@Model.BatchId" asp-route-curriculumId="@Model.CurriculumId">
+                                <span>فتح التوصية</span><i class="fas fa-arrow-left"></i>
+                            </a>
+                        </footer>
+                    </article>
+                }
+            </div>
+        </section>
+    }
+
+    <section class="dl-ba-section">
+        <header class="dl-ba-section__head dl-ba-section__head--tabs">
+            <div class="dl-ba-tabs" role="tablist">
+                <button type="button" class="dl-ba-tab is-active" data-tab="lessons" role="tab">
+                    <i class="fas fa-layer-group"></i><span>الدروس الأضعف</span>
+                    <span class="dl-ba-tab__count">@Model.WeakLessons.Count</span>
+                </button>
+                <button type="button" class="dl-ba-tab" data-tab="questions" role="tab">
+                    <i class="fas fa-circle-radiation"></i><span>الأسئلة عالية الخطر</span>
+                    <span class="dl-ba-tab__count">@Model.HighRiskQuestions.Count</span>
+                </button>
+            </div>
+
+            <div class="dl-ba-search">
+                <i class="fas fa-magnifying-glass"></i>
+                <input type="text" id="dlBaTableSearch" placeholder="ابحث داخل الجدول..." />
+            </div>
+        </header>
+
+        <div class="dl-ba-tabpane is-active" data-pane="lessons">
+            @if (!Model.WeakLessons.Any())
+            {
+                <div class="dl-ba-empty">
+                    <i class="fas fa-circle-check"></i>
+                    <p>لا توجد دروس ضعيفة كافية للتحليل.</p>
+                </div>
+            }
+            else
+            {
+                <div class="dl-ba-table-wrap">
+                    <table class="dl-ba-table">
+                        <thead>
+                            <tr>
+                                <th>الدرس</th><th>القسم</th><th>نسبة الخطأ</th><th>المحاولات</th>
+                                <th>الطلاب المتأثرون</th><th>متوسط الزمن</th><th>مستوى الخطر</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var lesson in Model.WeakLessons)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="dl-ba-cell-title">
+                                            <strong>@lesson.LessonTitle</strong>
+                                            <span>@lesson.RelatedQuestionsCount سؤال مرتبط</span>
+                                        </div>
+                                    </td>
+                                    <td><span class="dl-ba-tag dl-ba-tag--soft">@lesson.SectionTitle</span></td>
+                                    <td>
+                                        <div class="dl-ba-progress">
+                                            <div class="dl-ba-progress__bar @RiskClass(lesson.RiskLevel)" style="width:@(Math.Min(100, lesson.ErrorPercentage).ToString("0.#"))%"></div>
+                                            <span>@lesson.ErrorPercentage.ToString("0.#")%</span>
+                                        </div>
+                                    </td>
+                                    <td><strong>@lesson.TotalAttempts.ToString("N0")</strong></td>
+                                    <td>@lesson.AffectedStudentsCount</td>
+                                    <td>@lesson.AverageTimeTakenSeconds.ToString("0.#")<small> ث</small></td>
+                                    <td><span class="dl-ba-pill @RiskClass(lesson.RiskLevel)">@RiskLabel(lesson.RiskLevel)</span></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+
+        <div class="dl-ba-tabpane" data-pane="questions">
+            @if (!Model.HighRiskQuestions.Any())
+            {
+                <div class="dl-ba-empty">
+                    <i class="fas fa-circle-check"></i>
+                    <p>لا توجد أسئلة عالية الخطر كافية للتحليل.</p>
+                </div>
+            }
+            else
+            {
+                <div class="dl-ba-table-wrap">
+                    <table class="dl-ba-table">
+                        <thead>
+                            <tr>
+                                <th>السؤال</th><th>المرجع</th><th>الدرس</th><th>نسبة الخطأ</th>
+                                <th>المحاولات</th><th>الطلاب المتأثرون</th><th>متوسط الزمن</th><th>مستوى الخطر</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var q in Model.HighRiskQuestions)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="dl-ba-cell-title">
+                                            <strong>@q.QuestionTitle</strong>
+                                            <span>@q.SectionTitle</span>
+                                        </div>
+                                    </td>
+                                    <td><span class="dl-ba-tag dl-ba-tag--soft">@q.ReferenceNumber</span></td>
+                                    <td>@q.LessonTitle</td>
+                                    <td>
+                                        <div class="dl-ba-progress">
+                                            <div class="dl-ba-progress__bar @RiskClass(q.RiskLevel)" style="width:@(Math.Min(100, q.ErrorPercentage).ToString("0.#"))%"></div>
+                                            <span>@q.ErrorPercentage.ToString("0.#")%</span>
+                                        </div>
+                                    </td>
+                                    <td><strong>@q.TotalAttempts.ToString("N0")</strong></td>
+                                    <td>@q.AffectedStudentsCount</td>
+                                    <td>@q.AverageTimeTakenSeconds.ToString("0.#")<small> ث</small></td>
+                                    <td><span class="dl-ba-pill @RiskClass(q.RiskLevel)">@RiskLabel(q.RiskLevel)</span></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </section>
+
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script>
+        (function () {
+            'use strict';
+
+            const PALETTE = {
+                critical: '#c8202a', elevated: '#c47c00',
+                moderate: '#1748cc', stable: '#027a50'
+            };
+            const tone = s => s >= 70 ? PALETTE.critical : s >= 40 ? PALETTE.elevated : s >= 20 ? PALETTE.moderate : PALETTE.stable;
+
+            const gaugeEl = document.getElementById('dlBaRiskGauge');
+            if (gaugeEl && window.Chart) {
+                const score = Math.min(100, Math.max(0, parseFloat(gaugeEl.dataset.score) || 0));
+                new Chart(gaugeEl, {
+                    type: 'doughnut',
+                    data: { datasets: [{ data: [score, 100 - score], backgroundColor: [tone(score), '#eef1f7'], borderWidth: 0, circumference: 270, rotation: 225 }] },
+                    options: { responsive: false, cutout: '78%', plugins: { legend: { display: false }, tooltip: { enabled: false } }, animation: { duration: 900 } }
+                });
+            }
+
+            const radarEl = document.getElementById('dlBaRiskRadar');
+            if (radarEl && window.Chart) {
+                const ds = radarEl.dataset;
+                const values = [parseFloat(ds.attendance)||0, parseFloat(ds.homework)||0, parseFloat(ds.exam)||0, parseFloat(ds.lessons)||0, parseFloat(ds.questions)||0];
+                new Chart(radarEl, {
+                    type: 'radar',
+                    data: {
+                        labels: ['الحضور', 'الواجبات', 'الاختبارات', 'الدروس', 'الأسئلة'],
+                        datasets: [{ label: 'مؤشر الخطر', data: values, backgroundColor: 'rgba(23,72,204,0.15)', borderColor: '#1748cc', borderWidth: 2, pointBackgroundColor: '#1748cc', pointRadius: 4, pointHoverRadius: 6 }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        scales: { r: { beginAtZero: true, max: 100, ticks: { stepSize: 20, color: '#7a8ea8', backdropColor: 'transparent', font: { size: 10 } }, grid: { color: '#e3e8f0' }, angleLines: { color: '#e3e8f0' }, pointLabels: { color: '#0d1520', font: { size: 12, family: 'Cairo, sans-serif', weight: '600' } } } },
+                        plugins: { legend: { display: false }, tooltip: { rtl: true, bodyFont: { family: 'Cairo, sans-serif' }, callbacks: { label: ctx => ' ' + ctx.parsed.r.toFixed(1) + '%' } } }
+                    }
+                });
+            }
+
+            const tabs = document.querySelectorAll('.dl-ba-tab');
+            const panes = document.querySelectorAll('.dl-ba-tabpane');
+            tabs.forEach(tab => tab.addEventListener('click', () => {
+                const target = tab.dataset.tab;
+                tabs.forEach(t => t.classList.toggle('is-active', t === tab));
+                panes.forEach(p => p.classList.toggle('is-active', p.dataset.pane === target));
+                const search = document.getElementById('dlBaTableSearch');
+                if (search) { search.value = ''; filterTables(''); }
+            }));
+
+            function filterTables(term) {
+                const t = (term || '').trim().toLowerCase();
+                document.querySelectorAll('.dl-ba-tabpane.is-active .dl-ba-table tbody tr').forEach(row => {
+                    row.style.display = !t || row.textContent.toLowerCase().includes(t) ? '' : 'none';
+                });
+            }
+            const si = document.getElementById('dlBaTableSearch');
+            if (si) si.addEventListener('input', e => filterTables(e.target.value));
+        })();
+    </script>
+}

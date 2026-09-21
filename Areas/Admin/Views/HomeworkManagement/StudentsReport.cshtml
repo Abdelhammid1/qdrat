@@ -1,0 +1,1620 @@
+﻿@using QdratNew.Enums
+@using System.Globalization
+@using Microsoft.AspNetCore.Authorization
+@using QdratNew.Security.AdminPermissions
+@inject IAuthorizationService AuthorizationService
+@model QdratNew.ViewModels.Homework.HomeworkDetailsViewModel
+
+@{
+    ViewData["Title"] = "تفاصيل الواجب";
+    var canViewHomeworkReports  = (await AuthorizationService.AuthorizeAsync(User, AdminPermissionPolicies.Homework_Reports)).Succeeded;
+    var canReviewHomework       = (await AuthorizationService.AuthorizeAsync(User, AdminPermissionPolicies.Homework_Review)).Succeeded;
+    var canResendHomework       = (await AuthorizationService.AuthorizeAsync(User, AdminPermissionPolicies.Homework_Resend)).Succeeded;
+    var canManageQuestions      = (await AuthorizationService.AuthorizeAsync(User, AdminPermissionPolicies.Homework_ManageQuestions)).Succeeded;
+    var canResolveIntegrity     = (await AuthorizationService.AuthorizeAsync(User, AdminPermissionPolicies.IntegrityViolations_Resolve)).Succeeded;
+
+    var totalStudents = Model.Students.Count();
+    var submittedCount = Model.Students.Count(x => x.Status == HomeworkStatus.Submitted);
+    var pendingCount = Model.Students.Count(x => x.Status == HomeworkStatus.Pending);
+    var overduePendingCount = Model.Students.Count(x => x.IsOverdue24Hours);
+    var completionPercent = totalStudents == 0
+        ? 0
+        : Math.Round((submittedCount * 100.0) / totalStudents, 1);
+
+    var riskyStudentsCount = Model.Students.Count(x => x.RiskScore >= 70 || x.IsHighRiskLateSubmission);
+    var suspiciousStudentsCount = Model.Students.Count(x =>
+        x.BehaviorLevel == StudentBehaviorLevel.غش_محتمل ||
+        x.BehaviorLevel == StudentBehaviorLevel.مريب);
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" />
+
+    <style>
+        :root {
+            --hw-primary: #1B5EAE;
+            --hw-primary-dark: #103E7A;
+            --hw-primary-soft: #E8F1FB;
+            --hw-success: #0D7A5B;
+            --hw-success-soft: #E4F5EE;
+            --hw-warning: #985D09;
+            --hw-warning-soft: #FDF0D8;
+            --hw-danger: #BF1030;
+            --hw-danger-soft: #FDEAEE;
+            --hw-info: #5535B5;
+            --hw-info-soft: #EDE8F9;
+            --hw-text: #0D1B2A;
+            --hw-muted: #6B7A8A;
+            --hw-border: #DDE4EC;
+            --hw-bg: #F3F6FA;
+            --hw-card: #FFFFFF;
+            --hw-radius-md: 12px;
+            --hw-radius-lg: 18px;
+            --hw-shadow: 0 6px 20px rgba(13,27,42,.08);
+        }
+
+        .hw-details-page {
+            direction: rtl;
+            background: var(--hw-bg);
+            min-height: 100vh;
+            padding: 24px 24px 118px;
+            font-family: 'Cairo', Arial, sans-serif;
+            color: var(--hw-text);
+        }
+
+        .hw-page-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+
+        .hw-title-wrap {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .hw-title-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 16px;
+            background: var(--hw-primary);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            box-shadow: 0 6px 16px rgba(27,94,174,.25);
+        }
+
+        .hw-page-title {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--hw-text);
+        }
+
+        .hw-page-subtitle {
+            margin-top: 4px;
+            font-size: 14px;
+            color: var(--hw-muted);
+        }
+
+        .hw-back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid var(--hw-border);
+            background: #fff;
+            color: var(--hw-text);
+            border-radius: 10px;
+            padding: 9px 16px;
+            font-size: 14px;
+            font-weight: 700;
+            text-decoration: none;
+            transition: all .15s ease;
+        }
+
+            .hw-back-btn:hover {
+                background: var(--hw-primary-soft);
+                color: var(--hw-primary);
+                border-color: #B8D4F4;
+                text-decoration: none;
+            }
+
+        .hw-summary-alert {
+            border: 1px solid #B8D4F4;
+            background: var(--hw-primary-soft);
+            color: var(--hw-primary-dark);
+            border-radius: var(--hw-radius-lg);
+            padding: 14px 18px;
+            font-size: 15px;
+            font-weight: 700;
+            margin-bottom: 20px;
+        }
+
+        .hw-kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 14px;
+            margin-bottom: 20px;
+        }
+
+        .hw-kpi-card {
+            background: var(--hw-card);
+            border: 1px solid var(--hw-border);
+            border-radius: var(--hw-radius-lg);
+            padding: 16px;
+            box-shadow: 0 3px 10px rgba(13,27,42,.05);
+            position: relative;
+            overflow: hidden;
+            min-height: 116px;
+            cursor: pointer;
+            transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+        }
+
+            .hw-kpi-card:hover,
+            .hw-kpi-card.is-active {
+                border-color: #9FC5EF;
+                box-shadow: 0 8px 22px rgba(27,94,174,.14);
+                transform: translateY(-1px);
+            }
+
+            .hw-kpi-card.is-active {
+                outline: 2px solid rgba(27,94,174,.16);
+            }
+
+            .hw-kpi-card::before {
+                content: "";
+                position: absolute;
+                top: 0;
+                right: 0;
+                width: 5px;
+                height: 100%;
+            }
+
+        .hw-kpi-primary::before {
+            background: var(--hw-primary);
+        }
+
+        .hw-kpi-success::before {
+            background: var(--hw-success);
+        }
+
+        .hw-kpi-warning::before {
+            background: var(--hw-warning);
+        }
+
+        .hw-kpi-info::before {
+            background: var(--hw-info);
+        }
+
+        .hw-kpi-danger::before {
+            background: var(--hw-danger);
+        }
+
+        .hw-kpi-label {
+            font-size: 13px;
+            color: var(--hw-muted);
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .hw-kpi-value {
+            font-size: 18px;
+            font-weight: 900;
+            line-height: 1;
+            color: var(--hw-text);
+        }
+
+        .hw-kpi-hint {
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--hw-muted);
+        }
+
+        .hw-meta-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+            margin-bottom: 20px;
+        }
+
+        .hw-meta-card {
+            background: var(--hw-card);
+            border: 1px solid var(--hw-border);
+            border-radius: var(--hw-radius-lg);
+            padding: 16px;
+            box-shadow: 0 3px 10px rgba(13,27,42,.05);
+        }
+
+        .hw-meta-label {
+            font-size: 13px;
+            color: var(--hw-muted);
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .hw-meta-value {
+            font-size: 16px;
+            color: var(--hw-text);
+            font-weight: 800;
+        }
+
+        .hw-table-card {
+            background: var(--hw-card);
+            border: 1px solid var(--hw-border);
+            border-radius: var(--hw-radius-lg);
+            box-shadow: var(--hw-shadow);
+            overflow: hidden;
+        }
+
+        .hw-table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            padding: 16px 18px;
+            border-bottom: 1px solid var(--hw-border);
+            background: #fff;
+        }
+
+        .hw-table-title {
+            margin: 0;
+            font-size: 17px;
+            font-weight: 800;
+            color: var(--hw-text);
+        }
+
+        .hw-table-subtitle {
+            margin-top: 4px;
+            font-size: 13px;
+            color: var(--hw-muted);
+        }
+
+        .hw-table-count {
+            background: var(--hw-primary-soft);
+            color: var(--hw-primary);
+            border-radius: 30px;
+            padding: 5px 12px;
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        .hw-table-body {
+            padding: 0;
+        }
+
+        #studentsTable {
+            width: 100% !important;
+            margin: 0 !important;
+            border-collapse: collapse !important;
+        }
+
+            #studentsTable thead th {
+                background: #F8FAFC !important;
+                color: var(--hw-muted) !important;
+                font-size: 13px !important;
+                font-weight: 800 !important;
+                padding: 13px 12px !important;
+                border-bottom: 1px solid var(--hw-border) !important;
+                white-space: nowrap;
+                text-align: center;
+            }
+
+            #studentsTable tbody td {
+                font-size: 14px !important;
+                color: var(--hw-text);
+                padding: 13px 12px !important;
+                vertical-align: middle !important;
+                text-align: center;
+                border-bottom: 1px solid #EDF1F5 !important;
+            }
+
+            #studentsTable tbody tr {
+                cursor: pointer;
+            }
+
+                #studentsTable tbody tr:hover {
+                    background: #F5F8FD;
+                }
+
+                #studentsTable tbody tr.hw-row-selected,
+                #studentsTable tbody tr.hw-row-selected td {
+                    background: #E8F1FB !important;
+                }
+
+        .hw-select-col {
+            width: 46px !important;
+            min-width: 46px !important;
+            max-width: 46px !important;
+            text-align: center !important;
+        }
+
+        .hw-row-checkbox,
+        #studentsSelectAll {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--hw-primary);
+            cursor: pointer;
+        }
+
+        .student-name-cell {
+            font-size: 15px;
+            font-weight: 800;
+            text-align: right !important;
+            color: var(--hw-text);
+            min-width: 230px;
+        }
+
+        .student-count {
+            font-size: 15px;
+            font-weight: 800;
+            color: var(--hw-primary);
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            border-radius: 30px;
+            padding: 5px 12px;
+            font-size: 13px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        .status-submitted {
+            background: var(--hw-success-soft);
+            color: var(--hw-success);
+        }
+
+        .status-pending {
+            background: var(--hw-warning-soft);
+            color: var(--hw-warning);
+        }
+
+        .status-neutral {
+            background: #EEF2F7;
+            color: var(--hw-muted);
+        }
+
+        .behavior-normal {
+            background: var(--hw-success-soft);
+            color: var(--hw-success);
+        }
+
+        .behavior-warning {
+            background: var(--hw-warning-soft);
+            color: var(--hw-warning);
+        }
+
+        .behavior-danger {
+            background: var(--hw-danger-soft);
+            color: var(--hw-danger);
+        }
+
+        .score-value {
+            font-size: 15px;
+            font-weight: 900;
+            color: var(--hw-primary);
+        }
+
+        .empty-value {
+            font-size: 14px;
+            color: var(--hw-muted);
+        }
+
+        .risk-wrap {
+            min-width: 130px;
+        }
+
+        .risk-progress {
+            height: 20px;
+            background: #EDF1F5;
+            border-radius: 20px;
+            overflow: hidden;
+        }
+
+            .risk-progress .progress-bar {
+                font-size: 12px;
+                font-weight: 800;
+                line-height: 20px;
+            }
+
+        .follow-up-box {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            min-width: 170px;
+            text-align: right;
+        }
+
+        .follow-up-option {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--hw-text);
+            white-space: nowrap;
+        }
+
+            .follow-up-option input[type="checkbox"] {
+                flex-shrink: 0;
+                cursor: pointer;
+            }
+
+        .follow-up-info-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            font-size: 12px;
+            color: var(--hw-muted);
+            cursor: help;
+            flex-shrink: 0;
+            transition: color .15s;
+        }
+
+            .follow-up-info-icon:hover {
+                color: var(--hw-primary);
+            }
+
+        .follow-up-warning {
+            color: var(--hw-danger);
+        }
+
+        .follow-up-status {
+            font-size: 11px;
+            font-weight: 700;
+            min-height: 14px;
+            color: var(--hw-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 180px;
+        }
+
+            .follow-up-status.is-success {
+                color: var(--hw-success);
+            }
+
+            .follow-up-status.is-error {
+                color: var(--hw-danger);
+            }
+
+        .dataTables_wrapper {
+            direction: rtl;
+            padding: 0;
+        }
+
+            .dataTables_wrapper .dataTables_filter {
+                float: left !important;
+                text-align: left !important;
+                padding: 14px 16px;
+                font-size: 14px;
+            }
+
+                .dataTables_wrapper .dataTables_filter label,
+                .dataTables_wrapper .dataTables_length label {
+                    font-size: 14px;
+                    color: var(--hw-muted);
+                    font-weight: 700;
+                }
+
+                .dataTables_wrapper .dataTables_filter input,
+                .dataTables_wrapper .dataTables_length select {
+                    border: 1px solid var(--hw-border);
+                    border-radius: 8px;
+                    padding: 6px 10px;
+                    font-size: 14px;
+                    margin-right: 6px;
+                    margin-left: 6px;
+                }
+
+            .dataTables_wrapper .dataTables_length {
+                padding: 14px 16px;
+                font-size: 14px;
+            }
+
+            .dataTables_wrapper .dataTables_info {
+                padding: 14px 16px;
+                font-size: 14px;
+                color: var(--hw-muted);
+            }
+
+            .dataTables_wrapper .dataTables_paginate {
+                padding: 14px 16px;
+                font-size: 14px;
+            }
+
+                .dataTables_wrapper .dataTables_paginate .paginate_button {
+                    font-size: 14px !important;
+                    border-radius: 8px !important;
+                    padding: 4px 10px !important;
+                }
+
+        .hw-bulk-footer {
+            position: fixed;
+            right: 50%;
+            bottom: 18px;
+            transform: translateX(50%);
+            z-index: 1050;
+            width: min(1120px, calc(100% - 28px));
+            background: #0D1B2A;
+            color: #ffffff;
+            border: 1px solid rgba(255,255,255,.14);
+            border-radius: 16px;
+            box-shadow: 0 18px 45px rgba(13,27,42,.30);
+            padding: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+            .hw-bulk-footer.is-hidden {
+                display: none;
+            }
+
+        .hw-bulk-summary {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: auto;
+            font-size: 14px;
+            font-weight: 800;
+            min-width: 165px;
+        }
+
+        .hw-bulk-count {
+            min-width: 30px;
+            height: 30px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--hw-primary);
+            color: #ffffff;
+            font-weight: 900;
+        }
+
+        .hw-bulk-btn {
+            border: 1px solid rgba(255,255,255,.14);
+            border-radius: 11px;
+            color: #ffffff;
+            font-size: 13px;
+            font-weight: 800;
+            padding: 8px 13px;
+            background: rgba(255,255,255,.08);
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            transition: all .15s ease;
+            cursor: pointer;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+
+            .hw-bulk-btn:hover {
+                background: rgba(255,255,255,.16);
+                color: #ffffff;
+                text-decoration: none;
+                transform: translateY(-1px);
+            }
+
+        .hw-bulk-review {
+            background: rgba(27,94,174,.95);
+            border-color: transparent;
+        }
+
+        .hw-bulk-resend {
+            background: rgba(152,93,9,.22);
+            border-color: rgba(152,93,9,.35);
+            color: #FDE68A;
+        }
+
+        .hw-bulk-questions {
+            background: rgba(85,53,181,.22);
+            border-color: rgba(85,53,181,.35);
+            color: #EDE8F9;
+        }
+
+        .hw-bulk-report {
+            background: rgba(13,122,91,.22);
+            border-color: rgba(13,122,91,.35);
+            color: #BBF7D0;
+        }
+
+        .hw-bulk-clear {
+            width: 34px;
+            height: 34px;
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,.18);
+            background: rgba(255,255,255,.08);
+            color: #ffffff;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all .15s ease;
+        }
+
+            .hw-bulk-clear:hover {
+                background: rgba(255,255,255,.16);
+            }
+
+        .hw-single-only.d-none {
+            display: none !important;
+        }
+
+        @@media (max-width: 1200px) {
+            .hw-kpi-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+
+            .hw-bulk-summary {
+                width: 100%;
+                margin-left: 0;
+                justify-content: center;
+            }
+        }
+
+        @@media (max-width: 768px) {
+            .hw-details-page {
+                padding: 16px 16px 190px;
+            }
+
+            .hw-kpi-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .hw-meta-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .hw-page-title {
+                font-size: 17px;
+            }
+
+            .hw-bulk-footer {
+                bottom: 12px;
+                align-items: stretch;
+            }
+
+            .hw-bulk-btn {
+                flex: 1 1 auto;
+                justify-content: center;
+            }
+        }
+
+        @@media (max-width: 520px) {
+            .hw-kpi-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @@media print {
+            .hw-back-btn,
+            .hw-bulk-footer,
+            .hw-select-col,
+            .dataTables_filter,
+            .dataTables_length,
+            .dataTables_paginate,
+            .dataTables_info {
+                display: none !important;
+            }
+
+            .hw-details-page {
+                padding: 0;
+                min-height: 0;
+            }
+
+            .hw-table-card {
+                box-shadow: none;
+                border: none;
+            }
+
+            #studentsTable tbody tr {
+                page-break-inside: avoid;
+            }
+        }
+    </style>
+}
+
+<div class="hw-details-page">
+    @Html.AntiForgeryToken()
+
+    <div class="hw-page-head">
+        <div class="hw-title-wrap">
+            <div class="hw-title-icon">
+                <i class="fas fa-file-lines"></i>
+            </div>
+            <div>
+                <h3 class="hw-page-title">تفاصيل الواجب</h3>
+                <div class="hw-page-subtitle">
+                    متابعة حالة حل الطلاب، مراجعة النتائج، وإعادة الإرسال عند الحاجة.
+                </div>
+            </div>
+        </div>
+
+        <a asp-action="Index" class="hw-back-btn">
+            <i class="fas fa-arrow-right"></i>
+            رجوع
+        </a>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.ParentReportSummary))
+    {
+        <div class="hw-summary-alert">
+            <i class="fas fa-circle-info ms-1"></i>
+            @Model.ParentReportSummary
+        </div>
+    }
+
+    <div class="hw-kpi-grid">
+        <div class="hw-kpi-card hw-kpi-primary is-active" data-table-filter="all" role="button" tabindex="0">
+            <div class="hw-kpi-label">إجمالي الطلاب</div>
+            <div class="hw-kpi-value" id="kpiTotalStudents">@totalStudents</div>
+            <div class="hw-kpi-hint" id="kpiTotalStudentsHint">طلاب مرتبطون بهذا الواجب</div>
+        </div>
+
+        <div class="hw-kpi-card hw-kpi-success" data-table-filter="submitted" role="button" tabindex="0">
+            <div class="hw-kpi-label">تم الحل</div>
+            <div class="hw-kpi-value" id="kpiSubmittedStudents">@submittedCount</div>
+            <div class="hw-kpi-hint">طلاب أنهوا الواجب</div>
+        </div>
+
+        <div class="hw-kpi-card hw-kpi-warning" data-table-filter="pending" role="button" tabindex="0">
+            <div class="hw-kpi-label">لم يُحل بعد</div>
+            <div class="hw-kpi-value" id="kpiPendingStudents">@overduePendingCount</div>
+            <div class="hw-kpi-hint">مر عليهم 24 ساعة ولم يسلموا</div>
+        </div>
+
+        <div class="hw-kpi-card hw-kpi-info" data-table-filter="all" role="button" tabindex="0">
+            <div class="hw-kpi-label">نسبة الإنجاز</div>
+            <div class="hw-kpi-value" id="kpiCompletionPercent">@completionPercent%</div>
+            <div class="hw-kpi-hint">نسبة إكمال الواجب</div>
+        </div>
+
+        <div class="hw-kpi-card hw-kpi-danger" data-table-filter="risky" role="button" tabindex="0">
+            <div class="hw-kpi-label">مخاطرة عالية</div>
+            <div class="hw-kpi-value" id="kpiRiskyStudents">@riskyStudentsCount</div>
+            <div class="hw-kpi-hint">طلاب بدرجة مخاطرة 70% فأكثر</div>
+        </div>
+
+        <div class="hw-kpi-card hw-kpi-danger" data-table-filter="suspicious" role="button" tabindex="0">
+            <div class="hw-kpi-label">سلوك مريب</div>
+            <div class="hw-kpi-value" id="kpiSuspiciousStudents">@suspiciousStudentsCount</div>
+            <div class="hw-kpi-hint">غش محتمل أو نمط غير طبيعي</div>
+        </div>
+    </div>
+
+    <div class="hw-meta-grid">
+        <div class="hw-meta-card">
+            <div class="hw-meta-label">تاريخ الإنشاء</div>
+            <div class="hw-meta-value">@Model.CreatedAt.ToString("yyyy-MM-dd")</div>
+        </div>
+
+        <div class="hw-meta-card">
+            <div class="hw-meta-label">الدفعة</div>
+            <div class="hw-meta-value">@Model.BatchName</div>
+        </div>
+
+        <div class="hw-meta-card">
+            <div class="hw-meta-label">إجمالي الطلاب</div>
+            <div class="hw-meta-value">@Model.Students.Count()</div>
+        </div>
+    </div>
+
+    <div class="hw-table-card">
+        <div class="hw-table-header">
+            <div>
+                <h5 class="hw-table-title">
+                    <i class="fas fa-users ms-1"></i>
+                    قائمة الطلاب المرتبطين بالواجب
+                </h5>
+                <div class="hw-table-subtitle">
+                    حدد طالبًا من الجدول لإظهار إجراءات المراجعة والإرسال أسفل الصفحة.
+                </div>
+            </div>
+
+            <span class="hw-table-count" id="studentsTableCount">
+                @Model.Students.Count() طالب
+            </span>
+        </div>
+
+        <div class="hw-table-body">
+            <div class="table-responsive">
+                <table id="studentsTable" class="table align-middle text-center">
+                    <thead>
+                        <tr>
+                            <th class="hw-select-col">
+                                <input type="checkbox"
+                                       id="studentsSelectAll"
+                                       aria-label="تحديد كل الطلاب في الصفحة الحالية" />
+                            </th>
+                            <th>الطالب</th>
+                            <th>عدد الأسئلة</th>
+                            <th>الحالة</th>
+                            <th>درجة الطالب</th>
+                            <th>تحليل السلوك</th>
+                            <th>درجة المخاطرة</th>
+                            <th>متابعة التأخير</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @foreach (var student in Model.Students)
+                        {
+                            var homeworkId = student.HomeworkIds.FirstOrDefault();
+
+                            <tr data-status="@((int)student.Status)"
+                                data-risk="@student.RiskScore.ToString(CultureInfo.InvariantCulture)"
+                                data-overdue24="@student.IsOverdue24Hours.ToString().ToLowerInvariant()"
+                                data-late-high-risk="@student.IsHighRiskLateSubmission.ToString().ToLowerInvariant()"
+                                data-behavior="@((int)student.BehaviorLevel)">
+                                <td class="hw-select-col">
+                                    <input type="checkbox"
+                                           class="hw-row-checkbox"
+                                           value="@student.StudentId"
+                                           data-student-id="@student.StudentId"
+                                           data-student-name="@student.StudentName"
+                                           data-homework-id="@homeworkId"
+                                           data-homework-count="@student.HomeworkCount"
+                                           data-status-text="@(student.Status == HomeworkStatus.Submitted ? "تم الحل" : student.Status == HomeworkStatus.Pending ? "لم يُحل بعد" : "غير محدد")"
+                                           data-score="@(student.Score.HasValue? student.Score.Value.ToString(CultureInfo.InvariantCulture) + "%" : "")"
+                                           data-risk="@student.RiskScore.ToString(CultureInfo.InvariantCulture)"
+                                           aria-label="تحديد الطالب @student.StudentName" />
+                                </td>
+
+                                <td class="student-name-cell">
+                                    @student.StudentName
+                                    @if (student.IsIntegrityBlocked)
+                                    {
+                                        <div class="mt-1">
+                                            <span class="badge bg-danger">موقوف (ترجمة المتصفح)</span>
+                                            @if (canResolveIntegrity)
+                                            {
+                                                <form asp-area="Admin" asp-controller="IntegrityViolations" asp-action="ResolveByAttempt" method="post" class="d-inline-block mt-1">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="studentId" value="@student.StudentId" />
+                                                    <input type="hidden" name="attemptType" value="@((int)IntegrityAttemptType.Homework)" />
+                                                    <input type="hidden" name="attemptEntityId" value="@Model.HomeworkSetId" />
+                                                    <input type="hidden" name="returnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('تأكيد إعادة فتح المحاولة لهذا الطالب؟');">إعادة فتح المحاولة</button>
+                                                </form>
+                                            }
+                                        </div>
+                                    }
+                                </td>
+
+                                <td>
+                                    <span class="student-count">@student.HomeworkCount</span>
+                                </td>
+
+                                <td>
+                                    @switch (student.Status)
+                                    {
+                                        case HomeworkStatus.Submitted:
+                                            <span class="status-pill status-submitted">
+                                                <i class="fas fa-check-circle"></i>
+                                                تم الحل
+                                            </span>
+                                            break;
+
+                                        case HomeworkStatus.Pending:
+                                            <span class="status-pill status-pending">
+                                                <i class="fas fa-hourglass-half"></i>
+                                                لم يُحل بعد
+                                            </span>
+                                            break;
+
+                                        default:
+                                            <span class="status-pill status-neutral">
+                                                غير محدد
+                                            </span>
+                                            break;
+                                    }
+                                </td>
+
+                                <td>
+                                    @if (student.Score.HasValue)
+                                    {
+                                        <span class="score-value">@student.Score%</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="empty-value">—</span>
+                                    }
+                                </td>
+
+                                <td>
+                                    @switch (student.BehaviorLevel)
+                                    {
+                                        case StudentBehaviorLevel.غش_محتمل:
+                                            <span class="status-pill behavior-danger">
+                                                ⚠️ غش محتمل
+                                            </span>
+                                            break;
+
+                                        case StudentBehaviorLevel.مريب:
+                                            <span class="status-pill behavior-warning">
+                                                مريب
+                                            </span>
+                                            break;
+
+                                        default:
+                                            <span class="status-pill behavior-normal">
+                                                طبيعي
+                                            </span>
+                                            break;
+                                    }
+                            </td>
+
+                            <td>
+                                <div class="risk-wrap">
+                                    <div class="risk-progress">
+                                        <div class="progress-bar
+                                                @((student.RiskScore >= 70 || student.IsHighRiskLateSubmission) ? "bg-danger" :
+                                                                                               student.RiskScore >= 40 ? "bg-warning" : "bg-success")"
+                                             style="width:@(student.IsHighRiskLateSubmission && student.RiskScore < 70 ? 70 : student.RiskScore)%">
+                                            @(student.IsHighRiskLateSubmission && student.RiskScore < 70 ? "تأخير 3 أيام" : $"{student.RiskScore}%")
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+
+                                <td>
+                                @if (student.Status == HomeworkStatus.Pending && student.IsOverdue24Hours)
+                                    {
+                                        <div class="follow-up-box" data-follow-up-row>
+
+                                            <label class="follow-up-option">
+                                                <input type="checkbox"
+                                                       class="js-follow-up-toggle"
+                                                       data-kind="student"
+                                                       data-homework-set-id="@Model.HomeworkSetId"
+                                                       data-student-id="@student.StudentId"
+                                                       @(student.StudentReminderContacted ? "checked" : "") />
+                                                <span>تذكير الطالب</span>
+                                                <i class="fas fa-circle-info follow-up-info-icon"
+                                                   data-bs-toggle="tooltip"
+                                                   data-bs-placement="top"
+                                                   title="يرسل إشعارًا للطالب عند التفعيل لأول مرة"></i>
+                                            </label>
+
+                                            <label class="follow-up-option @(student.IsHighRiskLateSubmission ? "follow-up-warning" : "")">
+                                                <input type="checkbox"
+                                                       class="js-follow-up-toggle"
+                                                       data-kind="parent"
+                                                       data-homework-set-id="@Model.HomeworkSetId"
+                                                       data-student-id="@student.StudentId"
+                                                       @(student.ParentContacted ? "checked" : "")
+                                                       @(student.IsHighRiskLateSubmission ? "" : "disabled") />
+                                                <span>ولي الأمر</span>
+                                                <i class="fas fa-circle-info follow-up-info-icon"
+                                                   data-bs-toggle="tooltip"
+                                                   data-bs-placement="top"
+                                                   title="@(student.IsHighRiskLateSubmission ? "مخاطرة عالية — مر أكثر من 3 أيام دون حل" : "تُفعَّل عند اليوم الثالث من التأخير")"></i>
+                                            </label>
+
+                                            @{
+                                                var contactTimes = new List<string>();
+                                                if (student.StudentReminderContactedAt.HasValue)
+                                                    contactTimes.Add($"ط: {student.StudentReminderContactedAt.Value:MM/dd HH:mm}");
+                                                if (student.ParentContactedAt.HasValue)
+                                                    contactTimes.Add($"و: {student.ParentContactedAt.Value:MM/dd HH:mm}");
+                                            }
+
+                                            <div class="follow-up-status"
+                                                 data-follow-up-status
+                                                 title="@(contactTimes.Any() ? string.Join(" | ", contactTimes) : "لم يتم التواصل بعد")">
+                                                @(contactTimes.Any() ? string.Join(" | ", contactTimes) : "لم يتم بعد")
+                                            </div>
+
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span class="empty-value">—</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="hw-bulk-footer is-hidden" id="studentsBulkFooter">
+        <div class="hw-bulk-summary">
+            <span class="hw-bulk-count" id="studentsSelectedCount">0</span>
+            <span>طالب محدد</span>
+        </div>
+
+        @if (canReviewHomework)
+        {
+            <button type="button"
+                    class="hw-bulk-btn hw-bulk-review hw-single-only"
+                    onclick="reviewSelectedStudent()">
+                <i class="fas fa-eye"></i>
+                مراجعة الحل
+            </button>
+        }
+
+        @if (canResendHomework)
+        {
+            <button type="button"
+                    class="hw-bulk-btn hw-bulk-resend hw-single-only"
+                    onclick="resendSelectedStudent()">
+                <i class="fas fa-redo-alt"></i>
+                إعادة الإرسال
+            </button>
+        }
+
+        @if (canManageQuestions)
+        {
+            <button type="button"
+                    class="hw-bulk-btn hw-bulk-questions hw-single-only"
+                    onclick="manageSelectedStudentQuestions()">
+                <i class="fas fa-list-check"></i>
+                أسئلة الطالب
+            </button>
+        }
+
+        @if (canViewHomeworkReports)
+        {
+            <button type="button"
+                    class="hw-bulk-btn hw-bulk-report hw-single-only"
+                    onclick="openSelectedParentReport()">
+                <i class="fas fa-chart-pie"></i>
+                تقرير ولي الأمر
+            </button>
+        }
+
+        <button type="button"
+                class="hw-bulk-btn"
+                onclick="exportSelectedStudents()">
+            <i class="fas fa-download"></i>
+            تصدير المحدد
+        </button>
+
+        <button type="button"
+                class="hw-bulk-clear"
+                onclick="clearStudentsSelection()"
+                aria-label="إلغاء التحديد">
+            <i class="fas fa-xmark"></i>
+        </button>
+    </div>
+
+    <form id="resendSelectedStudentForm"
+          asp-action="ResendToStudent"
+          method="post"
+          style="display:none;">
+        @Html.AntiForgeryToken()
+    </form>
+</div>
+
+@section Scripts {
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+    <script>
+        const selectedStudentsMap = new Map();
+        const homeworkSetId = @Model.HomeworkSetId;
+
+        let activeKpiFilter = 'all';
+        let table;
+
+        const homeworkStatus = {
+            submitted: @((int)HomeworkStatus.Submitted),
+            pending: @((int)HomeworkStatus.Pending)
+        };
+
+        const behaviorLevel = {
+            suspicious: @((int)StudentBehaviorLevel.مريب),
+            cheatingLikely: @((int)StudentBehaviorLevel.غش_محتمل)
+        };
+
+        function formatNumber(value) {
+            return Number(value || 0).toLocaleString('ar-EG');
+        }
+
+        function formatPercent(value) {
+            const rounded = Math.round((value + Number.EPSILON) * 10) / 10;
+            return rounded.toLocaleString('ar-EG', { maximumFractionDigits: 1 }) + '%';
+        }
+
+        function getRowInfo(row) {
+            const $row = $(row);
+
+            return {
+                status: Number($row.attr('data-status')),
+                risk: Number($row.attr('data-risk')) || 0,
+                behavior: Number($row.attr('data-behavior')),
+                isOverdue24: $row.attr('data-overdue24') === 'true',
+                isLateHighRisk: $row.attr('data-late-high-risk') === 'true'
+            };
+        }
+
+        function rowMatchesKpiFilter(row) {
+            const info = getRowInfo(row);
+
+            switch (activeKpiFilter) {
+                case 'submitted':
+                    return info.status === homeworkStatus.submitted;
+
+                case 'pending':
+                    return info.status === homeworkStatus.pending && info.isOverdue24;
+
+                case 'risky':
+                    return info.risk >= 70 || info.isLateHighRisk;
+
+                case 'suspicious':
+                    return info.behavior === behaviorLevel.suspicious || info.behavior === behaviorLevel.cheatingLikely;
+
+                case 'all':
+                default:
+                    return true;
+            }
+        }
+
+        $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
+            if (settings.nTable.id !== 'studentsTable') {
+                return true;
+            }
+
+            const row = settings.aoData[dataIndex].nTr;
+            return rowMatchesKpiFilter(row);
+        });
+
+        function calculateCountsFromRows(rows) {
+            let total = rows.length;
+            let submitted = 0;
+            let pending = 0;
+            let overduePending = 0;
+            let risky = 0;
+            let suspicious = 0;
+
+            rows.forEach(function (row) {
+                const info = getRowInfo(row);
+
+                if (info.status === homeworkStatus.submitted) {
+                    submitted++;
+                }
+
+                if (info.status === homeworkStatus.pending) {
+                    pending++;
+                }
+
+                if (info.status === homeworkStatus.pending && info.isOverdue24) {
+                    overduePending++;
+                }
+
+                if (info.risk >= 70 || info.isLateHighRisk) {
+                    risky++;
+                }
+
+                if (info.behavior === behaviorLevel.suspicious || info.behavior === behaviorLevel.cheatingLikely) {
+                    suspicious++;
+                }
+            });
+
+            return {
+                total,
+                submitted,
+                pending,
+                overduePending,
+                risky,
+                suspicious,
+                completionPercent: total === 0 ? 0 : (submitted * 100) / total
+            };
+        }
+
+        function updateDashboardCards(dataTable) {
+            const visibleRows = dataTable.rows({ search: 'applied' }).nodes().toArray();
+            const counts = calculateCountsFromRows(visibleRows);
+
+            $('#kpiTotalStudents').text(formatNumber(counts.total));
+            $('#kpiSubmittedStudents').text(formatNumber(counts.submitted));
+            $('#kpiPendingStudents').text(formatNumber(counts.overduePending));
+            $('#kpiCompletionPercent').text(formatPercent(counts.completionPercent));
+            $('#kpiRiskyStudents').text(formatNumber(counts.risky));
+            $('#kpiSuspiciousStudents').text(formatNumber(counts.suspicious));
+            $('#studentsTableCount').text(formatNumber(counts.total) + ' طالب');
+
+            const hasSearch = dataTable.search().length > 0;
+            const hasKpiFilter = activeKpiFilter !== 'all';
+
+            $('#kpiTotalStudentsHint').text(
+                hasSearch || hasKpiFilter
+                    ? 'طلاب مطابقون لمحتوى الجدول الحالي'
+                    : 'طلاب مرتبطون بهذا الواجب'
+            );
+        }
+
+        function getSelectedStudentsArray() {
+            return Array.from(selectedStudentsMap.values());
+        }
+
+        function updateStudentsBulkFooter() {
+            const selected = getSelectedStudentsArray();
+            const footer = document.getElementById('studentsBulkFooter');
+            const count = document.getElementById('studentsSelectedCount');
+            const selectAll = document.getElementById('studentsSelectAll');
+            const singleOnlyButtons = document.querySelectorAll('.hw-single-only');
+
+            if (footer) {
+                footer.classList.toggle('is-hidden', selected.length === 0);
+            }
+
+            if (count) {
+                count.textContent = selected.length;
+            }
+
+            singleOnlyButtons.forEach(function (btn) {
+                btn.classList.toggle('d-none', selected.length !== 1);
+            });
+
+            const pageCheckboxes = Array.from(document.querySelectorAll('.hw-row-checkbox'));
+
+            if (selectAll) {
+                const checkedOnPage = pageCheckboxes.filter(function (cb) {
+                    return cb.checked;
+                }).length;
+
+                selectAll.checked = pageCheckboxes.length > 0 && checkedOnPage === pageCheckboxes.length;
+                selectAll.indeterminate = checkedOnPage > 0 && checkedOnPage < pageCheckboxes.length;
+            }
+        }
+
+        function syncStudentRowSelectionStyles() {
+            document.querySelectorAll('#studentsTable tbody tr').forEach(function (tr) {
+                const cb = tr.querySelector('.hw-row-checkbox');
+                tr.classList.toggle('hw-row-selected', !!cb && cb.checked);
+            });
+        }
+
+        function setStudentSelectedFromCheckbox(cb) {
+            if (!cb) {
+                return;
+            }
+
+            const studentId = cb.value;
+
+            if (!studentId) {
+                return;
+            }
+
+            if (cb.checked) {
+                selectedStudentsMap.set(studentId, {
+                    studentId: studentId,
+                    studentName: cb.dataset.studentName || '',
+                    homeworkId: cb.dataset.homeworkId || '',
+                    homeworkCount: cb.dataset.homeworkCount || '',
+                    statusText: cb.dataset.statusText || '',
+                    score: cb.dataset.score || '',
+                    risk: cb.dataset.risk || ''
+                });
+            } else {
+                selectedStudentsMap.delete(studentId);
+            }
+
+            syncStudentRowSelectionStyles();
+            updateStudentsBulkFooter();
+        }
+
+        function clearStudentsSelection() {
+            selectedStudentsMap.clear();
+
+            document.querySelectorAll('.hw-row-checkbox').forEach(function (cb) {
+                cb.checked = false;
+            });
+
+            const selectAll = document.getElementById('studentsSelectAll');
+            if (selectAll) {
+                selectAll.checked = false;
+                selectAll.indeterminate = false;
+            }
+
+            syncStudentRowSelectionStyles();
+            updateStudentsBulkFooter();
+        }
+
+        function getSingleSelectedStudent() {
+            const selected = getSelectedStudentsArray();
+
+            if (selected.length !== 1) {
+                alert('اختر طالبًا واحدًا فقط لتنفيذ هذا الإجراء.');
+                return null;
+            }
+
+            return selected[0];
+        }
+
+        function reviewSelectedStudent() {
+            const selected = getSingleSelectedStudent();
+
+            if (!selected) {
+                return;
+            }
+
+            window.location.href = `/Admin/HomeworkManagement/Review?studentId=${encodeURIComponent(selected.studentId)}&homeworkSetId=${encodeURIComponent(homeworkSetId)}`;
+        }
+
+        function resendSelectedStudent() {
+            const selected = getSingleSelectedStudent();
+
+            if (!selected) {
+                return;
+            }
+
+            if (!selected.homeworkId || selected.homeworkId === '0') {
+                alert('لا يوجد HomeworkId صالح لإعادة الإرسال لهذا الطالب.');
+                return;
+            }
+
+            const confirmed = confirm('هل أنت متأكد من إعادة الإرسال لهذا الطالب؟');
+
+            if (!confirmed) {
+                return;
+            }
+
+            const form = document.getElementById('resendSelectedStudentForm');
+
+            if (!form) {
+                alert('نموذج إعادة الإرسال غير موجود.');
+                return;
+            }
+
+            form.action = `/Admin/HomeworkManagement/ResendToStudent?homeworkId=${encodeURIComponent(selected.homeworkId)}`;
+            form.submit();
+        }
+
+        function manageSelectedStudentQuestions() {
+            const selected = getSingleSelectedStudent();
+
+            if (!selected) {
+                return;
+            }
+
+            window.location.href = `/Admin/HomeworkManagement/ManageHomeworkQuestions?homeworkSetId=${encodeURIComponent(homeworkSetId)}&studentId=${encodeURIComponent(selected.studentId)}`;
+        }
+
+        function openSelectedParentReport() {
+            const selected = getSingleSelectedStudent();
+
+            if (!selected) {
+                return;
+            }
+
+            window.location.href = `/Admin/HomeworkManagement/HomeworkParentReport?homeworkSetId=${encodeURIComponent(homeworkSetId)}&studentId=${encodeURIComponent(selected.studentId)}`;
+        }
+
+        function exportSelectedStudents() {
+            const selected = getSelectedStudentsArray();
+
+            if (!selected.length) {
+                alert('اختر طالبًا واحدًا على الأقل للتصدير.');
+                return;
+            }
+
+            const csvRows = [[
+                'الطالب',
+                'عدد الأسئلة',
+                'الحالة',
+                'الدرجة',
+                'درجة المخاطرة'
+            ]];
+
+            selected.forEach(function (item) {
+                csvRows.push([
+                    item.studentName || '',
+                    item.homeworkCount || '',
+                    item.statusText || '',
+                    item.score || '',
+                    item.risk || ''
+                ]);
+            });
+
+            const csv = '\uFEFF' + csvRows.map(function (items) {
+                return items.map(function (item) {
+                    return '"' + String(item || '').replace(/"/g, '""') + '"';
+                }).join(',');
+            }).join('\r\n');
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+
+            link.href = url;
+            link.download = 'selected_homework_students.csv';
+            link.click();
+
+            URL.revokeObjectURL(url);
+        }
+
+        $(document).ready(function () {
+
+            document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+                new bootstrap.Tooltip(el, { trigger: 'hover focus' });
+            });
+
+            table = $('#studentsTable').DataTable({
+                pageLength: 25,
+                order: [[2, 'desc']],
+                language: {
+                    url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json"
+                },
+                columnDefs: [
+                    {
+                        orderable: false,
+                        searchable: false,
+                        targets: [0]
+                    },
+                    {
+                        orderable: false,
+                        targets: [6, 7]
+                    }
+                ],
+                drawCallback: function () {
+                    document.querySelectorAll('.hw-row-checkbox').forEach(function (cb) {
+                        cb.checked = selectedStudentsMap.has(cb.value);
+                    });
+
+                    syncStudentRowSelectionStyles();
+                    updateStudentsBulkFooter();
+                    updateDashboardCards(this.api());
+                },
+                initComplete: function () {
+                    updateDashboardCards(this.api());
+                    updateStudentsBulkFooter();
+                }
+            });
+
+            $('#studentsTable').on('change', '.hw-row-checkbox', function () {
+                setStudentSelectedFromCheckbox(this);
+            });
+
+            $('#studentsTable tbody').on('click', 'tr', function (event) {
+                const ignoredSelectors = 'input, button, a, label, .follow-up-box, .follow-up-option, .follow-up-info-icon, i';
+
+                if ($(event.target).closest(ignoredSelectors).length) {
+                    return;
+                }
+
+                const cb = this.querySelector('.hw-row-checkbox');
+
+                if (!cb) {
+                    return;
+                }
+
+                cb.checked = !cb.checked;
+                setStudentSelectedFromCheckbox(cb);
+            });
+
+            $('#studentsSelectAll').on('change', function () {
+                const isChecked = this.checked;
+
+                document.querySelectorAll('.hw-row-checkbox').forEach(function (cb) {
+                    cb.checked = isChecked;
+                    setStudentSelectedFromCheckbox(cb);
+                });
+
+                syncStudentRowSelectionStyles();
+                updateStudentsBulkFooter();
+            });
+
+            $('.hw-kpi-card[data-table-filter]').on('click keydown', function (event) {
+                if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') {
+                    return;
+                }
+
+                event.preventDefault();
+
+                const selectedFilter = $(this).data('table-filter') || 'all';
+
+                if (activeKpiFilter === selectedFilter && selectedFilter !== 'all') {
+                    activeKpiFilter = 'all';
+                    $('.hw-kpi-card[data-table-filter]').removeClass('is-active');
+                    $('.hw-kpi-card[data-table-filter="all"]').first().addClass('is-active');
+                } else {
+                    activeKpiFilter = selectedFilter;
+                    $('.hw-kpi-card[data-table-filter]').removeClass('is-active');
+                    $(this).addClass('is-active');
+                }
+
+                clearStudentsSelection();
+                table.draw();
+            });
+
+            let studentsPageLengthBeforePrint = null;
+
+            window.addEventListener('beforeprint', function () {
+                if (table) {
+                    studentsPageLengthBeforePrint = table.page.len();
+                    table.page.len(-1).draw(false);
+                }
+            });
+
+            window.addEventListener('afterprint', function () {
+                if (table && studentsPageLengthBeforePrint !== null) {
+                    table.page.len(studentsPageLengthBeforePrint).draw(false);
+                    studentsPageLengthBeforePrint = null;
+                }
+            });
+
+            $('.js-follow-up-toggle').on('change', function () {
+                const $changed = $(this);
+                const $box = $changed.closest('[data-follow-up-row]');
+                const $status = $box.find('[data-follow-up-status]');
+                const homeworkSetIdValue = $changed.data('homework-set-id');
+                const studentId = $changed.data('student-id');
+                const studentReminderContacted = $box.find('.js-follow-up-toggle[data-kind="student"]').is(':checked');
+                const parentContacted = $box.find('.js-follow-up-toggle[data-kind="parent"]').is(':checked');
+                const token = $('input[name="__RequestVerificationToken"]').first().val();
+
+                $box.find('.js-follow-up-toggle').prop('disabled', true);
+                $status.removeClass('is-success is-error').text('جاري الحفظ...');
+
+                $.ajax({
+                    url: '@Url.Action("UpdateStudentFollowUp", "HomeworkManagement", new { area = "Admin" })',
+                    method: 'POST',
+                    headers: {
+                        'RequestVerificationToken': token
+                    },
+                    data: {
+                        homeworkSetId: homeworkSetIdValue,
+                        studentId: studentId,
+                        studentReminderContacted: studentReminderContacted,
+                        parentContacted: parentContacted
+                    }
+                }).done(function (response) {
+                    if (!response || !response.success) {
+                        $status.addClass('is-error').text(response && response.message ? response.message : 'تعذر حفظ المتابعة.');
+                        return;
+                    }
+
+                    const notes = [];
+
+                    if (response.studentReminderContactedAt) {
+                        notes.push('الطالب: ' + response.studentReminderContactedAt);
+                    }
+
+                    if (response.parentContactedAt) {
+                        notes.push('ولي الأمر: ' + response.parentContactedAt);
+                    }
+
+                    $status.addClass('is-success').text(notes.length ? notes.join(' | ') : 'لم يتم التواصل بعد');
+                }).fail(function (xhr) {
+                    const message = xhr.responseJSON && xhr.responseJSON.message
+                        ? xhr.responseJSON.message
+                        : 'حدث خطأ أثناء حفظ المتابعة.';
+
+                    $changed.prop('checked', !$changed.is(':checked'));
+                    $status.addClass('is-error').text(message);
+                }).always(function () {
+                    $box.find('.js-follow-up-toggle[data-kind="student"]').prop('disabled', false);
+
+                    $box.find('.js-follow-up-toggle[data-kind="parent"]').each(function () {
+                        const shouldEnable = $(this).closest('label').hasClass('follow-up-warning');
+                        $(this).prop('disabled', !shouldEnable);
+                    });
+
+                    table.draw(false);
+                });
+            });
+        });
+    </script>
+}

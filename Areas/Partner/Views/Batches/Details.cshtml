@@ -1,0 +1,222 @@
+﻿@model QdratNew.ViewModels.Partner.PartnerBatchDetailsViewModel
+
+@{
+    ViewData["Title"] = "تفاصيل الدفعة";
+}
+
+<div class="container mt-4" dir="rtl">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-bold mb-0">📄 تفاصيل الدفعة</h3>
+        <a asp-action="Index" class="btn btn-outline-secondary">رجوع</a>
+    </div>
+    <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#bulkAddModal">
+        إضافة طلاب للدفعة
+    </button>
+    <!-- معلومات الدفعة -->
+    <ul class="list-group mb-4">
+        <li class="list-group-item">
+            <strong>اسم الدفعة:</strong> @Model.BatchName
+        </li>
+        <li class="list-group-item">
+            <strong>الدورة:</strong> @Model.CourseName
+        </li>
+        <li class="list-group-item">
+            <strong>عدد الطلاب:</strong> @Model.StudentsCount
+        </li>
+    </ul>
+
+    <!-- جدول الطلاب -->
+    <div class="card shadow-sm">
+        <div class="card-header fw-bold">
+            👥 طلاب الدفعة
+        </div>
+
+        <div class="mb-3">
+            <input type="text"
+                   id="studentSearchInput"
+                   class="form-control bg-dark-50"
+                   placeholder="🔍 ابحث باسم الطالب أو رقم الهوية..."
+                   autocomplete="off" />
+        </div>
+
+
+
+        <div class="table-responsive">
+            <table class="table table-striped table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>#</th>
+                        <th>الاسم</th>
+                        <th>رقم الهوية</th>
+                        <th>الهاتف</th>
+                        <th>المستوى</th>
+                        <th>التقارير</th>
+                    </tr>
+                </thead>
+                <tbody id="studentsTableBody">
+                    @if (!Model.Students.Any())
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center text-muted">
+                                لا يوجد طلاب مسجلين في هذه الدفعة.
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        var i = 1;
+                        foreach (var student in Model.Students)
+                        {
+                            <tr>
+                                <td>@i</td>
+                                <td>@student.FullName</td>
+                                <td>@student.NationalId</td>
+                                <td>@student.Phone</td>
+                                <td>@student.Level</td>
+                                <td>
+                                    <a asp-area="Partner"
+                                       asp-controller="Students"
+                                       asp-action="Report"
+                                       asp-route-id="@student.StudentId"
+                                       class="btn btn-sm btn-outline-primary">
+                                        تقرير الطالب
+                                    </a>
+                                </td>
+                            </tr>
+                            i++;
+                        }
+                    }
+                </tbody>
+
+            </table>
+        </div>
+    </div>
+
+</div>
+
+
+<div class="modal fade" id="bulkAddModal">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content p-3">
+
+            <h5>اختيار الطلاب</h5>
+
+            <input type="text" id="searchStudent" class="form-control mb-2" placeholder="بحث...">
+
+            <div id="studentsList" style="max-height:400px;overflow:auto;"></div>
+
+            <form method="post"
+                  asp-controller="Students"
+                  asp-action="BulkAddToBatch"
+                  asp-area="Partner">
+
+                <input type="hidden" name="batchId" value="@Model.BatchId" />
+
+                <div id="selectedStudents"></div>
+
+                <button class="btn btn-primary mt-3">إضافة للدفعة</button>
+            </form>
+
+        </div>
+    </div>
+</div>
+
+
+@section Scripts {
+    <script>
+        const input = document.getElementById('studentSearchInput');
+        const tbody = document.getElementById('studentsTableBody');
+
+        let typingTimer;
+        const delay = 400; // ms
+
+        input.addEventListener('keyup', function () {
+            clearTimeout(typingTimer);
+            typingTimer = setTimeout(runSearch, delay);
+        });
+
+        function runSearch() {
+            const term = input.value.trim();
+
+            fetch(`@Url.Action("SearchBatchStudents", "Batches", new { area = "Partner" })?batchId=@Context.Request.RouteValues["id"]&term=${encodeURIComponent(term)}`)
+                .then(res => res.json())
+                .then(data => {
+                    tbody.innerHTML = '';
+
+                    if (!data || data.length === 0) {
+                        tbody.innerHTML = `
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">
+                                    لا توجد نتائج مطابقة.
+                                </td>
+                            </tr>`;
+                        return;
+                    }
+
+                    let index = 1;
+                    data.forEach(s => {
+                        tbody.innerHTML += `
+                            <tr>
+                                <td>${index}</td>
+                                <td>${s.fullName}</td>
+                                <td>${s.nationalId}</td>
+                                <td>${s.phone ?? ''}</td>
+                                <td>${s.level ?? ''}</td>
+                                <td>
+                                    <a href="/Partner/Students/Report/${s.studentId}"
+                                       class="btn btn-sm btn-outline-primary">
+                                        تقرير الطالب
+                                    </a>
+                                </td>
+                            </tr>`;
+                        index++;
+                    });
+                });
+        }
+    </script>
+
+
+    <script>
+        let selected = [];
+
+        function loadStudents() {
+            fetch('/Partner/Students/GetAvailableStudents')
+                .then(res => res.json())
+                .then(data => {
+                    let html = '';
+                    data.forEach(s => {
+                        html += `
+                            <div>
+                                <input type="checkbox" value="${s.id}" onchange="toggleStudent(this)">
+                                ${s.name} (${s.nationalId})
+                            </div>
+                        `;
+                    });
+                    document.getElementById('studentsList').innerHTML = html;
+                });
+        }
+
+        function toggleStudent(el) {
+            const id = parseInt(el.value);
+
+            if (el.checked) {
+                selected.push(id);
+            } else {
+                selected = selected.filter(x => x !== id);
+            }
+
+            renderSelected();
+        }
+
+        function renderSelected() {
+            let html = '';
+            selected.forEach(id => {
+                html += `<input type="hidden" name="studentIds" value="${id}" />`;
+            });
+            document.getElementById('selectedStudents').innerHTML = html;
+        }
+
+        document.getElementById('bulkAddModal').addEventListener('show.bs.modal', loadStudents);
+    </script>
+}

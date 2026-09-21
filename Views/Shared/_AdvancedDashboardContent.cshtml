@@ -1,0 +1,2036 @@
+@model QdratNew.ViewModels.Admin.Analytics.AdvancedAnalyticsDashboardVM
+@using QdratNew.Extensions
+@using QdratNew.ViewModels.Admin.Shared
+
+@{
+    // ── Decision Engine ────────────────────────────────────────────────
+    var riskHigh   = Model?.RiskHigh   ?? 0;
+    var riskMedium = Model?.RiskMedium ?? 0;
+    var riskLow    = Model?.RiskLow    ?? 0;
+
+    string decisionStatus, decisionIcon, decisionColor, decisionBg, decisionMsg, decisionAction;
+
+    if (riskHigh > 0 && (Model?.CriticalCases ?? 0) > 5)
+    {
+        decisionStatus = "خطر حرج"; decisionIcon = "bi-exclamation-octagon-fill";
+        decisionColor  = "#dc2626"; decisionBg   = "#fff1f1";
+        decisionMsg    = "يوجد دفعات وطلاب في مستوى خطر عالي. التدخل الفوري مطلوب.";
+        decisionAction = "مراجعة الدفعات عالية الخطورة وإرسال توجيه للمدربين";
+    }
+    else if (riskHigh > 0 || (Model?.CriticalCases ?? 0) > 0)
+    {
+        decisionStatus = "تنبيه"; decisionIcon = "bi-exclamation-triangle-fill";
+        decisionColor  = "#d97706"; decisionBg = "#fffbeb";
+        decisionMsg    = "بعض الدفعات والطلاب يحتاجون متابعة مركزة. الوضع العام قابل للضبط.";
+        decisionAction = "متابعة الطلاب ذوي الأولوية العالية وإعادة شرح الدروس الضعيفة";
+    }
+    else if ((Model?.WeakStudents ?? 0) == 0 && (Model?.HighRiskCount ?? 0) == 0)
+    {
+        decisionStatus = "مستقر"; decisionIcon = "bi-check-circle-fill";
+        decisionColor  = "#16a34a"; decisionBg  = "#f0fdf4";
+        decisionMsg    = "الوضع العام مستقر. لا توجد مؤشرات ضعف حرجة حاليًا.";
+        decisionAction = "الاستمرار في المتابعة الدورية";
+    }
+    else
+    {
+        decisionStatus = "متوسط"; decisionIcon = "bi-info-circle-fill";
+        decisionColor  = "#2563eb"; decisionBg  = "#eff6ff";
+        decisionMsg    = "يوجد مؤشرات ضعف في بعض الدروس أو الطلاب تستحق المتابعة.";
+        decisionAction = "مراجعة تفاصيل الدروس الضعيفة وتقييم أداء الدفعات";
+    }
+
+    var instructorsCount = Model.Instructors?.Count ?? 0;
+    var batchesCount     = Model.Batches?.Count ?? 0;
+
+    var avgExam = Model.Students != null && Model.Students.Any()
+        ? Math.Round(Model.Students.Average(x => x.ExamScore), 1)
+        : Model.AvgExamScore;
+
+    var avgHomework = Model.Students != null && Model.Students.Any()
+        ? Math.Round(Model.Students.Average(x => x.HomeworkScore), 1)
+        : Model.AvgHomeworkScore;
+
+    var avgAttendance = Model.Students != null && Model.Students.Any()
+        ? Math.Round(Model.Students.Average(x => x.Attendance), 1)
+        : Model.AvgAttendance;
+
+    var highPriorityStudents = Model.Students?
+        .Where(x => x.Priority == "High")
+        .OrderBy(x => x.ExamScore)
+        .Take(3)
+        .ToList();
+
+    var worstStudent = Model.Students?
+        .OrderBy(x => x.ExamScore)
+        .FirstOrDefault();
+
+    var lessonRows = (Model?.Lessons ?? new List<QdratNew.ViewModels.Admin.Analytics.LessonAnalyticsVM>())
+        .OrderByDescending(x => x.WeakPercentage)
+        .ToList();
+
+    var lessonPageSize = 5;
+
+    string ExamColor  = avgExam      >= 70 ? "#16a34a" : avgExam      >= 50 ? "#d97706" : "#dc2626";
+    string HwColor    = avgHomework  >= 70 ? "#16a34a" : avgHomework  >= 50 ? "#d97706" : "#dc2626";
+    string AttColor   = avgAttendance>= 70 ? "#16a34a" : avgAttendance>= 50 ? "#d97706" : "#dc2626";
+
+    int excellentCount = Model.ExcellentStudents;
+    int mediumCount    = Model.MediumStudents;
+    int weakCount      = Model.WeakStudentsCount;
+}
+
+@* ═══════════════════════════════════════════════════════════════════
+   JSON DATA ISLAND — تغذية مخططات Chart.js
+   ═══════════════════════════════════════════════════════════════════ *@
+<script type="application/json" id="riskDataJson">
+    @Html.Raw(Json.Serialize(new List<int> { Model.RiskHigh, Model.RiskMedium, Model.RiskLow }))
+</script>
+<script type="application/json" id="lessonNamesJson">
+    @Html.Raw(Json.Serialize(Model.Lessons == null ? new List<string>() : Model.Lessons.Take(8).Select(x => x.LessonName).ToList()))
+</script>
+<script type="application/json" id="lessonValuesJson">
+    @Html.Raw(Json.Serialize(Model.Lessons == null ? new List<double>() : Model.Lessons.Take(8).Select(x => x.WeakPercentage).ToList()))
+</script>
+<script type="application/json" id="criticalLabelsJson">
+    @Html.Raw(Json.Serialize(Model.Students == null ? new List<string>() : Model.Students.OrderBy(x => x.ExamScore).Take(6).Select(x => x.StudentName).ToList()))
+</script>
+<script type="application/json" id="criticalExamsJson">
+    @Html.Raw(Json.Serialize(Model.Students == null ? new List<double>() : Model.Students.OrderBy(x => x.ExamScore).Take(6).Select(x => x.ExamScore).ToList()))
+</script>
+<script type="application/json" id="criticalHomeworkJson">
+    @Html.Raw(Json.Serialize(Model.Students == null ? new List<double>() : Model.Students.OrderBy(x => x.ExamScore).Take(6).Select(x => x.HomeworkScore).ToList()))
+</script>
+<script type="application/json" id="criticalAttendanceJson">
+    @Html.Raw(Json.Serialize(Model.Students == null ? new List<double>() : Model.Students.OrderBy(x => x.ExamScore).Take(6).Select(x => x.Attendance).ToList()))
+</script>
+<script type="application/json" id="instructorNamesJson">
+    @Html.Raw(Json.Serialize(Model.Instructors == null ? new List<string>() : Model.Instructors.Select(x => x.InstructorName).ToList()))
+</script>
+<script type="application/json" id="instructorScoresJson">
+    @Html.Raw(Json.Serialize(Model.Instructors == null ? new List<double>() : Model.Instructors.Select(x => x.AvgScore).ToList()))
+</script>
+<script type="application/json" id="instructorWeakJson">
+    @Html.Raw(Json.Serialize(Model.Instructors == null ? new List<int>() : Model.Instructors.Select(x => x.WeakLessonsCount).ToList()))
+</script>
+<script type="application/json" id="studentDistJson">
+    @Html.Raw(Json.Serialize(new List<int> { excellentCount, mediumCount, weakCount }))
+</script>
+<script type="application/json" id="performanceAvgJson">
+    @Html.Raw(Json.Serialize(new List<double> { avgExam, avgHomework, avgAttendance }))
+</script>
+
+@* ══════════════════════════════════════════════════════════════════════
+   § 0-A — Decision Summary Panel
+   ══════════════════════════════════════════════════════════════════════ *@
+<div class="qd-decision mb-4"
+     style="background:@decisionBg; border-color:@decisionColor;
+            border:1.5px solid; border-radius:16px; padding:20px 24px;
+            display:flex; align-items:flex-start; gap:16px;">
+    <div style="width:44px;height:44px;border-radius:12px;flex-shrink:0;
+                background:rgba(0,0,0,.07); display:flex; align-items:center;
+                justify-content:center; font-size:22px;">
+        <i class="bi @decisionIcon" style="color:@decisionColor;"></i>
+    </div>
+    <div class="flex-grow-1">
+        <div style="font-size:11px;font-weight:700;color:@decisionColor;text-transform:uppercase;letter-spacing:.05em;">حالة النظام الحالية</div>
+        <div style="font-size:18px;font-weight:900;color:@decisionColor;margin:2px 0 6px;">@decisionStatus</div>
+        <p style="font-size:13px;color:@decisionColor;margin:0 0 6px;">@decisionMsg</p>
+        <span style="font-size:12px;font-weight:600;color:@decisionColor;">
+            <i class="bi bi-lightning-charge-fill me-1"></i>الإجراء المقترح: @decisionAction
+        </span>
+    </div>
+    <div class="d-none d-lg-flex flex-column gap-2 text-end" style="min-width:150px;">
+        <div style="font-size:11px;color:#6b7280;font-weight:700;">ملخص سريع</div>
+        <div style="font-size:12px;"><i class="bi bi-exclamation-triangle-fill text-danger me-1"></i>دفعات خطرة: <strong>@riskHigh</strong></div>
+        <div style="font-size:12px;"><i class="bi bi-person-fill-exclamation text-warning me-1"></i>حالات حرجة: <strong>@(Model?.CriticalCases ?? 0)</strong></div>
+        <div style="font-size:12px;"><i class="bi bi-book-half text-danger me-1"></i>دروس ضعيفة: <strong>@(Model?.HighRiskCount ?? 0)</strong></div>
+    </div>
+</div>
+
+@* ══════════════════════════════════════════════════════════════════════
+   § 0-B — KPI Cards
+   ══════════════════════════════════════════════════════════════════════ *@
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-4 col-xl-2">
+        <div class="qd-kpi kpi-primary qd-kpi-clickable"
+             data-bs-toggle="offcanvas" data-bs-target="#batchesOffcanvas" role="button">
+            <div class="qd-kpi-icon" style="background:var(--q-primary-light);color:var(--q-primary);"><i class="bi bi-layers-fill"></i></div>
+            <div class="qd-kpi-value" style="color:var(--q-primary);">@(Model?.TotalBatches ?? 0)</div>
+            <div class="qd-kpi-label">إجمالي الدفعات</div>
+            <div class="qd-kpi-sub">الدفعات النشطة في النظام</div>
+            <div class="qd-kpi-open"><i class="bi bi-layout-sidebar"></i> عرض التفاصيل</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-xl-2">
+        <div class="qd-kpi kpi-info qd-kpi-clickable"
+             data-bs-toggle="offcanvas" data-bs-target="#instructorsOffcanvas" role="button">
+            <div class="qd-kpi-icon" style="background:var(--q-info-light);color:var(--q-info);"><i class="bi bi-person-badge-fill"></i></div>
+            <div class="qd-kpi-value" style="color:var(--q-info);">@(Model?.TotalInstructors ?? 0)</div>
+            <div class="qd-kpi-label">المدربون النشطون</div>
+            <div class="qd-kpi-sub">مدربون مرتبطون بدفعات</div>
+            <div class="qd-kpi-open"><i class="bi bi-layout-sidebar"></i> عرض التفاصيل</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-xl-2">
+        <div class="qd-kpi kpi-warning qd-kpi-clickable"
+             data-bs-toggle="offcanvas" data-bs-target="#studentsAnalyticsOffcanvas" role="button">
+            <div class="qd-kpi-icon" style="background:var(--q-warning-light);color:var(--q-warning);"><i class="bi bi-people-fill"></i></div>
+            <div class="qd-kpi-value" style="color:var(--q-warning);">@(Model?.WeakStudents ?? 0)</div>
+            <div class="qd-kpi-label">الطلاب المحللون</div>
+            <div class="qd-kpi-sub">طلاب لديهم مؤشر ضعف</div>
+            <div class="qd-kpi-open"><i class="bi bi-layout-sidebar"></i> عرض التفاصيل</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-xl-2">
+        <div class="qd-kpi kpi-danger qd-kpi-clickable"
+             data-bs-toggle="offcanvas" data-bs-target="#criticalOffcanvas" role="button">
+            <div class="qd-kpi-icon" style="background:var(--q-danger-light);color:var(--q-danger);"><i class="bi bi-person-fill-exclamation"></i></div>
+            <div class="qd-kpi-value" style="color:var(--q-danger);">@(Model?.CriticalCases ?? 0)</div>
+            <div class="qd-kpi-label">حالات أولوية عالية</div>
+            <div class="qd-kpi-sub">تحتاج تدخل فوري</div>
+            <div class="qd-kpi-open"><i class="bi bi-layout-sidebar"></i> عرض التفاصيل</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-xl-2">
+        <div class="qd-kpi kpi-danger qd-kpi-clickable"
+             data-bs-toggle="offcanvas" data-bs-target="#highRiskOffcanvas" role="button">
+            <div class="qd-kpi-icon" style="background:var(--q-danger-light);color:var(--q-danger);"><i class="bi bi-exclamation-diamond-fill"></i></div>
+            <div class="qd-kpi-value" style="color:var(--q-danger);">@(Model?.HighRiskCount ?? 0)</div>
+            <div class="qd-kpi-label">دروس عالية الخطورة</div>
+            <div class="qd-kpi-sub">نسبة ضعف ≥ 70%</div>
+            <div class="qd-kpi-open"><i class="bi bi-layout-sidebar"></i> عرض التفاصيل</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-xl-2">
+        <a class="qd-card-link"
+           asp-area="Admin" asp-controller="Analytics" asp-action="MetricDecisionDetails"
+           asp-route-metric="avg-weakness"
+           asp-route-curriculumId="@Model.SelectedCurriculumId"
+           asp-route-batchId="@Model.SelectedBatchId"
+           asp-route-instructorId="@Model.SelectedInstructorId">
+            <div class="qd-kpi kpi-violet">
+                <div class="qd-kpi-icon" style="background:var(--q-violet-light);color:var(--q-violet);"><i class="bi bi-bar-chart-fill"></i></div>
+                <div class="qd-kpi-value" style="color:var(--q-violet);">@(Model?.AvgWeakness ?? 0)%</div>
+                <div class="qd-kpi-label">متوسط نسبة الضعف</div>
+                <div class="qd-kpi-sub">عبر جميع الدروس المحللة</div>
+                <div class="qd-kpi-open"><i class="bi bi-box-arrow-up-left"></i> فتح تحليل القرار</div>
+            </div>
+        </a>
+    </div>
+</div>
+
+@* ══════════════════════════════════════════════════════════════════════
+   § 1 — نظرة عامة: ثلاثة مقاييس أداء + مخطط Radar
+   ══════════════════════════════════════════════════════════════════════ *@
+<div class="qdn-section-header mb-3">
+    <div class="qdn-section-icon" style="background:#dbeafe;color:#1e40af;">
+        <i class="bi bi-speedometer2"></i>
+    </div>
+    <div>
+        <div class="qdn-section-title">نظرة عامة على الأداء</div>
+        <div class="qdn-section-sub">مقارنة متوسطات الأداء مع عتبة القبول (70%)</div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+
+    @* ── 3 بطاقات مقاييس ── *@
+    <div class="col-xl-8">
+        <div class="row g-3 h-100">
+
+            @* الاختبارات *@
+            <div class="col-md-4">
+                <a class="qdn-card-link"
+                   asp-area="Admin" asp-controller="Analytics" asp-action="MetricDecisionDetails"
+                   asp-route-metric="avg-exam"
+                   asp-route-curriculumId="@Model.SelectedCurriculumId"
+                   asp-route-batchId="@Model.SelectedBatchId"
+                   asp-route-instructorId="@Model.SelectedInstructorId">
+                    <div class="qdn-metric-card h-100">
+                        <div class="qdn-metric-icon" style="background:#fee2e2;color:#dc2626;">
+                            <i class="bi bi-pencil-square"></i>
+                        </div>
+                        <div class="qdn-metric-label">متوسط الاختبارات</div>
+                        <div class="qdn-metric-value" style="color:@ExamColor;">@avgExam<span class="qdn-metric-unit">%</span></div>
+                        <div class="qdn-progress-wrap">
+                            <div class="qdn-progress-track">
+                                <div class="qdn-progress-fill" style="width:@avgExam%;background:@ExamColor;"></div>
+                                <div class="qdn-progress-threshold" style="left:70%;"></div>
+                            </div>
+                            <div class="qdn-progress-labels">
+                                <span>0%</span>
+                                <span style="color:#94a3b8;">حد القبول 70%</span>
+                                <span>100%</span>
+                            </div>
+                        </div>
+                        @if (avgExam >= 70) {
+                            <div class="qdn-status-chip" style="background:#dcfce7;color:#16a34a;">
+                                <i class="bi bi-arrow-up-circle-fill"></i> جيد
+                            </div>
+                        } else if (avgExam >= 50) {
+                            <div class="qdn-status-chip" style="background:#fef3c7;color:#d97706;">
+                                <i class="bi bi-dash-circle-fill"></i> متوسط
+                            </div>
+                        } else {
+                            <div class="qdn-status-chip" style="background:#fee2e2;color:#dc2626;">
+                                <i class="bi bi-arrow-down-circle-fill"></i> ضعيف
+                            </div>
+                        }
+                        <div class="qdn-metric-cta"><i class="bi bi-box-arrow-up-left"></i> تحليل القرار</div>
+                    </div>
+                </a>
+            </div>
+
+            @* الواجبات *@
+            <div class="col-md-4">
+                <a class="qdn-card-link"
+                   asp-area="Admin" asp-controller="Analytics" asp-action="MetricDecisionDetails"
+                   asp-route-metric="avg-homework"
+                   asp-route-curriculumId="@Model.SelectedCurriculumId"
+                   asp-route-batchId="@Model.SelectedBatchId"
+                   asp-route-instructorId="@Model.SelectedInstructorId">
+                    <div class="qdn-metric-card h-100">
+                        <div class="qdn-metric-icon" style="background:#fef3c7;color:#d97706;">
+                            <i class="bi bi-journal-check"></i>
+                        </div>
+                        <div class="qdn-metric-label">متوسط الواجبات</div>
+                        <div class="qdn-metric-value" style="color:@HwColor;">@avgHomework<span class="qdn-metric-unit">%</span></div>
+                        <div class="qdn-progress-wrap">
+                            <div class="qdn-progress-track">
+                                <div class="qdn-progress-fill" style="width:@avgHomework%;background:@HwColor;"></div>
+                                <div class="qdn-progress-threshold" style="left:70%;"></div>
+                            </div>
+                            <div class="qdn-progress-labels">
+                                <span>0%</span>
+                                <span style="color:#94a3b8;">حد القبول 70%</span>
+                                <span>100%</span>
+                            </div>
+                        </div>
+                        @if (avgHomework >= 70) {
+                            <div class="qdn-status-chip" style="background:#dcfce7;color:#16a34a;">
+                                <i class="bi bi-arrow-up-circle-fill"></i> جيد
+                            </div>
+                        } else if (avgHomework >= 50) {
+                            <div class="qdn-status-chip" style="background:#fef3c7;color:#d97706;">
+                                <i class="bi bi-dash-circle-fill"></i> متوسط
+                            </div>
+                        } else {
+                            <div class="qdn-status-chip" style="background:#fee2e2;color:#dc2626;">
+                                <i class="bi bi-arrow-down-circle-fill"></i> ضعيف
+                            </div>
+                        }
+                        <div class="qdn-metric-cta"><i class="bi bi-box-arrow-up-left"></i> تحليل القرار</div>
+                    </div>
+                </a>
+            </div>
+
+            @* الحضور *@
+            <div class="col-md-4">
+                <a class="qdn-card-link"
+                   asp-area="Admin" asp-controller="Analytics" asp-action="MetricDecisionDetails"
+                   asp-route-metric="avg-attendance"
+                   asp-route-curriculumId="@Model.SelectedCurriculumId"
+                   asp-route-batchId="@Model.SelectedBatchId"
+                   asp-route-instructorId="@Model.SelectedInstructorId">
+                    <div class="qdn-metric-card h-100">
+                        <div class="qdn-metric-icon" style="background:#dcfce7;color:#16a34a;">
+                            <i class="bi bi-calendar2-check"></i>
+                        </div>
+                        <div class="qdn-metric-label">متوسط الحضور</div>
+                        <div class="qdn-metric-value" style="color:@AttColor;">@avgAttendance<span class="qdn-metric-unit">%</span></div>
+                        <div class="qdn-progress-wrap">
+                            <div class="qdn-progress-track">
+                                <div class="qdn-progress-fill" style="width:@avgAttendance%;background:@AttColor;"></div>
+                                <div class="qdn-progress-threshold" style="left:70%;"></div>
+                            </div>
+                            <div class="qdn-progress-labels">
+                                <span>0%</span>
+                                <span style="color:#94a3b8;">حد القبول 70%</span>
+                                <span>100%</span>
+                            </div>
+                        </div>
+                        @if (avgAttendance >= 70) {
+                            <div class="qdn-status-chip" style="background:#dcfce7;color:#16a34a;">
+                                <i class="bi bi-arrow-up-circle-fill"></i> جيد
+                            </div>
+                        } else if (avgAttendance >= 50) {
+                            <div class="qdn-status-chip" style="background:#fef3c7;color:#d97706;">
+                                <i class="bi bi-dash-circle-fill"></i> متوسط
+                            </div>
+                        } else {
+                            <div class="qdn-status-chip" style="background:#fee2e2;color:#dc2626;">
+                                <i class="bi bi-arrow-down-circle-fill"></i> ضعيف
+                            </div>
+                        }
+                        <div class="qdn-metric-cta"><i class="bi bi-box-arrow-up-left"></i> تحليل القرار</div>
+                    </div>
+                </a>
+            </div>
+
+        </div>
+    </div>
+
+    @* ── Radar Chart ── *@
+    <div class="col-xl-4">
+        <div class="qdn-chart-card h-100">
+            <div class="qdn-chart-header">
+                <div class="qdn-chart-title"><i class="bi bi-radar me-2"></i>مخطط الأداء الشامل</div>
+                <div class="qdn-chart-sub">مقارنة المحاور الثلاثة</div>
+            </div>
+            <div class="qdn-chart-body" style="height:230px;">
+                <canvas id="performanceRadarChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+@* ══════════════════════════════════════════════════════════════════════
+   § 2 — توزيع المخاطر + توزيع الطلاب (تصميم محسّن)
+   ══════════════════════════════════════════════════════════════════════ *@
+@{
+    var riskTotal = Model.RiskHigh + Model.RiskMedium + Model.RiskLow;
+    var riskHighPct   = riskTotal > 0 ? (int)(Model.RiskHigh   * 100.0 / riskTotal) : 0;
+    var riskMedPct    = riskTotal > 0 ? (int)(Model.RiskMedium * 100.0 / riskTotal) : 0;
+    var riskLowPct    = riskTotal > 0 ? (int)(Model.RiskLow    * 100.0 / riskTotal) : 0;
+
+    var stTotal       = excellentCount + mediumCount + weakCount;
+    var stExcPct      = stTotal > 0 ? (int)(excellentCount * 100.0 / stTotal) : 0;
+    var stMedPct      = stTotal > 0 ? (int)(mediumCount    * 100.0 / stTotal) : 0;
+    var stWkPct       = stTotal > 0 ? (int)(weakCount      * 100.0 / stTotal) : 0;
+}
+<style>
+.dn2-card {
+    background:#fff;
+    border-radius:16px;
+    border:1px solid #e5e7eb;
+    box-shadow:0 2px 12px rgba(0,0,0,.05);
+    padding:20px 22px;
+    height:100%;
+}
+.dn2-title {
+    font-size:15px;font-weight:800;
+    display:flex;align-items:center;gap:8px;
+    margin-bottom:3px;
+}
+.dn2-sub { font-size:12px;color:#6b7280;margin-bottom:18px; }
+.dn2-body { display:flex;align-items:center;gap:18px; }
+.dn2-donut-wrap { position:relative;flex-shrink:0;width:110px;height:110px; }
+.dn2-donut-wrap canvas { width:100%!important;height:100%!important; }
+.dn2-center {
+    position:absolute;inset:0;
+    display:flex;flex-direction:column;
+    align-items:center;justify-content:center;
+    pointer-events:none;
+}
+.dn2-center-num { font-size:22px;font-weight:900;line-height:1; }
+.dn2-center-lbl { font-size:10px;color:#6b7280;font-weight:700; }
+.dn2-bars { flex:1;display:flex;flex-direction:column;gap:10px; }
+.dn2-row { display:flex;align-items:center;gap:10px; }
+.dn2-row-label {
+    width:70px;font-size:12px;font-weight:700;
+    color:#374151;flex-shrink:0;text-align:right;
+}
+.dn2-bar-track {
+    flex:1;height:8px;border-radius:20px;
+    background:#f3f4f6;overflow:hidden;
+}
+.dn2-bar-fill { height:100%;border-radius:20px;transition:width .5s; }
+.dn2-row-count {
+    width:36px;font-size:13px;font-weight:800;
+    text-align:left;flex-shrink:0;
+}
+.dn2-row-pct { font-size:11px;color:#9ca3af;width:32px;flex-shrink:0; }
+@@media(max-width:576px){ .dn2-body { flex-direction:column; } .dn2-donut-wrap { width:90px;height:90px; } }
+</style>
+
+<div class="row g-3 mb-4">
+
+    @* توزيع مستويات المخاطر *@
+    <div class="col-md-6">
+        <div class="dn2-card">
+            <div class="dn2-title">
+                <i class="bi bi-pie-chart-fill" style="color:#dc2626;font-size:16px;"></i>
+                توزيع مستويات المخاطر
+            </div>
+            <div class="dn2-sub">تصنيف الدفعات حسب مستوى الخطورة — إجمالي @riskTotal دفعة</div>
+            <div class="dn2-body">
+                <div class="dn2-donut-wrap">
+                    <canvas id="riskChart"></canvas>
+                    <div class="dn2-center">
+                        <div class="dn2-center-num" style="color:#dc2626;">@Model.RiskHigh</div>
+                        <div class="dn2-center-lbl">خطر عالي</div>
+                    </div>
+                </div>
+                <div class="dn2-bars">
+                    <div class="dn2-row">
+                        <div class="dn2-row-label">خطر عالي</div>
+                        <div class="dn2-bar-track">
+                            <div class="dn2-bar-fill" style="width:@riskHighPct%;background:#dc2626;"></div>
+                        </div>
+                        <div class="dn2-row-count" style="color:#dc2626;">@Model.RiskHigh</div>
+                        <div class="dn2-row-pct">@riskHighPct%</div>
+                    </div>
+                    <div class="dn2-row">
+                        <div class="dn2-row-label">متوسط</div>
+                        <div class="dn2-bar-track">
+                            <div class="dn2-bar-fill" style="width:@riskMedPct%;background:#d97706;"></div>
+                        </div>
+                        <div class="dn2-row-count" style="color:#d97706;">@Model.RiskMedium</div>
+                        <div class="dn2-row-pct">@riskMedPct%</div>
+                    </div>
+                    <div class="dn2-row">
+                        <div class="dn2-row-label">جيد</div>
+                        <div class="dn2-bar-track">
+                            <div class="dn2-bar-fill" style="width:@riskLowPct%;background:#16a34a;"></div>
+                        </div>
+                        <div class="dn2-row-count" style="color:#16a34a;">@Model.RiskLow</div>
+                        <div class="dn2-row-pct">@riskLowPct%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* توزيع الطلاب *@
+    <div class="col-md-6">
+        <div class="dn2-card">
+            <div class="dn2-title">
+                <i class="bi bi-people-fill" style="color:#7c3aed;font-size:16px;"></i>
+                توزيع مستويات الطلاب
+            </div>
+            <div class="dn2-sub">تصنيف الطلاب حسب مستوى الأداء — إجمالي @stTotal طالب</div>
+            <div class="dn2-body">
+                <div class="dn2-donut-wrap">
+                    <canvas id="studentDistChart"></canvas>
+                    <div class="dn2-center">
+                        <div class="dn2-center-num" style="color:#dc2626;">@weakCount</div>
+                        <div class="dn2-center-lbl">ضعيف</div>
+                    </div>
+                </div>
+                <div class="dn2-bars">
+                    <div class="dn2-row">
+                        <div class="dn2-row-label">ممتاز</div>
+                        <div class="dn2-bar-track">
+                            <div class="dn2-bar-fill" style="width:@stExcPct%;background:#16a34a;"></div>
+                        </div>
+                        <div class="dn2-row-count" style="color:#16a34a;">@excellentCount</div>
+                        <div class="dn2-row-pct">@stExcPct%</div>
+                    </div>
+                    <div class="dn2-row">
+                        <div class="dn2-row-label">متوسط</div>
+                        <div class="dn2-bar-track">
+                            <div class="dn2-bar-fill" style="width:@stMedPct%;background:#d97706;"></div>
+                        </div>
+                        <div class="dn2-row-count" style="color:#d97706;">@mediumCount</div>
+                        <div class="dn2-row-pct">@stMedPct%</div>
+                    </div>
+                    <div class="dn2-row">
+                        <div class="dn2-row-label">ضعيف</div>
+                        <div class="dn2-bar-track">
+                            <div class="dn2-bar-fill" style="width:@stWkPct%;background:#dc2626;"></div>
+                        </div>
+                        <div class="dn2-row-count" style="color:#dc2626;">@weakCount</div>
+                        <div class="dn2-row-pct">@stWkPct%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+@* ══════════════════════════════════════════════════════════════════════
+   § 3 — توصية النظام الذكي
+   ══════════════════════════════════════════════════════════════════════ *@
+<div class="qdn-ai-banner mb-4">
+    <div class="qdn-ai-glow"></div>
+    <div class="row align-items-center g-3">
+        <div class="col-auto">
+            <div class="qdn-ai-icon-wrap">
+                <i class="bi bi-cpu-fill"></i>
+            </div>
+        </div>
+        <div class="col">
+            <div class="qdn-ai-eyebrow">توصية النظام الذكي</div>
+            @if (worstStudent != null) {
+                <div class="qdn-ai-headline">
+                    الطالب <strong>@worstStudent.StudentName</strong> يحتاج متابعة عاجلة
+                </div>
+                <p class="qdn-ai-body">
+                    السبب: <strong>@worstStudent.WeakReason</strong> —
+                    الإجراء المقترح: <strong>@worstStudent.ActionRequired</strong>
+                </p>
+            } else {
+                <div class="qdn-ai-headline" style="color:#dcfce7;">لا توجد حالات حرجة كافية لإصدار توصية حالية</div>
+                <p class="qdn-ai-body" style="opacity:.8;">جميع المؤشرات ضمن الحدود المقبولة حالياً.</p>
+            }
+        </div>
+        <div class="col-auto">
+            <button type="button" class="qdn-ai-refresh-btn" onclick="loadAdvancedDashboard(1)">
+                <i class="bi bi-arrow-clockwise"></i> تحديث التحليل
+            </button>
+        </div>
+    </div>
+</div>
+
+@* ══════════════════════════════════════════════════════════════════════
+   § 4 — تحليل أداء المدربين
+   ══════════════════════════════════════════════════════════════════════ *@
+<div class="qdn-section-header mb-3">
+    <div class="qdn-section-icon" style="background:#cffafe;color:#0891b2;">
+        <i class="bi bi-person-badge-fill"></i>
+    </div>
+    <div>
+        <div class="qdn-section-title">تحليل أداء المدربين</div>
+        <div class="qdn-section-sub">قياس متوسط الأداء والدروس الضعيفة لكل مدرب — @instructorsCount مدرب</div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+
+    @* مخطط المدربين *@
+    <div class="col-lg-5">
+        <div class="qdn-chart-card h-100">
+            <div class="qdn-chart-header">
+                <div class="qdn-chart-title"><i class="bi bi-bar-chart-horizontal-fill me-2" style="color:#0891b2;"></i>متوسط أداء المدربين</div>
+                <div class="qdn-chart-sub">المدربون مرتبون حسب النتيجة</div>
+            </div>
+            <div class="qdn-chart-body" style="height:280px;">
+                <canvas id="instructorBarChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    @* جدول المدربين *@
+    <div class="col-lg-7">
+        <div class="qdn-table-card h-100">
+            <div class="qdn-table-card-header">
+                <span class="qdn-badge-pill" style="background:#cffafe;color:#0891b2;">
+                    <i class="bi bi-person-badge-fill me-1"></i>@instructorsCount مدرب
+                </span>
+            </div>
+            <div class="table-responsive">
+                <table class="table qdn-table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>المدرب</th>
+                            <th>مستوى الخطورة</th>
+                            <th>متوسط الأداء</th>
+                            <th>الدروس الضعيفة</th>
+                            <th>الدفعات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.Instructors != null && Model.Instructors.Any()) {
+                            foreach (var ins in Model.Instructors) {
+                                var iLevel = ins.AvgScore >= 80 ? "منخفض" : ins.AvgScore >= 60 ? "متوسط" : "عالي";
+                                var iBadgeCls = ins.AvgScore >= 80 ? "qdn-chip-success" : ins.AvgScore >= 60 ? "qdn-chip-warning" : "qdn-chip-danger";
+                                var iScColor2 = ins.AvgScore >= 80 ? "#16a34a" : ins.AvgScore >= 60 ? "#d97706" : "#dc2626";
+                                <tr>
+                                    <td>
+                                        <a asp-area="Admin" asp-controller="Analytics"
+                                           asp-action="InstructorPerformanceDetails"
+                                           asp-route-instructorId="@ins.InstructorId"
+                                           class="qdn-table-link">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <div class="qdn-avatar-xs" style="background:rgba(8,145,178,.12);color:#0891b2;">
+                                                    @(ins.InstructorName.Length > 0 ? ins.InstructorName[0].ToString() : "؟")
+                                                </div>
+                                                @ins.InstructorName
+                                            </div>
+                                        </a>
+                                    </td>
+                                    <td><span class="qdn-chip @iBadgeCls">@iLevel</span></td>
+                                    <td>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span style="font-weight:800;color:@iScColor2;min-width:38px;">@Math.Round(ins.AvgScore)%</span>
+                                            <div class="qdn-mini-bar">
+                                                <div class="qdn-mini-bar-fill" style="width:@ins.AvgScore%;background:@iScColor2;"></div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        @if (ins.WeakLessonsCount > 0) {
+                                            <span class="qdn-chip qdn-chip-warning">@ins.WeakLessonsCount درس</span>
+                                        } else {
+                                            <span class="qdn-chip qdn-chip-success"><i class="bi bi-check2"></i> لا شيء</span>
+                                        }
+                                    </td>
+                                    <td style="font-weight:700;">@ins.BatchesCount</td>
+                                </tr>
+                            }
+                        } else {
+                            <tr>
+                                <td colspan="5">
+                                    <div class="qdn-empty-inline">
+                                        <i class="bi bi-inbox"></i>
+                                        <span>لا توجد بيانات مدربين</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+@* ══════════════════════════════════════════════════════════════════════
+   § 5 — تحليل الدروس الضعيفة
+   ══════════════════════════════════════════════════════════════════════ *@
+<div class="qdn-section-header mb-3">
+    <div class="qdn-section-icon" style="background:#fee2e2;color:#dc2626;">
+        <i class="bi bi-exclamation-diamond-fill"></i>
+    </div>
+    <div>
+        <div class="qdn-section-title">تحليل الدروس الضعيفة</div>
+        <div class="qdn-section-sub">الدروس التي ظهر فيها تكرار أخطاء لدى الطلاب</div>
+    </div>
+</div>
+
+@* Mini KPIs للدروس *@
+<div class="row g-3 mb-3">
+    <div class="col-md-4">
+        <div class="qdn-mini-kpi" style="border-color:#fca5a5;">
+            <div class="qdn-mini-kpi-icon" style="background:#fee2e2;color:#dc2626;"><i class="bi bi-exclamation-diamond-fill"></i></div>
+            <div>
+                <div class="qdn-mini-kpi-value text-danger">@Model.HighRiskCount</div>
+                <div class="qdn-mini-kpi-label">دروس تجاوزت نسبة الضعف</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="qdn-mini-kpi" style="border-color:#fde68a;">
+            <div class="qdn-mini-kpi-icon" style="background:#fef3c7;color:#d97706;"><i class="bi bi-graph-down"></i></div>
+            <div>
+                <div class="qdn-mini-kpi-value" style="color:#d97706;">@Math.Round(Model.AvgWeakness, 1)%</div>
+                <div class="qdn-mini-kpi-label">متوسط نسبة الضعف العام</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="qdn-mini-kpi" style="border-color:#c4b5fd;">
+            <div class="qdn-mini-kpi-icon" style="background:#ede9fe;color:#7c3aed;"><i class="bi bi-trophy-fill"></i></div>
+            <div>
+                <div style="font-size:14px;font-weight:800;color:#111827;line-height:1.3;margin-bottom:2px;">
+                    @(lessonRows.FirstOrDefault()?.LessonName ?? "—")
+                </div>
+                <div class="qdn-mini-kpi-label">أكثر درس تكرر فيه الضعف</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+
+    @* جدول الدروس *@
+    <div class="col-lg-7">
+        <div class="qdn-table-card h-100 d-flex flex-column">
+            <div class="qdn-table-card-header">
+                <span class="qdn-badge-pill" style="background:#fee2e2;color:#dc2626;">
+                    <i class="bi bi-exclamation-diamond-fill me-1"></i>@Model.HighRiskCount درس حرج
+                </span>
+            </div>
+            <div class="table-responsive flex-grow-1">
+                <table class="table qdn-table align-middle mb-0" id="lessonWeakTable" style="table-layout:fixed;width:100%;">
+                    <thead>
+                        <tr>
+                            <th style="width:30%;">اسم الدرس</th>
+                            <th style="width:18%;">الدفعة</th>
+                            <th style="width:18%;">المدرب</th>
+                            <th style="width:15%;">المتأثرون</th>
+                            <th style="width:19%;">نسبة الضعف</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (lessonRows.Any()) {
+                            var rowIndex = 0;
+                            foreach (var l in lessonRows) {
+                                rowIndex++;
+                                var lColor   = l.WeakPercentage >= 70 ? "#dc2626" : l.WeakPercentage >= 50 ? "#d97706" : "#16a34a";
+                                var lBg      = l.WeakPercentage >= 70 ? "#fee2e2" : l.WeakPercentage >= 50 ? "#fef3c7" : "#dcfce7";
+                                <tr class="lesson-page-row" data-row-index="@rowIndex">
+                                    <td>
+                                        <a asp-area="Admin" asp-controller="Analytics"
+                                           asp-action="WeakLessonDetails"
+                                           asp-route-lessonId="@l.LessonId"
+                                           asp-route-curriculumId="@Model.SelectedCurriculumId"
+                                           asp-route-batchId="@Model.SelectedBatchId"
+                                           asp-route-instructorId="@Model.SelectedInstructorId"
+                                           class="qdn-table-link">@l.LessonName</a>
+                                    </td>
+                                    <td style="font-size:12px;color:#6b7280;">@l.BatchName</td>
+                                    <td style="font-size:12px;color:#6b7280;">@l.InstructorName</td>
+                                    <td>
+                                        <span class="qdn-chip qdn-chip-danger">@l.AffectedStudents طالب</span>
+                                    </td>
+                                    <td>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span style="font-weight:800;color:@lColor;min-width:40px;">@Math.Round(l.WeakPercentage, 1)%</span>
+                                            <div class="qdn-mini-bar" style="flex:1;">
+                                                <div class="qdn-mini-bar-fill" style="width:@l.WeakPercentage%;background:@lColor;"></div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        } else {
+                            <tr>
+                                <td colspan="5">
+                                    <div class="qdn-empty-inline">
+                                        <i class="bi bi-inbox"></i>
+                                        <span>لا توجد دروس ضعيفة مسجلة</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @if (lessonRows.Any()) {
+                <div class="lesson-pagination-bar d-flex justify-content-between align-items-center flex-wrap gap-2 mt-3 pt-3"
+                     style="border-top:1px solid #f3f4f6;">
+                    <div style="font-size:12px;color:#6b7280;">
+                        عرض <span id="lessonPageFrom">1</span>–<span id="lessonPageTo">@Math.Min(lessonPageSize, lessonRows.Count)</span>
+                        من <strong>@lessonRows.Count</strong> درس
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="qdn-pager-btn" id="lessonPrevBtn" onclick="changeLessonPage(-1)">
+                            <i class="bi bi-chevron-right"></i> السابق
+                        </button>
+                        <span style="font-size:12px;font-weight:700;color:#6b7280;">
+                            <span id="lessonCurrentPage">1</span> / <span id="lessonTotalPages">1</span>
+                        </span>
+                        <button class="qdn-pager-btn qdn-pager-btn-primary" id="lessonNextBtn" onclick="changeLessonPage(1)">
+                            التالي <i class="bi bi-chevron-left"></i>
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    @* مخطط الدروس الضعيفة *@
+    <div class="col-lg-5">
+        <div class="qdn-chart-card h-100">
+            <div class="qdn-chart-header">
+                <div class="qdn-chart-title"><i class="bi bi-bar-chart-horizontal-fill me-2" style="color:#dc2626;"></i>أعلى 8 دروس ضعفاً</div>
+                <div class="qdn-chart-sub">مرتبة حسب نسبة الضعف تنازلياً</div>
+            </div>
+            <div class="qdn-chart-body" style="height:@(Math.Max(240, (Model.Lessons?.Take(8).Count() ?? 4) * 42))px;">
+                <canvas id="lessonWeakChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+@* ══════════════════════════════════════════════════════════════════════
+   § 6 — تحليل أداء الدفعات
+   ══════════════════════════════════════════════════════════════════════ *@
+<div class="qdn-section-header mb-3">
+    <div class="qdn-section-icon" style="background:#dbeafe;color:#1e40af;">
+        <i class="bi bi-layers-fill"></i>
+    </div>
+    <div>
+        <div class="qdn-section-title">تحليل أداء الدفعات</div>
+        <div class="qdn-section-sub">نظرة عامة على الدفعات الحالية ومستوى المخاطر — @batchesCount دفعة</div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+
+    @* جدول الدفعات *@
+    <div class="col-lg-8">
+        <div class="qdn-table-card h-100">
+            <div class="qdn-table-card-header">
+                <span class="qdn-badge-pill" style="background:#dbeafe;color:#1e40af;">
+                    <i class="bi bi-layers-fill me-1"></i>@batchesCount دفعة نشطة
+                </span>
+            </div>
+            <div class="table-responsive" style="max-height:360px;overflow-y:auto;">
+                <table class="table qdn-table align-middle mb-0">
+                    <thead style="position:sticky;top:0;z-index:1;">
+                        <tr>
+                            <th>الدفعة</th>
+                            <th>الدورة</th>
+                            <th>الدروس الحرجة</th>
+                            <th>الطلاب</th>
+                            <th>متوسط الضعف</th>
+                            <th>الحالة</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.Batches != null && Model.Batches.Any()) {
+                            foreach (var b in Model.Batches) {
+                                var bPct   = Math.Round(b.AvgWeakness, 1);
+                                var bColor = bPct >= 70 ? "#dc2626" : bPct >= 50 ? "#d97706" : "#16a34a";
+                                var bChip  = bPct >= 70 ? "qdn-chip-danger" : bPct >= 50 ? "qdn-chip-warning" : "qdn-chip-success";
+                                var bState = bPct >= 70 ? "خطر" : bPct >= 50 ? "متوسط" : "مستقر";
+                                <tr>
+                                    <td>
+                                        <a asp-area="Admin" asp-controller="Analytics"
+                                           asp-action="BatchPerformanceDetails"
+                                           asp-route-batchId="@b.BatchId"
+                                           asp-route-curriculumId="@Model.SelectedCurriculumId"
+                                           asp-route-instructorId="@Model.SelectedInstructorId"
+                                           class="qdn-table-link">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <div class="qdn-avatar-xs" style="background:rgba(30,64,175,.1);color:#1e40af;">
+                                                    @(b.BatchName.Length > 0 ? b.BatchName[0].ToString() : "؟")
+                                                </div>
+                                                @b.BatchName
+                                            </div>
+                                        </a>
+                                    </td>
+                                    <td style="font-size:12px;color:#6b7280;">@b.CourseName</td>
+                                    <td>
+                                        @if (b.CriticalLessonsCount > 0) {
+                                            <span class="qdn-chip qdn-chip-danger">@b.CriticalLessonsCount</span>
+                                        } else {
+                                            <span style="color:#16a34a;font-weight:700;">—</span>
+                                        }
+                                    </td>
+                                    <td style="font-weight:700;">@b.StudentsCount</td>
+                                    <td>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span style="font-weight:800;color:@bColor;min-width:38px;">@bPct%</span>
+                                            <div class="qdn-mini-bar" style="width:60px;">
+                                                <div class="qdn-mini-bar-fill" style="width:@b.AvgWeakness%;background:@bColor;"></div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td><span class="qdn-chip @bChip">@bState</span></td>
+                                </tr>
+                            }
+                        } else {
+                            <tr>
+                                <td colspan="6">
+                                    <div class="qdn-empty-inline"><i class="bi bi-inbox"></i><span>لا توجد بيانات دفعات</span></div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @if (Model.TotalPages > 1) {
+                <div class="d-flex justify-content-center gap-2 mt-3 pt-3" style="border-top:1px solid #f3f4f6;">
+                    @if (Model.CurrentPage > 1) { <a href="#" data-dashboard-page="@(Model.CurrentPage - 1)" class="qdn-pager-btn"><i class="bi bi-chevron-right"></i></a> }
+                    @for (int pg = 1; pg <= Model.TotalPages; pg++) {
+                        if (pg == Model.CurrentPage) { <span class="qdn-pager-btn qdn-pager-btn-primary">@pg</span> }
+                        else { <a href="#" data-dashboard-page="@pg" class="qdn-pager-btn">@pg</a> }
+                    }
+                    @if (Model.CurrentPage < Model.TotalPages) { <a href="#" data-dashboard-page="@(Model.CurrentPage + 1)" class="qdn-pager-btn"><i class="bi bi-chevron-left"></i></a> }
+                </div>
+            }
+        </div>
+    </div>
+
+    @* مخطط توزيع المخاطر — مكرر هنا للدفعات *@
+    <div class="col-lg-4">
+        <div class="qdn-chart-card h-100">
+            <div class="qdn-chart-header">
+                <div class="qdn-chart-title"><i class="bi bi-pie-chart-fill me-2" style="color:#1e40af;"></i>تصنيف الدفعات</div>
+                <div class="qdn-chart-sub">توزيع المخاطر عبر الدفعات</div>
+            </div>
+            <div class="qdn-chart-body" style="height:260px;">
+                <canvas id="batchRiskChart"></canvas>
+            </div>
+            <div class="d-flex justify-content-center gap-3 mt-2">
+                <div class="text-center">
+                    <div style="font-size:22px;font-weight:900;color:#dc2626;">@Model.RiskHigh</div>
+                    <div style="font-size:11px;color:#6b7280;font-weight:700;">خطر عالي</div>
+                </div>
+                <div style="width:1px;background:#f3f4f6;"></div>
+                <div class="text-center">
+                    <div style="font-size:22px;font-weight:900;color:#d97706;">@Model.RiskMedium</div>
+                    <div style="font-size:11px;color:#6b7280;font-weight:700;">متوسط</div>
+                </div>
+                <div style="width:1px;background:#f3f4f6;"></div>
+                <div class="text-center">
+                    <div style="font-size:22px;font-weight:900;color:#16a34a;">@Model.RiskLow</div>
+                    <div style="font-size:11px;color:#6b7280;font-weight:700;">جيد</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+@* ══════════════════════════════════════════════════════════════════════
+   § 7 — تفاصيل الطلاب الحرجين
+   ══════════════════════════════════════════════════════════════════════ *@
+<div class="qdn-section-header mb-3">
+    <div class="qdn-section-icon" style="background:#fee2e2;color:#dc2626;">
+        <i class="bi bi-person-fill-exclamation"></i>
+    </div>
+    <div>
+        <div class="qdn-section-title">تفاصيل الطلاب الحرجين</div>
+        <div class="qdn-section-sub">أولوية التدخل مبنية على الاختبارات والواجبات والحضور</div>
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+
+    @* مخطط الطلاب الحرجين *@
+    <div class="col-lg-7">
+        <div class="qdn-chart-card h-100">
+            <div class="qdn-chart-header">
+                <div class="qdn-chart-title"><i class="bi bi-bar-chart-steps me-2" style="color:#dc2626;"></i>أضعف 6 طلاب — مقارنة الأداء</div>
+                <div class="qdn-chart-sub">الاختبارات، الواجبات، الحضور</div>
+            </div>
+            <div class="qdn-chart-body" style="height:280px;">
+                <canvas id="criticalChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    @* توصية فورية *@
+    <div class="col-lg-5">
+        @if (worstStudent != null) {
+            <div class="qdn-urgent-card h-100">
+                <div class="qdn-urgent-icon-wrap">
+                    <i class="bi bi-lightning-charge-fill"></i>
+                </div>
+                <div class="qdn-urgent-label">توصية فورية</div>
+                <div class="qdn-urgent-name">@worstStudent.StudentName</div>
+                <p class="qdn-urgent-reason">@worstStudent.WeakReason</p>
+                <div class="qdn-urgent-stats">
+                    <div class="qdn-urgent-stat">
+                        <div class="qdn-urgent-stat-value">@worstStudent.ExamScore%</div>
+                        <div class="qdn-urgent-stat-label">الاختبارات</div>
+                    </div>
+                    <div class="qdn-urgent-stat">
+                        <div class="qdn-urgent-stat-value">@worstStudent.HomeworkScore%</div>
+                        <div class="qdn-urgent-stat-label">الواجبات</div>
+                    </div>
+                    <div class="qdn-urgent-stat">
+                        <div class="qdn-urgent-stat-value">@worstStudent.Attendance%</div>
+                        <div class="qdn-urgent-stat-label">الحضور</div>
+                    </div>
+                </div>
+                <div class="qdn-urgent-action">
+                    <i class="bi bi-lightning-charge-fill me-1"></i>@worstStudent.ActionRequired
+                </div>
+            </div>
+        } else {
+            <div class="qdn-ok-card h-100">
+                <i class="bi bi-shield-check"></i>
+                <div style="font-size:17px;font-weight:800;color:#16a34a;margin-bottom:6px;">لا توجد حالات حرجة</div>
+                <div style="font-size:14px;color:#6b7280;">جميع الطلاب في وضع مقبول حالياً</div>
+            </div>
+        }
+    </div>
+
+</div>
+
+@* جدول الطلاب الكامل *@
+<div class="qdn-table-card mb-4">
+    <div class="qdn-table-card-header">
+        <span class="qdn-badge-pill" style="background:#fee2e2;color:#dc2626;">
+            <i class="bi bi-person-fill-exclamation me-1"></i>@Model.WeakStudents طالب محلل
+        </span>
+    </div>
+    <div class="table-responsive">
+        <table class="table qdn-table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>اسم الطالب</th>
+                    <th>الحضور</th>
+                    <th>الواجبات</th>
+                    <th>الاختبارات</th>
+                    <th>المستوى</th>
+                    <th>سبب الضعف</th>
+                    <th>الإجراء</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.Students == null || !Model.Students.Any()) {
+                    <tr>
+                        <td colspan="7">
+                            <div class="qdn-empty-inline"><i class="bi bi-inbox"></i><span>لا توجد بيانات طلاب</span></div>
+                        </td>
+                    </tr>
+                } else {
+                    foreach (var s in Model.Students.OrderBy(x => x.ExamScore).Take(20)) {
+                        var sAtt  = Math.Round(s.Attendance, 0);
+                        var sHw   = Math.Round(s.HomeworkScore, 0);
+                        var sEx   = Math.Round(s.ExamScore, 0);
+                        var sLvl  = sEx < 40 ? "حرج جدًا" : sEx < 60 ? "ضعيف" : "مقبول";
+                        var sLvlC = sEx < 40 ? "qdn-chip-danger" : sEx < 60 ? "qdn-chip-warning" : "qdn-chip-success";
+                        var sActC = s.Priority == "High" ? "qdn-chip-danger" : s.Priority == "Medium" ? "qdn-chip-warning" : "qdn-chip-primary";
+                        var sExColor = sEx < 40 ? "#dc2626" : sEx < 60 ? "#d97706" : "#16a34a";
+                        <tr>
+                            <td>
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="qdn-avatar-xs" style="background:@(sEx < 40 ? "#fee2e2" : sEx < 60 ? "#fef3c7" : "#dcfce7");color:@sExColor;">
+                                        @(s.StudentName.Length > 0 ? s.StudentName[0].ToString() : "؟")
+                                    </div>
+                                    <span style="font-weight:700;">@s.StudentName</span>
+                                </div>
+                            </td>
+                            <td>
+                                <div style="font-size:12px;font-weight:700;margin-bottom:3px;">@sAtt%</div>
+                                <div class="qdn-mini-bar" style="width:60px;">
+                                    <div class="qdn-mini-bar-fill" style="width:@sAtt%;background:#1e40af;"></div>
+                                </div>
+                            </td>
+                            <td style="font-weight:800;color:#d97706;">@sHw%</td>
+                            <td style="font-weight:800;color:@sExColor;">@sEx%</td>
+                            <td><span class="qdn-chip @sLvlC">@sLvl</span></td>
+                            <td style="font-size:12px;color:#dc2626;font-weight:600;max-width:160px;">@s.WeakReason</td>
+                            <td><span class="qdn-chip @sActC" style="font-size:11px;">@s.ActionRequired</span></td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@* ══════════════════════════════════════════════════════════════════════
+   § 8 — قرارات النظام (أولوية عالية)
+   ══════════════════════════════════════════════════════════════════════ *@
+<div class="qdn-section-header mb-3">
+    <div class="qdn-section-icon" style="background:#ede9fe;color:#7c3aed;">
+        <i class="bi bi-cpu-fill"></i>
+    </div>
+    <div>
+        <div class="qdn-section-title">قرارات النظام</div>
+        <div class="qdn-section-sub">الطلاب ذوو الأولوية العالية الذين يتطلبون تدخلاً عاجلاً</div>
+    </div>
+</div>
+
+<div class="mb-4">
+    @if (highPriorityStudents != null && highPriorityStudents.Any()) {
+        <div class="row g-3">
+            @foreach (var s in highPriorityStudents) {
+                <div class="col-md-4">
+                    <div class="qdn-decision-card">
+                        <div class="qdn-decision-card-badge">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i> أولوية عالية
+                        </div>
+                        <div class="qdn-decision-card-name">@s.StudentName</div>
+                        <p class="qdn-decision-card-reason">@s.WeakReason</p>
+                        <div class="qdn-decision-card-action">
+                            <i class="bi bi-lightning-charge-fill me-1"></i>@s.ActionRequired
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    } else {
+        <div class="qdn-ok-card" style="padding:32px;">
+            <i class="bi bi-shield-check"></i>
+            <div style="font-size:17px;font-weight:800;color:#16a34a;margin-bottom:6px;">لا توجد مشاكل حرجة</div>
+            <div style="font-size:14px;color:#6b7280;">جميع الطلاب في وضع مقبول حالياً</div>
+        </div>
+    }
+</div>
+
+@* ══════════════════════════════════════════════════════════════════════
+   § 9 — الإجراءات الجماعية
+   ══════════════════════════════════════════════════════════════════════ *@
+<div class="qdn-section-header mb-3">
+    <div class="qdn-section-icon" style="background:#dbeafe;color:#1e40af;">
+        <i class="bi bi-lightning-charge-fill"></i>
+    </div>
+    <div>
+        <div class="qdn-section-title">الإجراءات الجماعية</div>
+        <div class="qdn-section-sub">إجراءات تنفيذية تُطبَّق فوراً على الطلاب والدفعات المحددة</div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="qdn-action-card">
+            <div class="d-flex align-items-center gap-3 mb-3">
+                <div class="qdn-action-icon" style="background:#cffafe;color:#0891b2;"><i class="bi bi-bell-fill"></i></div>
+                <div style="font-size:15px;font-weight:800;color:#111827;">إرسال إشعار جماعي</div>
+            </div>
+            <p style="font-size:13px;color:#6b7280;flex:1;">إرسال رسالة تنبيهية لجميع الطلاب ذوي الأولوية العالية في الدفعة المحددة.</p>
+            <button type="button" class="qdn-action-btn" style="background:#0891b2;" id="btnSendNotification" onclick="handleSendNotification(this)">
+                <i class="bi bi-send-fill"></i> إرسال الإشعار
+            </button>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="qdn-action-card">
+            <div class="d-flex align-items-center gap-3 mb-3">
+                <div class="qdn-action-icon" style="background:#dcfce7;color:#16a34a;"><i class="bi bi-calendar-check-fill"></i></div>
+                <div style="font-size:15px;font-weight:800;color:#111827;">جدولة جلسة تحليل</div>
+            </div>
+            <p style="font-size:13px;color:#6b7280;flex:1;">إنشاء جلسة مجدولة لمراجعة أداء الدفعة مع المدربين المعنيين.</p>
+            <button type="button" class="qdn-action-btn" style="background:#16a34a;" id="btnScheduleSession" onclick="handleScheduleSession(this)">
+                <i class="bi bi-calendar-plus-fill"></i> جدولة الجلسة
+            </button>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="qdn-action-card">
+            <div class="d-flex align-items-center gap-3 mb-3">
+                <div class="qdn-action-icon" style="background:#ede9fe;color:#7c3aed;"><i class="bi bi-person-check-fill"></i></div>
+                <div style="font-size:15px;font-weight:800;color:#111827;">تعيين مدرب للمتابعة</div>
+            </div>
+            <p style="font-size:13px;color:#6b7280;flex:1;">تكليف مدرب مختص بمتابعة الحالات الحرجة في الدفعة المحددة.</p>
+            <button type="button" class="qdn-action-btn" style="background:#7c3aed;" id="btnAssignInstructor" onclick="handleAssignInstructor(this)">
+                <i class="bi bi-person-plus-fill"></i> تعيين المدرب
+            </button>
+        </div>
+    </div>
+</div>
+
+@* ══════════════════════════════════════════════════════════════════════
+   STYLES — محلية للـ partial
+   ══════════════════════════════════════════════════════════════════════ *@
+<style>
+    /* ── Section header ── */
+    .qdn-section-header {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+    }
+    .qdn-section-icon {
+        width: 42px; height: 42px; border-radius: 12px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 20px; flex-shrink: 0;
+    }
+    .qdn-section-title {
+        font-size: 17px; font-weight: 800; color: #111827; margin-bottom: 3px;
+    }
+    .qdn-section-sub {
+        font-size: 13px; color: #6b7280;
+    }
+
+    /* ── Metric Card ── */
+    .qdn-metric-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 16px;
+        padding: 20px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.05);
+        transition: transform .18s, box-shadow .18s;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .qdn-metric-card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,.1); }
+    .qdn-metric-icon {
+        width: 40px; height: 40px; border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 18px;
+    }
+    .qdn-metric-label { font-size: 12px; color: #6b7280; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; }
+    .qdn-metric-value { font-size: 32px; font-weight: 900; line-height: 1; }
+    .qdn-metric-unit  { font-size: 18px; font-weight: 700; }
+    .qdn-metric-cta   { font-size: 12px; color: #6b7280; font-weight: 700; margin-top: auto; }
+    .qdn-metric-cta i { margin-left: 4px; }
+
+    /* ── Progress Bar ── */
+    .qdn-progress-wrap { margin-top: 4px; }
+    .qdn-progress-track { position: relative; height: 8px; border-radius: 20px; background: #f3f4f6; overflow: visible; }
+    .qdn-progress-fill  { height: 100%; border-radius: 20px; transition: width .5s ease; }
+    .qdn-progress-threshold { position: absolute; top: -4px; bottom: -4px; width: 2px; background: #94a3b8; border-radius: 2px; transform: translateX(-50%); }
+    .qdn-progress-labels { display: flex; justify-content: space-between; margin-top: 5px; font-size: 10px; color: #94a3b8; font-weight: 600; }
+
+    /* ── Status Chip ── */
+    .qdn-status-chip {
+        display: inline-flex; align-items: center; gap: 5px;
+        padding: 4px 10px; border-radius: 20px;
+        font-size: 12px; font-weight: 700; width: fit-content;
+    }
+
+    /* ── Chart Card ── */
+    .qdn-chart-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 16px;
+        padding: 20px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.05);
+        display: flex;
+        flex-direction: column;
+    }
+    .qdn-chart-header { margin-bottom: 16px; }
+    .qdn-chart-title  { font-size: 14px; font-weight: 800; color: #111827; margin-bottom: 3px; }
+    .qdn-chart-sub    { font-size: 12px; color: #6b7280; }
+    .qdn-chart-body   { position: relative; flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; }
+    .qdn-chart-body canvas { display: block; width: 100% !important; height: 100% !important; max-height: 100%; }
+
+    /* ── Legend Pill ── */
+    .qdn-legend-pill {
+        display: inline-flex; align-items: center; gap: 5px;
+        padding: 3px 10px; border-radius: 20px;
+        font-size: 12px; font-weight: 700;
+        background: color-mix(in srgb, var(--clr) 12%, #fff);
+        color: var(--clr);
+        border: 1px solid color-mix(in srgb, var(--clr) 25%, #fff);
+    }
+
+    /* ── AI Banner ── */
+    .qdn-ai-banner {
+        background: linear-gradient(135deg, #3b0764, #5b21b6, #7c3aed);
+        border-radius: 16px;
+        padding: 22px 26px;
+        color: #fff;
+        position: relative;
+        overflow: hidden;
+    }
+    .qdn-ai-glow {
+        position: absolute;
+        width: 200px; height: 200px;
+        border-radius: 50%;
+        background: rgba(167,139,250,.25);
+        top: -60px; left: -60px;
+        pointer-events: none;
+    }
+    .qdn-ai-icon-wrap {
+        width: 52px; height: 52px; border-radius: 14px;
+        background: rgba(255,255,255,.18);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 24px; border: 1px solid rgba(255,255,255,.2);
+        flex-shrink: 0;
+    }
+    .qdn-ai-eyebrow  { font-size: 11px; font-weight: 700; opacity: .7; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+    .qdn-ai-headline { font-size: 17px; font-weight: 800; margin-bottom: 6px; }
+    .qdn-ai-body     { font-size: 14px; opacity: .85; margin: 0; }
+    .qdn-ai-refresh-btn {
+        background: rgba(255,255,255,.18);
+        color: #fff;
+        border: 1px solid rgba(255,255,255,.25);
+        border-radius: 10px;
+        padding: 9px 18px;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        font-family: inherit;
+        white-space: nowrap;
+        transition: background .18s;
+    }
+    .qdn-ai-refresh-btn:hover { background: rgba(255,255,255,.28); }
+
+    /* ── Table Card ── */
+    .qdn-table-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 16px;
+        padding: 16px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.05);
+    }
+    .qdn-table-card-header { margin-bottom: 12px; }
+
+    /* ── Table ── */
+    .qdn-table { font-family: inherit; }
+    .qdn-table thead th {
+        background: #f8f9fa;
+        font-size: 12px; font-weight: 800;
+        color: #374151;
+        text-transform: uppercase;
+        letter-spacing: .4px;
+        border-bottom: 1px solid #e5e7eb;
+        padding: 10px 12px;
+        white-space: nowrap;
+    }
+    .qdn-table tbody td { font-size: 13px; color: #111827; padding: 10px 12px; border-bottom: 1px solid #f9fafb; }
+    .qdn-table tbody tr:last-child td { border-bottom: none; }
+    .qdn-table tbody tr:hover { background: #f9fafb; }
+    .qdn-table-link {
+        font-weight: 700; color: #111827; text-decoration: none;
+        transition: color .15s;
+    }
+    .qdn-table-link:hover { color: #1e40af; }
+
+    /* ── Chips ── */
+    .qdn-chip {
+        display: inline-flex; align-items: center; gap: 4px;
+        padding: 3px 9px; border-radius: 20px;
+        font-size: 11px; font-weight: 700;
+        white-space: nowrap;
+    }
+    .qdn-chip-success { background: #dcfce7; color: #16a34a; }
+    .qdn-chip-warning { background: #fef3c7; color: #d97706; }
+    .qdn-chip-danger  { background: #fee2e2; color: #dc2626; }
+    .qdn-chip-primary { background: #dbeafe; color: #1e40af; }
+
+    /* ── Badge Pill ── */
+    .qdn-badge-pill {
+        display: inline-flex; align-items: center; gap: 5px;
+        padding: 5px 12px; border-radius: 20px;
+        font-size: 12px; font-weight: 700;
+    }
+
+    /* ── Mini Bar ── */
+    .qdn-mini-bar {
+        height: 6px; border-radius: 20px; background: #f3f4f6;
+        overflow: hidden; flex: 1; min-width: 40px;
+    }
+    .qdn-mini-bar-fill { height: 100%; border-radius: 20px; transition: width .4s; }
+
+    /* ── Avatar XS ── */
+    .qdn-avatar-xs {
+        width: 28px; height: 28px; border-radius: 8px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 12px; font-weight: 800; flex-shrink: 0;
+    }
+
+    /* ── Mini KPI ── */
+    .qdn-mini-kpi {
+        background: #fff;
+        border: 1px solid;
+        border-radius: 14px;
+        padding: 16px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.04);
+    }
+    .qdn-mini-kpi-icon {
+        width: 42px; height: 42px; border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 18px; flex-shrink: 0;
+    }
+    .qdn-mini-kpi-value { font-size: 26px; font-weight: 900; line-height: 1; margin-bottom: 4px; }
+    .qdn-mini-kpi-label { font-size: 12px; color: #6b7280; font-weight: 700; }
+
+    /* ── Urgent Card ── */
+    .qdn-urgent-card {
+        background: linear-gradient(135deg, #fff1f1, #fee2e2);
+        border: 1.5px solid #fca5a5;
+        border-radius: 16px;
+        padding: 22px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    .qdn-urgent-icon-wrap {
+        width: 44px; height: 44px; border-radius: 12px;
+        background: #dc2626;
+        color: #fff;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 20px;
+    }
+    .qdn-urgent-label  { font-size: 11px; font-weight: 700; color: #dc2626; text-transform: uppercase; letter-spacing: .5px; }
+    .qdn-urgent-name   { font-size: 20px; font-weight: 800; color: #7f1d1d; }
+    .qdn-urgent-reason { font-size: 14px; color: #991b1b; margin: 0; }
+    .qdn-urgent-stats  { display: flex; gap: 16px; }
+    .qdn-urgent-stat   { text-align: center; }
+    .qdn-urgent-stat-value { font-size: 22px; font-weight: 900; color: #dc2626; }
+    .qdn-urgent-stat-label { font-size: 11px; color: #9ca3af; font-weight: 700; }
+    .qdn-urgent-action {
+        font-size: 13px; font-weight: 700;
+        background: rgba(220,38,38,.1);
+        color: #b91c1c;
+        border-radius: 8px;
+        padding: 8px 12px;
+        display: flex; align-items: center;
+    }
+
+    /* ── OK Card ── */
+    .qdn-ok-card {
+        background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+        border: 1.5px solid #86efac;
+        border-radius: 16px;
+        padding: 22px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        gap: 10px;
+    }
+    .qdn-ok-card i { font-size: 40px; color: #16a34a; opacity: .7; }
+
+    /* ── Decision Card ── */
+    .qdn-decision-card {
+        background: linear-gradient(135deg, #fff5f5, #fee2e2);
+        border: 1.5px solid #fca5a5;
+        border-radius: 16px;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .qdn-decision-card-badge {
+        display: inline-flex; align-items: center;
+        background: #dc2626; color: #fff;
+        border-radius: 20px; padding: 3px 10px;
+        font-size: 11px; font-weight: 700;
+        width: fit-content;
+    }
+    .qdn-decision-card-name   { font-size: 17px; font-weight: 800; color: #7f1d1d; }
+    .qdn-decision-card-reason { font-size: 13px; color: #991b1b; margin: 0; }
+    .qdn-decision-card-action {
+        font-size: 12px; font-weight: 700; color: #b91c1c;
+        background: rgba(220,38,38,.1);
+        border-radius: 8px;
+        padding: 6px 10px;
+        display: flex; align-items: center;
+    }
+
+    /* ── Action Card ── */
+    .qdn-action-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 16px;
+        padding: 20px;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        transition: box-shadow .15s, border-color .15s;
+        box-shadow: 0 2px 8px rgba(0,0,0,.04);
+    }
+    .qdn-action-card:hover { box-shadow: 0 6px 20px rgba(0,0,0,.1); border-color: #93c5fd; }
+    .qdn-action-icon {
+        width: 44px; height: 44px; border-radius: 12px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 20px; flex-shrink: 0;
+    }
+    .qdn-action-btn {
+        display: inline-flex; align-items: center; justify-content: center;
+        gap: 6px; width: 100%; padding: 10px 16px;
+        border-radius: 10px; border: none;
+        font-size: 13px; font-weight: 700;
+        cursor: pointer; color: #fff;
+        font-family: inherit;
+        transition: opacity .15s;
+        margin-top: auto;
+    }
+    .qdn-action-btn:hover { opacity: .88; }
+    .qdn-action-btn:disabled { opacity: .55; cursor: not-allowed; }
+
+    /* ── Pager ── */
+    .qdn-pager-btn {
+        display: inline-flex; align-items: center; gap: 4px;
+        padding: 6px 12px; border-radius: 8px;
+        border: 1px solid #e5e7eb;
+        background: #fff; color: #374151;
+        font-size: 12px; font-weight: 700;
+        cursor: pointer; transition: .15s;
+        font-family: inherit;
+    }
+    .qdn-pager-btn:hover:not(:disabled) { background: #dbeafe; color: #1e40af; border-color: #93c5fd; }
+    .qdn-pager-btn:disabled { opacity: .4; cursor: not-allowed; }
+    .qdn-pager-btn-primary { background: #1e40af; color: #fff; border-color: #1e40af; }
+    .qdn-pager-btn-primary:hover:not(:disabled) { background: #1d4ed8; }
+    a.qdn-pager-btn { text-decoration: none; }
+
+    /* ── Empty Inline ── */
+    .qdn-empty-inline {
+        display: flex; align-items: center; justify-content: center;
+        gap: 10px; padding: 24px;
+        color: #9ca3af; font-size: 14px; font-weight: 700;
+    }
+    .qdn-empty-inline i { font-size: 24px; opacity: .5; }
+
+    /* ── Card Link ── */
+    .qdn-card-link { text-decoration: none; display: block; color: inherit; }
+
+    /* ── Lesson Pagination ── */
+    .lesson-pagination-bar .qdn-pager-btn { min-width: 70px; }
+
+    /* ── Toast Animations ── */
+    @@keyframes toast-in  { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+    @@keyframes toast-out { from { opacity:1; transform:translateY(0); } to { opacity:0; transform:translateY(10px); } }
+
+    /* ── Responsive ── */
+    @@media (max-width: 991px) {
+        .qdn-chart-card, .qdn-table-card { min-height: auto; }
+        .qdn-chart-body { min-height: 200px; }
+    }
+    @@media (max-width: 767px) {
+        .qdn-metric-value { font-size: 26px; }
+        .qdn-ai-banner { padding: 16px; }
+        .qdn-urgent-stats { gap: 10px; }
+    }
+</style>
+
+@* ══════════════════════════════════════════════════════════════════════
+   SCRIPTS — Lesson Pagination
+   ══════════════════════════════════════════════════════════════════════ *@
+<script>
+    let lessonCurrentPage = 1;
+    const lessonPageSize  = @lessonPageSize;
+    const lessonTotalRows = @lessonRows.Count;
+    const lessonTotalPages = Math.max(1, Math.ceil(lessonTotalRows / lessonPageSize));
+
+    function renderLessonPage() {
+        const rows = document.querySelectorAll(".lesson-page-row");
+        const startIndex = (lessonCurrentPage - 1) * lessonPageSize + 1;
+        const endIndex   = Math.min(lessonCurrentPage * lessonPageSize, lessonTotalRows);
+
+        rows.forEach(row => {
+            const idx = parseInt(row.getAttribute("data-row-index"));
+            row.style.display = (idx >= startIndex && idx <= endIndex) ? "" : "none";
+        });
+
+        const get = id => document.getElementById(id);
+        if (get("lessonCurrentPage")) get("lessonCurrentPage").textContent = lessonCurrentPage;
+        if (get("lessonTotalPages"))  get("lessonTotalPages").textContent  = lessonTotalPages;
+        if (get("lessonPageFrom"))    get("lessonPageFrom").textContent    = lessonTotalRows === 0 ? 0 : startIndex;
+        if (get("lessonPageTo"))      get("lessonPageTo").textContent      = endIndex;
+        if (get("lessonPrevBtn"))     get("lessonPrevBtn").disabled        = lessonCurrentPage <= 1;
+        if (get("lessonNextBtn"))     get("lessonNextBtn").disabled        = lessonCurrentPage >= lessonTotalPages;
+    }
+
+    function changeLessonPage(direction) {
+        const next = lessonCurrentPage + direction;
+        if (next < 1 || next > lessonTotalPages) return;
+        lessonCurrentPage = next;
+        renderLessonPage();
+    }
+
+    document.addEventListener("DOMContentLoaded", renderLessonPage);
+</script>
+
+@* ══════════════════════════════════════════════════════════════════════
+   SCRIPTS — Bulk Actions + Toast System
+   ══════════════════════════════════════════════════════════════════════ *@
+<script>
+(function () {
+    if (!document.getElementById('qd-toast-wrap')) {
+        const wrap = document.createElement('div');
+        wrap.id = 'qd-toast-wrap';
+        wrap.style.cssText = 'position:fixed;bottom:20px;left:20px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none;';
+        document.body.appendChild(wrap);
+    }
+
+    window.showQdToast = function (msg, type = 'success') {
+        const wrap   = document.getElementById('qd-toast-wrap');
+        const colors = { success:'#16a34a', danger:'#dc2626', warning:'#d97706', info:'#0891b2' };
+        const icons  = { success:'bi-check-circle-fill', danger:'bi-x-octagon-fill', warning:'bi-exclamation-triangle-fill', info:'bi-info-circle-fill' };
+        const toast  = document.createElement('div');
+        toast.style.cssText = `background:#fff;border-radius:12px;padding:14px 18px;box-shadow:0 8px 24px rgba(0,0,0,.12);display:flex;align-items:center;gap:10px;min-width:280px;pointer-events:all;border-right:4px solid ${colors[type]};font-family:inherit;direction:rtl;animation:toast-in .25s ease;`;
+        toast.innerHTML = `<i class="bi ${icons[type]}" style="color:${colors[type]};font-size:20px;flex-shrink:0"></i><span style="font-size:14px;font-weight:700;flex:1">${msg}</span><button onclick="this.closest('div').remove()" style="border:none;background:none;cursor:pointer;color:#9ca3af;font-size:16px;line-height:1;padding:0;">&times;</button>`;
+        wrap.appendChild(toast);
+        setTimeout(() => {
+            toast.style.animation = 'toast-out .25s ease forwards';
+            setTimeout(() => toast.remove(), 250);
+        }, 4000);
+    };
+
+    window.setButtonLoading = function (btn, loading) {
+        if (loading) {
+            btn.dataset.originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>جاري...';
+            btn.disabled = true;
+        } else {
+            btn.innerHTML = btn.dataset.originalText || btn.innerHTML;
+            btn.disabled = false;
+        }
+    };
+
+    window.qdConfirm = function (msg) {
+        return new Promise(resolve => {
+            const modal = document.createElement('div');
+            modal.innerHTML = `
+                <div style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;display:flex;align-items:center;justify-content:center;direction:rtl;">
+                    <div style="background:#fff;border-radius:16px;padding:28px;max-width:380px;width:calc(100% - 32px);box-shadow:0 20px 60px rgba(0,0,0,.2);">
+                        <div style="font-size:17px;font-weight:800;margin-bottom:12px;color:#111827;">تأكيد الإجراء</div>
+                        <p style="color:#6b7280;margin-bottom:20px;font-size:15px;">${msg}</p>
+                        <div style="display:flex;gap:10px;justify-content:flex-end;">
+                            <button id="qd-cancel-btn" style="padding:9px 20px;border-radius:8px;border:1px solid #e5e7eb;background:#f9fafb;cursor:pointer;font-weight:700;font-family:inherit;">إلغاء</button>
+                            <button id="qd-confirm-btn" style="padding:9px 20px;border-radius:8px;border:none;background:#dc2626;color:#fff;cursor:pointer;font-weight:700;font-family:inherit;">تأكيد</button>
+                        </div>
+                    </div>
+                </div>`;
+            document.body.appendChild(modal);
+            modal.querySelector('#qd-confirm-btn').onclick = () => { modal.remove(); resolve(true); };
+            modal.querySelector('#qd-cancel-btn').onclick  = () => { modal.remove(); resolve(false); };
+        });
+    };
+
+    function getFilterParams() {
+        const get = id => document.getElementById(id)?.value || '';
+        return new URLSearchParams({
+            curriculumId: get('curriculumId'),
+            batchId:      get('batchId'),
+            instructorId: get('instructorId')
+        });
+    }
+
+    async function postAction(btn, confirmMsg, url) {
+        const ok = await qdConfirm(confirmMsg);
+        if (!ok) return;
+        setButtonLoading(btn, true);
+        try {
+            const res  = await fetch(url, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
+                body:   getFilterParams()
+            });
+            const data = await res.json();
+            if (data.success) showQdToast(data.message || 'تم تنفيذ الإجراء بنجاح', 'success');
+            else              showQdToast(data.error   || 'حدث خطأ أثناء التنفيذ', 'danger');
+        } catch {
+            showQdToast('فشل الاتصال بالخادم', 'danger');
+        } finally {
+            setButtonLoading(btn, false);
+        }
+    }
+
+    window.handleSendNotification = btn => postAction(btn, 'سيتم إرسال إشعار لجميع الطلاب ذوي الأولوية العالية في الدفعة المحددة. هل تريد المتابعة؟', '/Admin/Analytics/SendBulkNotification');
+    window.handleScheduleSession  = btn => postAction(btn, 'سيتم إنشاء جلسة تحليل مجدولة للدفعة المحددة ومدربيها. هل تريد المتابعة؟', '/Admin/Analytics/ScheduleAnalyticsSession');
+    window.handleAssignInstructor = btn => postAction(btn, 'سيتم تعيين مدرب لمتابعة الحالات الحرجة في الدفعة المحددة. هل تريد المتابعة؟', '/Admin/Analytics/AssignAnalyticsInstructor');
+})();
+</script>
+
+@* ═══════════════════════════════════════════════════════════════════
+   OFFCANVAS 1 — إجمالي الدفعات
+   ═══════════════════════════════════════════════════════════════════ *@
+<div class="offcanvas offcanvas-end qd-offcanvas" tabindex="-1" id="batchesOffcanvas" aria-labelledby="batchesOffcanvasLabel" data-bs-scroll="true">
+    <div class="offcanvas-header" style="background:linear-gradient(135deg,#1e3a8a,#1e40af)">
+        <div>
+            <h5 class="offcanvas-title" id="batchesOffcanvasLabel" style="font-size:17px;font-weight:800">
+                <i class="bi bi-layers-fill me-2"></i> إجمالي الدفعات
+            </h5>
+            <div style="font-size:13px;opacity:.8;margin-top:3px">@(Model?.TotalBatches ?? 0) دفعة نشطة في النظام</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        <div class="qd-oc-summary">
+            <button type="button" class="qd-badge badge-danger qd-risk-filter-btn"
+                    data-risk="High" onclick="qdFilterBatchRisk('High', this)"
+                    style="cursor:pointer;border:none;font-family:inherit;">
+                <i class="bi bi-exclamation-triangle-fill me-1"></i>خطر عالي: @(Model?.RiskHigh ?? 0)
+            </button>
+            <button type="button" class="qd-badge badge-warning qd-risk-filter-btn"
+                    data-risk="Medium" onclick="qdFilterBatchRisk('Medium', this)"
+                    style="cursor:pointer;border:none;font-family:inherit;">
+                <i class="bi bi-dash-circle-fill me-1"></i>متوسط: @(Model?.RiskMedium ?? 0)
+            </button>
+            <button type="button" class="qd-badge badge-success qd-risk-filter-btn"
+                    data-risk="Low" onclick="qdFilterBatchRisk('Low', this)"
+                    style="cursor:pointer;border:none;font-family:inherit;">
+                <i class="bi bi-check-circle-fill me-1"></i>جيد: @(Model?.RiskLow ?? 0)
+            </button>
+        </div>
+        <div class="qd-oc-list">
+            @if (Model?.Batches == null || !Model.Batches.Any())
+            {
+                <div class="qd-empty">
+                    <i class="bi bi-layers"></i>
+                    <div class="qd-empty-title">لا توجد دفعات</div>
+                    <div class="qd-empty-sub">لم يتم إضافة دفعات بعد</div>
+                </div>
+            }
+            else
+            {
+                @foreach (var batch in Model.Batches)
+                {
+                    var bRisk = batch.RiskLevel == "High" ? "badge-danger" : batch.RiskLevel == "Medium" ? "badge-warning" : "badge-success";
+                    var bRiskLabel = batch.RiskLevel == "High" ? "خطر عالي" : batch.RiskLevel == "Medium" ? "متوسط" : "جيد";
+                    Model.DecisionStatusMap.TryGetValue(batch.BatchId, out var batchDecision);
+                    <div class="qd-oc-item" data-batch-risk="@batch.RiskLevel">
+                        <div class="qd-oc-item-title d-flex align-items-center gap-2 flex-wrap">
+                            @batch.BatchName
+                            @if (batchDecision != null && batchDecision.StatusLabel != "لا قرار")
+                            {
+                                <span class="badge bg-@batchDecision.StatusCssClass" style="font-size:10px;font-weight:700;">@batchDecision.StatusLabel</span>
+                            }
+                            @if (batchDecision?.HasActiveInterventionTask == true && batchDecision.LatestDecisionAt.HasValue)
+                            {
+                                var daysSince = (int)(DateTime.Now - batchDecision.LatestDecisionAt.Value).TotalDays;
+                                <span class="badge" style="background:#ede9fe;color:#5b21b6;font-size:10px;font-weight:700;"><i class="fas fa-bolt me-1"></i>تدخل جارٍ منذ @daysSince يوم</span>
+                            }
+                        </div>
+                        @if (!string.IsNullOrEmpty(batch.CourseName))
+                        { <div class="qd-oc-item-sub"><i class="bi bi-book me-1"></i>@batch.CourseName</div> }
+                        <div class="qd-oc-item-stats">
+                            <span class="qd-badge @bRisk">@bRiskLabel</span>
+                            <span class="qd-badge badge-primary"><i class="bi bi-people-fill me-1"></i>@batch.StudentsCount طالب</span>
+                            @if (batch.WeakLessonsCount > 0) { <span class="qd-badge badge-warning"><i class="bi bi-exclamation-diamond me-1"></i>@batch.WeakLessonsCount درس ضعيف</span> }
+                            @if (batch.AffectedStudents > 0) { <span class="qd-badge badge-danger"><i class="bi bi-person-fill-exclamation me-1"></i>@batch.AffectedStudents متأثر</span> }
+                        </div>
+                        @if ((batch.RiskLevel == "High" || batch.RiskLevel == "Medium") && (User.IsInRole("Owner") || User.IsInRole("Developer")))
+                        {
+                            var batchBridgeCtx = new AnalyticsDecisionBridgeContext { BatchId = batch.BatchId, CurriculumId = Model.SelectedCurriculumId, InstructorId = Model.SelectedInstructorId, SourceMetric = batch.RiskLevel == "High" ? "high-risk-batch" : "medium-risk-batch", SourcePage = "AdvancedDashboard", ReturnUrl = Url.Action("AdvancedDashboard","Analytics",new{area="Admin",curriculumId=Model.SelectedCurriculumId,batchId=batch.BatchId,instructorId=Model.SelectedInstructorId})??"" };
+                            var batchDashUrl = Url.Action("AdvancedDashboard","Analytics",new{area="Admin",batchId=batch.BatchId,curriculumId=Model.SelectedCurriculumId,instructorId=Model.SelectedInstructorId})??"#";
+                            var btnColor = batch.RiskLevel == "High" ? "var(--q-danger)" : "var(--q-warning)";
+                            <div class="mt-2 d-flex gap-2 flex-wrap">
+                                <a href="@batchDashUrl" class="qd-nav-btn" style="font-size:12px;padding:4px 10px;background:@btnColor;color:#fff;border-color:@btnColor;text-decoration:none;"><i class="bi bi-lightning-charge-fill"></i> اتخذ قراراً لهذه الدفعة</a>
+                                <a href="@Url.ToBatchAnalysisUrl(batchBridgeCtx)" class="qd-nav-btn qd-nav-btn-secondary" style="font-size:12px;padding:4px 10px;text-decoration:none;"><i class="bi bi-bar-chart-line"></i> تحليل الدفعة</a>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+        <div class="qd-oc-footer">
+            <button type="button" class="qd-nav-btn qd-nav-btn-ghost" data-bs-dismiss="offcanvas"><i class="bi bi-x-lg"></i> إغلاق</button>
+            <a class="qd-nav-btn qd-nav-btn-secondary" asp-area="Admin" asp-controller="Analytics" asp-action="MetricDecisionDetails" asp-route-metric="total-batches" asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId"><i class="bi bi-graph-up"></i> تحليل القرار</a>
+            <a class="qd-nav-btn qd-nav-btn-primary" asp-area="Admin" asp-controller="Analytics" asp-action="AdvancedDashboard" asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId"><i class="bi bi-bar-chart-fill"></i> لوحة التحليلات</a>
+        </div>
+    </div>
+</div>
+
+@* ═══════════════════════════════════════════════════════════════════
+   OFFCANVAS 2 — المدربون النشطون
+   ═══════════════════════════════════════════════════════════════════ *@
+<div class="offcanvas offcanvas-end qd-offcanvas" tabindex="-1" id="instructorsOffcanvas" aria-labelledby="instructorsOffcanvasLabel" data-bs-scroll="true">
+    <div class="offcanvas-header" style="background:linear-gradient(135deg,#164e63,#0891b2)">
+        <div>
+            <h5 class="offcanvas-title" id="instructorsOffcanvasLabel" style="font-size:17px;font-weight:800"><i class="bi bi-person-badge-fill me-2"></i> المدربون النشطون</h5>
+            <div style="font-size:13px;opacity:.8;margin-top:3px">@(Model?.TotalInstructors ?? 0) مدرب مرتبط بدفعات</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        <div class="qd-oc-list">
+            @if (Model?.Instructors == null || !Model.Instructors.Any())
+            {
+                <div class="qd-empty"><i class="bi bi-person-badge"></i><div class="qd-empty-title">لا يوجد مدربون</div><div class="qd-empty-sub">لم يتم تعيين مدربين بعد</div></div>
+            }
+            else
+            {
+                @foreach (var instr in Model.Instructors)
+                {
+                    var iRisk = instr.RiskLevel == "High" ? "badge-danger" : instr.RiskLevel == "Medium" ? "badge-warning" : "badge-success";
+                    var iRiskLabel = instr.RiskLevel == "High" ? "خطر عالي" : instr.RiskLevel == "Medium" ? "متوسط" : "جيد";
+                    var scoreColor = instr.AvgScore >= 70 ? "var(--q-success)" : instr.AvgScore >= 50 ? "var(--q-warning)" : "var(--q-danger)";
+                    <div class="qd-oc-item">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                            <div><div class="qd-oc-item-title">@instr.InstructorName</div><div class="qd-oc-item-sub"><i class="bi bi-layers me-1"></i>@instr.BatchesCount دفعة</div></div>
+                            <div style="font-size:22px;font-weight:900;color:@scoreColor;flex-shrink:0">@Math.Round(instr.AvgScore)%</div>
+                        </div>
+                        <div class="qd-oc-item-stats">
+                            <span class="qd-badge @iRisk">@iRiskLabel</span>
+                            @if (instr.WeakLessonsCount > 0) { <span class="qd-badge badge-warning"><i class="bi bi-exclamation-diamond me-1"></i>@instr.WeakLessonsCount درس ضعيف</span> }
+                            else { <span class="qd-badge badge-success"><i class="bi bi-check2-circle me-1"></i>لا دروس ضعيفة</span> }
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+        <div class="qd-oc-footer">
+            <button type="button" class="qd-nav-btn qd-nav-btn-ghost" data-bs-dismiss="offcanvas"><i class="bi bi-x-lg"></i> إغلاق</button>
+            <a class="qd-nav-btn qd-nav-btn-secondary" asp-area="Admin" asp-controller="Analytics" asp-action="MetricDecisionDetails" asp-route-metric="total-instructors" asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId"><i class="bi bi-graph-up"></i> تحليل القرار</a>
+            <a class="qd-nav-btn qd-nav-btn-primary" asp-area="Admin" asp-controller="Analytics" asp-action="AdvancedDashboard" asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId"><i class="bi bi-bar-chart-fill"></i> لوحة التحليلات</a>
+        </div>
+    </div>
+</div>
+
+@* ═══════════════════════════════════════════════════════════════════
+   OFFCANVAS 3 — الطلاب المحللون
+   ═══════════════════════════════════════════════════════════════════ *@
+@{
+    var allStudents    = Model?.Students ?? new List<QdratNew.ViewModels.Admin.Analytics.StudentAnalyticsVM>();
+    var ocExcellent    = allStudents.Count(s => s.Priority == "Low"  || (s.ExamScore >= 70 && s.HomeworkScore >= 70));
+    var ocMedium       = allStudents.Count(s => s.Priority == "Medium");
+    var ocWeak         = allStudents.Count(s => s.Priority == "High");
+    var criticalStudents = allStudents.Where(s => s.Priority == "High").OrderBy(s => s.ExamScore).ToList();
+}
+<div class="offcanvas offcanvas-end qd-offcanvas" tabindex="-1" id="studentsAnalyticsOffcanvas" aria-labelledby="studentsAnalyticsOffcanvasLabel" data-bs-scroll="true">
+    <div class="offcanvas-header" style="background:linear-gradient(135deg,#92400e,#d97706)">
+        <div>
+            <h5 class="offcanvas-title" id="studentsAnalyticsOffcanvasLabel" style="font-size:17px;font-weight:800"><i class="bi bi-people-fill me-2"></i> الطلاب المحللون</h5>
+            <div style="font-size:13px;opacity:.8;margin-top:3px">@allStudents.Count طالب لديهم مؤشرات أداء</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        <div class="qd-oc-summary">
+            <span class="qd-badge badge-success"><i class="bi bi-star-fill me-1"></i>ممتاز: @ocExcellent</span>
+            <span class="qd-badge badge-warning"><i class="bi bi-dash-circle me-1"></i>متوسط: @ocMedium</span>
+            <span class="qd-badge badge-danger"><i class="bi bi-arrow-down-circle-fill me-1"></i>ضعيف: @ocWeak</span>
+        </div>
+        <div class="qd-oc-list">
+            @if (!allStudents.Any())
+            {
+                <div class="qd-empty"><i class="bi bi-people"></i><div class="qd-empty-title">لا يوجد طلاب محللون</div><div class="qd-empty-sub">لم يتم تسجيل محاولات بعد</div></div>
+            }
+            else
+            {
+                @foreach (var st in allStudents.OrderBy(s => s.ExamScore))
+                {
+                    var stBadge = st.Priority == "High" ? "badge-danger" : st.Priority == "Medium" ? "badge-warning" : "badge-success";
+                    var stLabel = st.Priority == "High" ? "أولوية عالية" : st.Priority == "Medium" ? "متوسط" : "جيد";
+                    var examColor = st.ExamScore >= 70 ? "var(--q-success)" : st.ExamScore >= 50 ? "var(--q-warning)" : "var(--q-danger)";
+                    <div class="qd-oc-item">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                            <div style="flex:1;min-width:0"><div class="qd-oc-item-title">@st.StudentName</div>@if (!string.IsNullOrEmpty(st.WeakReason)) { <div class="qd-oc-item-sub"><i class="bi bi-exclamation-circle me-1"></i>@st.WeakReason</div> }</div>
+                            <div style="font-size:20px;font-weight:900;color:@examColor;flex-shrink:0">@Math.Round(st.ExamScore)%</div>
+                        </div>
+                        <div class="qd-oc-item-stats">
+                            <span class="qd-badge @stBadge">@stLabel</span>
+                            <span class="qd-badge badge-primary"><i class="bi bi-journal-check me-1"></i>واجبات: @Math.Round(st.HomeworkScore)%</span>
+                            <span class="qd-badge badge-info"><i class="bi bi-calendar2-check me-1"></i>حضور: @Math.Round(st.Attendance)%</span>
+                        </div>
+                        @if (st.BatchId.HasValue && (User.IsInRole("Owner") || User.IsInRole("Developer")))
+                        {
+                            var stBridgeCtx = new AnalyticsDecisionBridgeContext { BatchId = st.BatchId, CurriculumId = Model.SelectedCurriculumId, SourceMetric = "student-weak-" + st.Priority.ToLower(), SourcePage = "AdvancedDashboard", ReturnUrl = Url.Action("AdvancedDashboard","Analytics",new{area="Admin",curriculumId=Model.SelectedCurriculumId,batchId=Model.SelectedBatchId,instructorId=Model.SelectedInstructorId})??"" };
+                            <div class="mt-2"><a href="@Url.ToDecisionLabUrl(stBridgeCtx)" class="qd-nav-btn" style="font-size:11px;padding:3px 9px;background:var(--q-primary);color:#fff;border-color:var(--q-primary);text-decoration:none;"><i class="bi bi-lightning-charge-fill"></i> اتخذ قراراً للدفعة</a></div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+        <div class="qd-oc-footer">
+            <button type="button" class="qd-nav-btn qd-nav-btn-ghost" data-bs-dismiss="offcanvas"><i class="bi bi-x-lg"></i> إغلاق</button>
+            <a class="qd-nav-btn qd-nav-btn-secondary" asp-area="Admin" asp-controller="Analytics" asp-action="MetricDecisionDetails" asp-route-metric="analyzed-students" asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId"><i class="bi bi-graph-up"></i> تحليل القرار</a>
+            <a class="qd-nav-btn qd-nav-btn-primary" asp-area="Admin" asp-controller="Analytics" asp-action="AnalyzedStudentsDetails" asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId"><i class="bi bi-people-fill"></i> تفاصيل الطلاب</a>
+        </div>
+    </div>
+</div>
+
+@* ═══════════════════════════════════════════════════════════════════
+   OFFCANVAS 4 — حالات أولوية عالية
+   ═══════════════════════════════════════════════════════════════════ *@
+<div class="offcanvas offcanvas-end qd-offcanvas" tabindex="-1" id="criticalOffcanvas" aria-labelledby="criticalOffcanvasLabel" data-bs-scroll="true">
+    <div class="offcanvas-header" style="background:linear-gradient(135deg,#7f1d1d,#dc2626)">
+        <div>
+            <h5 class="offcanvas-title" id="criticalOffcanvasLabel" style="font-size:17px;font-weight:800"><i class="bi bi-person-fill-exclamation me-2"></i> حالات أولوية عالية</h5>
+            <div style="font-size:13px;opacity:.8;margin-top:3px">@(Model?.CriticalCases ?? 0) حالة تحتاج تدخل فوري</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        <div class="qd-oc-list">
+            @if (!criticalStudents.Any())
+            {
+                <div class="qd-empty"><i class="bi bi-shield-check" style="color:var(--q-success);opacity:.6"></i><div class="qd-empty-title" style="color:var(--q-success)">لا توجد حالات حرجة</div><div class="qd-empty-sub">جميع الطلاب في وضع مقبول</div></div>
+            }
+            else
+            {
+                @foreach (var cs in criticalStudents)
+                {
+                    var examCol = cs.ExamScore >= 50 ? "var(--q-warning)" : "var(--q-danger)";
+                    <div class="qd-oc-item" style="border-right:4px solid var(--q-danger)">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                            <div style="flex:1;min-width:0"><div class="qd-oc-item-title">@cs.StudentName</div>@if (!string.IsNullOrEmpty(cs.WeakReason)) { <div class="qd-oc-item-sub"><i class="bi bi-exclamation-circle me-1" style="color:var(--q-danger)"></i>@cs.WeakReason</div> }</div>
+                            <div style="font-size:20px;font-weight:900;color:@examCol;flex-shrink:0">@Math.Round(cs.ExamScore)%</div>
+                        </div>
+                        <div class="qd-oc-item-stats">
+                            <span class="qd-badge badge-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>أولوية عالية</span>
+                            <span class="qd-badge badge-warning"><i class="bi bi-journal-check me-1"></i>واجبات: @Math.Round(cs.HomeworkScore)%</span>
+                            <span class="qd-badge badge-info"><i class="bi bi-calendar2-check me-1"></i>حضور: @Math.Round(cs.Attendance)%</span>
+                        </div>
+                        @if (!string.IsNullOrEmpty(cs.ActionRequired)) { <div style="margin-top:8px;padding:6px 10px;background:var(--q-danger-light);border-radius:6px;font-size:12px;font-weight:700;color:#991b1b"><i class="bi bi-lightning-charge-fill me-1"></i>@cs.ActionRequired</div> }
+                        @if (cs.BatchId.HasValue && (User.IsInRole("Owner") || User.IsInRole("Developer")))
+                        {
+                            var csBridgeCtx = new AnalyticsDecisionBridgeContext { BatchId = cs.BatchId, CurriculumId = Model.SelectedCurriculumId, SourceMetric = "critical-student", SourcePage = "AdvancedDashboard", ReturnUrl = Url.Action("AdvancedDashboard","Analytics",new{area="Admin",curriculumId=Model.SelectedCurriculumId,batchId=Model.SelectedBatchId,instructorId=Model.SelectedInstructorId})??"" };
+                            <div class="mt-2 d-flex gap-2 flex-wrap">
+                                <a href="@Url.ToDecisionLabUrl(csBridgeCtx)" class="qd-nav-btn" style="font-size:11px;padding:3px 9px;background:var(--q-danger);color:#fff;border-color:var(--q-danger);text-decoration:none;"><i class="bi bi-lightning-charge-fill"></i> اتخذ قراراً فورياً</a>
+                                <a href="@Url.ToBatchAnalysisUrl(csBridgeCtx)" class="qd-nav-btn qd-nav-btn-secondary" style="font-size:11px;padding:3px 9px;text-decoration:none;"><i class="bi bi-bar-chart-line"></i> تحليل الدفعة</a>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+        <div class="qd-oc-footer">
+            <button type="button" class="qd-nav-btn qd-nav-btn-ghost" data-bs-dismiss="offcanvas"><i class="bi bi-x-lg"></i> إغلاق</button>
+            <a class="qd-nav-btn qd-nav-btn-secondary" asp-area="Admin" asp-controller="Analytics" asp-action="MetricDecisionDetails" asp-route-metric="critical-cases" asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId"><i class="bi bi-graph-up"></i> تحليل القرار</a>
+            <a class="qd-nav-btn qd-nav-btn-primary" asp-area="Admin" asp-controller="Analytics" asp-action="CriticalStudentsDetails" asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId"><i class="bi bi-person-fill-exclamation"></i> تفاصيل الحالات</a>
+        </div>
+    </div>
+</div>
+
+@* ═══════════════════════════════════════════════════════════════════
+   OFFCANVAS 5 — دروس عالية الخطورة
+   ═══════════════════════════════════════════════════════════════════ *@
+@{
+    var highRiskLessons = (Model?.Lessons ?? new List<QdratNew.ViewModels.Admin.Analytics.LessonAnalyticsVM>())
+        .Where(l => l.WeakPercentage >= 70).OrderByDescending(l => l.WeakPercentage).ToList();
+}
+<div class="offcanvas offcanvas-end qd-offcanvas" tabindex="-1" id="highRiskOffcanvas" aria-labelledby="highRiskOffcanvasLabel" data-bs-scroll="true">
+    <div class="offcanvas-header" style="background:linear-gradient(135deg,#7f1d1d,#b91c1c)">
+        <div>
+            <h5 class="offcanvas-title" id="highRiskOffcanvasLabel" style="font-size:17px;font-weight:800"><i class="bi bi-exclamation-diamond-fill me-2"></i> دروس عالية الخطورة</h5>
+            <div style="font-size:13px;opacity:.8;margin-top:3px">@(Model?.HighRiskCount ?? 0) درس بنسبة ضعف ≥ 70%</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        <div class="qd-oc-summary">
+            <span class="qd-badge badge-danger"><i class="bi bi-exclamation-diamond-fill me-1"></i>خطر عالي ≥ 70%: @highRiskLessons.Count</span>
+            <span class="qd-badge badge-warning"><i class="bi bi-exclamation-triangle me-1"></i>متوسط 50–69%: @(Model?.Lessons?.Count(l => l.WeakPercentage >= 50 && l.WeakPercentage < 70) ?? 0)</span>
+        </div>
+        <div class="qd-oc-list">
+            @if (!highRiskLessons.Any())
+            {
+                <div class="qd-empty"><i class="bi bi-shield-check" style="color:var(--q-success);opacity:.6"></i><div class="qd-empty-title" style="color:var(--q-success)">لا توجد دروس عالية الخطورة</div><div class="qd-empty-sub">جميع الدروس ضمن النسب المقبولة</div></div>
+            }
+            else
+            {
+                @foreach (var lesson in highRiskLessons)
+                {
+                    var weakColor = lesson.WeakPercentage >= 85 ? "var(--q-danger)" : "var(--q-warning)";
+                    var weakBadge = lesson.WeakPercentage >= 85 ? "badge-danger" : "badge-warning";
+                    <div class="qd-oc-item" style="border-right:4px solid @weakColor">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                            <div style="flex:1;min-width:0">
+                                <div class="qd-oc-item-title">@lesson.LessonName</div>
+                                <div class="qd-oc-item-sub">
+                                    @if (!string.IsNullOrEmpty(lesson.BatchName)) { <span><i class="bi bi-layers me-1"></i>@lesson.BatchName</span> }
+                                    @if (!string.IsNullOrEmpty(lesson.InstructorName)) { <span class="ms-2"><i class="bi bi-person-badge me-1"></i>@lesson.InstructorName</span> }
+                                </div>
+                            </div>
+                            <div style="font-size:20px;font-weight:900;color:@weakColor;flex-shrink:0">@Math.Round(lesson.WeakPercentage)%</div>
+                        </div>
+                        <div class="qd-oc-item-stats">
+                            <span class="qd-badge @weakBadge"><i class="bi bi-arrow-down-circle-fill me-1"></i>نسبة الضعف: @Math.Round(lesson.WeakPercentage)%</span>
+                            @if (lesson.AffectedStudents > 0) { <span class="qd-badge badge-primary"><i class="bi bi-people-fill me-1"></i>@lesson.AffectedStudents طالب متأثر</span> }
+                            @if (lesson.TotalAttempts > 0)   { <span class="qd-badge badge-info"><i class="bi bi-clipboard-data me-1"></i>@lesson.TotalAttempts محاولة</span> }
+                        </div>
+                        @if (lesson.BatchId.HasValue && (User.IsInRole("Owner") || User.IsInRole("Developer")))
+                        {
+                            var lessonBridgeCtx = new AnalyticsDecisionBridgeContext { BatchId = lesson.BatchId, CurriculumId = Model.SelectedCurriculumId, SourceMetric = "high-risk-lesson", SourcePage = "AdvancedDashboard", ReturnUrl = Url.Action("AdvancedDashboard","Analytics",new{area="Admin",curriculumId=Model.SelectedCurriculumId,batchId=Model.SelectedBatchId,instructorId=Model.SelectedInstructorId})??"" };
+                            var lessonBtnColor = lesson.WeakPercentage >= 85 ? "var(--q-danger)" : "var(--q-warning)";
+                            <div class="mt-2 d-flex gap-2 flex-wrap">
+                                <a href="@Url.ToDecisionLabUrl(lessonBridgeCtx)" class="qd-nav-btn" style="font-size:11px;padding:3px 9px;background:@lessonBtnColor;color:#fff;border-color:@lessonBtnColor;text-decoration:none;"><i class="bi bi-lightning-charge-fill"></i> اتخذ قراراً للدفعة</a>
+                                <a href="@Url.ToBatchAnalysisUrl(lessonBridgeCtx)" class="qd-nav-btn qd-nav-btn-secondary" style="font-size:11px;padding:3px 9px;text-decoration:none;"><i class="bi bi-bar-chart-line"></i> تحليل الدفعة</a>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+        </div>
+        <div class="qd-oc-footer">
+            <button type="button" class="qd-nav-btn qd-nav-btn-ghost" data-bs-dismiss="offcanvas"><i class="bi bi-x-lg"></i> إغلاق</button>
+            <a class="qd-nav-btn qd-nav-btn-secondary" asp-area="Admin" asp-controller="Analytics" asp-action="MetricDecisionDetails" asp-route-metric="high-risk-lessons" asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId"><i class="bi bi-graph-up"></i> تحليل القرار</a>
+            <a class="qd-nav-btn qd-nav-btn-primary" asp-area="Admin" asp-controller="Analytics" asp-action="AdvancedDashboard" asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId"><i class="bi bi-bar-chart-fill"></i> لوحة التحليلات</a>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    /* ── Batch Risk Filter (badges inside #batchesOffcanvas) ── */
+    window.qdFilterBatchRisk = function (risk, btn) {
+        var list   = document.querySelector('#batchesOffcanvas .qd-oc-list');
+        var btns   = document.querySelectorAll('#batchesOffcanvas .qd-risk-filter-btn');
+        var items  = list ? list.querySelectorAll('[data-batch-risk]') : [];
+
+        // determine if this button is already active (toggle off = show all)
+        var isActive = btn.classList.contains('qdrf-active');
+
+        // reset all button highlights
+        btns.forEach(function (b) {
+            b.classList.remove('qdrf-active');
+            b.style.outline = '';
+            b.style.boxShadow = '';
+        });
+
+        if (isActive) {
+            // second click on the same badge → show all
+            items.forEach(function (el) { el.style.display = ''; });
+            return;
+        }
+
+        // highlight this badge and filter the list
+        btn.classList.add('qdrf-active');
+        btn.style.outline = '2px solid currentColor';
+        btn.style.boxShadow = '0 0 0 3px rgba(0,0,0,.12)';
+
+        items.forEach(function (el) {
+            el.style.display = el.getAttribute('data-batch-risk') === risk ? '' : 'none';
+        });
+    };
+})();
+</script>

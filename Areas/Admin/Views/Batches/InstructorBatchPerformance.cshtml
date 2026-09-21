@@ -1,0 +1,517 @@
+@model QdratNew.ViewModels.Batch.InstructorBatchPerformanceViewModel
+
+@{
+    ViewData["Title"] = $"أداء {Model.FullName} في {Model.BatchName}";
+    Layout = "~/Areas/Admin/Views/Shared/_AdminLayout.cshtml";
+
+    double safeActivity = Model.ActivityScore < 0 ? 0
+        : Model.ActivityScore > 100 ? 100 : Model.ActivityScore;
+    double ringOffset = 251.2 * (1 - safeActivity / 100.0);
+
+    string actLabel = safeActivity >= 80 ? "ممتاز"
+        : safeActivity >= 65 ? "جيد جداً"
+        : safeActivity >= 50 ? "جيد"
+        : safeActivity >= 35 ? "متوسط" : "يحتاج متابعة";
+
+    string actLabelCss = safeActivity >= 80 ? "label-good"
+        : safeActivity >= 50 ? "label-warn" : "label-bad";
+}
+
+<div class="ibp-page" dir="rtl">
+
+    @* ====== Nav ====== *@
+    <nav class="ibp-nav">
+        <div class="ibp-nav-brand">
+            <a class="ibp-back"
+               asp-area="Admin" asp-controller="Batches" asp-action="Details"
+               asp-route-id="@Model.BatchId">← العودة للدفعة</a>
+            <div class="ibp-sep"></div>
+            <div class="ibp-breadcrumb">
+                <a asp-area="Admin" asp-controller="Batches" asp-action="Index">الدفعات</a>
+                <span>›</span>
+                <a asp-area="Admin" asp-controller="Batches" asp-action="Details"
+                   asp-route-id="@Model.BatchId">@Model.BatchName</a>
+                <span>›</span>
+                <span class="ibp-crumb-current">أداء @Model.FullName</span>
+            </div>
+        </div>
+    </nav>
+
+    <div class="ibp-body">
+
+        @* ====== Hero ====== *@
+        <section class="ibp-hero">
+            <div class="ibp-hero-left">
+                <div class="ibp-avatar">@Model.AvatarText</div>
+                <div class="ibp-hero-info">
+                    <div class="ibp-hero-tags">
+                        <span class="ibp-tag info">📋 @Model.BatchName</span>
+                        <span class="ibp-tag info">📚 @Model.CourseName</span>
+                        @if (!Model.IsActive)
+                        {
+                            <span class="ibp-tag danger">● غير نشط</span>
+                        }
+                        else
+                        {
+                            <span class="ibp-tag success">● نشط</span>
+                        }
+                    </div>
+                    <h1 class="ibp-name">@Model.FullName</h1>
+                    <div class="ibp-role">@Model.Specialization</div>
+
+                    <div class="ibp-quick-stats">
+                        <div class="ibp-qs">
+                            <span class="ibp-qs-val">@Model.TotalLectures</span>
+                            <span class="ibp-qs-lbl">محاضرة</span>
+                        </div>
+                        <div class="ibp-qs-sep"></div>
+                        <div class="ibp-qs">
+                            <span class="ibp-qs-val">@Model.TotalHomeworksCreated</span>
+                            <span class="ibp-qs-lbl">واجب</span>
+                        </div>
+                        <div class="ibp-qs-sep"></div>
+                        <div class="ibp-qs">
+                            <span class="ibp-qs-val">@Model.TotalExamsCreated</span>
+                            <span class="ibp-qs-lbl">اختبار</span>
+                        </div>
+                        <div class="ibp-qs-sep"></div>
+                        <div class="ibp-qs">
+                            <span class="ibp-qs-val">@Model.TotalStudents</span>
+                            <span class="ibp-qs-lbl">طالب</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ibp-ring-wrap">
+                <div class="ibp-ring">
+                    <svg viewBox="0 0 100 100" aria-hidden="true">
+                        <circle class="ibp-ring-bg" cx="50" cy="50" r="40"></circle>
+                        <circle class="ibp-ring-fill"
+                                cx="50" cy="50" r="40"
+                                stroke="@Model.ActivityCssColor"
+                                stroke-dasharray="251.2"
+                                stroke-dashoffset="@ringOffset.ToString("0.##")"></circle>
+                    </svg>
+                    <div class="ibp-ring-val">
+                        @safeActivity.ToString("0")<small>%</small>
+                    </div>
+                </div>
+                <div class="ibp-ring-label">
+                    مؤشر النشاط الكلي
+                    <span class="ibp-act-label @actLabelCss">@actLabel</span>
+                </div>
+            </div>
+        </section>
+
+        @* ====== KPI Strip ====== *@
+        <section class="ibp-kpi-strip">
+            <div class="ibp-kpi @(Model.OverallAttendancePercent >= 80 ? "g" : Model.OverallAttendancePercent >= 60 ? "a" : "r")">
+                <div class="ibp-kpi-icon">🗓</div>
+                <div class="ibp-kpi-val">@Model.OverallAttendancePercent.ToString("0")<sup>%</sup></div>
+                <div class="ibp-kpi-lbl">متوسط الحضور</div>
+                <div class="ibp-kpi-bar">
+                    <div class="ibp-kpi-fill" style="width:@(Math.Min(100,Model.OverallAttendancePercent).ToString("0"))%;background:@(Model.OverallAttendancePercent >= 80 ? "#059669" : Model.OverallAttendancePercent >= 60 ? "#d97706" : "#dc2626")"></div>
+                </div>
+            </div>
+            <div class="ibp-kpi @(Model.OverallHomeworkSubmissionPercent >= 80 ? "g" : Model.OverallHomeworkSubmissionPercent >= 60 ? "a" : "r")">
+                <div class="ibp-kpi-icon">📝</div>
+                <div class="ibp-kpi-val">@Model.OverallHomeworkSubmissionPercent.ToString("0")<sup>%</sup></div>
+                <div class="ibp-kpi-lbl">تسليم الواجبات</div>
+                <div class="ibp-kpi-bar">
+                    <div class="ibp-kpi-fill" style="width:@(Math.Min(100,Model.OverallHomeworkSubmissionPercent).ToString("0"))%;background:@(Model.OverallHomeworkSubmissionPercent >= 80 ? "#059669" : Model.OverallHomeworkSubmissionPercent >= 60 ? "#d97706" : "#dc2626")"></div>
+                </div>
+            </div>
+            <div class="ibp-kpi @(Model.OverallExamAvgScore >= 75 ? "g" : Model.OverallExamAvgScore >= 55 ? "a" : "r")">
+                <div class="ibp-kpi-icon">🏆</div>
+                <div class="ibp-kpi-val">@Model.OverallExamAvgScore.ToString("0")<sup>%</sup></div>
+                <div class="ibp-kpi-lbl">متوسط الاختبارات</div>
+                <div class="ibp-kpi-bar">
+                    <div class="ibp-kpi-fill" style="width:@(Math.Min(100,Model.OverallExamAvgScore).ToString("0"))%;background:@(Model.OverallExamAvgScore >= 75 ? "#059669" : Model.OverallExamAvgScore >= 55 ? "#d97706" : "#dc2626")"></div>
+                </div>
+            </div>
+            <div class="ibp-kpi b">
+                <div class="ibp-kpi-icon">📅</div>
+                <div class="ibp-kpi-val">@Model.LecturesThisWeek</div>
+                <div class="ibp-kpi-lbl">محاضرات هذا الأسبوع</div>
+            </div>
+        </section>
+
+        @* ====== Issues ====== *@
+        @if (Model.Issues.Any())
+        {
+            <section class="ibp-card">
+                <div class="ibp-card-head">
+                    <div class="ibp-ch-left">
+                        <div class="ibp-ch-accent red"></div>
+                        <div>
+                            <div class="ibp-ch-title">التشخيص والمشاكل المكتشفة</div>
+                            <div class="ibp-ch-sub">@Model.Issues.Count عناصر بحاجة للمراجعة</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="ibp-issues">
+                    @foreach (var issue in Model.Issues)
+                    {
+                        <div class="ibp-issue @issue.CssClass">
+                            <div class="ibp-issue-icon">@issue.Icon</div>
+                            <div class="ibp-issue-body">
+                                <div class="ibp-issue-title">@issue.Title</div>
+                                <div class="ibp-issue-desc">@issue.Body</div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </section>
+        }
+
+        <div class="ibp-two-col">
+
+            @* ====== Lectures ====== *@
+            <section class="ibp-card">
+                <div class="ibp-card-head">
+                    <div class="ibp-ch-left">
+                        <div class="ibp-ch-accent blue"></div>
+                        <div>
+                            <div class="ibp-ch-title">المحاضرات في الدفعة</div>
+                            <div class="ibp-ch-sub">@Model.Lectures.Count محاضرة مسجلة</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="ibp-table-wrap">
+                    <table class="ibp-table">
+                        <thead>
+                            <tr>
+                                <th>المحاضرة</th>
+                                <th>التاريخ</th>
+                                <th>الحضور</th>
+                                <th>النسبة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (Model.Lectures.Any())
+                            {
+                                @foreach (var lec in Model.Lectures)
+                                {
+                                    <tr class="@(lec.IsLowAttendance ? "row-warn" : "")">
+                                        <td>
+                                            <span class="ibp-lec-title">@lec.Title</span>
+                                            @if (lec.IsLowAttendance)
+                                            {
+                                                <span class="ibp-warn-badge">⚠ حضور منخفض</span>
+                                            }
+                                        </td>
+                                        <td class="ibp-mute">@lec.Date.ToString("yyyy/MM/dd")</td>
+                                        <td class="ibp-mute">@lec.PresentCount / @lec.TotalStudents</td>
+                                        <td>
+                                            <div class="ibp-att-cell">
+                                                <div class="ibp-mini-bar">
+                                                    <div class="ibp-mini-fill @lec.AttendanceCssClass"
+                                                         style="width:@lec.AttendancePercent.ToString("0")%"></div>
+                                                </div>
+                                                <span class="ibp-att-pct @lec.AttendanceCssClass">@lec.AttendancePercent.ToString("0")%</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                <tr><td colspan="4" class="ibp-empty">لا توجد محاضرات مسجلة لهذا المدرب في الدفعة.</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <div class="ibp-right-stack">
+
+                @* ====== Homeworks ====== *@
+                <section class="ibp-card">
+                    <div class="ibp-card-head">
+                        <div class="ibp-ch-left">
+                            <div class="ibp-ch-accent amber"></div>
+                            <div>
+                                <div class="ibp-ch-title">الواجبات المرسلة</div>
+                                <div class="ibp-ch-sub">@Model.Homeworks.Count واجب</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="ibp-hw-list">
+                        @if (Model.Homeworks.Any())
+                        {
+                            @foreach (var hw in Model.Homeworks)
+                            {
+                                <div class="ibp-hw-row">
+                                    <div class="ibp-hw-left">
+                                        <div class="ibp-hw-title">@hw.Title</div>
+                                        <div class="ibp-hw-date">@hw.CreatedAt.ToString("yyyy/MM/dd")</div>
+                                    </div>
+                                    <div class="ibp-hw-right">
+                                        <div class="ibp-mini-bar wide">
+                                            <div class="ibp-mini-fill @hw.StatusCssClass"
+                                                 style="width:@hw.SubmissionPercent.ToString("0")%"></div>
+                                        </div>
+                                        <span class="ibp-hw-pct @hw.StatusCssClass">@hw.SubmissionPercent.ToString("0")%</span>
+                                    </div>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="ibp-empty">لا توجد واجبات مرتبطة بمحاضراته.</div>
+                        }
+                    </div>
+                </section>
+
+                @* ====== Exams ====== *@
+                <section class="ibp-card">
+                    <div class="ibp-card-head">
+                        <div class="ibp-ch-left">
+                            <div class="ibp-ch-accent green"></div>
+                            <div>
+                                <div class="ibp-ch-title">الاختبارات المنشأة</div>
+                                <div class="ibp-ch-sub">@Model.Exams.Count اختبار</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="ibp-hw-list">
+                        @if (Model.Exams.Any())
+                        {
+                            @foreach (var ex in Model.Exams)
+                            {
+                                <div class="ibp-hw-row">
+                                    <div class="ibp-hw-left">
+                                        <div class="ibp-hw-title">@ex.Title</div>
+                                        <div class="ibp-hw-date">@ex.CreatedAt.ToString("yyyy/MM/dd") • @ex.SubmittedCount/@ex.TotalStudents طالب</div>
+                                    </div>
+                                    <div class="ibp-hw-right">
+                                        <div class="ibp-mini-bar wide">
+                                            <div class="ibp-mini-fill @ex.ScoreCssClass"
+                                                 style="width:@(Math.Min(100,ex.AverageScore).ToString("0"))%"></div>
+                                        </div>
+                                        <span class="ibp-hw-pct @ex.ScoreCssClass">@ex.AverageScore.ToString("0")</span>
+                                    </div>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="ibp-empty">لا توجد اختبارات منشأة من هذا المدرب.</div>
+                        }
+                    </div>
+                </section>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    :root {
+        --ibp-blue:  #2563eb;
+        --ibp-green: #059669;
+        --ibp-amber: #d97706;
+        --ibp-red:   #dc2626;
+        --ibp-ink:   #1e293b;
+        --ibp-mute:  #64748b;
+        --ibp-bg:    #f1f5f9;
+        --ibp-card:  #fff;
+        --ibp-border:#e2e8f0;
+        --ibp-r:     12px;
+    }
+
+    .ibp-page { background: var(--ibp-bg); min-height: 100vh; font-family: 'Cairo','Tajawal',sans-serif; direction: rtl; }
+
+    /* Nav */
+    .ibp-nav { background: #1e293b; padding: 14px 24px; display: flex; align-items: center; }
+    .ibp-nav-brand { display: flex; align-items: center; gap: 14px; }
+    .ibp-back { color: #94a3b8; text-decoration: none; font-size: .85rem; font-weight: 600; transition: color .15s; }
+    .ibp-back:hover { color: #fff; }
+    .ibp-sep { width: 1px; height: 20px; background: #334155; }
+    .ibp-breadcrumb { display: flex; align-items: center; gap: 6px; font-size: .8rem; color: #64748b; }
+    .ibp-breadcrumb a { color: #94a3b8; text-decoration: none; }
+    .ibp-breadcrumb a:hover { color: #fff; }
+    .ibp-crumb-current { color: #e2e8f0; font-weight: 600; }
+
+    .ibp-body { padding: 24px; max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+    /* Hero */
+    .ibp-hero {
+        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        border-radius: var(--ibp-r);
+        padding: 28px 32px;
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 24px; color: #fff;
+    }
+    .ibp-hero-left { display: flex; align-items: flex-start; gap: 20px; flex: 1; }
+    .ibp-avatar {
+        width: 72px; height: 72px; border-radius: 16px;
+        background: linear-gradient(135deg,#2563eb,#7c3aed);
+        color: #fff; font-size: 1.5rem; font-weight: 800;
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
+    }
+    .ibp-hero-info { flex: 1; }
+    .ibp-hero-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .ibp-tag { padding: 4px 10px; border-radius: 20px; font-size: .73rem; font-weight: 600; }
+    .ibp-tag.info    { background: rgba(37,99,235,.3);   color: #93c5fd; }
+    .ibp-tag.success { background: rgba(5,150,105,.3);   color: #6ee7b7; }
+    .ibp-tag.danger  { background: rgba(220,38,38,.3);   color: #fca5a5; }
+    .ibp-name { font-size: 1.5rem; font-weight: 800; margin: 0 0 4px; }
+    .ibp-role { font-size: .85rem; color: #94a3b8; margin-bottom: 14px; }
+    .ibp-quick-stats { display: flex; align-items: center; gap: 16px; }
+    .ibp-qs { text-align: center; }
+    .ibp-qs-val { display: block; font-size: 1.3rem; font-weight: 800; }
+    .ibp-qs-lbl { display: block; font-size: .72rem; color: #94a3b8; }
+    .ibp-qs-sep { width: 1px; height: 30px; background: rgba(255,255,255,.15); }
+
+    /* Ring */
+    .ibp-ring-wrap { text-align: center; flex-shrink: 0; }
+    .ibp-ring { width: 110px; height: 110px; position: relative; margin: 0 auto 10px; }
+    .ibp-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+    .ibp-ring-bg  { fill: none; stroke: rgba(255,255,255,.1); stroke-width: 10; }
+    .ibp-ring-fill { fill: none; stroke-width: 10; stroke-linecap: round; transition: stroke-dashoffset .9s ease; }
+    .ibp-ring-val {
+        position: absolute; inset: 0;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.5rem; font-weight: 800; color: #fff;
+    }
+    .ibp-ring-val small { font-size: .7rem; margin-right: 1px; }
+    .ibp-ring-label { font-size: .75rem; color: #94a3b8; font-weight: 600; line-height: 1.6; }
+    .ibp-act-label {
+        display: block; font-size: .8rem; font-weight: 700; margin-top: 4px;
+    }
+    .ibp-act-label.label-good { color: #6ee7b7; }
+    .ibp-act-label.label-warn { color: #fcd34d; }
+    .ibp-act-label.label-bad  { color: #fca5a5; }
+
+    /* KPI */
+    .ibp-kpi-strip { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; }
+    .ibp-kpi {
+        background: var(--ibp-card); border-radius: var(--ibp-r);
+        padding: 18px 16px; border-top: 3px solid transparent;
+        box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .ibp-kpi.g { border-top-color: var(--ibp-green); }
+    .ibp-kpi.a { border-top-color: var(--ibp-amber); }
+    .ibp-kpi.r { border-top-color: var(--ibp-red); }
+    .ibp-kpi.b { border-top-color: var(--ibp-blue); }
+    .ibp-kpi-icon { font-size: 1.4rem; margin-bottom: 6px; }
+    .ibp-kpi-val  { font-size: 1.6rem; font-weight: 800; color: var(--ibp-ink); }
+    .ibp-kpi-val sup { font-size: .75rem; }
+    .ibp-kpi-lbl  { font-size: .72rem; color: var(--ibp-mute); margin: 3px 0 8px; }
+    .ibp-kpi-bar  { height: 5px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
+    .ibp-kpi-fill { height: 100%; border-radius: 3px; transition: width .8s ease; }
+
+    /* Card */
+    .ibp-card { background: var(--ibp-card); border-radius: var(--ibp-r); box-shadow: 0 1px 4px rgba(0,0,0,.06); overflow: hidden; }
+    .ibp-card-head {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 14px 18px; border-bottom: 1px solid var(--ibp-border);
+    }
+    .ibp-ch-left { display: flex; align-items: center; gap: 10px; }
+    .ibp-ch-accent { width: 4px; height: 30px; border-radius: 2px; }
+    .ibp-ch-accent.blue  { background: var(--ibp-blue); }
+    .ibp-ch-accent.amber { background: var(--ibp-amber); }
+    .ibp-ch-accent.green { background: var(--ibp-green); }
+    .ibp-ch-accent.red   { background: var(--ibp-red); }
+    .ibp-ch-title { font-size: .95rem; font-weight: 700; color: var(--ibp-ink); }
+    .ibp-ch-sub { font-size: .75rem; color: var(--ibp-mute); margin-top: 2px; }
+
+    /* Issues */
+    .ibp-issues { padding: 14px 18px; display: flex; flex-direction: column; gap: 10px; }
+    .ibp-issue {
+        display: flex; align-items: flex-start; gap: 12px;
+        padding: 12px 14px; border-radius: 8px;
+    }
+    .ibp-issue.good { background: #ecfdf5; border: 1px solid #a7f3d0; }
+    .ibp-issue.warn { background: #fffbeb; border: 1px solid #fde68a; }
+    .ibp-issue.bad  { background: #fef2f2; border: 1px solid #fca5a5; }
+    .ibp-issue-icon { font-size: 1.3rem; flex-shrink: 0; }
+    .ibp-issue-title { font-size: .875rem; font-weight: 700; color: var(--ibp-ink); margin-bottom: 3px; }
+    .ibp-issue-desc  { font-size: .78rem; color: var(--ibp-mute); }
+
+    /* Two col layout */
+    .ibp-two-col { display: grid; grid-template-columns: 1.4fr 1fr; gap: 20px; align-items: start; }
+    .ibp-right-stack { display: flex; flex-direction: column; gap: 20px; }
+
+    /* Table */
+    .ibp-table-wrap { overflow-x: auto; }
+    .ibp-table { width: 100%; border-collapse: collapse; }
+    .ibp-table th {
+        background: #f8fafc; padding: 9px 14px;
+        font-size: .78rem; font-weight: 700; color: var(--ibp-mute);
+        text-align: right; border-bottom: 1px solid var(--ibp-border);
+    }
+    .ibp-table td {
+        padding: 11px 14px; border-bottom: 1px solid #f1f5f9;
+        font-size: .85rem; color: var(--ibp-ink); vertical-align: middle;
+    }
+    .ibp-table tr:hover td { background: #f8fafc; }
+    .ibp-table tr.row-warn td { background: #fffbeb; }
+    .ibp-lec-title { font-weight: 600; display: block; }
+    .ibp-warn-badge {
+        background: #fef3c7; color: #92400e;
+        font-size: .7rem; font-weight: 700;
+        padding: 2px 8px; border-radius: 10px; margin-top: 3px; display: inline-block;
+    }
+    .ibp-mute { color: var(--ibp-mute); font-size: .8rem; }
+    .ibp-att-cell { display: flex; align-items: center; gap: 8px; }
+    .ibp-mini-bar {
+        height: 6px; background: #e5e7eb; border-radius: 3px;
+        overflow: hidden; width: 70px;
+    }
+    .ibp-mini-bar.wide { width: 80px; }
+    .ibp-mini-fill { height: 100%; border-radius: 3px; transition: width .7s ease; }
+    .ibp-mini-fill.good { background: var(--ibp-green); }
+    .ibp-mini-fill.warn { background: var(--ibp-amber); }
+    .ibp-mini-fill.bad  { background: var(--ibp-red); }
+    .ibp-att-pct { font-size: .8rem; font-weight: 700; width: 36px; }
+    .ibp-att-pct.good { color: var(--ibp-green); }
+    .ibp-att-pct.warn { color: var(--ibp-amber); }
+    .ibp-att-pct.bad  { color: var(--ibp-red); }
+
+    /* HW List */
+    .ibp-hw-list { padding: 10px 18px; display: flex; flex-direction: column; gap: 10px; }
+    .ibp-hw-row {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 12px; padding: 8px 0; border-bottom: 1px solid #f1f5f9;
+    }
+    .ibp-hw-row:last-child { border-bottom: none; }
+    .ibp-hw-left { flex: 1; min-width: 0; }
+    .ibp-hw-title { font-size: .85rem; font-weight: 600; color: var(--ibp-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ibp-hw-date  { font-size: .72rem; color: var(--ibp-mute); margin-top: 2px; }
+    .ibp-hw-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+    .ibp-hw-pct { font-size: .8rem; font-weight: 700; width: 36px; text-align: left; }
+    .ibp-hw-pct.good { color: var(--ibp-green); }
+    .ibp-hw-pct.warn { color: var(--ibp-amber); }
+    .ibp-hw-pct.bad  { color: var(--ibp-red); }
+
+    .ibp-empty { text-align: center; color: var(--ibp-mute); padding: 20px; font-size: .85rem; }
+
+    @@media (max-width: 900px) {
+        .ibp-two-col { grid-template-columns: 1fr; }
+        .ibp-kpi-strip { grid-template-columns: repeat(2,1fr); }
+        .ibp-hero { flex-direction: column; align-items: flex-start; }
+    }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var ring = document.querySelector('.ibp-ring-fill');
+        if (ring) {
+            var orig = ring.getAttribute('stroke-dashoffset');
+            ring.setAttribute('stroke-dashoffset', '251.2');
+            setTimeout(function () {
+                ring.style.transition = 'stroke-dashoffset .9s ease';
+                ring.setAttribute('stroke-dashoffset', orig);
+            }, 200);
+        }
+        document.querySelectorAll('.ibp-mini-fill, .ibp-kpi-fill').forEach(function (el) {
+            var w = el.style.width;
+            el.style.width = '0';
+            setTimeout(function () { el.style.width = w; }, 300);
+        });
+    });
+</script>

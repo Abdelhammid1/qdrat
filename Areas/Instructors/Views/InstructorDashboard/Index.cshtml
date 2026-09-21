@@ -1,0 +1,617 @@
+@using QdratNew.ViewModels.Instructor
+@model InstructorDashboardViewModel
+@{
+    ViewData["Title"] = "لوحة تحكم المدرب";
+
+    var today = DateTime.Now.ToString("EEEE، d MMMM yyyy", new System.Globalization.CultureInfo("ar-SA"));
+    var hour  = DateTime.Now.Hour;
+    var greet = hour < 12 ? "صباح الخير" : hour < 17 ? "مساء الخير" : "مرحباً بعودتك";
+
+    var instructorName = string.IsNullOrWhiteSpace(Model.InstructorName) ? "مدرب" : Model.InstructorName.Trim();
+
+    var initials = instructorName.Length > 0
+        ? string.Join("", instructorName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(w => w[0].ToString()))
+        : "م";
+}
+
+@section Styles {
+    <link href="~/css/instructor/instructor-dashboard.css" rel="stylesheet" asp-append-version="true" />
+}
+
+<div class="dash">
+    <div class="dash-shell">
+
+        <!-- ══ Hero ══ -->
+        <div class="d-hero">
+            <div class="d-avatar-wrap">
+                <div class="d-avatar">@initials</div>
+                <div>
+                    <p class="d-greeting-name">@greet، @instructorName</p>
+                    <p class="d-greeting-date">@today</p>
+                </div>
+            </div>
+
+            <div class="d-hero-meta">
+                <span class="d-hero-chip">لوحة تحليلات المدرب</span>
+                <div id="liveExamBadge" class="d-live-badge">
+                    <span class="d-live-dot"></span>
+                    اختبارات جارية الآن
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ Alerts ══ -->
+        <div class="d-alerts" id="alertsContainer">
+            @foreach (var alert in Model.Alerts)
+            {
+                var ico = alert.Type switch
+                {
+                    "warning" => "⚠️",
+                    "danger"  => "🔴",
+                    _         => "ℹ️"
+                };
+                <div class="d-alert @alert.Type">
+                    <span class="d-alert-ico">@ico</span>
+                    <span>@alert.Message</span>
+                    <button type="button" class="d-alert-close" onclick="this.parentElement.remove()">×</button>
+                </div>
+            }
+        </div>
+
+        <!-- ══ KPI Cards ══ -->
+        <div class="d-kpi-row">
+            <a class="d-kpi anim-in"
+               style="--kpi-accent:#22C55E;--kpi-icon-bg:rgba(34,197,94,.12);--kpi-soft:rgba(34,197,94,.08)"
+               href="@Url.Action("StatDetails","InstructorDashboard",new{area="Instructors",metric="students"})">
+                <div class="d-kpi-top">
+                    <div class="d-kpi-icon">👥</div>
+                    <span class="d-kpi-trend trend-up">دفعاتي</span>
+                </div>
+                <div class="d-kpi-value">@Model.TotalStudents</div>
+                <div class="d-kpi-label">إجمالي الطلاب</div>
+                <div class="d-kpi-sub">@Model.TotalBatches دفعة نشطة</div>
+            </a>
+
+            <a class="d-kpi anim-in"
+               style="--kpi-accent:#0EA5E9;--kpi-icon-bg:rgba(14,165,233,.12);--kpi-soft:rgba(14,165,233,.08)"
+               href="@Url.Action("StatDetails","InstructorDashboard",new{area="Instructors",metric="exams"})">
+                <div class="d-kpi-top">
+                    <div class="d-kpi-icon">📋</div>
+                    <span class="d-kpi-trend trend-info">مُرسَلة</span>
+                </div>
+                <div class="d-kpi-value">@Model.TotalExamsSent</div>
+                <div class="d-kpi-label">اختبارات مُرسَلة</div>
+                <div class="d-kpi-sub">دفعي · فردي · أداء</div>
+            </a>
+
+            <a class="d-kpi anim-in"
+               style="--kpi-accent:#F59E0B;--kpi-icon-bg:rgba(245,158,11,.12);--kpi-soft:rgba(245,158,11,.08)"
+               href="@Url.Action("StatDetails","InstructorDashboard",new{area="Instructors",metric="homeworks"})">
+                <div class="d-kpi-top">
+                    <div class="d-kpi-icon">📝</div>
+                    @if (Model.ActiveHomeworksCount > 0)
+                    {
+                        <span class="d-kpi-trend trend-warn">@Model.ActiveHomeworksCount مفتوح</span>
+                    }
+                    else
+                    {
+                        <span class="d-kpi-trend trend-muted">بلا نشاط</span>
+                    }
+                </div>
+                <div class="d-kpi-value">@Model.TotalHomeworks</div>
+                <div class="d-kpi-label">واجبات مُرسَلة</div>
+                <div class="d-kpi-sub @(Model.ActiveHomeworksCount > 0 ? "active" : "")">@Model.ActiveHomeworksCount قيد الحل</div>
+            </a>
+
+            <a class="d-kpi anim-in"
+               style="--kpi-accent:#7C3AED;--kpi-icon-bg:rgba(124,58,237,.12);--kpi-soft:rgba(124,58,237,.08)"
+               href="@Url.Action("StatDetails","InstructorDashboard",new{area="Instructors",metric="completion"})">
+                <div class="d-kpi-top">
+                    <div class="d-kpi-icon">📊</div>
+                    @{
+                        var trendCls = Model.OverallCompletionRate >= 75 ? "trend-up"
+                                     : Model.OverallCompletionRate >= 50 ? "trend-warn"
+                                     : "trend-muted";
+                    }
+                    <span class="d-kpi-trend @trendCls">
+                        @(Model.OverallCompletionRate >= 75 ? "ممتاز" : Model.OverallCompletionRate >= 50 ? "متوسط" : "ضعيف")
+                    </span>
+                </div>
+                <div class="d-kpi-value">@Model.OverallCompletionRate%</div>
+                <div class="d-kpi-label">نسبة الإتمام</div>
+                <div class="d-kpi-sub">تسليم الواجبات</div>
+            </a>
+        </div>
+
+        <!-- ══ Quick Actions ══ -->
+        <div class="d-sec-head" style="margin-bottom:12px">
+            <h2>إجراءات سريعة</h2>
+        </div>
+
+        <div class="d-qa-row">
+            <a class="d-qa-btn" href="@Url.Action("Create","InstructorExamDraft",new{area="Instructors"})">
+                <div class="d-qa-ico" style="background:rgba(34,197,94,.12);">✏️</div>
+                <span class="d-qa-label">مسودة اختبار</span>
+            </a>
+            <a class="d-qa-btn" href="@Url.Action("Drafts","InstructorExamDraft",new{area="Instructors"})">
+                <div class="d-qa-ico" style="background:rgba(14,165,233,.12);">📁</div>
+                <span class="d-qa-label">المسودات</span>
+            </a>
+            <a class="d-qa-btn" href="@Url.Action("SentExams","InstructorExamSend",new{area="Instructors"})">
+                <div class="d-qa-ico" style="background:rgba(245,158,11,.12);">🚀</div>
+                <span class="d-qa-label">إرسال اختبار</span>
+            </a>
+            <a class="d-qa-btn" href="@Url.Action("Create","InstructorHomeworkDrafts",new{area="Instructors"})">
+                <div class="d-qa-ico" style="background:rgba(124,58,237,.12);">📋</div>
+                <span class="d-qa-label">واجب جديد</span>
+            </a>
+            <a class="d-qa-btn" href="@Url.Action("Students","InstructorExamMonitoring",new{area="Instructors"})">
+                <div class="d-qa-ico" style="background:rgba(239,68,68,.12);">🔴</div>
+                <span class="d-qa-label">مراقبة مباشرة</span>
+            </a>
+            <a class="d-qa-btn" href="@Url.Action("Archived","InstructorExamDraft",new{area="Instructors"})">
+                <div class="d-qa-ico" style="background:rgba(100,116,139,.10);">🗄️</div>
+                <span class="d-qa-label">الأرشيف</span>
+            </a>
+        </div>
+
+        <!-- ══ Charts Row 1 ══ -->
+        <div class="d-grid-2-1">
+            <div class="d-card">
+                <div class="d-sec-head">
+                    <h2>أداء المحاور — آخر اختبار</h2>
+                    <a class="d-sec-link" href="@Url.Action("Report","InstructorExamMonitoring",new{area="Instructors"})">تقرير كامل ←</a>
+                </div>
+                <div class="d-chart-wrap" style="height:240px">
+                    <canvas id="sectionChart" role="img" aria-label="مخطط أداء الطلاب في المحاور"></canvas>
+                </div>
+            </div>
+
+            <div class="d-card">
+                <div class="d-sec-head">
+                    <h2>توزيع الدرجات</h2>
+                </div>
+                <div class="d-chart-wrap" style="height:240px">
+                    <canvas id="scoreChart" role="img" aria-label="توزيع درجات الطلاب"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ Section Performance ══ -->
+        <div class="d-grid-full">
+            <div class="d-card" id="perfSection">
+                <div class="d-sec-head">
+                    <h2>تفصيل المحاور</h2>
+                    <a class="d-sec-link" href="@Url.Action("Report","InstructorExamMonitoring",new{area="Instructors"})">تقرير كامل ←</a>
+                </div>
+                <div class="d-perf-grid" id="perfGrid">
+                    <div class="d-skel" style="height:76px"></div>
+                    <div class="d-skel" style="height:76px"></div>
+                    <div class="d-skel" style="height:76px"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ Recent Exams & Homeworks ══ -->
+        <div class="d-grid-2-1">
+            <div class="d-card">
+                <div class="d-sec-head">
+                    <h2>الاختبارات الأخيرة</h2>
+                    <a class="d-sec-link" href="@Url.Action("SentExams","InstructorExamSend",new{area="Instructors"})">الكل ←</a>
+                </div>
+                <div class="d-item-list">
+                    @foreach (var exam in Model.RecentExams)
+                    {
+                        var examUrl = Url.Action("Report","InstructorExamMonitoring",
+                            new{area="Instructors",examAssignmentId=exam.ExamAssignmentId});
+                        var dotClr = exam.IsLive ? "var(--dash-danger)" : "var(--dash-primary)";
+
+                        <a class="d-list-item" href="@examUrl">
+                            <div class="d-item-dot" style="background:@dotClr"></div>
+                            <div class="d-item-body">
+                                <div class="d-item-name">@exam.Title</div>
+                                <div class="d-item-meta">
+                                    @exam.TargetName &nbsp;·&nbsp; @exam.DurationMinutes د
+                                    &nbsp;·&nbsp; @exam.CreatedAt.ToString("dd MMM",new System.Globalization.CultureInfo("ar-SA"))
+                                </div>
+                                @if (exam.TotalCount > 0)
+                                {
+                                    <div class="d-mini-prog">
+                                        <div class="d-mini-fill" style="width:@exam.CompletionPct%"></div>
+                                    </div>
+                                }
+                            </div>
+                            <span class="d-type-badge @(exam.ExamType=="Batch"?"badge-batch":exam.ExamType=="Performance"?"badge-perf":"badge-ind")">
+                                @(exam.ExamType=="Batch"?"دفعي":exam.ExamType=="Performance"?"أداء":"فردي")
+                            </span>
+                        </a>
+                    }
+                    @if (!Model.RecentExams.Any())
+                    {
+                        <p class="d-empty">لا توجد اختبارات بعد</p>
+                    }
+                </div>
+            </div>
+
+            <div class="d-card">
+                <div class="d-sec-head">
+                    <h2>الواجبات الأخيرة</h2>
+                    <a class="d-sec-link" href="@Url.Action("Index","InstructorHomeworks",new{area="Instructors"})">الكل ←</a>
+                </div>
+                <div class="d-item-list">
+                    @foreach (var hw in Model.RecentHomeworks)
+                    {
+                        var hwUrl   = Url.Action("Students","InstructorHomeworks",
+                            new{area="Instructors",homeworkSetId=hw.HomeworkSetId});
+                        var hwBadge = hw.IsActive ? "badge-act" : "badge-cld";
+                        var hwTxt   = hw.IsActive ? "نشط" : hw.IsClosed ? "مغلق" : "منتهٍ";
+
+                        <a class="d-list-item" href="@hwUrl">
+                            <div class="d-item-dot" style="background:@(hw.IsActive?"var(--dash-primary)":"var(--dash-muted-dark)")"></div>
+                            <div class="d-item-body">
+                                <div class="d-item-name">@hw.Title</div>
+                                <div class="d-item-meta">
+                                    @hw.SubmittedCount / @hw.TotalStudents أتموا
+                                    @(hw.EndAt.HasValue ? "· " + hw.EndAt.Value.ToString("dd MMM",new System.Globalization.CultureInfo("ar-SA")) : "")
+                                </div>
+                                <div class="d-mini-prog">
+                                    <div class="d-mini-fill" style="width:@hw.CompletionPct%;background:@(hw.IsActive?"var(--dash-primary)":"var(--dash-muted-dark)")"></div>
+                                </div>
+                            </div>
+                            <span class="d-type-badge @hwBadge">@hwTxt</span>
+                        </a>
+                    }
+                    @if (!Model.RecentHomeworks.Any())
+                    {
+                        <p class="d-empty">لا توجد واجبات بعد</p>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ Top Students + Activity ══ -->
+        <div class="d-grid-2-1">
+            <div class="d-card">
+                <div class="d-sec-head">
+                    <h2>أفضل الطلاب أداءً</h2>
+                </div>
+                <div id="topStudentsWrap">
+                    <div class="d-skel" style="height:220px"></div>
+                </div>
+            </div>
+
+            <div class="d-card">
+                <div class="d-sec-head">
+                    <h2>نشاط الأسبوع</h2>
+                </div>
+                <div class="d-chart-wrap" style="height:220px">
+                    <canvas id="activityChart" role="img" aria-label="نشاط المدرب هذا الأسبوع"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ Batches ══ -->
+        @if (Model.Batches.Any())
+        {
+            <div class="d-grid-full">
+                <div class="d-card">
+                    <div class="d-sec-head">
+                        <h2>دفعاتي (@Model.Batches.Count)</h2>
+                    </div>
+                    <div class="d-batch-grid">
+                        @foreach (var batch in Model.Batches)
+                        {
+                            <a class="d-batch-item"
+                               href="@Url.Action("Index","InstructorHomeworks",new{area="Instructors",batchId=batch.BatchId})">
+                                <div class="d-batch-name">@batch.BatchName</div>
+                                <div class="d-batch-count">@batch.StudentCount طالب</div>
+                            </a>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+
+    </div><!-- /.dash-shell -->
+</div><!-- /.dash -->
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <script>
+        (function () {
+            'use strict';
+
+            const $ = id => document.getElementById(id);
+
+            /* ── Light-theme chart palette ── */
+            const textClr  = '#64748B';
+            const titleClr = '#334155';
+            const gridClr  = 'rgba(0,0,0,.06)';
+
+            if (typeof Chart !== 'undefined') {
+                Chart.defaults.color       = textClr;
+                Chart.defaults.font.family = "'Tajawal', 'Cairo', sans-serif";
+            }
+
+            const chartBase = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false,
+                        labels: {
+                            color: titleClr,
+                            font: { size: 11, weight: '700' },
+                            boxWidth: 10, boxHeight: 10,
+                            padding: 14, usePointStyle: true
+                        }
+                    },
+                    tooltip: {
+                        rtl: true,
+                        backgroundColor: '#1E293B',
+                        titleColor: '#FFFFFF',
+                        bodyColor:  '#CBD5E1',
+                        borderColor: 'rgba(255,255,255,.12)',
+                        borderWidth: 1,
+                        padding: 12,
+                        titleFont: { size: 12, weight: '800' },
+                        bodyFont:  { size: 11, weight: '700' }
+                    }
+                }
+            };
+
+            let sectionChartInst = null;
+
+            async function loadSectionChart() {
+                try {
+                    const res  = await fetch('@Url.Action("GetSectionPerformance","InstructorDashboard",new{area="Instructors"})');
+                    const data = await res.json();
+
+                    if (!data.labels || !data.labels.length) {
+                        const el = $('sectionChart');
+                        if (el && el.parentElement) el.parentElement.innerHTML = '<p class="d-empty">لا توجد بيانات بعد</p>';
+                        buildEmptyPerfCards();
+                        return;
+                    }
+
+                    if (sectionChartInst) sectionChartInst.destroy();
+
+                    sectionChartInst = new Chart($('sectionChart'), {
+                        type: 'bar',
+                        data: {
+                            labels: data.labels,
+                            datasets: [
+                                {
+                                    label: 'صحيح %',
+                                    data: data.correct,
+                                    backgroundColor: '#22C55E',
+                                    borderRadius: 7, borderSkipped: false, barThickness: 10
+                                },
+                                {
+                                    label: 'خطأ %',
+                                    data: data.wrong,
+                                    backgroundColor: '#EF4444',
+                                    borderRadius: 7, borderSkipped: false, barThickness: 10
+                                }
+                            ]
+                        },
+                        options: {
+                            ...chartBase,
+                            indexAxis: 'y',
+                            scales: {
+                                x: {
+                                    max: 100,
+                                    ticks: { color: textClr, font: { size: 10, weight: '700' }, callback: v => v + '%' },
+                                    grid: { color: gridClr }, border: { display: false }
+                                },
+                                y: {
+                                    ticks: { color: textClr, font: { size: 10, weight: '700' } },
+                                    grid: { display: false }, border: { display: false }
+                                }
+                            },
+                            plugins: {
+                                ...chartBase.plugins,
+                                legend: {
+                                    display: true, position: 'bottom',
+                                    labels: { color: titleClr, font: { size: 11, weight: '800' }, boxWidth: 10, boxHeight: 10, padding: 14, usePointStyle: true }
+                                }
+                            }
+                        }
+                    });
+
+                    buildPerfCards(data);
+                } catch (e) { console.warn('Section chart:', e); }
+            }
+
+            function buildEmptyPerfCards() {
+                const grid = $('perfGrid');
+                if (grid) grid.innerHTML = '<p class="d-empty" style="grid-column:1/-1">لا توجد بيانات بعد</p>';
+            }
+
+            function buildPerfCards(data) {
+                const grid = $('perfGrid');
+                if (!grid) return;
+                const colors = ['#22C55E','#0EA5E9','#F59E0B','#EF4444','#7C3AED','#14B8A6'];
+                grid.innerHTML = data.labels.map((lbl, i) => {
+                    const pct = data.correct[i] || 0;
+                    const clr = colors[i % colors.length];
+                    return `<div class="d-perf-card">
+                        <div class="d-perf-name" title="${lbl}">${lbl}</div>
+                        <div class="d-perf-bar"><div class="d-perf-fill" style="width:${pct}%;background:${clr}"></div></div>
+                        <div class="d-perf-pct" style="color:${clr}">${pct}%</div>
+                    </div>`;
+                }).join('');
+            }
+
+            async function loadScoreChart() {
+                try {
+                    const res      = await fetch('@Url.Action("GetTopStudents","InstructorDashboard",new{area="Instructors"})?count=50');
+                    const students = await res.json();
+
+                    let excellent = 0, good = 0, fair = 0, poor = 0;
+                    students.forEach(s => {
+                        if      (s.avgScore >= 80) excellent++;
+                        else if (s.avgScore >= 60) good++;
+                        else if (s.avgScore >= 40) fair++;
+                        else                       poor++;
+                    });
+
+                    if (!students.length) {
+                        const el = $('scoreChart');
+                        if (el && el.parentElement) el.parentElement.innerHTML = '<p class="d-empty">لا توجد بيانات بعد</p>';
+                        return;
+                    }
+
+                    new Chart($('scoreChart'), {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['ممتاز 80%+','جيد جداً 60-80%','جيد 40-60%','يحتاج تحسين'],
+                            datasets: [{
+                                data: [excellent, good, fair, poor],
+                                backgroundColor: ['#22C55E','#0EA5E9','#F59E0B','#EF4444'],
+                                borderWidth: 3,
+                                borderColor: '#FFFFFF',
+                                hoverOffset: 8
+                            }]
+                        },
+                        options: {
+                            ...chartBase,
+                            cutout: '70%',
+                            plugins: {
+                                ...chartBase.plugins,
+                                legend: {
+                                    display: true, position: 'bottom',
+                                    labels: { color: titleClr, font: { size: 11, weight: '800' }, padding: 14, boxWidth: 10, boxHeight: 10, usePointStyle: true }
+                                }
+                            }
+                        }
+                    });
+                } catch (e) { console.warn('Score chart:', e); }
+            }
+
+            async function loadActivityChart() {
+                try {
+                    const res  = await fetch('@Url.Action("GetWeeklyActivity","InstructorDashboard",new{area="Instructors"})');
+                    const data = await res.json();
+
+                    new Chart($('activityChart'), {
+                        type: 'line',
+                        data: {
+                            labels: data.map(d => d.dayName),
+                            datasets: [
+                                {
+                                    label: 'اختبارات',
+                                    data: data.map(d => d.exams),
+                                    borderColor: '#22C55E',
+                                    backgroundColor: 'rgba(34,197,94,.10)',
+                                    fill: true, tension: .4,
+                                    pointRadius: 4,
+                                    pointBackgroundColor: '#22C55E',
+                                    pointBorderColor: '#FFFFFF',
+                                    pointBorderWidth: 2
+                                },
+                                {
+                                    label: 'واجبات',
+                                    data: data.map(d => d.homeworks),
+                                    borderColor: '#0EA5E9',
+                                    backgroundColor: 'rgba(14,165,233,.08)',
+                                    fill: true, tension: .4,
+                                    pointRadius: 4,
+                                    borderDash: [5,3],
+                                    pointBackgroundColor: '#0EA5E9',
+                                    pointBorderColor: '#FFFFFF',
+                                    pointBorderWidth: 2
+                                }
+                            ]
+                        },
+                        options: {
+                            ...chartBase,
+                            scales: {
+                                x: {
+                                    ticks: { color: textClr, font: { size: 10, weight: '700' } },
+                                    grid: { display: false }, border: { display: false }
+                                },
+                                y: {
+                                    ticks: { color: textClr, font: { size: 10, weight: '700' }, stepSize: 1 },
+                                    grid: { color: gridClr }, border: { display: false }
+                                }
+                            },
+                            plugins: {
+                                ...chartBase.plugins,
+                                legend: {
+                                    display: true, position: 'bottom',
+                                    labels: { color: titleClr, font: { size: 11, weight: '800' }, boxWidth: 10, boxHeight: 10, padding: 14, usePointStyle: true }
+                                }
+                            }
+                        }
+                    });
+                } catch (e) { console.warn('Activity chart:', e); }
+            }
+
+            async function loadTopStudents() {
+                const wrap = $('topStudentsWrap');
+                if (!wrap) return;
+                try {
+                    const res      = await fetch('@Url.Action("GetTopStudents","InstructorDashboard",new{area="Instructors"})?count=5');
+                    const students = await res.json();
+
+                    if (!students.length) { wrap.innerHTML = '<p class="d-empty">لا توجد بيانات بعد</p>'; return; }
+
+                    const rows = students.map((s, idx) => {
+                        const cls  = s.avgScore >= 80 ? 'pill-hi' : s.avgScore >= 60 ? 'pill-mid' : 'pill-lo';
+                        const rank = ['🥇','🥈','🥉','4','5'][idx] || (idx + 1);
+                        return `<tr>
+                            <td><span style="margin-left:6px;opacity:.7">${rank}</span>${s.studentName}</td>
+                            <td style="text-align:center">${s.examCount}</td>
+                            <td><span class="d-score-pill ${cls}">${s.avgScore.toFixed(1)}%</span></td>
+                            <td><a href="/Instructors/InstructorExamStudent/StudentExamReport?studentId=${s.studentId}&examAssignmentId=0"
+                                   class="d-btn-report">تقرير ←</a></td>
+                        </tr>`;
+                    }).join('');
+
+                    wrap.innerHTML = `<table class="d-std-table">
+                        <thead><tr>
+                            <th>الطالب</th>
+                            <th style="text-align:center">اختبارات</th>
+                            <th>متوسط الدرجة</th>
+                            <th>الإجراء</th>
+                        </tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>`;
+                } catch (e) { wrap.innerHTML = '<p class="d-empty">تعذر تحميل البيانات</p>'; }
+            }
+
+            async function checkLiveExams() {
+                try {
+                    const res    = await fetch('@Url.Action("GetAlerts","InstructorDashboard",new{area="Instructors"})');
+                    const alerts = await res.json();
+
+                    const liveBadge = $('liveExamBadge');
+                    if (alerts.some(a => a.type === 'danger') && liveBadge) liveBadge.classList.add('show');
+
+                    const container = $('alertsContainer');
+                    if (!container) return;
+                    container.querySelectorAll('.ajax-alert').forEach(el => el.remove());
+
+                    alerts.forEach(a => {
+                        const ico = a.type === 'warning' ? '⚠️' : a.type === 'danger' ? '🔴' : 'ℹ️';
+                        const div = document.createElement('div');
+                        div.className = `d-alert ${a.type} ajax-alert`;
+                        div.innerHTML = `<span class="d-alert-ico">${ico}</span><span>${a.message}</span>
+                            <button type="button" class="d-alert-close" onclick="this.parentElement.remove()">×</button>`;
+                        container.appendChild(div);
+                    });
+                } catch (e) { console.warn('Alerts:', e); }
+            }
+
+            document.addEventListener('DOMContentLoaded', function () {
+                loadSectionChart();
+                loadScoreChart();
+                loadActivityChart();
+                loadTopStudents();
+                checkLiveExams();
+            });
+        })();
+    </script>
+}

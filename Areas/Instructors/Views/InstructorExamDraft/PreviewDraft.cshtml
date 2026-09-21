@@ -1,0 +1,154 @@
+@model QdratNew.ViewModels.Instructor.Exam.ExamDraftVM
+
+@{
+    ViewData["Title"] = "مراجعة نموذج الاختبار";
+}
+
+@functions {
+    string ShortHtml(string html, int length = 45)
+    {
+        if (string.IsNullOrWhiteSpace(html)) return "";
+        var plain = System.Text.RegularExpressions.Regex.Replace(html, "<.*?>", string.Empty);
+        return plain.Length <= length ? plain : plain.Substring(0, length) + "...";
+    }
+}
+
+@section Styles {
+    <link href="~/css/instructor/instructor-drafts.css" rel="stylesheet" asp-append-version="true" />
+}
+
+<div class="instructor-page">
+
+    <div class="hw-page-header">
+        <h3 class="hw-page-title">
+            <i class="fas fa-brain"></i>
+            مراجعة نموذج الاختبار
+        </h3>
+        <a asp-action="Drafts" class="hw-back-btn ms-auto">
+            <i class="fas fa-arrow-right"></i> رجوع
+        </a>
+    </div>
+
+    <div class="draft-summary">
+        <div class="draft-summary-row">
+            <div class="draft-summary-item">
+                <strong>العنوان</strong>
+                <span>@Model.Title</span>
+            </div>
+            <div class="draft-summary-item">
+                <strong>تاريخ الإنشاء</strong>
+                <span>@Model.CreatedAt.ToString("yyyy/MM/dd")</span>
+            </div>
+            <div class="draft-summary-item">
+                <strong>عدد الأسئلة</strong>
+                <span>@Model.QuestionCount</span>
+            </div>
+        </div>
+    </div>
+
+    @if (Model.SectionGroups == null || !Model.SectionGroups.Any())
+    {
+        <div class="instructor-card text-center text-muted py-4">
+            <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+            لا يوجد أسئلة في هذا النموذج
+        </div>
+    }
+    else
+    {
+        @foreach (var group in Model.SectionGroups)
+        {
+            <div class="draft-group">
+                <div class="draft-group-header">
+                    <div class="group-title">
+                        <i class="fas fa-book-open"></i>
+                        @group.SectionTitle
+                    </div>
+                    <a asp-action="AddQuestion"
+                       asp-route-draftId="@Model.Id"
+                       asp-route-sectionId="@group.SectionId"
+                       class="btn btn-sm btn-outline-success">
+                        <i class="fas fa-plus"></i> إضافة سؤال
+                    </a>
+                </div>
+
+                @{ int qNum = 1; }
+                @foreach (var q in group.Questions)
+                {
+                    <div class="draft-q-item">
+                        <div class="draft-q-num">@qNum</div>
+                        <div class="draft-q-text">@Html.Raw(q.QuestionTitle)</div>
+                        <div class="draft-q-actions">
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-primary"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#questionPreviewModal"
+                                    data-question-id="@q.QuestionId"
+                                    title="معاينة">
+                                <i class="fa fa-eye"></i>
+                            </button>
+                            <a asp-action="ReplaceQuestion"
+                               asp-route-draftId="@Model.Id"
+                               asp-route-oldQuestionId="@q.QuestionId"
+                               asp-route-sectionId="@group.SectionId"
+                               class="btn btn-sm btn-outline-warning"
+                               title="استبدال">
+                                <i class="fas fa-repeat"></i>
+                            </a>
+                            <a asp-action="RemoveQuestion"
+                               asp-route-draftId="@Model.Id"
+                               asp-route-questionId="@q.QuestionId"
+                               class="btn btn-sm btn-outline-danger"
+                               title="حذف">
+                                <i class="fas fa-xmark"></i>
+                            </a>
+                        </div>
+                    </div>
+                    qNum++;
+                }
+            </div>
+        }
+    }
+
+    <div class="d-flex justify-content-end gap-2 mt-3">
+        <a asp-action="Drafts" class="btn btn-outline-secondary px-4">
+            <i class="fas fa-floppy-disk me-1"></i> حفظ كنموذج
+        </a>
+        <a asp-controller="InstructorExamSend"
+           asp-action="SendDraft"
+           asp-route-id="@Model.Id"
+           class="btn btn-outline-primary px-4">
+            <i class="fas fa-gear me-1"></i> إعداد الإرسال
+        </a>
+    </div>
+
+</div>
+
+<div class="modal fade" id="questionPreviewModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">معاينة السؤال</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="questionPreviewContent">
+                <div class="text-center text-muted py-5">جاري التحميل...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.getElementById('questionPreviewModal')
+            .addEventListener('show.bs.modal', function (event) {
+                const button = event.relatedTarget;
+                const questionId = button.getAttribute('data-question-id');
+                const container = document.getElementById('questionPreviewContent');
+                container.innerHTML = 'جاري التحميل...';
+                fetch('/Instructors/InstructorExamDraft/PreviewQuestion?questionId=' + questionId)
+                    .then(response => response.text())
+                    .then(html => { container.innerHTML = html; })
+                    .catch(() => { container.innerHTML = 'حدث خطأ أثناء تحميل السؤال'; });
+            });
+    </script>
+}

@@ -1,0 +1,309 @@
+﻿@model QdratNew.ViewModels.Exam.ExamBatchAnalyticsViewModel
+@{
+    ViewData["Title"] = "📊 تحليل دفعة: " + Model.BatchName;
+}
+
+<div class="container-fluid mt-4 px-4">
+
+    <!-- 🧭 العنوان -->
+    <div class="d-flex justify-content-between align-items-center mb-4 no-print">
+        <div>
+            <h3 class="fw-bold text-qdrat mb-1">
+                <i class="fas fa-chart-line me-2 text-primary"></i> التقرير التحليلي للاختبار
+            </h3>
+            <h6 class="text-muted">📘 الاختبار: @Model.ExamTitle — 🎓 الدفعة: @Model.BatchName</h6>
+        </div>
+        <button type="button" class="btn btn-dark no-print" onclick="printReport()">
+            <i class="fas fa-file-pdf me-1"></i> طباعة التقرير
+        </button>
+
+
+    </div>
+
+    <!-- 🧩 كروت الأداء العامة -->
+    <div class="row g-3 text-center mb-4">
+        <div class="col-md-4 col-6"><div class="card shadow-sm border-0 p-3"><h6>👨‍🎓 إجمالي الطلاب</h6><h4 class="fw-bold">@Model.TotalStudents</h4></div></div>
+        <div class="col-md-4 col-6"><div class="card shadow-sm border-0 p-3 text-success"><h6>✅ أكملوا</h6><h4 class="fw-bold">@Model.CompletedCount</h4></div></div>
+        <div class="col-md-4 col-6"><div class="card shadow-sm border-0 p-3 text-danger"><h6>🚫 غائبين</h6><h4 class="fw-bold">@Model.AbsentCount</h4></div></div>
+       
+    </div>
+
+
+
+
+    <!-- 📋 أداء الطلاب -->
+    <div class="card shadow-sm border-0 mb-5">
+        <div class="card-header bg-light fw-bold">
+            <i class="fas fa-user-graduate me-1 text-primary"></i> أداء الطلاب في الاختبار
+        </div>
+        <div class="card-body table-responsive">
+            <table class="table table-hover align-middle text-center">
+                <thead class="table-primary">
+                    <tr>
+                        <th>الاسم</th>
+                        <th>الحضور</th>
+                        <th>النتيجة</th>
+                        <th>عدد الأسئلة</th>
+                        <th>✅ الصحيحة</th>
+                        <th>❌ الخاطئة</th>
+                        <th>⏭️ المتخطاة</th>
+                        <th>⏱️ الزمن (د)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var s in Model.Students)
+                    {
+                        var rowClass = s.Score >= 80 ? "table-success"
+                        : s.Score >= 60 ? "table-warning"
+                        : "table-danger";
+
+                        <tr class="@rowClass">
+                            <td class="fw-bold">@s.FullName</td>
+                            <td>@(s.Attended ? "✅" : "❌")</td>
+                            <td>@(s.Score.HasValue? s.Score + "%" : "-")</td>
+                            <td>@s.TotalQuestions</td>
+                            <td class="text-success fw-bold">@s.CorrectAnswers</td>
+                            <td class="text-danger fw-bold">@s.WrongAnswers</td>
+                            <td class="text-muted fw-bold">@s.SkippedQuestions</td>
+                            <td>@s.DurationMinutes</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+
+
+
+
+    <hr class="p-2" />
+
+
+
+
+
+    <!-- 🎯 الرسوم البيانية -->
+    <div class="row g-4 mb-5">
+
+        <div class="col-md-12 col-sm-12 ">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-light fw-bold"><i class="fas fa-chart-bar text-info me-1"></i> توزيع الدرجات</div>
+                <div class="card-body"><canvas id="scoreChart"></canvas></div>
+            </div>
+        </div>
+
+
+        <div class="row g-3 text-center mb-4">
+
+            <div class="col-md-4 col-6"><div class="card shadow-sm border-0 p-3 text-primary"><h6>📈 معدل النجاح</h6><h4 class="fw-bold">@Model.PassedCount / @Model.TotalStudents</h4></div></div>
+            <div class="col-md-4 col-6"><div class="card shadow-sm border-0 p-3 text-warning"><h6>📉 الراسبون</h6><h4 class="fw-bold">@Model.FailedCount</h4></div></div>
+            <div class="col-md-4 col-6"><div class="card shadow-sm border-0 p-3 text-info"><h6>⏱️ متوسط الزمن</h6><h4 class="fw-bold">@Model.AvgDurationMinutes د</h4></div></div>
+        </div>
+
+        <div class="col-md-6 col-sm-12">
+
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-light fw-bold"><i class="fas fa-user-check text-success me-1"></i> الحضور والغياب</div>
+                <div class="card-body"><canvas id="attendanceChart"></canvas></div>
+            </div>
+        </div>
+        <div class="col-md-6 col-sm-12">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-light fw-bold"><i class="fas fa-chart-pie text-primary me-1"></i> النجاح والرسوب</div>
+                <div class="card-body"><canvas id="passFailChart"></canvas></div>
+            </div>
+        </div>
+   
+    </div>
+
+
+
+    <!-- 📚 أداء المحاور -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-light fw-bold d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-layer-group text-success me-1"></i> أداء المحاور</span>
+            <small class="text-muted">اضغط على "عرض المؤشرات" لتحليل المؤشرات داخل كل محور</small>
+        </div>
+        <div class="card-body table-responsive">
+            <table class="table table-hover align-middle text-center">
+                <thead class="table-secondary">
+                    <tr>
+                        <th>المحور</th>
+                        <th>عدد المؤشرات</th>
+                        <th>عدد الأسئلة</th>
+                        <th>نسبة النجاح</th>
+                        <th>عرض المؤشرات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var sec in Model.Sections)
+                    {
+                        <tr>
+                            <td class="fw-bold">@sec.SectionTitle</td>
+                            <td>@sec.LessonCount</td>
+                            <td>@sec.QuestionCount</td>
+                            <td>
+                                <div class="progress" style="height:20px;">
+                                    <div class="progress-bar bg-success" role="progressbar"
+                                         style="width:@sec.AvgSuccessRate%"
+                                         aria-valuenow="@sec.AvgSuccessRate" aria-valuemin="0" aria-valuemax="100">
+                                        @sec.AvgSuccessRate%
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <a asp-area="Admin"
+                                   asp-controller="ExamAssignments"
+                                   asp-action="SectionLessons"
+                                   asp-route-assignmentId="@Model.AssignmentId"
+                                   asp-route-sectionId="@sec.SectionId"
+                                   class="btn btn-sm btn-outline-primary">
+                                    عرض المؤشرات <i class="fas fa-arrow-left"></i>
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // 🟢 الحضور والغياب
+        new Chart(document.getElementById('attendanceChart'), {
+            type: 'pie',
+            data: {
+                labels: ['حاضرون', 'غائبون'],
+                datasets: [{
+                    data: [@Model.CompletedCount, @Model.AbsentCount],
+                    backgroundColor: ['#28a745', '#dc3545']
+                }]
+            }
+        });
+
+        // 🔵 النجاح والرسوب
+        new Chart(document.getElementById('passFailChart'), {
+            type: 'doughnut',
+            data: {
+                labels: ['ناجحون', 'راسبون'],
+                datasets: [{
+                    data: [@Model.PassedCount, @Model.FailedCount],
+                    backgroundColor: ['#0d6efd', '#ffc107']
+                }]
+            }
+        });
+
+        // 🟣 توزيع الدرجات
+        const students = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(Model.Students.Select(s => s.FullName)));
+        const scores = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(Model.Students.Select(s => s.Score ?? 0)));
+        new Chart(document.getElementById('scoreChart'), {
+            type: 'bar',
+            data: {
+                labels: students,
+                datasets: [{
+                    label: 'نسبة النجاح (%)',
+                    data: scores,
+                    backgroundColor: scores.map(v => v >= 80 ? '#28a745' : v >= 60 ? '#ffc107' : '#dc3545')
+                }]
+            },
+            options: {
+                plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+    </script>
+
+     <script>
+        // 🖨️ زر الطباعة
+        function printReport() {
+            // قبل الطباعة، نضيف كلاس خاص يخفي العناصر غير المرغوبة
+            document.body.classList.add("printing-mode");
+            setTimeout(() => {
+                window.print();
+                // بعد الانتهاء، نعيد كل شيء لطبيعته
+                setTimeout(() => document.body.classList.remove("printing-mode"), 1500);
+            }, 500);
+        }
+
+        // 🟢 رسوم بيانية (اختصرت المكرر)
+        new Chart(document.getElementById('attendanceChart'), {
+            type: 'pie',
+            data: {
+                labels: ['حاضرون', 'غائبون'],
+                datasets: [{
+                    data: [@Model.CompletedCount, @Model.AbsentCount],
+                    backgroundColor: ['#28a745', '#dc3545']
+                }]
+            }
+        });
+    </script>
+
+    <style>
+        /* 🌟 إخفاء القائمة الجانبية والـ Navbar أثناء الطباعة فقط */
+       @@media print {
+
+    /* ✅ إخفاء القائمة وكل ما لا نحتاجه للطباعة */
+    body.printing-mode .sidebar,
+    body.printing-mode nav,
+    body.printing-mode .no-print,
+    body.printing-mode button,
+    body.printing-mode .navbar,
+    body.printing-mode footer {
+        display: none !important;
+        visibility: hidden !important;
+    }
+
+    /* ✅ تمديد الصفحة لتكون Full Width */
+    body.printing-mode,
+    body.printing-mode .container-fluid,
+    body.printing-mode .main-content {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    /* ✅ إعداد الصفحة للطباعة */
+    @@page {
+        size: A4 portrait;
+        margin: 5mm;
+    }
+
+    /* ✅ الجداول والكروت */
+    .card, .table {
+        box-shadow: none !important;
+        border: 1px solid #ccc !important;
+    }
+
+    .table th, .table td {
+        border: 1px solid #ddd !important;
+        padding: 5px;
+    }
+
+    /* ✅ لجعل الرسوم البيانية متجاوبة في الطباعة */
+    canvas {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        height: auto !important;
+        aspect-ratio: 16/9 !important; /* أو غيّرها لـ 4/3 لو تحب */
+        page-break-inside: avoid !important;
+    }
+
+    .chart-container {
+        width: 100% !important;
+        max-width: 100% !important;
+        height: auto !important;
+        margin-bottom: 20px;
+        page-break-inside: avoid !important;
+    }
+    }
+
+    </style>
+
+}

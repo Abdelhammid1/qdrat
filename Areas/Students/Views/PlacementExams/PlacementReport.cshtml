@@ -1,0 +1,556 @@
+﻿@model QdratNew.ViewModels.Reports.PlacementReportViewModel
+@{
+    var rec = Model.Recommendation;
+    double overall = Model.OverallPercent;
+    double solve = Model.SolveMinutes;
+    double total = rec?.TotalMinutes ?? 1;
+    double timePercent = Math.Round((solve / total) * 100, 1);
+}
+
+<style>
+    body {
+        background: linear-gradient(135deg, #f8fafc, #eef2ff);
+        font-family: 'Cairo', sans-serif;
+    }
+
+    .dashboard-card {
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(12px);
+        border-radius: 1.2rem;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+        border: 1px solid rgba(255,255,255,0.4);
+        transition: all .25s ease;
+    }
+
+        .dashboard-card:hover {
+            transform: translateY(-4px);
+        }
+
+    .metric-badge {
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: .9rem;
+        font-weight: 600;
+        color: #fff;
+        display: inline-block;
+        margin-top: 5px;
+    }
+
+        .metric-badge.green {
+            background: linear-gradient(to right, #22c55e, #16a34a);
+        }
+
+        .metric-badge.yellow {
+            background: linear-gradient(to right, #eab308, #f59e0b);
+        }
+
+        .metric-badge.red {
+            background: linear-gradient(to right, #ef4444, #dc2626);
+        }
+
+    .section-heading {
+        font-weight: 700;
+        color: #334155;
+        border-right: 5px solid #6366f1;
+        padding-right: 10px;
+    }
+
+    .badge-tip {
+        border-radius: 10px;
+        padding: 10px 14px;
+        display: block;
+        margin-bottom: 8px;
+        font-size: .95rem;
+        font-weight: 500;
+    }
+
+        .badge-tip.success {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-tip.warn {
+            background: #fef9c3;
+            color: #854d0e;
+        }
+
+        .badge-tip.danger {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+    canvas {
+        background: #fff;
+        border-radius: 10px;
+    }
+
+    @@media print {
+        @@page {
+            size: A4 portrait;
+            margin: 10mm;
+        }
+
+        /* إخفاء العناصر غير المرغوبة أثناء الطباعة */
+        .no-print, .sidebar, nav, header, footer,
+        #ql-sidebar, #ql-header, #ql-overlay,
+        .ql-toggle-btn, .ql-mobile-toggle {
+            display: none !important;
+            visibility: hidden !important;
+        }
+
+        html,
+        body,
+        #ql-wrapper,
+        #ql-main,
+        .ql-content {
+            display: block !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+            max-height: none !important;
+            overflow: visible !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        /* توسيع الصفحة بالكامل */
+        body {
+            background: #fff !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+        }
+
+        .placement-report {
+            width: 100% !important;
+            max-width: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        .placement-report .row {
+            display: flex !important;
+            flex-wrap: wrap !important;
+        }
+
+        /* جعل الجداول والرسوم تُعرض كاملة بدون قص */
+        table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            page-break-inside: auto !important;
+            break-inside: auto !important;
+        }
+
+        thead {
+            display: table-header-group !important;
+        }
+
+        tfoot {
+            display: table-footer-group !important;
+        }
+
+        tr {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+        }
+
+        canvas {
+            page-break-inside: avoid !important;
+            max-width: 100% !important;
+            height: auto !important;
+        }
+        /* منع تقطيع الكروت بين الصفحات */
+        .dashboard-card, .card {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+        }
+
+        .section-analysis-card,
+        .section-analysis-card .card-body {
+            page-break-inside: auto !important;
+            break-inside: auto !important;
+            overflow: visible !important;
+        }
+
+        .dashboard-card:hover,
+        .report-card:hover {
+            transform: none !important;
+        }
+
+        /* تقليل الظلال أثناء الطباعة */
+        .shadow-sm, .shadow, .shadow-lg {
+            box-shadow: none !important;
+        }
+    }
+</style>
+<style>
+    .report-card {
+        background: #fff;
+        border-radius: 16px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.05);
+        text-align: center;
+        padding: 25px 10px;
+        height: 130; /* 🔹 توحيد الارتفاع */
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+        .report-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .report-card h6 {
+            color: #666;
+            font-size: 15px;
+            margin-bottom: 8px;
+        }
+
+        .report-card h4 {
+            font-weight: 700;
+            font-size: 28px;
+            color: #222;
+        }
+
+        .report-card .highlight {
+            font-size: 30px;
+            font-weight: bold;
+            color: #007bff;
+        }
+
+    /* لتوحيد التباعد بين الأعمدة */
+    .report-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 20px;
+        justify-content: center;
+    }
+
+        .report-row .col-card {
+            flex: 1 1 250px; /* 🔹 يجعل كل كارت بنفس العرض تقريبا */
+            max-width: 320px;
+        }
+</style>
+
+<div class="container py-5 placement-report">
+    <!-- 🖨️ زر الطباعة -->
+    <div class="text-center mb-4 no-print">
+        <button id="printReportBtn" class="btn btn-dark shadow-sm px-4 py-2 rounded-pill">
+            <i class="fas fa-print me-2"></i> طباعة التقرير بالكامل
+        </button>
+    </div>
+
+    <!-- 🎓 كارت بيانات الطالب -->
+    <!-- 🧾 بطاقة بيانات الطالب -->
+    <div class="dashboard-card p-4 mb-5 shadow-sm border-0 rounded-4 bg-white">
+        <div class="row align-items-center">
+            <!-- 🏫 شعار المركز -->
+            <div class="col-md-2 text-center">
+                <div class="p-2">
+                    <img src="~/images/160×100.png" alt="شعار مركز القدرات"
+                         class="rounded-3 shadow-sm logo-center" style="width:160;height:100px;" />
+                </div>
+            </div>
+
+            <!-- 👨‍🎓 بيانات الطالب -->
+            <div class="col-md-10">
+                <div class="row small gy-1">
+                    <div class="col-md-6">
+                        <h5 class="mb-1"><strong>👨‍🎓 اسم الطالب:</strong> @Model.Student.FullName</h5>
+                        <p class="mb-1"><strong>🎓 المستوى:</strong> @Model.Student.Level</p>
+                        <p class="mb-1"><strong>🆔 رقم الطالب:</strong> STD-@Model.Student.StudentID</p>
+                    </div>
+                    <div class="col-md-6">
+                        @*                         <p class="mb-1"><strong>👪 ولي الأمر:</strong> @Model.Student.ParentName</p>
+ *@                        <p class="mb-1"><strong>📞 رقم الجوال:</strong> @Model.Student.ParentPhone</p>
+                        <h6 class="mb-1"><strong>📅 تاريخ الاختبار:</strong> @Model.ExamDate</h6>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- 🧭 عنوان التقرير -->
+    <div class="text-center mb-4">
+        <h2 class="fw-bold text-primary"><i class="bi bi-bar-chart-line"></i> لوحة تحليل الأداء</h2>
+        <p class="text-muted">تحليل ذكي لأداء الطالب في اختبار مقياس المستوى</p>
+    </div>
+
+
+    <!-- 📊 كروت الإحصائيات العامة -->
+    <div class="row g-4 mb-5 text-center">
+        <div class="col-md-3 col-6">
+            <div class="dashboard-card p-4 h-100">
+                <div class="small text-muted mb-2"><i class="bi bi-list-numeric"></i> عدد الأسئلة الكلي</div>
+                <h3 class="fw-bold text-primary">@Model.TotalQuestions</h3>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="dashboard-card p-4 h-100">
+                <div class="small text-muted mb-2"><i class="bi bi-check-circle-fill text-success"></i> الإجابات الصحيحة</div>
+                <h3 class="fw-bold text-success">@Model.CorrectAnswers</h3>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="dashboard-card p-4 h-100">
+                <div class="small text-muted mb-2">
+                    <i class="bi bi-pencil-square text-info"></i> الاجابات الخاطئة
+                </div>
+                <h3 class="fw-bold text-info">@Model.WrongAnswers</h3>
+
+
+            </div>
+        </div>
+
+        <div class="col-md-3 col-6">
+            <div class="dashboard-card p-4 h-100">
+                <div class="small text-muted mb-2"><i class="bi bi-arrow-right-circle text-danger"></i> الأسئلة المتخطاة</div>
+                <h3 class="fw-bold text-danger">@Model.SkippedQuestions</h3>
+            </div>
+        </div>
+
+        @if (Model.DontKnowAnswers > 0)
+        {
+            <div class="col-md-3 col-6">
+                <div class="dashboard-card p-4 h-100">
+                    <div class="small text-muted mb-2"><i class="bi bi-patch-question text-warning"></i> "لا أعرف الإجابة"</div>
+                    <h3 class="fw-bold text-warning">@Model.DontKnowAnswers</h3>
+                </div>
+            </div>
+        }
+    </div>
+
+
+
+
+
+    <!-- 📊 التحليل الكمي واللفظي -->
+    @if (Model.HasQuantChart || Model.HasVerbalChart)
+    {
+        <div class="row mb-5 g-4">
+
+            @if (Model.HasQuantChart)
+            {
+                <div class="col-md-@(Model.HasVerbalChart ? "6" : "12")">
+                    <div class="dashboard-card p-3">
+                        <h6 class="fw-bold mb-3 text-center">📐 تحليل محاور الكمي</h6>
+                        <canvas id="quantChart" height="220"></canvas>
+                    </div>
+                </div>
+            }
+
+            @if (Model.HasVerbalChart)
+            {
+                <div class="col-md-@(Model.HasQuantChart ? "6" : "12")">
+                    <div class="dashboard-card p-3">
+                        <h6 class="fw-bold mb-3 text-center">🗣️ تحليل محاور اللفظي</h6>
+                        <canvas id="verbalChart" height="220"></canvas>
+                    </div>
+                </div>
+            }
+
+        </div>
+    }
+
+
+    <!-- 🧾 بيانات الأداء -->
+    <div class="report-row">
+        <div class="col-card">
+            <div class="report-card">
+                <h6>⏳ نسبة الوقت المستهلك</h6>
+                <h4 class="highlight">@Model.PercentTime%</h4>
+            </div>
+        </div>
+
+        <div class="col-card">
+            <div class="report-card">
+                <h6>⏱️ الوقت المحدد</h6>
+                <h4 class="highlight">@Model.TotalMinutes دقيقة</h4>
+            </div>
+        </div>
+
+        <div class="col-card">
+            <div class="report-card">
+                <h6>📊 المستوى العام</h6>
+                <h4 class="highlight">@Model.OverallPercent%</h4>
+            </div>
+        </div>
+    </div>
+
+
+
+
+
+    <!-- 🔹 تحليل المحاور والمؤشرات -->
+    <h4 class="mt-5 fw-bold text-primary">
+        <i class="fas fa-layer-group me-2 text-primary"></i> تحليل المحاور والمؤشرات
+    </h4>
+
+    @foreach (var sec in Model.SectionLessonReports)
+    {
+        <div class="card shadow-sm border-0 mb-4 rounded-3 overflow-hidden section-analysis-card">
+
+            <!-- 🧭 عنوان المحور -->
+            <div class="card-header bg-qdrat-soft text-dark fw-bold py-3">
+                <i class="fas fa-bookmark me-2"></i> @sec.SectionName
+            </div>
+
+            <!-- 📋 جدول المؤشرات داخل الكارت -->
+            <div class="card-body p-0">
+                <table class="table table-striped table-hover table-bordered align-middle mb-0">
+                    <thead class="table-light">
+                        <tr class="text-center">
+                            <th style="width: 30%;">المؤشر</th>
+                            <th>عدد الأسئلة</th>
+                            <th class="text-success">الصحيحة</th>
+                            <th class="text-danger">الخاطئة</th>
+                            <th class="text-muted">المتخطاة</th>
+                            <th>نسبة النجاح</th>
+                            <th>خيارات</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @foreach (var l in sec.Lessons)
+                        {
+                            <tr class="text-center">
+                                <td class="fw-semibold text-start ps-3">@l.LessonName</td>
+                                <td>@l.TotalQuestions</td>
+                                <td class="text-success fw-bold">@l.CorrectCount</td>
+                                <td class="text-danger fw-bold">@l.WrongCount</td>
+                                <td class="text-muted">@l.SkippedCount</td>
+                                <td>
+                                    <div class="progress" style="height: 20px;">
+                                        <div class="progress-bar
+                                                @(l.Percent >= 70 ? "bg-success" : l.Percent >= 50 ? "bg-warning text-dark" : "bg-danger")"
+                                             role="progressbar"
+                                             style="width: @l.Percent%">
+                                            @l.Percent%
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <a asp-action="ReviewLessonQuestions"
+                                       asp-route-lessonId="@l.LessonId"
+                                       asp-route-assignmentId="@Model.AssignmentId"
+                                       class="btn btn-outline-primary btn-sm">
+                                        <i class="fas fa-eye"></i> عرض الأسئلة
+                                    </a>
+
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    <!-- 🗺️ المسار التدريبي -->
+    <div class="dashboard-card p-4 mb-5">
+        <h5 class="section-heading mb-3"><i class="bi bi-map"></i> المسار التدريبي المقترح</h5>
+        <div class="row text-center g-4">
+            <div class="col-md-6">
+                <div class="p-3 border rounded-3 bg-light">
+                    <h6 class="text-primary">@rec.TrackCard1</h6>
+                    <p class="small text-secondary mb-0">@rec.TrackCard1Desc</p>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="p-3 border rounded-3 bg-success bg-opacity-10 border-success">
+                    <h6 class="text-success">@rec.TrackCard2</h6>
+                    <p class="small text-secondary mb-0">@rec.TrackCard2Desc</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ⚡ تقييم السرعة والتركيز -->
+    <div class="dashboard-card p-4 mb-5">
+        <h5 class="section-heading mb-3"><i class="bi bi-speedometer2"></i> تقييم السرعة والتركيز</h5>
+        <h6 class="fw-bold">@rec.SpeedLabel</h6>
+        <p class="text-muted">@rec.SpeedNote</p>
+    </div>
+
+
+    <!-- 💬 الملاحظات الذكية -->
+    <div class="dashboard-card p-4">
+        <h5 class="section-heading mb-3"><i class="bi bi-lightbulb"></i> الملاحظات الذكية</h5>
+        @foreach (var tip in rec.IndividualTips)
+        {
+            if (tip.Contains("تحذير"))
+            {
+                <div class="badge-tip danger"><i class="bi bi-exclamation-triangle-fill"></i> @tip</div>
+            }
+            else if (tip.Contains("تميّز"))
+            {
+                <div class="badge-tip success"><i class="bi bi-award-fill"></i> @tip</div>
+            }
+            else
+            {
+                <div class="badge-tip warn"><i class="bi bi-info-circle-fill"></i> @tip</div>
+            }
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const quantLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.QuantLabels ?? new List<string>()));
+        const quantCorrect = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.QuantCorrectCounts ?? new List<int>()));
+        const quantWrong = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.QuantWrongCounts ?? new List<int>()));
+
+        const verbalLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.VerbalLabels ?? new List<string>()));
+        const verbalCorrect = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.VerbalCorrectCounts ?? new List<int>()));
+        const verbalWrong = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.VerbalWrongCounts ?? new List<int>()));
+
+        const buildChart = (id, labels, correct, wrong, color1, color2) => {
+            new Chart(document.getElementById(id), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'صحيحة', data: correct, backgroundColor: color1, borderRadius: 8 },
+                        { label: 'خاطئة', data: wrong, backgroundColor: color2, borderRadius: 8 }
+                    ]
+                },
+                options: {
+                    plugins: { legend: { position: 'top' } },
+                    responsive: true,
+                    scales: {
+                        y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                    }
+                }
+            });
+        }
+        @if (Model.HasQuantChart)
+        {
+                <text>
+                buildChart('quantChart', quantLabels, quantCorrect, quantWrong, '#22c55e', '#ef4444');
+                </text>
+        }
+
+        @if (Model.HasVerbalChart)
+        {
+                <text>
+                buildChart('verbalChart', verbalLabels, verbalCorrect, verbalWrong, '#60a5fa', '#f87171');
+                </text>
+        }
+    </script>
+
+    <script>
+        // 🖨️ وظيفة الطباعة الشاملة
+        document.getElementById("printReportBtn").addEventListener("click", () => {
+            // تأكد أن كل الرسوم قد تم رسمها بالكامل قبل الطباعة
+            setTimeout(() => {
+                window.print();
+            }, 700);
+        });
+    </script>
+
+}

@@ -1,0 +1,181 @@
+﻿@model List<QdratNew.ViewModels.Reports.AdminSectionQuestionVm>
+@using QdratNew.Helpers
+
+@{
+    ViewData["Title"] = "أسئلة المحور";
+    int totalQ = Model.Count;
+}
+
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+
+<div class="container py-4">
+
+    <div class="text-center mb-5">
+        <h2 class="fw-bold text-primary">
+            <i class="fa-solid fa-layer-group me-2"></i>
+            أسئلة المحور: @Model.First().SectionTitle
+        </h2>
+        <h4 class="text-secondary">@Model.First().LessonTitle</h4>
+        <p class="text-muted">عدد الأسئلة: @totalQ</p>
+    </div>
+
+    <div class="row g-3">
+        @for (int i = 0; i < Model.Count; i++)
+        {
+            var q = Model[i];
+            var index = i + 1;
+            Func<string, string> convert = s => q.IsQuantitative ? NumberHelper.ToIndicNumbersSafe(s) : s;
+
+            <div class="col-md-6">
+                <div class="card shadow-sm mb-3 question-card">
+                    <div class="card-header bg-primary text-white fw-bold">
+                        ✦ سؤال @NumberHelper.ToIndicNumbersSafe(index.ToString())
+                    </div>
+
+                    <div class="card-body">
+
+                        <p class="fw-bold mb-3">
+                            @Html.Raw(convert(q.QuestionTitle))
+                        </p>
+
+                        @if (!string.IsNullOrWhiteSpace(q.VerbalPassageContent))
+                        {
+                            <details class="mb-3 passage" open>
+                                <summary class="fw-semibold">
+                                    📘 القطعة المرتبطة (انقر للعرض)
+                                </summary>
+                                <div class="mt-2">
+                                    @Html.Raw(convert(q.VerbalPassageContent))
+                                </div>
+                            </details>
+                        }
+
+                        @if (!string.IsNullOrWhiteSpace(q.ImageUrl))
+                        {
+                            <div class="text-center mb-3">
+                                <img src="@Url.Content(q.ImageUrl)"
+                                     class="img-fluid rounded-3 shadow-sm"
+                                     style="max-height:200px;" />
+                            </div>
+                        }
+
+                        @if (q.DisplayType == QdratNew.Enums.QuestionDisplayType.ComparisonText)
+                        {
+                            <div class="row mb-3 text-center">
+                                <div class="col-md-6 border-end">
+                                    <strong>القيمة الأولى:</strong>
+                                    <div>@Html.Raw(convert(q.ComparisonValue1))</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <strong>القيمة الثانية:</strong>
+                                    <div>@Html.Raw(convert(q.ComparisonValue2))</div>
+                                </div>
+                            </div>
+                        }
+
+                        @if (q.DisplayType == QdratNew.Enums.QuestionDisplayType.ComparisonWithImage)
+                        {
+                            <div class="row mb-3 text-center align-items-center">
+                                <div class="col-md-4">
+                                    <img src="@Url.Content(q.ImageUrl)"
+                                         class="img-fluid"
+                                         style="max-height:150px;" />
+                                </div>
+                                <div class="col-md-4 border-end">
+                                    <strong>القيمة الأولى:</strong>
+                                    <div>@Html.Raw(convert(q.ComparisonValue1))</div>
+                                </div>
+                                <div class="col-md-4">
+                                    <strong>القيمة الثانية:</strong>
+                                    <div>@Html.Raw(convert(q.ComparisonValue2))</div>
+                                </div>
+                            </div>
+                        }
+
+                        @if (q.Options != null && q.Options.Count > 0)
+                        {
+                            <ul class="list-group mb-3 options-list">
+                                @foreach (var opt in q.Options)
+                                {
+                                    string cssClass = "";
+                                    string icon = "";
+
+                                    if (opt.Text == q.CorrectAnswer)
+                                    {
+                                        cssClass = "list-group-item-success";
+                                        icon = "✔";
+                                    }
+                                    else if (opt.Text == q.StudentAnswer)
+                                    {
+                                        cssClass = "list-group-item-danger";
+                                        icon = "✖";
+                                    }
+
+                                    <li class="list-group-item d-flex align-items-center @cssClass">
+                                        @if (!string.IsNullOrWhiteSpace(opt.ImageUrl))
+                                        {
+                                            <img src="@Url.Content(opt.ImageUrl)"
+                                                 class="img-fluid me-2"
+                                                 style="max-height:50px;" />
+                                        }
+                                        else
+                                        {
+                                            <span>@Html.Raw(convert(opt.Text))</span>
+                                        }
+
+                                        @if (!string.IsNullOrEmpty(icon))
+                                        {
+                                            <span class="ms-auto fw-bold">@icon</span>
+                                        }
+                                    </li>
+                                }
+                            </ul>
+                        }
+                        else
+                        {
+                            <div class="alert alert-light mb-3">
+                                لا توجد اختيارات لهذا السؤال.
+                            </div>
+                        }
+
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="text-center mt-5">
+        <a asp-action="StudentExamPerformanceReport"
+           asp-route-examAssignmentId="@ViewBag.ExamAssignmentId"
+           asp-route-studentId="@ViewBag.StudentId"
+           class="btn btn-outline-primary btn-lg rounded-pill px-4 shadow-sm">
+            <i class="fa-solid fa-arrow-left me-2"></i>
+            العودة للتقرير
+        </a>
+    </div>
+</div>
+
+<style>
+    .question-card {
+        border-radius: 12px;
+        transition: 0.2s;
+    }
+
+        .question-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,.15);
+        }
+
+    .options-list li {
+        border: none;
+        border-bottom: 1px solid #eee;
+    }
+
+        .options-list li:last-child {
+            border-bottom: none;
+        }
+
+    .passage summary {
+        cursor: pointer;
+    }
+</style>

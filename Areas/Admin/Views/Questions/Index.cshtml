@@ -1,0 +1,2066 @@
+﻿@model QdratNew.ViewModels.Question.QuestionIndexViewModel
+@using QdratNew.Helpers
+@using QdratNew.ViewModels
+@using QdratNew.ViewModels.Question
+@using System.ComponentModel.DataAnnotations
+@using System.Reflection
+
+@functions {
+    string GetEnumDisplayName(Enum enumValue)
+    {
+        return enumValue.GetType()
+                        .GetMember(enumValue.ToString())
+                        .First()
+                        .GetCustomAttribute<DisplayAttribute>()?
+                        .GetName() ?? enumValue.ToString();
+    }
+}
+
+@{
+    ViewData["Title"] = "بنك الأسئلة الذكي";
+
+    var totalQuestions = Model.TotalQuestionsCount;
+    var pendingReviewCount = Model.PendingReviewCount;
+    var unansweredCount = Model.UnansweredCount;
+    var unreviewedCount = Model.UnreviewedCount;
+}
+
+@Html.AntiForgeryToken()
+
+@section Styles {
+
+    <link rel="stylesheet" href="https://unpkg.com/mathlive/dist/mathlive.core.css">
+    <link rel="stylesheet" href="https://unpkg.com/mathlive/dist/mathlive.css">
+
+    <style>
+        :root {
+            --pr-bg: #f4f7fb;
+            --pr-surface: #111827;
+            --pr-card: #1c2538;
+            --pr-border: rgba(255,255,255,.08);
+            --pr-accent: #2563eb;
+            --pr-accent-glow: rgba(37,99,235,.16);
+            --pr-success: #16a34a;
+            --pr-danger: #dc2626;
+            --pr-warning: #f59e0b;
+            --pr-text: #e2e8f0;
+            --pr-muted: #64748b;
+            --pr-radius: 14px;
+            --pr-radius-sm: 9px;
+            --pr-font: 'Cairo', sans-serif;
+            --pr-transition: .2s cubic-bezier(.4,0,.2,1);
+        }
+
+        body {
+            background: var(--pr-bg) !important;
+        }
+
+        .pr-page {
+            font-family: var(--pr-font);
+            min-height: 100vh;
+            padding: 28px 0 112px;
+            direction: rtl;
+        }
+
+        .pr-header {
+            background: #ffffff !important;
+            border: 1px solid #dbe4ef !important;
+            border-radius: var(--pr-radius) !important;
+            padding: 18px 22px !important;
+            box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06) !important;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .pr-header-title {
+            color: #0f172a !important;
+            font-size: 22px !important;
+            font-weight: 900 !important;
+            margin: 0;
+            line-height: 1.2;
+        }
+
+            .pr-header-title i {
+                color: var(--pr-accent) !important;
+                opacity: 1 !important;
+            }
+
+        .pr-header-sub {
+            color: #475569 !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            margin-top: 5px;
+        }
+
+        .pr-header-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .pr-alert {
+            border-radius: var(--pr-radius-sm);
+            border: none;
+            font-size: 14px;
+            margin-bottom: 18px;
+            padding: 12px 18px;
+            font-weight: 700;
+        }
+
+        .pr-alert-success {
+            background: #dcfce7;
+            color: #166534;
+            border-right: 4px solid var(--pr-success);
+        }
+
+        .pr-alert-danger {
+            background: #fee2e2;
+            color: #991b1b;
+            border-right: 4px solid var(--pr-danger);
+        }
+
+        .pr-alert-warning {
+            background: #fff7ed;
+            color: #9a3412;
+            border: 1px solid #fed7aa;
+            border-right: 4px solid #f97316;
+            border-radius: var(--pr-radius);
+        }
+
+        .pr-hero {
+            background: linear-gradient(135deg, #1a2540 0%, #1c3052 60%, #162440 100%);
+            border: 1px solid var(--pr-border);
+            border-radius: var(--pr-radius);
+            padding: 28px 32px;
+            margin-bottom: 24px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 14px 32px rgba(15, 23, 42, 0.18);
+        }
+
+            .pr-hero::before {
+                content: '';
+                position: absolute;
+                top: -70px;
+                left: -70px;
+                width: 240px;
+                height: 240px;
+                background: radial-gradient(circle, rgba(59,130,246,.20) 0%, transparent 70%);
+                pointer-events: none;
+            }
+
+        .pr-hero-label {
+            font-size: 13px;
+            color: #94a3b8;
+            margin-bottom: 6px;
+            font-weight: 700;
+        }
+
+        .pr-hero-number {
+            font-size: 50px;
+            font-weight: 900;
+            line-height: 1;
+            color: #ffffff;
+            letter-spacing: -1px;
+        }
+
+        .pr-hero-filtered {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            background: rgba(59,130,246,.14);
+            color: #bfdbfe;
+            border: 1px solid rgba(59,130,246,.30);
+            border-radius: 20px;
+            padding: 5px 13px;
+            margin-top: 12px;
+            font-weight: 700;
+        }
+
+        .pr-chips {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+        }
+
+        .pr-chip {
+            background: rgba(255,255,255,.06);
+            border: 1px solid rgba(255,255,255,.10);
+            border-radius: var(--pr-radius-sm);
+            padding: 13px 14px;
+            text-align: center;
+        }
+
+        .pr-chip-link {
+            display: block;
+            color: inherit;
+            text-decoration: none;
+            transition: transform var(--pr-transition), border-color var(--pr-transition), background var(--pr-transition);
+        }
+
+            .pr-chip-link:hover {
+                transform: translateY(-2px);
+                border-color: rgba(96, 165, 250, .55);
+                background: rgba(59, 130, 246, .14);
+                color: inherit;
+            }
+
+        .pr-chip-val {
+            font-size: 24px;
+            font-weight: 900;
+            line-height: 1;
+        }
+
+        .pr-chip-lbl {
+            font-size: 12px;
+            color: #cbd5e1;
+            margin-top: 5px;
+            font-weight: 700;
+        }
+
+        .pr-section-label {
+            font-size: 12px;
+            font-weight: 900;
+            color: #334155;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+            .pr-section-label::after {
+                content: '';
+                flex: 1;
+                height: 1px;
+                background: #dbe4ef;
+            }
+
+        .pr-filter-panel {
+            background: #ffffff;
+            border: 1px solid #dbe4ef;
+            border-radius: var(--pr-radius);
+            padding: 20px 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
+        }
+
+            .pr-filter-panel .form-label {
+                font-size: 12px;
+                font-weight: 800;
+                color: #334155;
+                margin-bottom: 6px;
+            }
+
+            .pr-filter-panel .form-select,
+            .pr-filter-panel .form-control {
+                background: #ffffff;
+                border: 1px solid #cbd5e1;
+                color: #0f172a;
+                border-radius: var(--pr-radius-sm);
+                font-size: 13px;
+                height: 39px;
+                font-weight: 700;
+                transition: var(--pr-transition);
+            }
+
+                .pr-filter-panel .form-select:focus,
+                .pr-filter-panel .form-control:focus {
+                    border-color: rgba(37,99,235,.65);
+                    box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+                }
+
+        .pr-filter-check {
+            background: #f8fafc;
+            border: 1px solid #dbe4ef;
+            border-radius: 10px;
+            padding: 10px 12px;
+            height: 39px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+            .pr-filter-check label {
+                color: #334155;
+                font-size: 13px;
+                font-weight: 800;
+                cursor: pointer;
+            }
+
+        .btn-pr-primary {
+            background: var(--pr-accent);
+            border: 1px solid var(--pr-accent);
+            color: #ffffff;
+            font-size: 13px;
+            font-weight: 800;
+            border-radius: var(--pr-radius-sm);
+            padding: 8px 18px;
+            transition: var(--pr-transition);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+            .btn-pr-primary:hover {
+                background: #1d4ed8;
+                border-color: #1d4ed8;
+                color: #ffffff;
+                transform: translateY(-1px);
+                box-shadow: 0 6px 18px rgba(37,99,235,.25);
+            }
+
+        .btn-pr-outline {
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            color: #334155;
+            font-size: 13px;
+            font-weight: 800;
+            border-radius: var(--pr-radius-sm);
+            padding: 8px 18px;
+            transition: var(--pr-transition);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+            .btn-pr-outline:hover {
+                background: #f1f5f9;
+                border-color: #94a3b8;
+                color: #0f172a;
+                text-decoration: none;
+            }
+
+        .btn-pr-ghost {
+            background: #f8fafc;
+            border: 1px solid #dbe4ef;
+            color: #475569;
+            font-size: 13px;
+            font-weight: 800;
+            border-radius: var(--pr-radius-sm);
+            padding: 8px 14px;
+            transition: var(--pr-transition);
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+            .btn-pr-ghost:hover {
+                color: #0f172a;
+                background: #eef2ff;
+                border-color: #c7d2fe;
+                text-decoration: none;
+            }
+
+        .pr-toolbar {
+            background: #111827;
+            border: 1px solid #243041;
+            border-radius: var(--pr-radius);
+            padding: 14px 20px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+        }
+
+        .pr-toolbar-title {
+            font-size: 14px;
+            font-weight: 900;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .pr-selected-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 800;
+            color: #bfdbfe;
+            background: rgba(37,99,235,.20);
+            border: 1px solid rgba(37,99,235,.35);
+            border-radius: 20px;
+            padding: 5px 13px;
+        }
+
+        .pr-table-panel {
+            background: #ffffff !important;
+            border: 1px solid #d8e0ec !important;
+            border-radius: var(--pr-radius) !important;
+            overflow: hidden;
+            box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+        }
+
+            .pr-table-panel .table,
+            .pr-table-panel table.dataTable {
+                background-color: #ffffff !important;
+                color: #1e293b !important;
+                margin: 0 !important;
+                width: 100% !important;
+            }
+
+                .pr-table-panel .table thead th,
+                .pr-table-panel table.dataTable thead th {
+                    background: #f1f5f9 !important;
+                    color: #0f172a !important;
+                    border-bottom: 1px solid #cbd5e1 !important;
+                    border-color: #dbe4ef !important;
+                    font-size: 12px !important;
+                    font-weight: 900 !important;
+                    opacity: 1 !important;
+                    padding: 12px 14px !important;
+                    white-space: nowrap;
+                    vertical-align: middle;
+                }
+
+                .pr-table-panel .table tbody td,
+                .pr-table-panel table.dataTable tbody td {
+                    background: #ffffff !important;
+                    color: #1e293b !important;
+                    border-color: #e2e8f0 !important;
+                    font-size: 13px !important;
+                    font-weight: 700 !important;
+                    opacity: 1 !important;
+                    padding: 12px 14px !important;
+                    vertical-align: middle !important;
+                }
+
+                .pr-table-panel .table tbody tr:hover td,
+                .pr-table-panel table.dataTable tbody tr:hover td {
+                    background: #f8fafc !important;
+                }
+
+                .pr-table-panel table.dataTable tbody tr.pr-row-selected td,
+                .pr-table-panel .table tbody tr.pr-row-selected td {
+                    background: #eef2ff !important;
+                }
+
+                .pr-table-panel table.dataTable tbody tr.pr-row-selected:hover td,
+                .pr-table-panel .table tbody tr.pr-row-selected:hover td {
+                    background: #e0e7ff !important;
+                }
+
+        .pr-select-col {
+            width: 46px !important;
+            min-width: 46px !important;
+            max-width: 46px !important;
+            text-align: center !important;
+        }
+
+        .pr-row-checkbox,
+        #questionsSelectAll {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--pr-accent);
+            cursor: pointer;
+        }
+
+        .pr-q-title {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            min-width: 460px;
+        }
+
+        .pr-q-title-text {
+            color: #0f172a !important;
+            font-weight: 800 !important;
+            opacity: 1 !important;
+            line-height: 1.65;
+            white-space: normal;
+            max-width: 680px;
+        }
+
+        .pr-q-ref {
+            color: #334155 !important;
+            background: #eef2ff !important;
+            border: 1px solid #c7d2fe !important;
+            font-weight: 900 !important;
+            border-radius: 5px;
+            padding: 2px 8px;
+            font-family: monospace;
+            letter-spacing: .3px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .pr-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            font-weight: 900;
+            border-radius: 20px;
+            padding: 3px 10px;
+            border: 1px solid transparent;
+            white-space: nowrap;
+        }
+
+        .pr-badge-confirmed {
+            background: #dcfce7 !important;
+            color: #15803d !important;
+            border-color: #86efac !important;
+        }
+
+        .pr-badge-unconfirmed {
+            background: #fee2e2 !important;
+            color: #b91c1c !important;
+            border-color: #fca5a5 !important;
+        }
+
+        .pr-badge-note {
+            background: #fef3c7 !important;
+            color: #92400e !important;
+            border-color: #fde68a !important;
+            max-width: 260px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .pr-badge-empty {
+            background: #f1f5f9 !important;
+            color: #64748b !important;
+            border-color: #cbd5e1 !important;
+        }
+
+        .dataTables_wrapper .dataTables_length label,
+        .dataTables_wrapper .dataTables_filter label,
+        .dataTables_wrapper .dataTables_info {
+            color: #334155 !important;
+            font-size: 13px !important;
+            font-weight: 800 !important;
+        }
+
+        .dataTables_wrapper .dataTables_length select,
+        .dataTables_wrapper .dataTables_filter input {
+            background: #ffffff !important;
+            border: 1px solid #94a3b8 !important;
+            color: #0f172a !important;
+            border-radius: 8px !important;
+            font-size: 13px !important;
+            font-weight: 700 !important;
+            padding: 5px 10px;
+        }
+
+        table.dataTable thead .sorting:before,
+        table.dataTable thead .sorting:after,
+        table.dataTable thead .sorting_asc:before,
+        table.dataTable thead .sorting_asc:after,
+        table.dataTable thead .sorting_desc:before,
+        table.dataTable thead .sorting_desc:after {
+            color: #475569 !important;
+            opacity: 1 !important;
+        }
+
+        .dataTables_wrapper .dataTables_paginate .paginate_button {
+            background: #ffffff !important;
+            border: 1px solid #cbd5e1 !important;
+            color: #334155 !important;
+            font-weight: 800 !important;
+            border-radius: 7px !important;
+            margin: 0 2px;
+            font-size: 12px;
+            padding: 4px 10px !important;
+        }
+
+            .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+            .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+                background: var(--pr-accent) !important;
+                border-color: var(--pr-accent) !important;
+                color: #ffffff !important;
+            }
+
+        .pr-bulk-footer {
+            position: fixed;
+            right: 50%;
+            bottom: 18px;
+            transform: translateX(50%);
+            z-index: 1050;
+            width: min(1160px, calc(100% - 28px));
+            background: #0f172a;
+            color: #ffffff;
+            border: 1px solid rgba(255,255,255,.14);
+            border-radius: 16px;
+            box-shadow: 0 18px 45px rgba(15, 23, 42, .30);
+            padding: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+            .pr-bulk-footer.is-hidden {
+                display: none;
+            }
+
+        .pr-bulk-summary {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: auto;
+            font-size: 13px;
+            font-weight: 900;
+            color: #ffffff;
+            min-width: 170px;
+        }
+
+        .pr-bulk-count {
+            min-width: 30px;
+            height: 30px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--pr-accent);
+            color: #ffffff;
+            font-weight: 900;
+        }
+
+        .pr-bulk-btn {
+            border: 1px solid rgba(255,255,255,.14);
+            border-radius: 11px;
+            color: #ffffff;
+            font-size: 12px;
+            font-weight: 900;
+            padding: 8px 11px;
+            background: rgba(255,255,255,.08);
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            transition: var(--pr-transition);
+            cursor: pointer;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+
+            .pr-bulk-btn:hover {
+                background: rgba(255,255,255,.16);
+                color: #ffffff;
+                text-decoration: none;
+                transform: translateY(-1px);
+            }
+
+        .pr-bulk-btn-primary {
+            background: var(--pr-accent);
+            border-color: transparent;
+        }
+
+            .pr-bulk-btn-primary:hover {
+                background: #1d4ed8;
+            }
+
+        .pr-bulk-btn-warning {
+            background: rgba(245, 158, 11, .18);
+            border-color: rgba(245, 158, 11, .35);
+            color: #fde68a;
+        }
+
+        .pr-bulk-btn-success {
+            background: rgba(22, 163, 74, .18);
+            border-color: rgba(22, 163, 74, .35);
+            color: #bbf7d0;
+        }
+
+        .pr-bulk-btn-info {
+            background: rgba(8, 145, 178, .18);
+            border-color: rgba(8, 145, 178, .35);
+            color: #a5f3fc;
+        }
+
+        .pr-bulk-btn-purple {
+            background: rgba(126, 34, 206, .18);
+            border-color: rgba(126, 34, 206, .35);
+            color: #e9d5ff;
+        }
+
+        .pr-bulk-btn-danger {
+            background: rgba(220, 38, 38, .18);
+            border-color: rgba(220, 38, 38, .35);
+            color: #fecaca;
+        }
+
+        .pr-bulk-clear {
+            width: 34px;
+            height: 34px;
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,.18);
+            background: rgba(255,255,255,.08);
+            color: #ffffff;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: var(--pr-transition);
+        }
+
+            .pr-bulk-clear:hover {
+                background: rgba(255,255,255,.16);
+            }
+
+        .pr-bulk-single-only.d-none {
+            display: none !important;
+        }
+
+        .pr-modal .modal-content {
+            background: #111827;
+            border: 1px solid #334155;
+            border-radius: var(--pr-radius);
+            color: #ffffff;
+            overflow: hidden;
+        }
+
+        .pr-modal .modal-header {
+            background: #111827;
+            border-bottom: 1px solid #334155;
+            padding: 16px 22px;
+        }
+
+        .pr-modal .modal-title {
+            font-size: 15px;
+            font-weight: 900;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .pr-modal .modal-body {
+            padding: 22px;
+        }
+
+        .pr-modal .btn-close {
+            filter: invert(1) brightness(1.7);
+            opacity: 1;
+        }
+
+        .pr-empty {
+            text-align: center;
+            padding: 50px 20px;
+            color: #94a3b8;
+        }
+
+            .pr-empty i {
+                font-size: 34px;
+                margin-bottom: 12px;
+                opacity: .75;
+            }
+
+        #questionPreviewModalBody {
+            background: #111827 !important;
+            color: #0f172a !important;
+        }
+
+            #questionPreviewModalBody .card,
+            #questionPreviewModalBody .question-card,
+            #questionPreviewModalBody .question-preview-card,
+            #questionPreviewModalBody .q-card,
+            #questionPreviewModalBody .preview-box,
+            #questionPreviewModalBody .question-box {
+                background: #ffffff !important;
+                color: #0f172a !important;
+                border: 1px solid #dbe4ef !important;
+                box-shadow: 0 10px 24px rgba(15, 23, 42, 0.10) !important;
+            }
+
+            #questionPreviewModalBody h1,
+            #questionPreviewModalBody h2,
+            #questionPreviewModalBody h3,
+            #questionPreviewModalBody h4,
+            #questionPreviewModalBody h5,
+            #questionPreviewModalBody h6,
+            #questionPreviewModalBody .question-title,
+            #questionPreviewModalBody .q-title,
+            #questionPreviewModalBody .title {
+                color: #0f172a !important;
+                font-weight: 900 !important;
+                opacity: 1 !important;
+            }
+
+            #questionPreviewModalBody p,
+            #questionPreviewModalBody span,
+            #questionPreviewModalBody div,
+            #questionPreviewModalBody label,
+            #questionPreviewModalBody strong,
+            #questionPreviewModalBody small {
+                opacity: 1 !important;
+            }
+
+            #questionPreviewModalBody .card p,
+            #questionPreviewModalBody .card span,
+            #questionPreviewModalBody .card div,
+            #questionPreviewModalBody .card label,
+            #questionPreviewModalBody .question-card p,
+            #questionPreviewModalBody .question-card span,
+            #questionPreviewModalBody .question-card div,
+            #questionPreviewModalBody .question-card label,
+            #questionPreviewModalBody .question-preview-card p,
+            #questionPreviewModalBody .question-preview-card span,
+            #questionPreviewModalBody .question-preview-card div,
+            #questionPreviewModalBody .question-preview-card label {
+                color: #0f172a !important;
+            }
+
+            #questionPreviewModalBody .question-text,
+            #questionPreviewModalBody .q-text,
+            #questionPreviewModalBody .question-content,
+            #questionPreviewModalBody .preview-question-text {
+                color: #0f172a !important;
+                font-size: 22px !important;
+                font-weight: 900 !important;
+                line-height: 1.9 !important;
+                opacity: 1 !important;
+            }
+
+            #questionPreviewModalBody .option,
+            #questionPreviewModalBody .answer-option,
+            #questionPreviewModalBody .choice,
+            #questionPreviewModalBody .option-card,
+            #questionPreviewModalBody .answer-card,
+            #questionPreviewModalBody .q-option,
+            #questionPreviewModalBody .list-group-item {
+                background: #ffffff !important;
+                color: #0f172a !important;
+                border: 1px solid #cbd5e1 !important;
+                border-radius: 14px !important;
+                font-weight: 800 !important;
+                opacity: 1 !important;
+            }
+
+                #questionPreviewModalBody .option *,
+                #questionPreviewModalBody .answer-option *,
+                #questionPreviewModalBody .choice *,
+                #questionPreviewModalBody .option-card *,
+                #questionPreviewModalBody .answer-card *,
+                #questionPreviewModalBody .q-option *,
+                #questionPreviewModalBody .list-group-item * {
+                    color: #0f172a !important;
+                    opacity: 1 !important;
+                }
+
+                #questionPreviewModalBody .correct,
+                #questionPreviewModalBody .is-correct,
+                #questionPreviewModalBody .correct-answer,
+                #questionPreviewModalBody .answer-option.correct,
+                #questionPreviewModalBody .option-card.correct,
+                #questionPreviewModalBody .choice.correct {
+                    background: #dcfce7 !important;
+                    color: #14532d !important;
+                    border: 2px solid #16a34a !important;
+                    font-weight: 900 !important;
+                }
+
+            #questionPreviewModalBody .badge,
+            #questionPreviewModalBody .badge-success,
+            #questionPreviewModalBody .bg-success,
+            #questionPreviewModalBody .correct-badge {
+                background: #16a34a !important;
+                color: #ffffff !important;
+                border: 1px solid #15803d !important;
+                font-weight: 900 !important;
+                opacity: 1 !important;
+            }
+
+            #questionPreviewModalBody img {
+                opacity: 1 !important;
+                max-width: 100% !important;
+            }
+
+        .swal2-popup {
+            font-family: var(--pr-font) !important;
+            border-radius: var(--pr-radius) !important;
+        }
+
+        @@media (max-width: 1200px) {
+            .pr-bulk-footer {
+                width: min(980px, calc(100% - 24px));
+            }
+
+            .pr-bulk-summary {
+                width: 100%;
+                margin-left: 0;
+                justify-content: center;
+            }
+        }
+
+        @@media (max-width: 768px) {
+            .pr-page {
+                padding-bottom: 190px;
+            }
+
+            .pr-hero {
+                padding: 22px;
+            }
+
+            .pr-hero-number {
+                font-size: 36px;
+            }
+
+            .pr-chips {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .pr-q-title {
+                min-width: 320px;
+            }
+
+            .pr-toolbar {
+                align-items: flex-start;
+            }
+
+            .pr-bulk-footer {
+                bottom: 12px;
+                align-items: stretch;
+            }
+
+            .pr-bulk-btn {
+                flex: 1 1 auto;
+                justify-content: center;
+            }
+        }
+    </style>
+}
+
+<div class="pr-page container-fluid px-4" dir="rtl">
+
+    @if (TempData["Message"] != null)
+    {
+        <div class="pr-alert pr-alert-success d-flex align-items-center gap-2">
+            <i class="fas fa-check-circle"></i>
+            @TempData["Message"]
+        </div>
+    }
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="pr-alert pr-alert-danger d-flex align-items-center gap-2">
+            <i class="fas fa-exclamation-circle"></i>
+            @TempData["Error"]
+        </div>
+    }
+
+    <div class="pr-header">
+        <div>
+            <h1 class="pr-header-title">
+                <i class="fas fa-list-ol me-2" style="font-size:18px;"></i>
+                بنك الأسئلة الذكي
+            </h1>
+            <div class="pr-header-sub">
+                إدارة بنك الأسئلة، مراجعة الإجابات، الفلاتر التعليمية، المعاينة، والتحقق من التشابه من واجهة واحدة.
+            </div>
+        </div>
+
+        <div class="pr-header-actions">
+            <a asp-action="PendingReview" class="btn-pr-ghost">
+                <i class="fas fa-shield-check"></i>
+                مركز اعتماد الأسئلة
+            </a>
+
+            <a asp-action="MissingAnswers" class="btn-pr-outline">
+                <i class="fas fa-circle-question"></i>
+                مراجعة بدون إجابة
+            </a>
+
+            <a asp-action="IncompleteQuestions" class="btn-pr-outline">
+                <i class="fas fa-triangle-exclamation"></i>
+                الأسئلة غير المكتملة
+            </a>
+
+            <a asp-action="SimilarGroups"
+               asp-route-curriculumId="@Model.CurriculumId"
+               asp-route-sectionId="@Model.SectionId"
+               asp-route-lessonId="@Model.LessonId"
+               asp-route-searchTitle="@Model.SearchTitle"
+               class="btn-pr-outline">
+                <i class="fas fa-code-compare"></i>
+                مجموعات التشابه
+            </a>
+
+            <a asp-action="Create" class="btn-pr-primary">
+                <i class="fas fa-plus"></i>
+                إضافة سؤال
+            </a>
+        </div>
+    </div>
+
+    <div class="pr-hero">
+        <div class="row g-4 align-items-center">
+            <div class="col-lg-4">
+                <div class="pr-hero-label">إدارة بنك الأسئلة</div>
+                <div class="pr-hero-number">@totalQuestions</div>
+                <div class="pr-hero-filtered">
+                    <i class="fas fa-database" style="font-size:11px;"></i>
+                    إجمالي الأسئلة المطابقة للفلاتر الحالية
+                </div>
+            </div>
+
+            <div class="col-lg-8">
+                <div class="pr-chips">
+                    <div class="pr-chip">
+                        <div class="pr-chip-val" style="color:#bfdbfe;">@pendingReviewCount</div>
+                        <div class="pr-chip-lbl">جاهزة للاعتماد</div>
+                    </div>
+
+                    <div class="pr-chip">
+                        <div class="pr-chip-val" style="color:#fde68a;">@unreviewedCount</div>
+                        <div class="pr-chip-lbl">غير مراجعة</div>
+                    </div>
+
+                    <div class="pr-chip">
+                        <div class="pr-chip-val" style="color:#fca5a5;">@unansweredCount</div>
+                        <div class="pr-chip-lbl">بدون إجابة مؤكدة</div>
+                    </div>
+
+                    <div class="pr-chip">
+                        <div class="pr-chip-val" style="color:#86efac;">
+                            @(totalQuestions - unansweredCount < 0 ? 0 : totalQuestions - unansweredCount)
+                        </div>
+                        <div class="pr-chip-lbl">مكتملة ظاهريًا</div>
+                    </div>
+
+                    <a asp-action="SimilarGroups"
+                       asp-route-curriculumId="@Model.CurriculumId"
+                       asp-route-sectionId="@Model.SectionId"
+                       asp-route-lessonId="@Model.LessonId"
+                       asp-route-searchTitle="@Model.SearchTitle"
+                       class="pr-chip pr-chip-link">
+                        <div class="pr-chip-val" style="color:#c4b5fd;font-size:22px;">فحص</div>
+                        <div class="pr-chip-lbl">مجموعات متشابهة</div>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (Model.UnreviewedCount > 0 || Model.UnansweredCount > 0 || Model.PendingReviewCount > 0)
+    {
+        <div class="pr-alert-warning px-4 py-3 mb-4">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div class="d-flex flex-column gap-2">
+                    @if (Model.PendingReviewCount > 0)
+                    {
+                        <div>
+                            <i class="fas fa-eye text-warning me-2"></i>
+                            يوجد <strong>@Model.PendingReviewCount</strong> سؤال جاهز للاعتماد.
+                        </div>
+                    }
+
+                    @if (Model.UnansweredCount > 0)
+                    {
+                        <div>
+                            <i class="fas fa-check-circle text-info me-2"></i>
+                            يوجد <strong>@Model.UnansweredCount</strong> سؤال مكتمل ولكن بدون إجابة مؤكدة.
+                        </div>
+                    }
+
+                    @if (Model.UnreviewedCount > 0)
+                    {
+                        <div>
+                            <i class="fas fa-triangle-exclamation text-danger me-2"></i>
+                            يوجد أسئلة غير مكتملة وتحتاج إلى مراجعة قبل اعتمادها.
+                        </div>
+                    }
+                </div>
+
+                <div class="d-flex flex-wrap gap-2">
+                    @if (Model.PendingReviewCount > 0)
+                    {
+                        <a asp-action="PendingReview" class="btn-pr-primary">
+                            <i class="fas fa-shield-check"></i>
+                            مراجعة الآن
+                        </a>
+                    }
+
+                    @if (Model.UnansweredCount > 0)
+                    {
+                        <a asp-action="MissingAnswers" class="btn-pr-outline">
+                            <i class="fas fa-circle-question"></i>
+                            مراجعة بدون إجابة
+                        </a>
+                    }
+
+                    @if (Model.UnreviewedCount > 0)
+                    {
+                        <a asp-action="IncompleteQuestions" class="btn-pr-outline">
+                            <i class="fas fa-list-check"></i>
+                            الأسئلة غير المكتملة
+                        </a>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+
+    <div class="pr-section-label">الفلاتر</div>
+
+    <div class="pr-filter-panel">
+        <form method="get" asp-action="Index" id="indexFilterForm" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">القسم</label>
+                <select asp-for="CurriculumId" class="form-select" asp-items="Model.Curriculums" id="CurriculumId">
+                    <option value="">كل الأقسام</option>
+                </select>
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label">المحور</label>
+                <select asp-for="SectionId" class="form-select" asp-items="Model.Sections" id="SectionId">
+                    <option value="">كل المحاور</option>
+                </select>
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label">الوحدة</label>
+                <select asp-for="UnitId" class="form-select" asp-items="Model.Units" id="UnitId">
+                    <option value="">كل الوحدات</option>
+                </select>
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label">المؤشر</label>
+                <select asp-for="LessonId" class="form-select" asp-items="Model.Lessons" id="LessonId">
+                    <option value="">كل المؤشرات</option>
+                </select>
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">بحث سريع</label>
+                <input asp-for="SearchTitle" class="form-control" id="SearchTitle" placeholder="كلمة من السؤال أو المرجع..." />
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">حالة الإجابة</label>
+                <div class="pr-filter-check">
+                    <input class="form-check-input" type="checkbox" asp-for="OnlyUnanswered" id="OnlyUnanswered" />
+                    <label class="form-check-label" for="OnlyUnanswered">
+                        عرض الأسئلة التي لا تحتوي على إجابة صحيحة
+                    </label>
+                </div>
+            </div>
+
+            <div class="col-md-4 d-flex flex-wrap gap-2">
+                <button type="submit" class="btn-pr-primary">
+                    <i class="fas fa-filter"></i>
+                    تطبيق الفلاتر
+                </button>
+
+                <a asp-action="Index" class="btn-pr-outline">
+                    <i class="fas fa-rotate-right"></i>
+                    إعادة تعيين
+                </a>
+
+                <a asp-action="SimilarGroups"
+                   asp-route-curriculumId="@Model.CurriculumId"
+                   asp-route-sectionId="@Model.SectionId"
+                   asp-route-lessonId="@Model.LessonId"
+                   asp-route-searchTitle="@Model.SearchTitle"
+                   class="btn-pr-outline">
+                    <i class="fas fa-code-compare"></i>
+                    فحص تشابه النطاق
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <div class="pr-toolbar">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <div class="pr-toolbar-title">
+                <i class="fas fa-table"></i>
+                جدول بنك الأسئلة
+            </div>
+            <span class="pr-selected-badge">
+                <i class="fas fa-hand-pointer"></i>
+                حدد سؤالًا من الجدول لإظهار الإجراءات أسفل الصفحة
+            </span>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+            <a asp-action="Create" class="btn-pr-primary">
+                <i class="fas fa-plus-circle"></i>
+                سؤال جديد
+            </a>
+
+            <a asp-action="PendingReview" class="btn-pr-outline" style="background:transparent;color:#e2e8f0;border-color:#334155;">
+                <i class="fas fa-shield-check"></i>
+                الاعتماد
+            </a>
+        </div>
+    </div>
+
+    <div class="pr-table-panel">
+        <div class="table-responsive">
+            <table id="questionsTable" class="table table-hover w-100 text-center">
+                <thead>
+                    <tr>
+                        <th class="pr-select-col">
+                            <input type="checkbox"
+                                   id="questionsSelectAll"
+                                   aria-label="تحديد كل الأسئلة في الصفحة الحالية" />
+                        </th>
+                        <th style="width:90px;"># مرجع</th>
+                        <th style="min-width:460px;">السؤال</th>
+                        <th>القسم</th>
+                        <th>المحور</th>
+                        <th>المؤشر</th>
+                        <th>الإجابة</th>
+                        <th>اللمحة</th>
+                        <th>التاريخ</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="pr-bulk-footer is-hidden" id="questionsBulkFooter">
+        <div class="pr-bulk-summary">
+            <span class="pr-bulk-count" id="questionsSelectedCount">0</span>
+            <span>سؤال محدد</span>
+        </div>
+
+        <button type="button"
+                class="pr-bulk-btn pr-bulk-btn-primary pr-bulk-single-only"
+                onclick="previewSelectedQuestion()">
+            <i class="fas fa-eye"></i>
+            معاينة
+        </button>
+
+        <button type="button"
+                class="pr-bulk-btn pr-bulk-btn-warning pr-bulk-single-only"
+                onclick="editSelectedQuestion()">
+            <i class="fas fa-pen"></i>
+            تعديل
+        </button>
+
+        <button type="button"
+                class="pr-bulk-btn pr-bulk-btn-success pr-bulk-single-only"
+                onclick="displaySelectedQuestion()">
+            <i class="fas fa-id-card"></i>
+            كارت السؤال
+        </button>
+
+        <button type="button"
+                class="pr-bulk-btn pr-bulk-single-only"
+                onclick="detailsSelectedQuestion()">
+            <i class="fas fa-info-circle"></i>
+            التفاصيل
+        </button>
+
+        <button type="button"
+                class="pr-bulk-btn pr-bulk-btn-info pr-bulk-single-only"
+                onclick="labelsSelectedQuestion()">
+            <i class="fas fa-tags"></i>
+            التصنيفات
+        </button>
+
+        <button type="button"
+                class="pr-bulk-btn pr-bulk-btn-purple pr-bulk-single-only"
+                onclick="auditSelectedQuestion()">
+            <i class="fas fa-history"></i>
+            آخر التعديلات
+        </button>
+
+        <button type="button"
+                class="pr-bulk-btn pr-bulk-btn-danger pr-bulk-single-only"
+                onclick="similarSelectedQuestion()">
+            <i class="fas fa-copy"></i>
+            فحص التشابه
+        </button>
+
+        <button type="button"
+                class="pr-bulk-btn pr-bulk-btn-danger pr-bulk-single-only"
+                onclick="deleteSelectedQuestion()">
+            <i class="fas fa-trash"></i>
+            حذف
+        </button>
+
+        <button type="button"
+                class="pr-bulk-btn"
+                onclick="exportSelectedQuestions()">
+            <i class="fas fa-download"></i>
+            تصدير المحدد
+        </button>
+
+        <button type="button"
+                class="pr-bulk-clear"
+                onclick="clearQuestionsSelection()"
+                aria-label="إلغاء التحديد">
+            <i class="fas fa-xmark"></i>
+        </button>
+    </div>
+
+    @await Html.PartialAsync("_ConfirmDeleteModal", new ConfirmDeleteViewModel
+    {
+        ModalId = "confirmDeleteModal",
+        Title = "تأكيد الحذف",
+        Message = "هل أنت متأكد أنك تريد حذف السؤال التالي؟",
+        ConfirmButtonText = "نعم، احذف",
+        CancelButtonText = "إلغاء"
+        })
+</div>
+
+<div class="modal fade pr-modal" id="questionPreviewModal" tabindex="-1" dir="rtl">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content text-end">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-eye" style="color:#60a5fa;"></i>
+                    معاينة السؤال
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body" id="questionPreviewModalBody">
+                <div class="pr-empty">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p>جارٍ التحميل...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade pr-modal" id="auditModal" tabindex="-1" dir="rtl">
+    <div class="modal-dialog modal-md modal-dialog-scrollable">
+        <div class="modal-content text-end">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-history" style="color:#d8b4fe;"></i>
+                    آخر التعديلات
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body" id="auditModalBody">
+                <div class="pr-empty">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p>جارٍ التحميل...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade pr-modal" id="labelsModal" tabindex="-1" dir="rtl">
+    <div class="modal-dialog modal-md modal-dialog-scrollable">
+        <div class="modal-content text-end">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-tags" style="color:#22d3ee;"></i>
+                    التصنيفات
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body" id="labelsModalBody">
+                <div class="pr-empty">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p>جارٍ التحميل...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade pr-modal" id="similarModal" tabindex="-1" dir="rtl">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content text-end">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-copy" style="color:#fca5a5;"></i>
+                    الأسئلة المتشابهة
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body">
+                <div id="similarResults" class="list-group"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<form method="post" asp-action="DeleteConfirmed">
+    @Html.AntiForgeryToken()
+</form>
+
+@section Scripts {
+    <script src="~/libs/datatables/js/jquery.datatables.min.js?v=@DateTime.Now.Ticks"></script>
+    <script src="~/libs/datatables/js/buttons.html5.min.js?v=@DateTime.Now.Ticks"></script>
+    <script src="~/libs/datatables/js/datatables.buttons.min.js?v=@DateTime.Now.Ticks"></script>
+    <script src="~/libs/datatables/js/buttons.print.min.js?v=@DateTime.Now.Ticks"></script>
+    <script src="~/libs/datatables/js/jszip.min.js?v=@DateTime.Now.Ticks"></script>
+    <script src="~/libs/datatables/js/pdfmake.min.js?v=@DateTime.Now.Ticks"></script>
+    <script src="~/libs/datatables/js/vfs_fonts.js?v=@DateTime.Now.Ticks"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script>
+        const selectedQuestionsMap = new Map();
+
+        function escapeHtml(value) {
+            return $('<div>').text(value || '').html();
+        }
+
+        function cleanQuestionTitle(rawTitle) {
+            if (!rawTitle) {
+                return '';
+            }
+
+            return rawTitle.replace(/<span[^>]*display:none[^>]*>(.*?)<\/span>/gi, '$1');
+        }
+
+        function shortenText(text, maxLength) {
+            if (!text) {
+                return '';
+            }
+
+            return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+        }
+
+        function getQuestionRowId(row) {
+            return row.id || row.Id || '';
+        }
+
+        function getSelectedQuestionsArray() {
+            return Array.from(selectedQuestionsMap.values());
+        }
+
+        function updateQuestionsBulkFooter() {
+            const selected = getSelectedQuestionsArray();
+            const footer = document.getElementById('questionsBulkFooter');
+            const count = document.getElementById('questionsSelectedCount');
+            const selectAll = document.getElementById('questionsSelectAll');
+            const singleOnlyButtons = document.querySelectorAll('.pr-bulk-single-only');
+
+            if (footer) {
+                footer.classList.toggle('is-hidden', selected.length === 0);
+            }
+
+            if (count) {
+                count.textContent = selected.length;
+            }
+
+            singleOnlyButtons.forEach(function (btn) {
+                btn.classList.toggle('d-none', selected.length !== 1);
+            });
+
+            const pageCheckboxes = Array.from(document.querySelectorAll('.pr-row-checkbox'));
+
+            if (selectAll) {
+                const checkedOnPage = pageCheckboxes.filter(function (cb) {
+                    return cb.checked;
+                }).length;
+
+                selectAll.checked = pageCheckboxes.length > 0 && checkedOnPage === pageCheckboxes.length;
+                selectAll.indeterminate = checkedOnPage > 0 && checkedOnPage < pageCheckboxes.length;
+            }
+        }
+
+        function syncQuestionRowSelectionStyles() {
+            document.querySelectorAll('#questionsTable tbody tr').forEach(function (tr) {
+                const cb = tr.querySelector('.pr-row-checkbox');
+                tr.classList.toggle('pr-row-selected', !!cb && cb.checked);
+            });
+        }
+
+        function setQuestionSelectedFromCheckbox(cb) {
+            if (!cb) {
+                return;
+            }
+
+            const questionId = cb.value;
+
+            if (!questionId) {
+                return;
+            }
+
+            if (cb.checked) {
+                selectedQuestionsMap.set(questionId, {
+                    id: questionId,
+                    referenceNumber: cb.dataset.reference || '',
+                    title: cb.dataset.title || '',
+                    curriculum: cb.dataset.curriculum || '',
+                    section: cb.dataset.section || '',
+                    lesson: cb.dataset.lesson || '',
+                    answerStatus: cb.dataset.answerStatus || '',
+                    createdAt: cb.dataset.createdAt || ''
+                });
+            } else {
+                selectedQuestionsMap.delete(questionId);
+            }
+
+            syncQuestionRowSelectionStyles();
+            updateQuestionsBulkFooter();
+        }
+
+        function clearQuestionsSelection() {
+            selectedQuestionsMap.clear();
+
+            document.querySelectorAll('.pr-row-checkbox').forEach(function (cb) {
+                cb.checked = false;
+            });
+
+            const selectAll = document.getElementById('questionsSelectAll');
+            if (selectAll) {
+                selectAll.checked = false;
+                selectAll.indeterminate = false;
+            }
+
+            syncQuestionRowSelectionStyles();
+            updateQuestionsBulkFooter();
+        }
+
+        function getSingleSelectedQuestion() {
+            const selected = getSelectedQuestionsArray();
+
+            if (selected.length !== 1) {
+                Swal.fire('تنبيه', 'اختر سؤالًا واحدًا فقط لتنفيذ هذا الإجراء.', 'warning');
+                return null;
+            }
+
+            return selected[0];
+        }
+
+        function previewSelectedQuestion() {
+            const selected = getSingleSelectedQuestion();
+            if (!selected) {
+                return;
+            }
+
+            showQuestionPreview(selected.id);
+        }
+
+        function editSelectedQuestion() {
+            const selected = getSingleSelectedQuestion();
+            if (!selected) {
+                return;
+            }
+
+            window.open(`/Admin/Questions/Edit/${selected.id}`, '_blank');
+        }
+
+        function displaySelectedQuestion() {
+            const selected = getSingleSelectedQuestion();
+            if (!selected) {
+                return;
+            }
+
+            window.open(`/Admin/Questions/Display/${selected.id}`, '_blank');
+        }
+
+        function detailsSelectedQuestion() {
+            const selected = getSingleSelectedQuestion();
+            if (!selected) {
+                return;
+            }
+
+            window.location.href = `/Admin/Questions/Details/${selected.id}`;
+        }
+
+        function labelsSelectedQuestion() {
+            const selected = getSingleSelectedQuestion();
+            if (!selected) {
+                return;
+            }
+
+            openLabelsModal(selected.id);
+        }
+
+        function auditSelectedQuestion() {
+            const selected = getSingleSelectedQuestion();
+            if (!selected) {
+                return;
+            }
+
+            openAuditModal(selected.id);
+        }
+
+        function similarSelectedQuestion() {
+            const selected = getSingleSelectedQuestion();
+            if (!selected) {
+                return;
+            }
+
+            checkSimilar(selected.id);
+        }
+
+        function deleteSelectedQuestion() {
+            const selected = getSingleSelectedQuestion();
+            if (!selected) {
+                return;
+            }
+
+            openConfirmDelete(selected.id, selected.title || selected.referenceNumber || 'هذا السؤال');
+        }
+
+        function exportSelectedQuestions() {
+            const selected = getSelectedQuestionsArray();
+
+            if (!selected.length) {
+                Swal.fire('تنبيه', 'اختر سؤالًا واحدًا على الأقل للتصدير.', 'warning');
+                return;
+            }
+
+            const csvRows = [[
+                'المرجع',
+                'السؤال',
+                'القسم',
+                'المحور',
+                'المؤشر',
+                'حالة الإجابة',
+                'التاريخ'
+            ]];
+
+            selected.forEach(function (item) {
+                csvRows.push([
+                    item.referenceNumber || '',
+                    item.title || '',
+                    item.curriculum || '',
+                    item.section || '',
+                    item.lesson || '',
+                    item.answerStatus || '',
+                    item.createdAt || ''
+                ]);
+            });
+
+            const csv = '\uFEFF' + csvRows.map(function (items) {
+                return items.map(function (item) {
+                    return '"' + String(item || '').replace(/"/g, '""') + '"';
+                }).join(',');
+            }).join('\r\n');
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+
+            link.href = url;
+            link.download = 'selected_questions.csv';
+            link.click();
+
+            URL.revokeObjectURL(url);
+        }
+
+        const questionsTable = $('#questionsTable').DataTable({
+            processing: true,
+            serverSide: true,
+            deferRender: true,
+            ajax: {
+                url: '/Admin/Questions/LoadQuestionsData',
+                type: 'POST',
+                data: function (d) {
+                    d.curriculumId = $('#CurriculumId').val();
+                    d.sectionId = $('#SectionId').val();
+                    d.unitId = $('#UnitId').val();
+                    d.lessonId = $('#LessonId').val();
+                    d.onlyUnanswered = $('#OnlyUnanswered').is(':checked');
+                    d.searchTitle = $('#SearchTitle').val();
+                },
+                dataSrc: 'data'
+            },
+            order: [[8, 'desc']],
+            pageLength: 50,
+            lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "الكل"]],
+            columns: [
+                {
+                    data: null,
+                    orderable: false,
+                    searchable: false,
+                    className: 'pr-select-col',
+                    render: function (_, __, row) {
+                        const id = getQuestionRowId(row);
+                        const cleanTitle = cleanQuestionTitle(row.title || '');
+                        const isSelected = selectedQuestionsMap.has(String(id));
+                        const answerStatus = row.isAnswerConfirmed ? 'مؤكدة' : 'غير مؤكدة';
+
+                        return `
+                            <input type="checkbox"
+                                   class="pr-row-checkbox"
+                                   value="${escapeHtml(id)}"
+                                   data-reference="${escapeHtml(row.referenceNumber || '')}"
+                                   data-title="${escapeHtml(cleanTitle || '')}"
+                                   data-curriculum="${escapeHtml(row.curriculum || '')}"
+                                   data-section="${escapeHtml(row.section || '')}"
+                                   data-lesson="${escapeHtml(row.lesson || '')}"
+                                   data-answer-status="${escapeHtml(answerStatus)}"
+                                   data-created-at="${escapeHtml(row.createdAt || '')}"
+                                   ${isSelected ? 'checked' : ''}
+                                   aria-label="تحديد السؤال ${escapeHtml(row.referenceNumber || '')}" />`;
+                    }
+                },
+                {
+                    data: 'referenceNumber',
+                    render: function (data) {
+                        return `<span class="pr-q-ref">${escapeHtml(data || '—')}</span>`;
+                    }
+                },
+                {
+                    data: null,
+                    className: 'dt-body-right',
+                    render: function (_, __, row) {
+                        const cleanTitle = cleanQuestionTitle(row.title || '');
+                        const shortTitle = shortenText(cleanTitle, 120);
+
+                        return `
+                            <div class="pr-q-title">
+                                <div class="pr-q-title-text">${escapeHtml(shortTitle || '—')}</div>
+                            </div>`;
+                    }
+                },
+                {
+                    data: 'curriculum',
+                    render: function (data) {
+                        return `<span style="color:#334155;font-weight:800;">${escapeHtml(data || '—')}</span>`;
+                    }
+                },
+                {
+                    data: 'section',
+                    render: function (data) {
+                        return `<span style="color:#334155;font-weight:800;">${escapeHtml(data || '—')}</span>`;
+                    }
+                },
+                {
+                    data: 'lesson',
+                    render: function (data) {
+                        return `<span style="color:#334155;font-weight:800;">${escapeHtml(data || '—')}</span>`;
+                    }
+                },
+                {
+                    data: 'isAnswerConfirmed',
+                    render: function (data) {
+                        return data
+                            ? `<span class="pr-badge pr-badge-confirmed"><i class="fas fa-check"></i> مؤكدة</span>`
+                            : `<span class="pr-badge pr-badge-unconfirmed"><i class="fas fa-xmark"></i> غير مؤكدة</span>`;
+                    }
+                },
+                {
+                    data: 'internalNote',
+                    render: function (data) {
+                        if (!data || data.trim() === '') {
+                            return `<span class="pr-badge pr-badge-empty">—</span>`;
+                        }
+
+                        const shortNote = data.length > 36 ? data.substring(0, 36) + '...' : data;
+                        return `<span class="pr-badge pr-badge-note" title="${escapeHtml(data)}">${escapeHtml(shortNote)}</span>`;
+                    }
+                },
+                {
+                    data: 'createdAt',
+                    render: function (data) {
+                        return `<span style="color:#334155;font-weight:800;">${escapeHtml(data || '—')}</span>`;
+                    }
+                }
+            ],
+            language: {
+                url: "//cdn.datatables.net/plug-ins/1.13.5/i18n/ar.json"
+            },
+            drawCallback: function () {
+                document.querySelectorAll('.pr-row-checkbox').forEach(function (cb) {
+                    cb.checked = selectedQuestionsMap.has(cb.value);
+                });
+
+                syncQuestionRowSelectionStyles();
+                updateQuestionsBulkFooter();
+            }
+        });
+
+        $('#questionsTable').on('change', '.pr-row-checkbox', function () {
+            setQuestionSelectedFromCheckbox(this);
+        });
+
+        $('#questionsTable tbody').on('click', 'tr', function (event) {
+            const ignoredSelectors = 'a, button, input, .pr-bulk-btn, i';
+
+            if ($(event.target).closest(ignoredSelectors).length) {
+                return;
+            }
+
+            const cb = this.querySelector('.pr-row-checkbox');
+
+            if (!cb) {
+                return;
+            }
+
+            cb.checked = !cb.checked;
+            setQuestionSelectedFromCheckbox(cb);
+        });
+
+        $('#questionsSelectAll').on('change', function () {
+            const isChecked = this.checked;
+
+            document.querySelectorAll('.pr-row-checkbox').forEach(function (cb) {
+                cb.checked = isChecked;
+                setQuestionSelectedFromCheckbox(cb);
+            });
+
+            syncQuestionRowSelectionStyles();
+            updateQuestionsBulkFooter();
+        });
+
+        $('#indexFilterForm').on('submit', function (e) {
+            e.preventDefault();
+            clearQuestionsSelection();
+            questionsTable.ajax.reload();
+        });
+
+        $('#OnlyUnanswered').on('change', function () {
+            clearQuestionsSelection();
+            questionsTable.ajax.reload();
+        });
+
+        function showQuestionPreview(id) {
+            const body = document.getElementById('questionPreviewModalBody');
+            body.innerHTML = '<div class="pr-empty"><i class="fas fa-spinner fa-spin"></i><p>جارٍ التحميل...</p></div>';
+
+            const modal = new bootstrap.Modal(document.getElementById('questionPreviewModal'));
+            modal.show();
+
+            fetch(`/Admin/Questions/Preview/${id}`)
+                .then(response => response.text())
+                .then(html => {
+                    body.innerHTML = html;
+                })
+                .catch(() => {
+                    body.innerHTML = '<div class="pr-empty"><i class="fas fa-exclamation-triangle"></i><p>حدث خطأ أثناء تحميل السؤال.</p></div>';
+                });
+        }
+
+        function openLabelsModal(id) {
+            const body = document.getElementById('labelsModalBody');
+            body.innerHTML = '<div class="pr-empty"><i class="fas fa-spinner fa-spin"></i><p>جارٍ التحميل...</p></div>';
+
+            const modal = new bootstrap.Modal(document.getElementById('labelsModal'));
+            modal.show();
+
+            fetch(`/Admin/Questions/Labels/${id}`)
+                .then(response => response.text())
+                .then(html => {
+                    body.innerHTML = html;
+                })
+                .catch(() => {
+                    body.innerHTML = '<div class="pr-empty"><i class="fas fa-exclamation-triangle"></i><p>حدث خطأ أثناء تحميل التصنيفات.</p></div>';
+                });
+        }
+
+        function openAuditModal(id) {
+            const body = document.getElementById('auditModalBody');
+            body.innerHTML = '<div class="pr-empty"><i class="fas fa-spinner fa-spin"></i><p>جارٍ التحميل...</p></div>';
+
+            const modal = new bootstrap.Modal(document.getElementById('auditModal'));
+            modal.show();
+
+            fetch(`/Admin/Questions/Audit/${id}`)
+                .then(response => response.text())
+                .then(html => {
+                    body.innerHTML = html;
+                })
+                .catch(() => {
+                    body.innerHTML = '<div class="pr-empty"><i class="fas fa-exclamation-triangle"></i><p>حدث خطأ أثناء تحميل سجل التعديلات.</p></div>';
+                });
+        }
+
+        function checkSimilar(questionId) {
+            const container = document.getElementById('similarResults');
+            container.innerHTML = '<div class="pr-empty"><i class="fas fa-spinner fa-spin"></i><p>جارٍ فحص التشابه...</p></div>';
+
+            const modal = new bootstrap.Modal(document.getElementById('similarModal'));
+            modal.show();
+
+            fetch(`/Admin/Questions/CheckSimilarQuestions?id=${questionId}`)
+                .then(res => res.json())
+                .then(data => {
+                    container.innerHTML = '';
+
+                    if (!data || data.length === 0) {
+                        container.innerHTML = `
+                            <div class="alert alert-info text-center fw-bold">
+                                لا يوجد أسئلة متشابهة بنسبة 80% أو أكثر.
+                            </div>`;
+                        return;
+                    }
+
+                    data.forEach(q => {
+                        const title = $('<div>').text(q.title || '').html();
+                        const meta = [q.referenceNumber, q.lesson, q.matchType].filter(Boolean).map(x => $('<div>').text(x).html()).join(' · ');
+                        container.innerHTML += `
+                            <a href="/Admin/Questions/Details/${q.id}" target="_blank"
+                               class="list-group-item list-group-item-action d-flex justify-content-between align-items-start gap-2">
+                                <span>
+                                    <span class="d-block fw-bold">${title}</span>
+                                    <small class="text-muted">${meta}</small>
+                                </span>
+                                <span class="pr-badge pr-badge-unconfirmed">${(q.similarity * 100).toFixed(1)}%</span>
+                            </a>`;
+                    });
+                })
+                .catch(() => {
+                    container.innerHTML = `
+                        <div class="alert alert-danger text-center fw-bold">
+                            فشل في تحميل الأسئلة المتشابهة.
+                        </div>`;
+                });
+        }
+
+        function openConfirmDelete(id, title) {
+            const modalElement = document.getElementById('confirmDeleteModal');
+
+            if (!modalElement) {
+                Swal.fire('خطأ', 'مودال الحذف غير موجود في الصفحة.', 'error');
+                return;
+            }
+
+            const titleElement = document.getElementById('questionToDeleteTitle');
+            if (titleElement) {
+                titleElement.textContent = title || 'هذا السؤال';
+            }
+
+            const modal = new bootstrap.Modal(modalElement);
+            const btn = document.getElementById('confirmDeleteBtn');
+
+            if (!btn) {
+                Swal.fire('خطأ', 'زر تأكيد الحذف غير موجود داخل المودال.', 'error');
+                return;
+            }
+
+            btn.replaceWith(btn.cloneNode(true));
+
+            const btnNew = document.getElementById('confirmDeleteBtn');
+            btnNew.onclick = async function () {
+                const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+
+                const formData = new FormData();
+                formData.append('id', id);
+                formData.append('__RequestVerificationToken', token);
+
+                try {
+                    const response = await fetch('/Admin/Questions/DeleteConfirmed', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const data = await response.json();
+                    modal.hide();
+
+                    if (data.success) {
+                        selectedQuestionsMap.delete(id);
+                        questionsTable.ajax.reload(null, false);
+                        updateQuestionsBulkFooter();
+                        Swal.fire('تم الحذف', data.message, 'success');
+                    } else {
+                        Swal.fire('خطأ', data.message, 'error');
+                    }
+                } catch {
+                    modal.hide();
+                    Swal.fire('خطأ', 'حدث خطأ أثناء حذف السؤال.', 'error');
+                }
+            };
+
+            modal.show();
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const curriculumSelect = document.getElementById('CurriculumId');
+            const sectionSelect = document.getElementById('SectionId');
+            const unitSelect = document.getElementById('UnitId');
+            const lessonSelect = document.getElementById('LessonId');
+
+            curriculumSelect?.addEventListener('change', async function () {
+                const curriculumId = this.value;
+
+                clearQuestionsSelection();
+
+                sectionSelect.innerHTML = `<option value="">تحميل المحاور...</option>`;
+                unitSelect.innerHTML = `<option value="">اختر المحور أولًا</option>`;
+                lessonSelect.innerHTML = `<option value="">اختر الوحدة أولًا</option>`;
+
+                if (!curriculumId) {
+                    sectionSelect.innerHTML = `<option value="">كل المحاور</option>`;
+                    unitSelect.innerHTML = `<option value="">كل الوحدات</option>`;
+                    lessonSelect.innerHTML = `<option value="">كل المؤشرات</option>`;
+                    questionsTable.ajax.reload();
+                    return;
+                }
+
+                const res = await fetch(`/Admin/Questions/GetSectionsByCurriculum?curriculumId=${curriculumId}`);
+                const data = await res.json();
+
+                sectionSelect.innerHTML = `<option value="">كل المحاور</option>`;
+                data.forEach(item => {
+                    sectionSelect.innerHTML += `<option value="${item.id}">${item.title}</option>`;
+                });
+
+                questionsTable.ajax.reload();
+            });
+
+            sectionSelect?.addEventListener('change', async function () {
+                const sectionId = this.value;
+
+                clearQuestionsSelection();
+
+                unitSelect.innerHTML = `<option value="">تحميل الوحدات...</option>`;
+                lessonSelect.innerHTML = `<option value="">اختر الوحدة أولًا</option>`;
+
+                if (!sectionId) {
+                    unitSelect.innerHTML = `<option value="">كل الوحدات</option>`;
+                    lessonSelect.innerHTML = `<option value="">كل المؤشرات</option>`;
+                    questionsTable.ajax.reload();
+                    return;
+                }
+
+                const res = await fetch(`/Admin/Questions/GetUnitsBySection?sectionId=${sectionId}`);
+                const data = await res.json();
+
+                unitSelect.innerHTML = `<option value="">كل الوحدات</option>`;
+                data.forEach(item => {
+                    unitSelect.innerHTML += `<option value="${item.id}">${item.title}</option>`;
+                });
+
+                questionsTable.ajax.reload();
+            });
+
+            unitSelect?.addEventListener('change', async function () {
+                const unitId = this.value;
+                const sectionId = sectionSelect?.value;
+
+                clearQuestionsSelection();
+
+                lessonSelect.innerHTML = `<option value="">تحميل المؤشرات...</option>`;
+
+                if (!unitId || !sectionId) {
+                    lessonSelect.innerHTML = `<option value="">كل المؤشرات</option>`;
+                    questionsTable.ajax.reload();
+                    return;
+                }
+
+                const res = await fetch(`/Admin/Questions/GetLessonsByUnit?unitId=${unitId}&sectionId=${sectionId}`);
+                const data = await res.json();
+
+                lessonSelect.innerHTML = `<option value="">كل المؤشرات</option>`;
+                data.forEach(item => {
+                    lessonSelect.innerHTML += `<option value="${item.id}">${item.title}</option>`;
+                });
+
+                questionsTable.ajax.reload();
+            });
+
+            lessonSelect?.addEventListener('change', function () {
+                clearQuestionsSelection();
+                questionsTable.ajax.reload();
+            });
+        });
+    </script>
+}

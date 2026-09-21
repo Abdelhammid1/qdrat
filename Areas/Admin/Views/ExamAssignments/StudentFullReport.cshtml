@@ -1,0 +1,185 @@
+﻿@model QdratNew.ViewModels.Exam.StudentAnalyticsReportVm
+@{
+    ViewData["Title"] = "📊 التقرير التحليلي الشامل لأداء الطالب";
+}
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+    body {
+        direction: rtl;
+        background-color: #f9fafb;
+        font-family: 'Cairo', sans-serif;
+    }
+
+    .report-card {
+        background: #fff;
+        border-radius: 1rem;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+        border: 1px solid #e5e7eb;
+        margin-bottom: 1.5rem;
+        overflow: hidden;
+    }
+
+    .report-header {
+        background: linear-gradient(135deg, #2563eb, #1d4ed8);
+        color: white;
+        padding: 1rem 1.25rem;
+    }
+
+    .info-title {
+        font-weight: 700;
+        color: #1e293b;
+    }
+</style>
+
+<div class="container mt-4">
+
+    <!-- 👤 معلومات الطالب -->
+    <div class="report-card">
+        <div class="report-header d-flex justify-content-between align-items-center">
+            <h4><i class="bi bi-person-badge me-2"></i> الملف التحليلي للطالب</h4>
+            <button class="btn btn-light btn-sm" onclick="window.print()"><i class="bi bi-printer"></i> طباعة</button>
+        </div>
+        <div class="row p-4 text-center">
+            <div class="col-md-3"><div class="info-title">اسم الطالب</div><div>@Model.StudentName</div></div>
+            <div class="col-md-3"><div class="info-title">المدرسة</div><div>@Model.School</div></div>
+            <div class="col-md-3"><div class="info-title">المستوى</div><div>@Model.Level</div></div>
+            <div class="col-md-3"><div class="info-title">الدفعة</div><div>@Model.BatchName</div></div>
+        </div>
+    </div>
+
+    <!-- 📈 الأداء العام -->
+    <div class="report-card">
+        <div class="report-header"><h5>📊 الأداء العام في الاختبارات</h5></div>
+        <div class="row p-4 text-center">
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm p-3"><h6>عدد الاختبارات</h6><h4>@Model.TotalExams</h4></div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm p-3 text-success"><h6>متوسط الدرجة</h6><h4>@Model.AverageExamScore%</h4></div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm p-3 text-primary"><h6>أفضل اختبار</h6><h4>@Model.TopExamTitle</h4></div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm p-3 text-danger"><h6>أضعف اختبار</h6><h4>@Model.WeakExamTitle</h4></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🧮 أداء الواجبات -->
+    <div class="report-card">
+        <div class="report-header"><h5>📝 أداء الطالب في الواجبات</h5></div>
+        <div class="row p-4 text-center">
+            <div class="col-md-4"><h6>عدد الواجبات المرسلة</h6><h4>@Model.TotalHomeworks</h4></div>
+            <div class="col-md-4 text-success"><h6>عدد الواجبات المنجزة</h6><h4>@Model.CompletedHomeworks</h4></div>
+            <div class="col-md-4 text-primary"><h6>متوسط درجات الواجبات</h6><h4>@Model.AverageHomeworkScore%</h4></div>
+        </div>
+    </div>
+
+    <!-- 🎯 تحليل المحاور -->
+    <div class="report-card">
+        <div class="report-header"><h5>🎯 تحليل المحاور التي خاضها الطالب</h5></div>
+        <div class="p-4">
+            <table class="table table-bordered text-center align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>المحور</th>
+                        <th>عدد الاختبارات</th>
+                        <th>متوسط النجاح %</th>
+                        <th>التقدير</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var s in Model.SectionsPerformance)
+                    {
+                        var color = s.AvgScore >= 85 ? "table-success" : s.AvgScore >= 60 ? "table-info" : "table-danger";
+                        <tr class="@color">
+                            <td>@s.SectionTitle</td>
+                            <td>@s.ExamsCount</td>
+                            <td>@s.AvgScore%</td>
+                            <td>
+                                @(s.AvgScore >= 85 ? "ممتاز" :
+                                                            s.AvgScore >= 70 ? "جيد جدًا" :
+                                                            s.AvgScore >= 60 ? "جيد" : "قيد التطوير")
+                        </td>
+                    </tr>
+                                        }
+                </tbody>
+            </table>
+            <canvas id="sectionChart" height="120"></canvas>
+        </div>
+    </div>
+
+    <!-- 📚 تحليل المؤشرات -->
+    <div class="report-card">
+        <div class="report-header"><h5>📚 المؤشرات التي درسها الطالب</h5></div>
+        <div class="p-4">
+            <table class="table table-bordered align-middle text-center">
+                <thead class="table-light">
+                    <tr>
+                        <th>المؤشر (الدرس)</th>
+                        <th>عدد الأسئلة</th>
+                        <th>نسبة النجاح</th>
+                        <th>آخر نشاط</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var l in Model.LessonsPerformance)
+                    {
+                        <tr>
+                            <td>@l.LessonTitle</td>
+                            <td>@l.TotalQuestions</td>
+                            <td>@l.SuccessRate%</td>
+                            <td>@l.LastActivityDate.ToString("yyyy/MM/dd")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 📅 تطور الأداء الزمني -->
+    <div class="report-card">
+        <div class="report-header"><h5>📅 تطور الأداء بمرور الوقت</h5></div>
+        <div class="p-4">
+            <canvas id="progressChart" height="130"></canvas>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 📊 رسم بياني لأداء المحاور
+    const sectionCtx = document.getElementById('sectionChart').getContext('2d');
+    new Chart(sectionCtx, {
+        type: 'bar',
+        data: {
+            labels: @Html.Raw(Json.Serialize(Model.SectionsPerformance.Select(s => s.SectionTitle))),
+            datasets: [{
+                label: 'نسبة النجاح بالمحور',
+                data: @Html.Raw(Json.Serialize(Model.SectionsPerformance.Select(s => s.AvgScore))),
+                backgroundColor: '#3b82f6'
+            }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } } }
+    });
+
+    // 📈 تطور الأداء الزمني
+    const progressCtx = document.getElementById('progressChart').getContext('2d');
+    new Chart(progressCtx, {
+        type: 'line',
+        data: {
+            labels: @Html.Raw(Json.Serialize(Model.ProgressTimeline.Select(p => p.Date.ToString("MM/dd")))),
+            datasets: [{
+                label: 'درجة الطالب',
+                data: @Html.Raw(Json.Serialize(Model.ProgressTimeline.Select(p => p.Score))),
+                borderColor: '#16a34a',
+                fill: false,
+                tension: 0.3
+            }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } } }
+    });
+</script>

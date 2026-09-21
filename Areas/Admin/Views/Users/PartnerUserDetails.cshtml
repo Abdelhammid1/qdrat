@@ -1,0 +1,1445 @@
+@using QdratNew.ViewModels.Admin
+@model PartnerUsersPageViewModel
+
+@{
+    ViewData["Title"] = "مستخدمو " + Model.PartnerName;
+}
+
+@section Styles {
+    <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+    <style>
+        :root {
+            --ink: #0D1B2A;
+            --ink-2: #2C3E50;
+            --ink-3: #5A6A7A;
+            --ink-4: #8FA0B0;
+            --canvas: #F3F6FA;
+            --surface: #FFFFFF;
+            --surface-2: #F8FAFC;
+            --border: #DDE4EC;
+            --blue: #1B5EAE;
+            --blue-2: #2471D0;
+            --blue-bg: #E8F1FB;
+            --blue-dark: #103E7A;
+            --emerald: #0D7A5B;
+            --emerald-bg: #E4F5EE;
+            --amber: #985D09;
+            --amber-bg: #FDF0D8;
+            --rose: #BF1030;
+            --rose-bg: #FDEAEE;
+            --violet: #5535B5;
+            --violet-bg: #EEEBFD;
+            --radius: 12px;
+            --shadow: 0 2px 10px rgba(0,0,0,.07);
+
+            /* Action bar */
+            --t-fast: 150ms;
+            --t-slow: 350ms;
+            --ease: cubic-bezier(.25,.46,.45,.94);
+            --r-md: 12px;
+            --r-full: 9999px;
+        }
+
+        body { background: var(--canvas); font-family: 'Cairo', sans-serif; direction: rtl; }
+        .page-wrap { padding: 1.75rem 1.5rem 100px; }
+
+        /* ── Header ── */
+        .page-header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .partner-logo {
+            width: 58px; height: 58px;
+            border-radius: 12px;
+            object-fit: contain;
+            border: 1px solid var(--border);
+            background: #fff;
+            padding: 4px;
+        }
+
+        .partner-logo-ph {
+            width: 58px; height: 58px;
+            border-radius: 12px;
+            background: var(--blue-bg);
+            display: flex; align-items: center; justify-content: center;
+            color: var(--blue); font-size: 1.6rem;
+        }
+
+        .header-info { flex: 1; }
+
+        .partner-title {
+            font-size: 1.2rem; font-weight: 700; color: var(--ink);
+            display: flex; align-items: center; gap: 8px;
+        }
+
+        .status-badge {
+            display: inline-flex; align-items: center; gap: 4px;
+            font-size: .72rem; font-weight: 600;
+            padding: 2px 9px; border-radius: 20px;
+        }
+        .s-active   { background: var(--emerald-bg); color: var(--emerald); }
+        .s-inactive { background: var(--rose-bg);    color: var(--rose); }
+
+        .breadcrumb-row {
+            font-size: .8rem; color: var(--ink-3); margin-top: 2px;
+        }
+        .breadcrumb-row a { color: var(--blue); text-decoration: none; }
+        .breadcrumb-row a:hover { text-decoration: underline; }
+
+        /* ── Summary Cards ── */
+        .summary-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .sum-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1rem 1.25rem;
+            display: flex; align-items: center; gap: 12px;
+            box-shadow: var(--shadow);
+        }
+
+        .sum-icon {
+            width: 42px; height: 42px; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.2rem; flex-shrink: 0;
+        }
+
+        .ic-blue    { background: var(--blue-bg);    color: var(--blue); }
+        .ic-emerald { background: var(--emerald-bg); color: var(--emerald); }
+        .ic-amber   { background: var(--amber-bg);   color: var(--amber); }
+        .ic-violet  { background: var(--violet-bg);  color: var(--violet); }
+
+        .sum-num { font-size: 1.5rem; font-weight: 700; line-height: 1; }
+        .sum-lbl { font-size: .75rem; color: var(--ink-3); margin-top: 2px; }
+
+        /* ── Tabs ── */
+        .tabs-nav {
+            display: flex; gap: 4px;
+            border-bottom: 2px solid var(--border);
+            margin-bottom: 1.25rem;
+        }
+
+        .tab-btn {
+            padding: .55rem 1.1rem;
+            border: none; background: none;
+            font-size: .88rem; font-weight: 600;
+            color: var(--ink-3); cursor: pointer;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            transition: color .15s, border-color .15s;
+            display: flex; align-items: center; gap: 6px;
+        }
+
+        .tab-btn:hover { color: var(--ink); }
+
+        .tab-btn.active {
+            color: var(--blue);
+            border-bottom-color: var(--blue);
+        }
+
+        .tab-count {
+            background: var(--blue-bg); color: var(--blue);
+            border-radius: 20px; padding: 1px 8px;
+            font-size: .72rem; font-weight: 600;
+        }
+
+        .tab-count.emerald { background: var(--emerald-bg); color: var(--emerald); }
+        .tab-count.amber   { background: var(--amber-bg);   color: var(--amber); }
+
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        /* ── Table Card ── */
+        .table-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        .table-card-head {
+            padding: .85rem 1.25rem;
+            display: flex; align-items: center; gap: 8px;
+            border-bottom: 1px solid var(--border);
+            font-size: .9rem; font-weight: 700; color: var(--ink);
+        }
+
+        .table-wrap { overflow-x: auto; }
+
+        table.styled { width: 100%; border-collapse: collapse; font-size: .85rem; }
+        table.styled thead tr { background: var(--surface-2); }
+        table.styled th {
+            padding: .65rem 1rem; font-weight: 600;
+            color: var(--ink-3); border-bottom: 1px solid var(--border);
+            white-space: nowrap; text-align: right;
+        }
+        table.styled td {
+            padding: .65rem 1rem; border-bottom: 1px solid var(--border);
+            color: var(--ink-2); vertical-align: middle;
+        }
+        table.styled tbody tr:hover { background: var(--surface-2); }
+        table.styled tbody tr:last-child td { border-bottom: none; }
+        table.styled tbody tr.is-selected { background: var(--blue-bg) !important; outline: 2px solid var(--blue-2); outline-offset: -1px; }
+
+        /* Checkbox column */
+        th.col-cb, td.col-cb {
+            width: 44px;
+            text-align: center !important;
+            padding: .65rem .5rem !important;
+        }
+        .row-cb {
+            width: 16px; height: 16px;
+            accent-color: var(--blue);
+            cursor: pointer;
+            display: block; margin: 0 auto;
+        }
+
+        .user-avatar {
+            width: 34px; height: 34px; border-radius: 50%;
+            background: var(--blue-bg); color: var(--blue);
+            display: inline-flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: .8rem; flex-shrink: 0;
+        }
+
+        .role-tag {
+            display: inline-flex; align-items: center; gap: 3px;
+            padding: 2px 9px; border-radius: 20px;
+            font-size: .72rem; font-weight: 600;
+        }
+
+        .r-student    { background: var(--blue-bg);    color: var(--blue); }
+        .r-instructor { background: var(--emerald-bg); color: var(--emerald); }
+        .r-admin      { background: var(--amber-bg);   color: var(--amber); }
+        .r-partner    { background: var(--violet-bg);  color: var(--violet); }
+
+        .empty-row td { text-align: center; color: var(--ink-4); padding: 2rem !important; }
+
+        /* ── Search ── */
+        .search-input {
+            border: 1px solid var(--border); border-radius: 8px;
+            padding: .4rem .85rem; font-size: .84rem;
+            width: 220px; outline: none;
+            font-family: 'Cairo', sans-serif;
+        }
+        .search-input:focus { border-color: var(--blue); }
+
+        /* ══════════════════════════════════════════
+           FLOATING ACTION BAR
+           ══════════════════════════════════════════ */
+        .action-bar {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            z-index: 9900;
+            pointer-events: none;
+        }
+
+        .action-bar__inner {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding: 14px 24px;
+            background: rgba(13, 27, 42, 0.93);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border-top: 1px solid rgba(255,255,255,.10);
+            box-shadow: 0 -8px 32px rgba(13,27,42,.28);
+            transform: translateY(110%);
+            transition: transform var(--t-slow) var(--ease);
+        }
+
+        .action-bar.is-visible .action-bar__inner { transform: translateY(0); }
+        .action-bar.is-visible { pointer-events: all; }
+
+        .ab-sel {
+            display: flex; align-items: center; gap: 8px;
+            padding: 6px 14px 6px 8px;
+            background: rgba(255,255,255,.10);
+            border-radius: var(--r-full);
+            border: 1px solid rgba(255,255,255,.14);
+            flex-shrink: 0;
+        }
+
+        .ab-sel__count {
+            display: flex; align-items: center; justify-content: center;
+            min-width: 28px; height: 28px; padding: 0 7px;
+            border-radius: var(--r-full);
+            background: var(--blue);
+            color: #fff; font-size: .8rem; font-weight: 800;
+            font-family: 'Cairo', sans-serif;
+            transition: transform var(--t-fast) var(--ease);
+        }
+        .ab-sel__count.bump { animation: countBump .3s ease; }
+        @@keyframes countBump { 0%,100%{transform:scale(1)}50%{transform:scale(1.35)} }
+
+        .ab-sel__text { font-size: .82rem; font-weight: 600; color: rgba(255,255,255,.75); white-space: nowrap; }
+
+        .ab-sep { width: 1px; height: 28px; background: rgba(255,255,255,.14); flex-shrink: 0; }
+
+        .ab-action {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 7px 14px; border-radius: var(--r-md);
+            font-size: .8rem; font-weight: 700;
+            font-family: 'Cairo', sans-serif;
+            cursor: pointer; border: 1px solid transparent;
+            white-space: nowrap;
+            transition: all var(--t-fast);
+            background: rgba(255,255,255,.09);
+            color: rgba(255,255,255,.85);
+            border-color: rgba(255,255,255,.14);
+        }
+        .ab-action:hover:not(:disabled) {
+            background: rgba(255,255,255,.16);
+            color: #fff;
+            border-color: rgba(255,255,255,.24);
+            transform: translateY(-1px);
+        }
+        .ab-action:disabled { opacity: .3; cursor: not-allowed; pointer-events: none; }
+
+        .ab-action--warn  { background: rgba(152,93,9,.22); color: #FCD34D; border-color: rgba(152,93,9,.32); }
+        .ab-action--warn:hover:not(:disabled)  { background: rgba(152,93,9,.34); }
+
+        .ab-action--danger { background: rgba(191,16,48,.22); color: #FCA5A5; border-color: rgba(191,16,48,.32); }
+        .ab-action--danger:hover:not(:disabled) { background: rgba(191,16,48,.34); }
+
+        .ab-action--clear {
+            background: transparent; color: rgba(255,255,255,.45); border-color: transparent; margin-right: auto;
+        }
+        .ab-action--clear:hover:not(:disabled) {
+            background: rgba(255,255,255,.08); color: rgba(255,255,255,.75); border-color: transparent; transform: none;
+        }
+
+        .ab-tip { position: relative; display: inline-flex; }
+        .ab-tip__text {
+            display: none; position: absolute; bottom: calc(100% + 8px); right: 50%;
+            transform: translateX(50%);
+            background: rgba(13,27,42,.95); color: rgba(255,255,255,.9);
+            font-size: .7rem; font-weight: 600;
+            padding: 5px 10px; border-radius: 8px;
+            white-space: nowrap; pointer-events: none;
+            border: 1px solid rgba(255,255,255,.1);
+        }
+        .ab-tip:hover .ab-tip__text { display: block; }
+
+        @@media(max-width: 680px) {
+            .summary-row { grid-template-columns: 1fr 1fr; }
+            .action-bar__inner { padding: 12px 14px; gap: 6px; }
+        }
+
+        /* ── Modal ── */
+        .adm-modal {
+            display: none;
+            position: fixed; inset: 0; z-index: 9999;
+            background: rgba(13,27,42,.55);
+            align-items: center; justify-content: center;
+        }
+        .adm-modal.show-modal { display: flex; }
+        .adm-modal__box {
+            background: var(--surface);
+            border-radius: 14px;
+            width: 560px; max-width: 96vw;
+            box-shadow: 0 8px 40px rgba(0,0,0,.18);
+            overflow: hidden;
+        }
+        .adm-modal__head {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: .85rem 1.25rem;
+            border-bottom: 1px solid var(--border);
+            font-size: .95rem; font-weight: 700; color: var(--ink);
+        }
+        .adm-modal__close {
+            background: none; border: none; font-size: 1.2rem; cursor: pointer;
+            color: var(--ink-3); line-height: 1;
+        }
+        .adm-modal__close:hover { color: var(--rose); }
+        .adm-modal__body { padding: 1.25rem; }
+        .adm-modal__foot {
+            display: flex; justify-content: flex-end; gap: 8px;
+            padding: .85rem 1.25rem;
+            border-top: 1px solid var(--border);
+        }
+        .form-g label {
+            font-size: .82rem; font-weight: 600; color: var(--ink-2);
+            display: block; margin-bottom: .35rem;
+        }
+        .form-ctrl {
+            width: 100%;
+            border: 1px solid var(--border); border-radius: 8px;
+            padding: .42rem .85rem; font-size: .84rem;
+            font-family: 'Cairo', sans-serif;
+            outline: none; background: #fff; color: var(--ink);
+        }
+        .form-ctrl:focus { border-color: var(--blue); }
+    </style>
+}
+
+<div class="page-wrap">
+
+    @Html.AntiForgeryToken()
+
+    <!-- Header -->
+    <div class="page-header">
+        @if (!string.IsNullOrWhiteSpace(Model.LogoPath))
+        {
+            <img src="@Model.LogoPath" alt="@Model.PartnerName" class="partner-logo" />
+        }
+        else
+        {
+            <div class="partner-logo-ph"><i class="bi bi-building"></i></div>
+        }
+
+        <div class="header-info">
+            <div class="partner-title">
+                @Model.PartnerName
+                @if (Model.IsActive)
+                {
+                    <span class="status-badge s-active"><i class="bi bi-circle-fill" style="font-size:.45rem"></i> نشط</span>
+                }
+                else
+                {
+                    <span class="status-badge s-inactive"><i class="bi bi-circle-fill" style="font-size:.45rem"></i> منتهي</span>
+                }
+            </div>
+            <div class="breadcrumb-row">
+                <a asp-action="PartnersList">مستخدمو الشركاء</a>
+                <i class="bi bi-chevron-left" style="font-size:.65rem;margin:0 4px"></i>
+                @Model.PartnerName
+            </div>
+        </div>
+
+        <a asp-action="PartnersList" class="btn btn-sm btn-outline-secondary ms-auto">
+            <i class="bi bi-arrow-right"></i> رجوع
+        </a>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="summary-row">
+        <div class="sum-card">
+            <div class="sum-icon ic-blue"><i class="bi bi-mortarboard-fill"></i></div>
+            <div>
+                <div class="sum-num" style="color:var(--blue)">@Model.Students.Count</div>
+                <div class="sum-lbl">طالب</div>
+            </div>
+        </div>
+        <div class="sum-card">
+            <div class="sum-icon ic-emerald"><i class="bi bi-person-video3"></i></div>
+            <div>
+                <div class="sum-num" style="color:var(--emerald)">@Model.Instructors.Count</div>
+                <div class="sum-lbl">مدرب</div>
+            </div>
+        </div>
+        <div class="sum-card">
+            <div class="sum-icon ic-amber"><i class="bi bi-person-badge-fill"></i></div>
+            <div>
+                <div class="sum-num" style="color:var(--amber)">@Model.Admins.Count</div>
+                <div class="sum-lbl">إداري</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs-nav">
+        <button class="tab-btn active" data-tab="tab-students">
+            <i class="bi bi-mortarboard"></i>
+            الطلاب
+            <span class="tab-count">@Model.Students.Count</span>
+        </button>
+        <button class="tab-btn" data-tab="tab-instructors">
+            <i class="bi bi-person-video3"></i>
+            المدربون
+            <span class="tab-count emerald">@Model.Instructors.Count</span>
+        </button>
+        <button class="tab-btn" data-tab="tab-admins">
+            <i class="bi bi-person-badge"></i>
+            الإداريون
+            <span class="tab-count amber">@Model.Admins.Count</span>
+        </button>
+        <button class="tab-btn" data-tab="tab-homework">
+            <i class="bi bi-journal-check"></i>
+            الواجبات
+            <span class="tab-count" style="background:var(--violet-bg);color:var(--violet)">@Model.HomeworkSets.Count</span>
+        </button>
+        <button class="tab-btn" data-tab="tab-exams">
+            <i class="bi bi-clipboard2-check"></i>
+            الاختبارات
+            <span class="tab-count" style="background:#E8F5E9;color:#2E7D32">@Model.ExamAssignments.Count</span>
+        </button>
+        <button class="tab-btn" data-tab="tab-import">
+            <i class="bi bi-file-earmark-spreadsheet"></i>
+            رفع طلاب
+        </button>
+    </div>
+
+    <!-- ═══════════ Tab: Students ═══════════ -->
+    <div class="tab-panel active" id="tab-students">
+        <div class="table-card">
+            <div class="table-card-head">
+                <i class="bi bi-mortarboard-fill" style="color:var(--blue)"></i>
+                الطلاب المسجلون لدى الشريك
+                <span style="margin-right:auto">
+                    <input type="text" class="search-input" id="search-students"
+                           placeholder="بحث بالاسم أو الهوية ..." />
+                </span>
+            </div>
+            <div class="table-wrap">
+                <table class="styled" id="tbl-students">
+                    <thead>
+                        <tr>
+                            <th class="col-cb">
+                                <input type="checkbox" class="row-cb select-all-cb" data-table="tbl-students" />
+                            </th>
+                            <th>#</th>
+                            <th>الطالب</th>
+                            <th>رقم الهوية</th>
+                            <th>الجوال</th>
+                            <th>المدرسة</th>
+                            <th>المستوى</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!Model.Students.Any())
+                        {
+                            <tr class="empty-row">
+                                <td colspan="7"><i class="bi bi-inbox" style="font-size:1.4rem;display:block;margin-bottom:6px"></i>لا يوجد طلاب مسجلون لهذا الشريك</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            int i = 1;
+                            foreach (var s in Model.Students)
+                            {
+                                var rowData = System.Text.Json.JsonSerializer.Serialize(new { id = s.UserId, isActive = s.IsActive, fullName = s.FullName });
+                                <tr>
+                                    <td class="col-cb">
+                                        @if (!string.IsNullOrWhiteSpace(s.UserId))
+                                        {
+                                            <input type="checkbox" class="row-cb user-cb"
+                                                   data-id="@s.UserId"
+                                                   data-row="@Uri.EscapeDataString(rowData)"
+                                                   onclick="event.stopPropagation()" />
+                                        }
+                                    </td>
+                                    <td>@(i++)</td>
+                                    <td>
+                                        <div style="display:flex;align-items:center;gap:8px">
+                                            <div class="user-avatar">@(s.FullName.Length > 0 ? s.FullName[0].ToString() : "?")</div>
+                                            <span style="font-weight:600">@s.FullName</span>
+                                        </div>
+                                    </td>
+                                    <td>@(s.NationalID ?? "—")</td>
+                                    <td>@(s.Phone ?? "—")</td>
+                                    <td>@(s.School ?? "—")</td>
+                                    <td>@(s.Level ?? "—")</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════ Tab: Instructors ═══════════ -->
+    <div class="tab-panel" id="tab-instructors">
+        <div class="table-card">
+            <div class="table-card-head">
+                <i class="bi bi-person-video3" style="color:var(--emerald)"></i>
+                المدربون المرتبطون بالشريك
+                <span style="margin-right:auto">
+                    <input type="text" class="search-input" id="search-instructors"
+                           placeholder="بحث بالاسم أو البريد ..." />
+                </span>
+            </div>
+            <div class="table-wrap">
+                <table class="styled" id="tbl-instructors">
+                    <thead>
+                        <tr>
+                            <th class="col-cb">
+                                <input type="checkbox" class="row-cb select-all-cb" data-table="tbl-instructors" />
+                            </th>
+                            <th>#</th>
+                            <th>المدرب</th>
+                            <th>البريد الإلكتروني</th>
+                            <th>رقم الهوية</th>
+                            <th>الجوال</th>
+                            <th>الحالة</th>
+                            <th>الأدوار</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!Model.Instructors.Any())
+                        {
+                            <tr class="empty-row">
+                                <td colspan="8"><i class="bi bi-inbox" style="font-size:1.4rem;display:block;margin-bottom:6px"></i>لا يوجد مدربون مرتبطون بهذا الشريك</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            int i = 1;
+                            foreach (var u in Model.Instructors)
+                            {
+                                var rowData = System.Text.Json.JsonSerializer.Serialize(new { id = u.UserId, isActive = u.IsActive, fullName = u.FullName });
+                                <tr>
+                                    <td class="col-cb">
+                                        <input type="checkbox" class="row-cb user-cb"
+                                               data-id="@u.UserId"
+                                               data-row="@Uri.EscapeDataString(rowData)"
+                                               onclick="event.stopPropagation()" />
+                                    </td>
+                                    <td>@(i++)</td>
+                                    <td>
+                                        <div style="display:flex;align-items:center;gap:8px">
+                                            <div class="user-avatar" style="background:var(--emerald-bg);color:var(--emerald)">
+                                                @(u.FullName.Length > 0 ? u.FullName[0].ToString() : "?")
+                                            </div>
+                                            <span style="font-weight:600">@u.FullName</span>
+                                        </div>
+                                    </td>
+                                    <td>@(u.Email ?? "—")</td>
+                                    <td>@(u.NationalID ?? "—")</td>
+                                    <td>@(u.Phone ?? "—")</td>
+                                    <td>
+                                        @if (u.IsActive)
+                                        {
+                                            <span class="status-badge s-active"><i class="bi bi-circle-fill" style="font-size:.45rem"></i> مفعّل</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="status-badge s-inactive"><i class="bi bi-circle-fill" style="font-size:.45rem"></i> موقوف</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @foreach (var r in u.Roles)
+                                        {
+                                            <span class="role-tag r-instructor">@r</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════ Tab: Admins ═══════════ -->
+    <div class="tab-panel" id="tab-admins"
+        <div class="table-card">
+            <div class="table-card-head">
+                <i class="bi bi-person-badge-fill" style="color:var(--amber)"></i>
+                الإداريون المرتبطون بالشريك
+                <span style="margin-right:auto">
+                    <input type="text" class="search-input" id="search-admins"
+                           placeholder="بحث بالاسم أو البريد ..." />
+                </span>
+            </div>
+            <div class="table-wrap">
+                <table class="styled" id="tbl-admins">
+                    <thead>
+                        <tr>
+                            <th class="col-cb">
+                                <input type="checkbox" class="row-cb select-all-cb" data-table="tbl-admins" />
+                            </th>
+                            <th>#</th>
+                            <th>الإداري</th>
+                            <th>البريد الإلكتروني</th>
+                            <th>رقم الهوية</th>
+                            <th>الجوال</th>
+                            <th>الحالة</th>
+                            <th>الأدوار</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!Model.Admins.Any())
+                        {
+                            <tr class="empty-row">
+                                <td colspan="8"><i class="bi bi-inbox" style="font-size:1.4rem;display:block;margin-bottom:6px"></i>لا يوجد إداريون مرتبطون بهذا الشريك</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            int i = 1;
+                            foreach (var u in Model.Admins)
+                            {
+                                var rowData = System.Text.Json.JsonSerializer.Serialize(new { id = u.UserId, isActive = u.IsActive, fullName = u.FullName });
+                                <tr>
+                                    <td class="col-cb">
+                                        <input type="checkbox" class="row-cb user-cb"
+                                               data-id="@u.UserId"
+                                               data-row="@Uri.EscapeDataString(rowData)"
+                                               onclick="event.stopPropagation()" />
+                                    </td>
+                                    <td>@(i++)</td>
+                                    <td>
+                                        <div style="display:flex;align-items:center;gap:8px">
+                                            <div class="user-avatar" style="background:var(--amber-bg);color:var(--amber)">
+                                                @(u.FullName.Length > 0 ? u.FullName[0].ToString() : "?")
+                                            </div>
+                                            <span style="font-weight:600">@u.FullName</span>
+                                        </div>
+                                    </td>
+                                    <td>@(u.Email ?? "—")</td>
+                                    <td>@(u.NationalID ?? "—")</td>
+                                    <td>@(u.Phone ?? "—")</td>
+                                    <td>
+                                        @if (u.IsActive)
+                                        {
+                                            <span class="status-badge s-active"><i class="bi bi-circle-fill" style="font-size:.45rem"></i> مفعّل</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="status-badge s-inactive"><i class="bi bi-circle-fill" style="font-size:.45rem"></i> موقوف</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @foreach (var r in u.Roles)
+                                        {
+                                            <span class="role-tag r-admin">@r</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════ Tab: Homework ═══════════ -->
+    <div class="tab-panel" id="tab-homework">
+        <div class="table-card" style="margin-bottom:1rem">
+            <div class="table-card-head" style="justify-content:space-between">
+                <span style="display:flex;align-items:center;gap:8px">
+                    <i class="bi bi-journal-check" style="color:var(--violet)"></i>
+                    الواجبات المُرسلة للشريك
+                </span>
+                @if (Model.HomeworkDrafts.Any())
+                {
+                    <button class="btn btn-sm" onclick="document.getElementById('modal-send-hw').classList.add('show-modal')"
+                            style="background:var(--violet);color:#fff;border:none;border-radius:8px;padding:.35rem .9rem;font-family:'Cairo',sans-serif;font-size:.82rem;font-weight:600;cursor:pointer">
+                        <i class="bi bi-send-plus"></i> إرسال واجب جديد
+                    </button>
+                }
+            </div>
+            <div class="table-wrap">
+                <table class="styled" id="tbl-homework">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>عنوان الواجب</th>
+                            <th>الدفعة</th>
+                            <th>تاريخ الإرسال</th>
+                            <th>الطلاب</th>
+                            <th>المسلّمون</th>
+                            <th>نسبة التسليم</th>
+                            <th>التقرير</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!Model.HomeworkSets.Any())
+                        {
+                            <tr class="empty-row">
+                                <td colspan="8"><i class="bi bi-inbox" style="font-size:1.4rem;display:block;margin-bottom:6px"></i>لا توجد واجبات مُرسلة لهذا الشريك</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            int i = 1;
+                            foreach (var hw in Model.HomeworkSets)
+                            {
+                                var pct = hw.TotalStudents > 0
+                                    ? (int)Math.Round(hw.SubmittedCount * 100.0 / hw.TotalStudents)
+                                    : 0;
+                                <tr>
+                                    <td>@(i++)</td>
+                                    <td style="font-weight:600">@hw.Title</td>
+                                    <td><span class="role-tag" style="background:var(--violet-bg);color:var(--violet)">@hw.BatchName</span></td>
+                                    <td style="color:var(--ink-3);font-size:.8rem">@hw.SentAt.ToString("yyyy/MM/dd HH:mm")</td>
+                                    <td>@hw.TotalStudents</td>
+                                    <td>
+                                        <span class="role-tag" style="background:var(--emerald-bg);color:var(--emerald)">
+                                            @hw.SubmittedCount
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div style="display:flex;align-items:center;gap:6px">
+                                            <div style="flex:1;height:6px;background:var(--border);border-radius:10px;overflow:hidden">
+                                                <div style="width:@pct%;height:100%;background:var(--emerald);border-radius:10px"></div>
+                                            </div>
+                                            <span style="font-size:.78rem;color:var(--ink-3)">@pct%</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <a asp-area="Admin" asp-controller="PartnerAdmin" asp-action="HomeworkReport"
+                                           asp-route-homeworkSetId="@hw.Id" asp-route-partnerId="@Model.PartnerId"
+                                           class="btn btn-sm" style="background:var(--blue-bg);color:var(--blue);border:none;border-radius:8px;font-size:.78rem;font-weight:600;padding:.3rem .8rem">
+                                            <i class="bi bi-bar-chart-line"></i> تقرير
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        @if (!Model.HomeworkDrafts.Any())
+        {
+            <div style="background:var(--amber-bg);border:1px solid #F0C674;border-radius:10px;padding:.85rem 1.1rem;color:var(--amber);font-size:.85rem">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                لا توجد مسودات واجبات لهذا الشريك. يجب على الشريك إنشاء مسودة واجب أولاً من منطقته.
+            </div>
+        }
+    </div>
+
+    <!-- ═══════════ Tab: Exams ═══════════ -->
+    <div class="tab-panel" id="tab-exams">
+        <div class="table-card" style="margin-bottom:1rem">
+            <div class="table-card-head" style="justify-content:space-between">
+                <span style="display:flex;align-items:center;gap:8px">
+                    <i class="bi bi-clipboard2-check" style="color:#2E7D32"></i>
+                    الاختبارات المُرسلة للشريك
+                </span>
+                @if (Model.ExamDrafts.Any())
+                {
+                    <button class="btn btn-sm" onclick="document.getElementById('modal-send-exam').classList.add('show-modal')"
+                            style="background:#2E7D32;color:#fff;border:none;border-radius:8px;padding:.35rem .9rem;font-family:'Cairo',sans-serif;font-size:.82rem;font-weight:600;cursor:pointer">
+                        <i class="bi bi-send-plus"></i> إرسال اختبار جديد
+                    </button>
+                }
+            </div>
+            <div class="table-wrap">
+                <table class="styled" id="tbl-exams">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>عنوان الاختبار</th>
+                            <th>الدفعة</th>
+                            <th>تاريخ الإرسال</th>
+                            <th>الطلاب</th>
+                            <th>أدّوا الاختبار</th>
+                            <th>نسبة المشاركة</th>
+                            <th>التقرير</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!Model.ExamAssignments.Any())
+                        {
+                            <tr class="empty-row">
+                                <td colspan="8"><i class="bi bi-inbox" style="font-size:1.4rem;display:block;margin-bottom:6px"></i>لا توجد اختبارات مُرسلة لهذا الشريك</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            int i = 1;
+                            foreach (var ex in Model.ExamAssignments)
+                            {
+                                var pct = ex.TotalStudents > 0
+                                    ? (int)Math.Round(ex.AttemptedCount * 100.0 / ex.TotalStudents)
+                                    : 0;
+                                <tr>
+                                    <td>@(i++)</td>
+                                    <td style="font-weight:600">@ex.Title</td>
+                                    <td><span class="role-tag" style="background:#E8F5E9;color:#2E7D32">@ex.BatchName</span></td>
+                                    <td style="color:var(--ink-3);font-size:.8rem">@ex.AssignedAt.ToString("yyyy/MM/dd HH:mm")</td>
+                                    <td>@ex.TotalStudents</td>
+                                    <td>
+                                        <span class="role-tag" style="background:var(--emerald-bg);color:var(--emerald)">
+                                            @ex.AttemptedCount
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div style="display:flex;align-items:center;gap:6px">
+                                            <div style="flex:1;height:6px;background:var(--border);border-radius:10px;overflow:hidden">
+                                                <div style="width:@pct%;height:100%;background:#2E7D32;border-radius:10px"></div>
+                                            </div>
+                                            <span style="font-size:.78rem;color:var(--ink-3)">@pct%</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <a asp-area="Admin" asp-controller="PartnerAdmin" asp-action="ExamReport"
+                                           asp-route-assignmentId="@ex.Id" asp-route-partnerId="@Model.PartnerId"
+                                           class="btn btn-sm" style="background:#E8F5E9;color:#2E7D32;border:none;border-radius:8px;font-size:.78rem;font-weight:600;padding:.3rem .8rem">
+                                            <i class="bi bi-bar-chart-line"></i> تقرير
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        @if (!Model.ExamDrafts.Any())
+        {
+            <div style="background:var(--amber-bg);border:1px solid #F0C674;border-radius:10px;padding:.85rem 1.1rem;color:var(--amber);font-size:.85rem">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                لا توجد مسودات اختبارات لهذا الشريك. يجب على الشريك إنشاء مسودة اختبار أولاً من منطقته.
+            </div>
+        }
+    </div>
+
+    <!-- ═══════════ Tab: Excel Import ═══════════ -->
+    <div class="tab-panel" id="tab-import">
+        <div class="table-card">
+            <div class="table-card-head">
+                <i class="bi bi-file-earmark-spreadsheet-fill" style="color:var(--blue)"></i>
+                رفع طلاب من Excel للشريك
+            </div>
+            <div style="padding:1.5rem">
+                @if (!Model.Branches.Any())
+                {
+                    <div style="background:var(--rose-bg);border:1px solid #F0A4B0;border-radius:10px;padding:.85rem 1.1rem;color:var(--rose);font-size:.85rem">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        لا يوجد فروع مرتبطة بهذا الشريك. أضف فرعاً أولاً.
+                    </div>
+                }
+                else
+                {
+                    <form method="post" enctype="multipart/form-data"
+                          asp-area="Admin" asp-controller="PartnerAdmin" asp-action="PartnerBulkImport">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="partnerId" value="@Model.PartnerId" />
+
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.25rem">
+                            <div>
+                                <label style="font-size:.85rem;font-weight:600;color:var(--ink-2);display:block;margin-bottom:.4rem">
+                                    الفرع <span style="color:var(--rose)">*</span>
+                                </label>
+                                <select name="branchId" id="import-branch" class="search-input" style="width:100%" onchange="loadBatchesForBranch(this.value)">
+                                    <option value="">— اختر فرع —</option>
+                                    @foreach (var br in Model.Branches)
+                                    {
+                                        <option value="@br.Id">@br.Name</option>
+                                    }
+                                </select>
+                            </div>
+                            <div>
+                                <label style="font-size:.85rem;font-weight:600;color:var(--ink-2);display:block;margin-bottom:.4rem">
+                                    الدفعة <span style="color:var(--rose)">*</span>
+                                </label>
+                                <select name="batchId" id="import-batch" class="search-input" style="width:100%">
+                                    <option value="">— اختر دفعة —</option>
+                                    @foreach (var bt in Model.Batches)
+                                    {
+                                        <option value="@bt.Id" data-branch="@bt.BranchId">
+                                            @bt.Name @(bt.IsActive ? "" : "(غير نشطة)")
+                                        </option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom:1.25rem">
+                            <label style="font-size:.85rem;font-weight:600;color:var(--ink-2);display:block;margin-bottom:.4rem">
+                                ملف Excel <span style="color:var(--rose)">*</span>
+                            </label>
+                            <input type="file" name="excelFile" accept=".xlsx,.xls"
+                                   style="border:1px solid var(--border);border-radius:8px;padding:.4rem .85rem;font-size:.84rem;width:100%;font-family:'Cairo',sans-serif;background:#fff" />
+                            <div style="font-size:.75rem;color:var(--ink-4);margin-top:.3rem">
+                                الأعمدة المطلوبة بالترتيب: الاسم الكامل، رقم الهوية، الجوال، الجنس، المدرسة (اختياري)، المستوى (اختياري)
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-sm"
+                                style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:.45rem 1.2rem;font-family:'Cairo',sans-serif;font-size:.88rem;font-weight:700;cursor:pointer">
+                            <i class="bi bi-upload"></i> رفع وإضافة الطلاب
+                        </button>
+                    </form>
+                }
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ════════════════════════════════════════════════
+     MODAL: إرسال واجب
+     ════════════════════════════════════════════════ -->
+<div id="modal-send-hw" class="adm-modal" onclick="if(event.target===this)this.classList.remove('show-modal')">
+    <div class="adm-modal__box">
+        <div class="adm-modal__head">
+            <span><i class="bi bi-journal-plus" style="color:var(--violet)"></i> إرسال واجب للشريك</span>
+            <button onclick="document.getElementById('modal-send-hw').classList.remove('show-modal')" class="adm-modal__close">&times;</button>
+        </div>
+        <form method="post" asp-area="Admin" asp-controller="PartnerAdmin" asp-action="AssignHomework">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="partnerId" value="@Model.PartnerId" />
+            <input type="hidden" name="subscriptionPeriodId" value="@(Model.ActiveSubscriptionPeriodId ?? 0)" />
+
+            <div class="adm-modal__body">
+                <div class="form-g">
+                    <label>المسودة <span style="color:var(--rose)">*</span></label>
+                    <select name="draftId" class="form-ctrl">
+                        <option value="">— اختر مسودة واجب —</option>
+                        @foreach (var d in Model.HomeworkDrafts)
+                        {
+                            <option value="@d.Id">@d.Title (@d.QuestionsCount سؤال)</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="form-g" style="margin-top:.9rem">
+                    <label>الدفعات <span style="color:var(--rose)">*</span></label>
+                    <div style="display:flex;flex-direction:column;gap:.4rem;max-height:160px;overflow-y:auto;padding:.4rem;border:1px solid var(--border);border-radius:8px">
+                        @foreach (var bt in Model.Batches)
+                        {
+                            <label style="display:flex;align-items:center;gap:8px;font-size:.85rem;font-weight:500;cursor:pointer">
+                                <input type="checkbox" name="batchIds" value="@bt.Id" style="accent-color:var(--violet)" />
+                                @bt.Name
+                                @if (!bt.IsActive)
+                                {
+                                    <span style="font-size:.7rem;color:var(--ink-4)">(غير نشطة)</span>
+                                }
+                            </label>
+                        }
+                    </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:.9rem">
+                    <div class="form-g">
+                        <label>تاريخ البدء</label>
+                        <input type="datetime-local" name="startAt" class="form-ctrl"
+                               value="@DateTime.Now.ToString("yyyy-MM-ddTHH:mm")" />
+                    </div>
+                    <div class="form-g">
+                        <label>تاريخ الانتهاء <span style="color:var(--rose)">*</span></label>
+                        <input type="datetime-local" name="endAt" class="form-ctrl"
+                               value="@DateTime.Now.AddDays(1).ToString("yyyy-MM-ddTHH:mm")" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="adm-modal__foot">
+                <button type="button" onclick="document.getElementById('modal-send-hw').classList.remove('show-modal')"
+                        class="btn btn-sm btn-outline-secondary">إلغاء</button>
+                <button type="submit"
+                        style="background:var(--violet);color:#fff;border:none;border-radius:8px;padding:.45rem 1.2rem;font-family:'Cairo',sans-serif;font-size:.88rem;font-weight:700;cursor:pointer">
+                    <i class="bi bi-send-fill"></i> إرسال الواجب
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     MODAL: إرسال اختبار
+     ════════════════════════════════════════════════ -->
+<div id="modal-send-exam" class="adm-modal" onclick="if(event.target===this)this.classList.remove('show-modal')">
+    <div class="adm-modal__box">
+        <div class="adm-modal__head">
+            <span><i class="bi bi-clipboard2-plus" style="color:#2E7D32"></i> إرسال اختبار للشريك</span>
+            <button onclick="document.getElementById('modal-send-exam').classList.remove('show-modal')" class="adm-modal__close">&times;</button>
+        </div>
+        <form method="post" asp-area="Admin" asp-controller="PartnerAdmin" asp-action="AssignExam">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="partnerId" value="@Model.PartnerId" />
+
+            <div class="adm-modal__body">
+                <div class="form-g">
+                    <label>مسودة الاختبار <span style="color:var(--rose)">*</span></label>
+                    <select name="draftId" class="form-ctrl">
+                        <option value="">— اختر مسودة اختبار —</option>
+                        @foreach (var d in Model.ExamDrafts)
+                        {
+                            <option value="@d.Id">@d.Title (@d.QuestionsCount سؤال)</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="form-g" style="margin-top:.9rem">
+                    <label>الدفعات <span style="color:var(--rose)">*</span></label>
+                    <div style="display:flex;flex-direction:column;gap:.4rem;max-height:160px;overflow-y:auto;padding:.4rem;border:1px solid var(--border);border-radius:8px">
+                        @foreach (var bt in Model.Batches)
+                        {
+                            <label style="display:flex;align-items:center;gap:8px;font-size:.85rem;font-weight:500;cursor:pointer">
+                                <input type="checkbox" name="batchIds" value="@bt.Id" style="accent-color:#2E7D32" />
+                                @bt.Name
+                                @if (!bt.IsActive)
+                                {
+                                    <span style="font-size:.7rem;color:var(--ink-4)">(غير نشطة)</span>
+                                }
+                            </label>
+                        }
+                    </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-top:.9rem">
+                    <div class="form-g">
+                        <label>تاريخ البدء</label>
+                        <input type="datetime-local" name="startAt" class="form-ctrl"
+                               value="@DateTime.Now.ToString("yyyy-MM-ddTHH:mm")" />
+                    </div>
+                    <div class="form-g">
+                        <label>تاريخ الانتهاء <span style="color:var(--rose)">*</span></label>
+                        <input type="datetime-local" name="endAt" class="form-ctrl"
+                               value="@DateTime.Now.AddDays(1).ToString("yyyy-MM-ddTHH:mm")" />
+                    </div>
+                    <div class="form-g">
+                        <label>المدة (دقيقة)</label>
+                        <input type="number" name="durationMinutes" class="form-ctrl" value="30" min="5" max="240" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="adm-modal__foot">
+                <button type="button" onclick="document.getElementById('modal-send-exam').classList.remove('show-modal')"
+                        class="btn btn-sm btn-outline-secondary">إلغاء</button>
+                <button type="submit"
+                        style="background:#2E7D32;color:#fff;border:none;border-radius:8px;padding:.45rem 1.2rem;font-family:'Cairo',sans-serif;font-size:.88rem;font-weight:700;cursor:pointer">
+                    <i class="bi bi-send-fill"></i> إرسال الاختبار
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     FLOATING ACTION BAR
+     ════════════════════════════════════════════════ -->
+<div class="action-bar" id="actionBar" role="toolbar" aria-label="إجراءات المستخدمين المحددين">
+    <div class="action-bar__inner">
+
+        <!-- Selection info -->
+        <div class="ab-sel">
+            <span class="ab-sel__count" id="abCount">0</span>
+            <span class="ab-sel__text" id="abText">محدد</span>
+        </div>
+
+        <div class="ab-sep"></div>
+
+        <!-- Single-user actions -->
+        <div class="ab-tip">
+            <button class="ab-action" id="abDetails" onclick="abGoDetails()" style="background:rgba(85,53,181,.18);color:#C4B5FD;border-color:rgba(85,53,181,.28)">
+                <i class="bi bi-person-lines-fill"></i> تفاصيل
+            </button>
+            <span class="ab-tip__text">يتطلب تحديد مستخدم واحد</span>
+        </div>
+
+        <div class="ab-tip">
+            <button class="ab-action" id="abEdit" onclick="abGoEdit()">
+                <i class="bi bi-pencil-square"></i> تعديل
+            </button>
+            <span class="ab-tip__text">يتطلب تحديد مستخدم واحد</span>
+        </div>
+
+        <div class="ab-tip">
+            <button class="ab-action" id="abRoles" onclick="abGoRoles()">
+                <i class="bi bi-person-gear"></i> الأدوار
+            </button>
+            <span class="ab-tip__text">يتطلب تحديد مستخدم واحد</span>
+        </div>
+
+        <div class="ab-tip">
+            <button class="ab-action" id="abPerms" onclick="abGoPerms()">
+                <i class="bi bi-shield-lock"></i> الصلاحيات
+            </button>
+            <span class="ab-tip__text">يتطلب تحديد مستخدم واحد</span>
+        </div>
+
+        <div class="ab-tip">
+            <button class="ab-action" id="abReset" onclick="abGoReset()">
+                <i class="bi bi-key"></i> كلمة المرور
+            </button>
+            <span class="ab-tip__text">يتطلب تحديد مستخدم واحد</span>
+        </div>
+
+        <div class="ab-sep"></div>
+
+        <!-- Bulk actions -->
+        <button class="ab-action ab-action--warn" id="abToggle" onclick="abToggle()">
+            <i class="bi bi-toggle-on" id="abToggleIco"></i>
+            <span id="abToggleTxt">تفعيل / إيقاف</span>
+        </button>
+
+        <button class="ab-action ab-action--danger" id="abDelete" onclick="abDelete()">
+            <i class="bi bi-trash3"></i>
+            <span id="abDeleteTxt">حذف</span>
+        </button>
+
+        <!-- Clear -->
+        <button class="ab-action ab-action--clear" onclick="clearAll()">
+            <i class="bi bi-x-circle"></i> إلغاء
+        </button>
+
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+    /* ════════════════════════════════════
+       URL constants
+       ════════════════════════════════════ */
+    const U_DETAILS = '@Url.Action("Details",           "Users", new { area="Admin" })';
+    const U_EDIT    = '@Url.Action("Edit",              "Users", new { area="Admin" })';
+    const U_ROLES   = '@Url.Action("AssignRoles",       "Users", new { area="Admin" })';
+    const U_PERMS   = '@Url.Action("ManagePermissions", "Users", new { area="Admin" })';
+    const U_RESET   = '@Url.Action("ResetPassword",     "Users", new { area="Admin" })';
+    const U_TOGGLE  = '@Url.Action("ToggleActive",      "Users", new { area="Admin" })';
+    const U_DELETE  = '@Url.Action("DeleteUser",        "Users", new { area="Admin" })';
+
+    /* ════════════════════════════════════
+       SELECTION ENGINE
+       ════════════════════════════════════ */
+    const selected = new Map(); // Map<userId, rowData>
+
+    function getToken() {
+        return document.querySelector('[name="__RequestVerificationToken"]')?.value || '';
+    }
+
+    async function postFetch(url, data) {
+        const fd = new FormData();
+        fd.append('__RequestVerificationToken', getToken());
+        for (const [k, v] of Object.entries(data)) fd.append(k, v);
+        return fetch(url, { method: 'POST', body: fd });
+    }
+
+    function selectRow(cb) {
+        const tr  = cb.closest('tr');
+        const id  = cb.dataset.id;
+        let   row = {};
+        try { row = JSON.parse(decodeURIComponent(cb.dataset.row)); } catch {}
+
+        if (cb.checked) {
+            selected.set(id, row);
+            tr?.classList.add('is-selected');
+        } else {
+            selected.delete(id);
+            tr?.classList.remove('is-selected');
+        }
+        syncBar();
+        syncSelectAll(cb.closest('table'));
+    }
+
+    function syncSelectAll(table) {
+        if (!table) return;
+        const cbs     = [...table.querySelectorAll('tbody .user-cb')];
+        const checked = cbs.filter(c => c.checked).length;
+        const allCb   = table.querySelector('thead .select-all-cb');
+        if (!allCb) return;
+        allCb.checked       = cbs.length > 0 && checked === cbs.length;
+        allCb.indeterminate = checked > 0 && checked < cbs.length;
+    }
+
+    function clearAll() {
+        selected.clear();
+        document.querySelectorAll('.user-cb').forEach(cb => {
+            cb.checked = false;
+            cb.closest('tr')?.classList.remove('is-selected');
+        });
+        document.querySelectorAll('.select-all-cb').forEach(cb => {
+            cb.checked = cb.indeterminate = false;
+        });
+        syncBar();
+    }
+
+    function syncBar() {
+        const cnt    = selected.size;
+        const bar    = document.getElementById('actionBar');
+        const cntEl  = document.getElementById('abCount');
+        const txtEl  = document.getElementById('abText');
+        const single = cnt === 1;
+
+        cntEl.textContent = cnt;
+        cntEl.classList.add('bump');
+        setTimeout(() => cntEl.classList.remove('bump'), 300);
+        txtEl.textContent = cnt === 1 ? 'مستخدم محدد' : 'مستخدمون محددون';
+        bar.classList.toggle('is-visible', cnt > 0);
+
+        ['abDetails', 'abEdit', 'abRoles', 'abPerms', 'abReset'].forEach(id => {
+            document.getElementById(id).disabled = !single;
+        });
+
+        const row = single ? [...selected.values()][0] : null;
+        document.getElementById('abToggleIco').className =
+            row ? (row.isActive ? 'bi bi-toggle-off' : 'bi bi-toggle-on') : 'bi bi-toggle-on';
+        document.getElementById('abToggleTxt').textContent =
+            row ? (row.isActive ? 'إيقاف' : 'تفعيل') : 'تفعيل / إيقاف';
+
+        document.getElementById('abDeleteTxt').textContent =
+            cnt > 1 ? `حذف (${cnt})` : 'حذف';
+    }
+
+    /* ════════════════════════════════════
+       ACTION HANDLERS
+       ════════════════════════════════════ */
+    function abGoDetails() { if (selected.size !== 1) return; location.href = U_DETAILS + '?id='    + encodeURIComponent([...selected.keys()][0]); }
+    function abGoEdit()    { if (selected.size !== 1) return; location.href = U_EDIT    + '?id='    + encodeURIComponent([...selected.keys()][0]); }
+    function abGoRoles()   { if (selected.size !== 1) return; location.href = U_ROLES   + '?userId=' + encodeURIComponent([...selected.keys()][0]); }
+    function abGoPerms()   { if (selected.size !== 1) return; location.href = U_PERMS   + '?userId=' + encodeURIComponent([...selected.keys()][0]); }
+    function abGoReset()   { if (selected.size !== 1) return; location.href = U_RESET   + '?userId=' + encodeURIComponent([...selected.keys()][0]); }
+
+    async function abToggle() {
+        const ids = [...selected.keys()];
+        if (!ids.length) return;
+        const msg = ids.length === 1 ? 'تغيير حالة هذا المستخدم؟' : `تغيير حالة ${ids.length} مستخدمين؟`;
+        if (!confirm(msg)) return;
+        document.getElementById('abToggle').disabled = true;
+        for (const id of ids) await postFetch(U_TOGGLE, { userId: id });
+        location.reload();
+    }
+
+    async function abDelete() {
+        const ids = [...selected.keys()];
+        if (!ids.length) return;
+        const msg = ids.length === 1
+            ? 'حذف هذا المستخدم؟ لا يمكن التراجع.'
+            : `حذف ${ids.length} مستخدمين؟ لا يمكن التراجع.`;
+        if (!confirm(msg)) return;
+        document.getElementById('abDelete').disabled = true;
+        for (const id of ids) await postFetch(U_DELETE, { id });
+        location.reload();
+    }
+
+    /* ════════════════════════════════════
+       EVENT WIRING
+       ════════════════════════════════════ */
+    document.addEventListener('change', e => {
+        if (e.target.classList.contains('select-all-cb')) {
+            const tableId = e.target.dataset.table;
+            const table   = document.getElementById(tableId);
+            table?.querySelectorAll('tbody .user-cb').forEach(cb => {
+                cb.checked = e.target.checked;
+                selectRow(cb);
+            });
+            syncSelectAll(table);
+        } else if (e.target.classList.contains('user-cb')) {
+            selectRow(e.target);
+        }
+    });
+
+    // Row click toggles checkbox
+    document.querySelectorAll('table.styled tbody').forEach(tbody => {
+        tbody.addEventListener('click', e => {
+            const tr = e.target.closest('tr');
+            if (!tr || tr.classList.contains('empty-row')) return;
+            if (e.target.closest('.user-cb')) return;
+            const cb = tr.querySelector('.user-cb');
+            if (cb) { cb.checked = !cb.checked; selectRow(cb); }
+        });
+    });
+
+    /* ════════════════════════════════════
+       TABS
+       ════════════════════════════════════ */
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById(btn.dataset.tab).classList.add('active');
+        });
+    });
+
+    /* ════════════════════════════════════
+       LIVE SEARCH
+       ════════════════════════════════════ */
+    function wireSearch(inputId, tableId) {
+        const input = document.getElementById(inputId);
+        const tbody = document.querySelector('#' + tableId + ' tbody');
+        if (!input || !tbody) return;
+        input.addEventListener('input', () => {
+            const q = input.value.trim().toLowerCase();
+            tbody.querySelectorAll('tr:not(.empty-row)').forEach(row => {
+                row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+            });
+        });
+    }
+
+    wireSearch('search-students',    'tbl-students');
+    wireSearch('search-instructors', 'tbl-instructors');
+    wireSearch('search-admins',      'tbl-admins');
+
+    /* ════════════════════════════════════
+       IMPORT: فلترة الدفعات حسب الفرع
+       ════════════════════════════════════ */
+    const U_BATCHES_BY_BRANCH = '@Url.Action("GetBatchesByBranch", "PartnerAdmin", new { area="Admin" })';
+    const PARTNER_ID = @Model.PartnerId;
+
+    function loadBatchesForBranch(branchId) {
+        const sel = document.getElementById('import-batch');
+        sel.innerHTML = '<option value="">— تحميل ... —</option>';
+
+        if (!branchId) {
+            sel.innerHTML = '<option value="">— اختر دفعة —</option>';
+            return;
+        }
+
+        fetch(`${U_BATCHES_BY_BRANCH}?branchId=${branchId}&partnerId=${PARTNER_ID}`)
+            .then(r => r.json())
+            .then(items => {
+                sel.innerHTML = '<option value="">— اختر دفعة —</option>';
+                items.forEach(b => {
+                    const opt = document.createElement('option');
+                    opt.value = b.value;
+                    opt.textContent = b.text + (b.isActive ? '' : ' (غير نشطة)');
+                    sel.appendChild(opt);
+                });
+            })
+            .catch(() => {
+                sel.innerHTML = '<option value="">— تعذّر التحميل —</option>';
+            });
+    }
+
+    /* ════════════════════════════════════
+       TempData alerts
+       ════════════════════════════════════ */
+    @if (TempData["Success"] != null)
+    {
+        <text>
+        (function() {
+            const msg = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(TempData["Success"]?.ToString() ?? ""));
+            const el = document.createElement('div');
+            el.style.cssText = 'position:fixed;top:1rem;left:50%;transform:translateX(-50%);background:#0D7A5B;color:#fff;padding:.65rem 1.4rem;border-radius:10px;z-index:99999;font-family:Cairo,sans-serif;font-size:.88rem;font-weight:600;box-shadow:0 4px 20px rgba(0,0,0,.18)';
+            el.textContent = msg;
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 4000);
+        })();
+        </text>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <text>
+        (function() {
+            const msg = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(TempData["Error"]?.ToString() ?? ""));
+            const el = document.createElement('div');
+            el.style.cssText = 'position:fixed;top:1rem;left:50%;transform:translateX(-50%);background:#BF1030;color:#fff;padding:.65rem 1.4rem;border-radius:10px;z-index:99999;font-family:Cairo,sans-serif;font-size:.88rem;font-weight:600;box-shadow:0 4px 20px rgba(0,0,0,.18);max-width:80vw;text-align:center';
+            el.innerHTML = msg;
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 6000);
+        })();
+        </text>
+    }
+
+    /* ════════════════════════════════════
+       Tab persistence via hash
+       ════════════════════════════════════ */
+    (function() {
+        const hash = location.hash.replace('#', '');
+        if (hash) {
+            const btn = document.querySelector(`.tab-btn[data-tab="${hash}"]`);
+            if (btn) btn.click();
+        }
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                history.replaceState(null, '', '#' + btn.dataset.tab);
+            });
+        });
+    })();
+    </script>
+}

@@ -1,0 +1,182 @@
+﻿@model QdratNew.ViewModels.Students.PracticeQuestionVm
+@using QdratNew.Helpers
+@using QdratNew.Enums
+
+@{
+    var q = Model.Question;
+
+    // 🔹 دالة التحويل إلى أرقام هندية
+    Func<string, string> convert = s =>
+        q?.IsQuantitative == true ? NumberHelper.ToIndicNumbersSafe(s ?? "") : (s ?? "");
+}
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+
+        <!-- 🔹 عنوان السؤال -->
+        <h5 class="fw-bold mb-3">
+            <i class="fa-solid fa-rotate-left text-danger me-2"></i>
+            @Html.Raw(convert(q.Title ?? ""))
+        </h5>
+
+        <!-- 🔹 القطعة النصية -->
+        @if (!string.IsNullOrWhiteSpace(q.VerbalPassage?.Content))
+        {
+            <div class="alert alert-light border mb-3">
+                <strong>📘 القطعة المرتبطة:</strong><br />
+                <div class="mt-2">@Html.Raw(q.VerbalPassage.Content)</div>
+            </div>
+        }
+
+        <!-- 🔹 حسب الـ Template -->
+        @switch (q.Template)
+        {
+            case QuestionTemplate.CompareValues:
+                <div class="row bg-light mb-3 text-center">
+                    <div class="col-md-6 border-end">
+                        <strong>القيمة الأولى:</strong>
+                        <div>@Html.Raw(convert(q.ValueA ?? ""))</div>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>القيمة الثانية:</strong>
+                        <div>@Html.Raw(convert(q.ValueB ?? ""))</div>
+                    </div>
+                </div>
+                break;
+
+            case QuestionTemplate.CompareWithImage:
+                <div class="row mb-3 text-center align-items-center">
+                    <div class="col-md-4">
+                        <img src="@Url.Content(q.ImageUrl)" class="img-fluid" style="max-height:150px;" />
+                    </div>
+                    <div class="col-md-4 border-end">
+                        <strong>القيمة الأولى:</strong>
+                        <div>@Html.Raw(convert(q.ValueA ?? ""))</div>
+                    </div>
+                    <div class="col-md-4">
+                        <strong>القيمة الثانية:</strong>
+                        <div>@Html.Raw(convert(q.ValueB ?? ""))</div>
+                    </div>
+                </div>
+                break;
+
+            default:
+                if (!string.IsNullOrWhiteSpace(q.ImageUrl))
+                {
+                    <div class="text-center mb-3">
+                        <img src="@Url.Content(q.ImageUrl)" class="img-fluid" style="max-height:200px;" />
+                    </div>
+                }
+                break;
+        }
+
+        <!-- 🔹 خيارات السؤال -->
+        @if (q.Options != null && q.Options.Count > 0)
+        {
+            <form class="mistake-form" data-question-id="@q.Id" method="post">
+                <div class="list-group">
+                    @foreach (var option in q.Options)
+                    {
+                        <label class="list-group-item d-flex align-items-center gap-3">
+                            <input type="radio"
+                                   name="SelectedAnswer"
+                                   value="@option.Text"
+                                   class="form-check-input me-2" />
+
+                            @if (!string.IsNullOrWhiteSpace(option.ImageUrl))
+                            {
+                                <div class="border rounded p-2 bg-white" style="max-width: 100%;">
+                                    <img src="@Url.Content(option.ImageUrl)" alt="صورة الاختيار"
+                                         class="img-fluid" style="max-height: 80px;" />
+                                </div>
+                            }
+                            else
+                            {
+                                <span class="fw-bold">@Html.Raw(convert(option.Text ?? ""))</span>
+                            }
+                        </label>
+                    }
+                </div>
+
+                <button type="submit" class="btn btn-primary mt-3">تأكيد الإجابة</button>
+            </form>
+        }
+        else
+        {
+            <div class="alert alert-danger text-center mt-3">
+                ⚠️ لا توجد اختيارات متاحة لهذا السؤال.
+            </div>
+        }
+
+        <!-- 🔹 مكان ظهور النتيجة -->
+        <div class="result mt-3 text-center"></div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+
+        // 🔹 تحويل أرقام إلى هندية — نسخة JavaScript
+        function toIndic(text) {
+            if (!text) return text;
+
+            return text
+                .replace(/0/g, '٠')
+                .replace(/1/g, '١')
+                .replace(/2/g, '٢')
+                .replace(/3/g, '٣')
+                .replace(/4/g, '٤')
+                .replace(/5/g, '٥')
+                .replace(/6/g, '٦')
+                .replace(/7/g, '٧')
+                .replace(/8/g, '٨')
+                .replace(/9/g, '٩');
+        }
+
+        // 🔹 معالجة إرسال الإجابة
+        $(document).on("submit", ".mistake-form", function (e) {
+            e.preventDefault();
+
+            var form = $(this);
+            var questionId = form.data("question-id");
+            var selectedAnswer = form.find("input[name='SelectedAnswer']:checked").val();
+
+            if (!selectedAnswer) {
+                form.siblings(".result").html("<span class='text-danger'>⚠️ اختر إجابة أولاً</span>");
+                return;
+            }
+
+            $.post("/Students/Practice/SubmitPracticeAnswer",
+                { questionId: questionId, selectedAnswer: selectedAnswer },
+                function (data) {
+                    if (data.success) {
+
+                        if (data.isCorrect) {
+                            form.siblings(".result").html(
+                                "<span class='text-success fw-bold'>✅ إجابتك صحيحة</span>"
+                            );
+                        } else {
+                            var correct = toIndic(data.correctAnswer);
+
+                            form.siblings(".result").html(
+                                "<span class='text-danger fw-bold'>❌ إجابتك خاطئة.<br/>" +
+                                "الإجابة الصحيحة: " + correct + "</span>"
+                            );
+                        }
+
+                        // 🔹 تسجيل أن الطالب راجع السؤال
+                        $.post("/Students/Practice/MarkReviewed",
+                            { questionId: questionId },
+                            function () {
+                                form.find("button[type='submit']")
+                                    .prop("disabled", true)
+                                    .removeClass("btn-primary")
+                                    .addClass("btn-success")
+                                    .html("✅ تمت المراجعة");
+                            });
+                    }
+                }
+            );
+        });
+    </script>
+}

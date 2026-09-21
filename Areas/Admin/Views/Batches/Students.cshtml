@@ -1,0 +1,536 @@
+@model IEnumerable<QdratNew.ViewModels.Batch.BatchStudentAccessRowViewModel>
+
+@{
+    ViewData["Title"] = "طلاب الدفعة المؤرشفة";
+
+    var students = Model?.ToList() ?? new List<QdratNew.ViewModels.Batch.BatchStudentAccessRowViewModel>();
+    int batchId = ViewBag.BatchId;
+    string batchName = ViewBag.BatchName;
+    string courseName = ViewBag.CourseName;
+    DateTime? archivedAt = ViewBag.ArchivedAt as DateTime?;
+
+    int revokedCount = students.Count(s => !s.CanAccessStudentArea);
+    int allowedCount = students.Count - revokedCount;
+}
+
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet" />
+
+<div class="qdrat-batch-students-page" dir="rtl">
+
+    <section class="students-hero-card">
+        <div class="hero-content">
+            <div class="hero-icon">
+                <i class="fa-solid fa-user-graduate"></i>
+            </div>
+            <div>
+                <div class="hero-label">إدارة طلاب دفعة مؤرشفة</div>
+                <h1>@batchName</h1>
+                <p>
+                    @courseName —
+                    @(archivedAt.HasValue ? "أُرشفت في " + archivedAt.Value.ToString("yyyy/MM/dd") : "غير محدد تاريخ الأرشفة")
+                </p>
+            </div>
+        </div>
+
+        <div class="hero-actions">
+            <a asp-area="Admin" asp-controller="Batches" asp-action="Archive" class="btn-hero secondary">
+                <i class="fa-solid fa-arrow-right"></i>
+                العودة للأرشيف
+            </a>
+        </div>
+    </section>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="system-alert success">
+            <i class="fa-solid fa-circle-check"></i>
+            <span>@TempData["SuccessMessage"]</span>
+        </div>
+    }
+
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="system-alert danger">
+            <i class="fa-solid fa-circle-exclamation"></i>
+            <span>@TempData["ErrorMessage"]</span>
+        </div>
+    }
+
+    <section class="students-kpi-grid">
+        <div class="kpi-card purple">
+            <div class="kpi-icon"><i class="fa-solid fa-users"></i></div>
+            <div class="kpi-body">
+                <span>إجمالي الطلاب</span>
+                <strong>@students.Count</strong>
+            </div>
+        </div>
+
+        <div class="kpi-card green">
+            <div class="kpi-icon"><i class="fa-solid fa-lock-open"></i></div>
+            <div class="kpi-body">
+                <span>يملكون دخول اريا الطالب</span>
+                <strong>@allowedCount</strong>
+            </div>
+        </div>
+
+        <div class="kpi-card red">
+            <div class="kpi-icon"><i class="fa-solid fa-lock"></i></div>
+            <div class="kpi-body">
+                <span>مسلوب عنهم الدخول</span>
+                <strong>@revokedCount</strong>
+            </div>
+        </div>
+    </section>
+
+    <section class="students-toolbar-card">
+        <div class="toolbar-grid">
+            <div class="filter-field search">
+                <label for="studentSearch">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    بحث بالاسم / رقم الهوية / الهاتف
+                </label>
+                <input id="studentSearch" type="text" class="qdrat-input" autocomplete="off"
+                       placeholder="ابحث عن طالب..." />
+            </div>
+
+            <div class="filter-actions">
+                <form asp-action="ToggleBatchStudentsAccess" asp-controller="Batches" asp-area="Admin" method="post"
+                      onsubmit="return confirm('سيتم سلب إمكانية الدخول عن كل طلاب هذه الدفعة (باستثناء من لديهم تسجيل في دفعة أخرى). هل تريد المتابعة؟');">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="batchId" value="@batchId" />
+                    <input type="hidden" name="allow" value="false" />
+                    <button type="submit" class="btn-bulk danger">
+                        <i class="fa-solid fa-lock"></i>
+                        سلب الدخول عن الجميع
+                    </button>
+                </form>
+
+                <form asp-action="ToggleBatchStudentsAccess" asp-controller="Batches" asp-area="Admin" method="post"
+                      onsubmit="return confirm('سيتم منح إمكانية الدخول لكل طلاب هذه الدفعة. هل تريد المتابعة؟');">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="batchId" value="@batchId" />
+                    <input type="hidden" name="allow" value="true" />
+                    <button type="submit" class="btn-bulk success">
+                        <i class="fa-solid fa-lock-open"></i>
+                        استعادة الدخول للجميع
+                    </button>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <section class="students-list-card">
+        <div class="list-head">
+            <div>
+                <span>سجل الطلاب</span>
+                <h2>طلاب الدفعة</h2>
+            </div>
+            <div class="list-counter">
+                المعروض: <strong id="visibleCount">@students.Count</strong> من <strong>@students.Count</strong>
+            </div>
+        </div>
+
+        @if (!students.Any())
+        {
+            <div class="empty-state">
+                <i class="fa-regular fa-folder-open"></i>
+                <strong>لا يوجد طلاب</strong>
+                <span>لا يوجد طلاب مسجلون في هذه الدفعة.</span>
+            </div>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="students-table" id="studentsTable">
+                    <thead>
+                        <tr>
+                            <th class="col-check"></th>
+                            <th>الطالب</th>
+                            <th>رقم الهوية</th>
+                            <th>الهاتف</th>
+                            <th>حالة الدخول</th>
+                            <th>ملاحظات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var s in students)
+                        {
+                            var searchText = $"{s.FullName} {s.NationalID} {s.Phone}".ToLower();
+                            <tr data-student-id="@s.StudentId" data-search="@searchText" data-allow="@s.CanAccessStudentArea.ToString().ToLower()">
+                                <td class="col-check">
+                                    <input type="checkbox" class="row-cb" data-id="@s.StudentId" onclick="selectRow(this)" />
+                                </td>
+                                <td>
+                                    <div class="student-name">
+                                        <strong>@s.FullName</strong>
+                                        @if (s.HasActiveEnrollment)
+                                        {
+                                            <span class="mini-badge info" title="لديه تسجيل في دفعة أخرى">دفعة أخرى</span>
+                                        }
+                                    </div>
+                                </td>
+                                <td>@(s.NationalID ?? "—")</td>
+                                <td>@(s.Phone ?? "—")</td>
+                                <td>
+                                    @if (s.CanAccessStudentArea)
+                                    {
+                                        <span class="status-badge allowed"><i class="fa-solid fa-lock-open"></i> مسموح</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="status-badge revoked"><i class="fa-solid fa-lock"></i> مسلوب</span>
+                                    }
+                                </td>
+                                <td class="muted-note">
+                                    @if (!s.CanAccessStudentArea && s.AccessRevokedAt.HasValue)
+                                    {
+                                        <span>بواسطة @(s.AccessRevokedByUserName ?? "غير معروف") — @s.AccessRevokedAt.Value.ToString("yyyy/MM/dd")</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="noResults" class="empty-state d-none">
+                <i class="fa-solid fa-filter-circle-xmark"></i>
+                <strong>لا توجد نتائج مطابقة</strong>
+            </div>
+        }
+    </section>
+</div>
+
+<!-- Hidden form used to submit selected student IDs -->
+<form id="accessForm" asp-action="ToggleStudentAccess" asp-controller="Batches" asp-area="Admin" method="post" style="display:none;">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="batchId" value="@batchId" />
+    <input type="hidden" id="accessFormAllow" name="allow" value="true" />
+    <div id="accessFormIds"></div>
+</form>
+
+<!-- Floating action bar -->
+<div class="action-bar" id="actionBar">
+    <div class="action-bar__inner">
+        <div class="ab-sel">
+            <span class="ab-sel__count" id="abCount">0</span>
+            <span class="ab-sel__text">طالب محدد</span>
+        </div>
+
+        <div class="ab-sep"></div>
+
+        <button class="ab-action ab-action--ok" onclick="submitAccess(true)">
+            <i class="fa-solid fa-lock-open"></i> منح الدخول
+        </button>
+
+        <button class="ab-action ab-action--danger" onclick="submitAccess(false)">
+            <i class="fa-solid fa-lock"></i> سلب الدخول
+        </button>
+
+        <button class="ab-action ab-action--clear" onclick="clearAll()">
+            <i class="fa-solid fa-xmark"></i> إلغاء
+        </button>
+    </div>
+</div>
+
+<style>
+    .qdrat-batch-students-page {
+        --font: 'Cairo','Tahoma',sans-serif;
+        --ink: #101827;
+        --ink-soft: #334155;
+        --muted: #64748b;
+        --muted-2: #94a3b8;
+        --surface: #ffffff;
+        --page-bg: #f4f7fb;
+        --line: #e5eaf2;
+        --line-2: #dbe3ef;
+        --purple: #7c3aed;
+        --purple-dark: #4c1d95;
+        --purple-soft: #ede9fe;
+        --blue: #2563eb;
+        --blue-soft: #dbeafe;
+        --green: #059669;
+        --green-dark: #064e3b;
+        --green-soft: #d1fae5;
+        --red: #dc2626;
+        --red-dark: #7f1d1d;
+        --red-soft: #fee2e2;
+        --shadow: 0 18px 40px rgba(15,23,42,.07);
+        --shadow-sm: 0 8px 20px rgba(15,23,42,.05);
+        --radius: 20px;
+        min-height: 100vh;
+        padding: 24px;
+        padding-bottom: 100px;
+        background: radial-gradient(circle at top right, rgba(124,58,237,.09), transparent 34%), linear-gradient(180deg, #f8fafc 0%, var(--page-bg) 100%);
+        color: var(--ink);
+        font-family: var(--font);
+    }
+
+        .qdrat-batch-students-page *, .qdrat-batch-students-page *::before, .qdrat-batch-students-page *::after {
+            box-sizing: border-box;
+        }
+
+        .qdrat-batch-students-page a { text-decoration: none; }
+
+    .students-hero-card {
+        border-radius: 26px;
+        padding: 24px;
+        margin-bottom: 16px;
+        background: linear-gradient(135deg, rgba(76,29,149,.96), rgba(124,58,237,.94));
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        box-shadow: var(--shadow);
+    }
+
+    .hero-content { display: flex; align-items: center; gap: 16px; }
+
+    .hero-icon {
+        width: 64px; height: 64px; border-radius: 20px;
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.20);
+        font-size: 26px; flex-shrink: 0;
+    }
+
+    .hero-label { color: #ddd6fe; font-size: 12px; font-weight: 900; margin-bottom: 4px; }
+    .students-hero-card h1 { margin: 0; font-size: 22px; font-weight: 900; }
+    .students-hero-card p { margin: 7px 0 0; font-size: 13px; font-weight: 700; color: rgba(255,255,255,.78); }
+
+    .btn-hero {
+        min-height: 42px; border-radius: 13px; padding: 10px 15px;
+        font-size: 12.5px; font-weight: 900; display: inline-flex; align-items: center; gap: 8px;
+        background: rgba(255,255,255,.14); color: #fff; border: 1px solid rgba(255,255,255,.20);
+        transition: .18s ease;
+    }
+        .btn-hero:hover { color: #fff; background: rgba(255,255,255,.20); }
+
+    .system-alert {
+        border-radius: 14px; padding: 13px 16px; margin-bottom: 16px;
+        display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 800; border: 1px solid;
+    }
+        .system-alert.success { background: var(--green-soft); color: var(--green-dark); border-color: rgba(5,150,105,.18); }
+        .system-alert.danger { background: var(--red-soft); color: var(--red-dark); border-color: rgba(220,38,38,.18); }
+
+    .students-kpi-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; margin-bottom: 16px; }
+
+    .kpi-card {
+        background: rgba(255,255,255,.92); border: 1px solid var(--line); border-radius: var(--radius);
+        padding: 16px; display: flex; gap: 13px; align-items: center; box-shadow: var(--shadow-sm);
+    }
+
+    .kpi-icon { width: 48px; height: 48px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 19px; flex-shrink: 0; }
+    .kpi-card.purple .kpi-icon { background: var(--purple-soft); color: var(--purple-dark); }
+    .kpi-card.green .kpi-icon { background: var(--green-soft); color: var(--green-dark); }
+    .kpi-card.red .kpi-icon { background: var(--red-soft); color: var(--red-dark); }
+
+    .kpi-body span { display: block; color: var(--muted); font-size: 11.5px; font-weight: 900; margin-bottom: 5px; }
+    .kpi-body strong { display: block; color: var(--ink); font-size: 24px; font-weight: 900; }
+
+    .students-toolbar-card, .students-list-card {
+        background: rgba(255,255,255,.96); border: 1px solid var(--line); border-radius: 24px; box-shadow: var(--shadow-sm);
+    }
+
+    .students-toolbar-card { padding: 18px; margin-bottom: 16px; }
+
+    .toolbar-grid { display: flex; flex-wrap: wrap; gap: 14px; align-items: end; justify-content: space-between; }
+
+    .filter-field.search { flex: 1 1 260px; }
+    .filter-field label { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; color: var(--ink-soft); font-size: 11.5px; font-weight: 900; }
+    .filter-field label i { color: var(--purple); }
+
+    .qdrat-input {
+        width: 100%; min-height: 44px; border-radius: 14px; border: 1px solid var(--line-2);
+        background: #fff; color: var(--ink); padding: 9px 12px; font-family: var(--font); font-size: 12.5px; font-weight: 700; outline: none;
+    }
+        .qdrat-input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(124,58,237,.10); }
+
+    .filter-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+    .btn-bulk {
+        min-height: 44px; border-radius: 14px; border: 1px solid; padding: 0 16px;
+        font-family: var(--font); font-size: 12.5px; font-weight: 900; display: inline-flex; align-items: center; gap: 8px;
+        cursor: pointer; white-space: nowrap;
+    }
+        .btn-bulk.danger { background: var(--red-soft); color: var(--red-dark); border-color: rgba(220,38,38,.2); }
+        .btn-bulk.danger:hover { background: var(--red); color: #fff; }
+        .btn-bulk.success { background: var(--green-soft); color: var(--green-dark); border-color: rgba(5,150,105,.2); }
+        .btn-bulk.success:hover { background: var(--green); color: #fff; }
+
+    .students-list-card { overflow: hidden; }
+
+    .list-head {
+        padding: 18px 20px; display: flex; justify-content: space-between; align-items: center; gap: 14px;
+        border-bottom: 1px solid var(--line); background: linear-gradient(180deg,#ffffff,#f8fafc);
+    }
+        .list-head span { display: block; color: var(--purple); font-size: 11.5px; font-weight: 900; margin-bottom: 3px; }
+        .list-head h2 { margin: 0; color: var(--ink); font-size: 16px; font-weight: 900; }
+
+    .list-counter {
+        background: #f1f5f9; border: 1px solid var(--line); border-radius: 999px; padding: 8px 13px;
+        color: var(--ink-soft); font-size: 11.5px; font-weight: 900; white-space: nowrap;
+    }
+        .list-counter strong { color: var(--purple); }
+
+    .table-wrap { overflow-x: auto; }
+
+    .students-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+        .students-table th {
+            text-align: right; padding: 12px 16px; color: var(--muted); font-size: 11px; font-weight: 900;
+            border-bottom: 1px solid var(--line); white-space: nowrap;
+        }
+        .students-table td { padding: 12px 16px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+        .students-table tbody tr { cursor: pointer; transition: background .12s ease; }
+        .students-table tbody tr:hover { background: #f8fafc; }
+        .students-table tbody tr.is-selected { background: var(--purple-soft); }
+        .col-check { width: 40px; }
+
+    .student-name { display: flex; align-items: center; gap: 8px; }
+    .student-name strong { color: var(--ink); font-weight: 800; }
+
+    .mini-badge {
+        display: inline-flex; align-items: center; border-radius: 999px; padding: 2px 8px;
+        font-size: 10px; font-weight: 900; white-space: nowrap;
+    }
+        .mini-badge.info { background: var(--blue-soft); color: #1e3a8a; }
+
+    .status-badge {
+        display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 5px 10px;
+        font-size: 11px; font-weight: 900; white-space: nowrap;
+    }
+        .status-badge.allowed { background: var(--green-soft); color: var(--green-dark); }
+        .status-badge.revoked { background: var(--red-soft); color: var(--red-dark); }
+
+    .muted-note { color: var(--muted-2); font-size: 10.5px; font-weight: 700; }
+
+    .empty-state { padding: 54px 20px; text-align: center; color: var(--muted); }
+        .empty-state i { display: block; color: var(--muted-2); font-size: 42px; margin-bottom: 14px; }
+        .empty-state strong { display: block; color: var(--ink); font-size: 17px; font-weight: 900; margin-bottom: 5px; }
+
+    .d-none { display: none !important; }
+
+    /* Floating action bar */
+    .action-bar {
+        position: fixed; bottom: 0; left: 0; right: 0; z-index: 9900; pointer-events: none;
+    }
+    .action-bar__inner {
+        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        padding: 14px 24px; background: rgba(15,23,42,.92);
+        backdrop-filter: blur(20px) saturate(180%);
+        border-top: 1px solid rgba(255,255,255,.10);
+        box-shadow: 0 -8px 32px rgba(15,23,42,.28);
+        transform: translateY(110%); transition: transform .3s ease;
+    }
+    .action-bar.is-visible .action-bar__inner { transform: translateY(0); }
+    .action-bar.is-visible { pointer-events: all; }
+
+    .ab-sel { display: flex; align-items: center; gap: 8px; padding: 6px 14px 6px 8px; background: rgba(255,255,255,.10); border-radius: 999px; border: 1px solid rgba(255,255,255,.14); }
+    .ab-sel__count {
+        display: flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; padding: 0 7px;
+        border-radius: 999px; background: var(--purple); color: #fff; font-size: .8rem; font-weight: 800;
+    }
+    .ab-sel__text { font-size: .82rem; font-weight: 700; color: rgba(255,255,255,.75); white-space: nowrap; }
+    .ab-sep { width: 1px; height: 28px; background: rgba(255,255,255,.14); flex-shrink: 0; }
+
+    .ab-action {
+        display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 10px;
+        font-size: .8rem; font-weight: 800; font-family: var(--font); cursor: pointer; border: 1px solid transparent;
+        white-space: nowrap; transition: all .16s ease; background: rgba(255,255,255,.09); color: rgba(255,255,255,.85);
+        border-color: rgba(255,255,255,.14);
+    }
+    .ab-action:hover { background: rgba(255,255,255,.16); color: #fff; }
+    .ab-action--ok { background: rgba(5,150,105,.18); color: #6ee7b7; border-color: rgba(5,150,105,.28); }
+    .ab-action--ok:hover { background: rgba(5,150,105,.28); }
+    .ab-action--danger { background: rgba(220,38,38,.18); color: #FCA5A5; border-color: rgba(220,38,38,.28); }
+    .ab-action--danger:hover { background: rgba(220,38,38,.28); }
+    .ab-action--clear { background: transparent; color: rgba(255,255,255,.45); border-color: transparent; margin-right: auto; }
+    .ab-action--clear:hover { background: rgba(255,255,255,.08); color: rgba(255,255,255,.75); }
+
+    @@media (max-width: 768px) {
+        .qdrat-batch-students-page { padding: 14px; padding-bottom: 100px; }
+        .students-hero-card { flex-direction: column; align-items: stretch; }
+        .students-kpi-grid { grid-template-columns: 1fr; }
+        .toolbar-grid { flex-direction: column; align-items: stretch; }
+    }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const searchInput = document.getElementById('studentSearch');
+        const rows = Array.from(document.querySelectorAll('#studentsTable tbody tr'));
+        const visibleCount = document.getElementById('visibleCount');
+        const noResults = document.getElementById('noResults');
+
+        function normalize(v) { return (v || '').toString().trim().toLowerCase(); }
+
+        function applyFilter() {
+            const term = normalize(searchInput ? searchInput.value : '');
+            let shown = 0;
+            rows.forEach(function (row) {
+                const match = term === '' || normalize(row.getAttribute('data-search')).indexOf(term) !== -1;
+                row.style.display = match ? '' : 'none';
+                if (match) shown++;
+            });
+            if (visibleCount) visibleCount.textContent = shown;
+            if (noResults) noResults.classList.toggle('d-none', shown !== 0);
+        }
+
+        if (searchInput) searchInput.addEventListener('input', applyFilter);
+    });
+
+    const selected = new Set();
+
+    function selectRow(cb) {
+        const tr = cb.closest('tr');
+        const id = cb.dataset.id;
+        if (cb.checked) {
+            selected.add(id);
+            tr?.classList.add('is-selected');
+        } else {
+            selected.delete(id);
+            tr?.classList.remove('is-selected');
+        }
+        syncBar();
+    }
+
+    // Clicking anywhere on the row (including the name) toggles selection
+    document.querySelectorAll('#studentsTable tbody tr').forEach(function (tr) {
+        tr.addEventListener('click', function (e) {
+            if (e.target.closest('.row-cb')) return;
+            const cb = tr.querySelector('.row-cb');
+            if (cb) {
+                cb.checked = !cb.checked;
+                selectRow(cb);
+            }
+        });
+    });
+
+    function syncBar() {
+        const cnt = selected.size;
+        document.getElementById('abCount').textContent = cnt;
+        document.getElementById('actionBar').classList.toggle('is-visible', cnt > 0);
+    }
+
+    function clearAll() {
+        selected.clear();
+        document.querySelectorAll('#studentsTable .row-cb').forEach(cb => cb.checked = false);
+        document.querySelectorAll('#studentsTable tr.is-selected').forEach(tr => tr.classList.remove('is-selected'));
+        syncBar();
+    }
+
+    function submitAccess(allow) {
+        if (selected.size === 0) return;
+        const idsContainer = document.getElementById('accessFormIds');
+        idsContainer.innerHTML = '';
+        selected.forEach(function (id) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'studentIds';
+            input.value = id;
+            idsContainer.appendChild(input);
+        });
+        document.getElementById('accessFormAllow').value = allow ? 'true' : 'false';
+        document.getElementById('accessForm').submit();
+    }
+</script>

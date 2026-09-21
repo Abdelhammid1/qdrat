@@ -1,0 +1,717 @@
+﻿@model QdratNew.ViewModels.Question.QuestionSearchViewModel
+@{
+    ViewData["Title"] = "بحث في الأسئلة";
+}
+
+<div class="container mt-4" dir="rtl">
+    <h2 class="text-primary text-center mb-4"><i class="fas fa-search"></i> بحث ذكي في الأسئلة</h2>
+
+    <form asp-action="Search" method="get" class="card shadow-sm p-4 mb-4">
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <label asp-for="CurriculumId" class="form-label fw-bold">📘 المنهج</label>
+                <select asp-for="CurriculumId" asp-items="Model.Curriculums" class="form-select">
+                    <option value="">-- اختر المنهج --</option>
+                </select>
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label fw-bold">📗 المحور</label>
+                <select asp-for="SectionId" asp-items="Model.Sections" class="form-select">
+                    <option value="">-- اختر المحور --</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label fw-bold">🔍 كلمات البحث أو معادلة</label>
+            <textarea asp-for="SearchText" class="form-control" rows="3"></textarea>
+        </div>
+
+        <partial name="_MathToolsPartial" for="SearchText" />
+
+        <div class="mb-3">
+            <label class="form-label fw-bold">📌 المعاينة الفورية:</label>
+            <div id="searchPreview" class="border rounded bg-light p-3" style="min-height: 50px; font-size: 22px; font-weight: bold;"></div>
+        </div>
+
+        <div class="text-end">
+            <button type="submit" class="btn btn-success">
+                <i class="fas fa-search"></i> تنفيذ البحث
+            </button>
+        </div>
+    </form>
+
+    @if (Model.Results?.Any() == true)
+    {
+        <div class="card shadow-sm p-4">
+            <h5 class="mb-3"><i class="fas fa-list-ol"></i> النتائج:</h5>
+            <ul class="list-group">
+                @foreach (var q in Model.Results)
+                {
+                    <li class="list-group-item">
+                        @Html.Raw(q.Title)
+                    </li>
+                }
+            </ul>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <partial name="_MathToolsModals" />
+    <partial name="_MathToolsPartial" for="SearchText" />
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const input = document.getElementById("SearchTitle");
+            const preview = document.getElementById("searchPreview");
+            if (input && preview) {
+                input.addEventListener("input", function () {
+                    preview.innerHTML = input.value;
+                });
+            }
+        });
+    </script>
+
+    <script>
+
+        document.addEventListener('DOMContentLoaded', function () {
+            // ========== سكربت تحميل المحاور والدروس باستخدام Fetch API ==========
+            const curriculumSelect = document.getElementById('curriculumSelect');
+            const sectionSelect = document.getElementById('sectionSelect');
+            const lessonSelect = document.getElementById('lessonSelect');
+
+            curriculumSelect?.addEventListener('change', async function () {
+                const curriculumId = this.value;
+                sectionSelect.innerHTML = '<option>جاري التحميل...</option>';
+                lessonSelect.innerHTML = '<option value="">اختر الدرس</option>';
+
+                if (curriculumId) {
+                    try {
+                        const response = await fetch(`/Admin/Questions/GetSectionsByCurriculum?curriculumId=${curriculumId}`);
+                        const data = await response.json();
+
+                        sectionSelect.innerHTML = '<option value="">اختر المحور</option>';
+                        data.forEach(section => {
+                            const option = document.createElement('option');
+                            option.value = section.id;
+                            option.textContent = section.title;
+                            sectionSelect.appendChild(option);
+                        });
+                    } catch (error) {
+                        console.error('خطأ أثناء تحميل المحاور:', error);
+                        sectionSelect.innerHTML = '<option>حدث خطأ أثناء التحميل</option>';
+                    }
+                }
+            });
+
+            sectionSelect?.addEventListener('change', async function () {
+                const sectionId = this.value;
+                lessonSelect.innerHTML = '<option>جاري التحميل...</option>';
+
+                if (sectionId) {
+                    try {
+                        const response = await fetch(`/Admin/Questions/GetLessonsBySection?sectionId=${sectionId}`);
+                        const data = await response.json();
+
+                        lessonSelect.innerHTML = '<option value="">اختر الدرس</option>';
+                        data.forEach(lesson => {
+                            const option = document.createElement('option');
+                            option.value = lesson.id;
+                            option.textContent = lesson.title;
+                            lessonSelect.appendChild(option);
+                        });
+                    } catch (error) {
+                        console.error('خطأ أثناء تحميل الدروس:', error);
+                        lessonSelect.innerHTML = '<option>حدث خطأ أثناء التحميل</option>';
+                    }
+                }
+            });
+
+        });
+    </script>
+    <script>
+        let activeInputId = null;
+        let rootTargetFieldId = null;
+        let nestedRootInputTarget = null;
+        let nestedRootLevel = 1;
+
+        // ✅ تحديد رمز الجذر حسب طول القيمة
+        function getRootSymbolBasedOnLength(value) {
+            const clean = value.replace(/<[^>]*>?/gm, '').trim();
+            const length = clean.length;
+            if (length <= 4) return '*';
+            if (length <= 5) return '+';
+            if (length <= 8) return '-';
+            return '.';
+        }
+
+        // ✅ فتح مودال الكسر
+        function openFractionModal(inputId) {
+            activeInputId = inputId;
+            document.getElementById('numeratorInput').value = '';
+            document.getElementById('denominatorInput').value = '';
+            document.getElementById('fractionPreview').innerHTML = '';
+            new bootstrap.Modal(document.getElementById('fractionModal')).show();
+        }
+
+        // ✅ فتح مودال الجذر
+        function openRootModal(inputId) {
+            rootTargetFieldId = inputId;
+            document.getElementById('rootValue').value = '';
+            document.getElementById('rootPreview').innerHTML = '';
+            new bootstrap.Modal(document.getElementById('rootModal')).show();
+        }
+
+        // ✅ إدراج الكسر
+        function insertStyledFraction() {
+            const num = document.getElementById('numeratorInput').value;
+            const den = document.getElementById('denominatorInput').value;
+            const input = document.getElementById(activeInputId);
+            if (!input || !num || !den) return alert("يرجى إدخال البسط والمقام.");
+            const fracHTML = `
+        <span style="
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            direction: rtl;
+            font-size: 18px;
+            font-weight: bold;
+            margin: 0 4px;
+            vertical-align: middle;
+            transform: translateY(-4px);
+        ">
+            <span style="border-bottom: 2px solid #000; padding: 0 4px;">${num}</span>
+            <span style="margin-top: 2px;">${den}</span>
+        </span>`;
+
+
+            const start = input.selectionStart;
+            const end = input.selectionEnd;
+            input.value = input.value.substring(0, start) + fracHTML + input.value.substring(end);
+            bootstrap.Modal.getInstance(document.getElementById('fractionModal')).hide();
+        }
+
+        // ✅ إدراج الجذر
+        function insertRoot() {
+            const value = document.getElementById('rootValue').value;
+            const type = document.getElementById('rootType').value;
+            const input = document.getElementById(rootTargetFieldId);
+            if (!value || !input) return;
+            const rootChar = getRootSymbolBasedOnLength(value);
+            const cubeRootSup = (type === '3') ? `<span style="font-size: 13px; position: absolute; right: -4px; top: -8px;">٣</span>` : '';
+            const rootHTML = `
+                <span style="display: inline-flex; direction: rtl; align-items: flex-start; position: relative;">
+                    ${cubeRootSup}
+                    <span style="font-family: 'ZA-roots'; font-size: 34px;">${rootChar}</span>
+                    <span style="font-size: 22px; padding-top: 10px; padding-right: 6px; text-align: center; min-width: 40px;">
+                        ${value}
+                    </span>
+                </span>`;
+            const start = input.selectionStart;
+            const end = input.selectionEnd;
+            input.value = input.value.substring(0, start) + rootHTML + input.value.substring(end);
+            bootstrap.Modal.getInstance(document.getElementById('rootModal')).hide();
+        }
+
+        // ✅ معاينة الكسر
+        function updateFractionPreview() {
+            const num = document.getElementById('numeratorInput').value;
+            const den = document.getElementById('denominatorInput').value;
+            const preview = (num && den)
+                ? `<span style="display:inline-block; text-align:center; direction: rtl;">
+                        <span style="border-bottom: 2px solid #000; display:block;">${num}</span>
+                        <span>${den}</span>
+                   </span>`
+                : '';
+            document.getElementById('fractionPreview').innerHTML = preview;
+        }
+
+        // ✅ معاينة الجذر
+        function updateRootPreview() {
+            const value = document.getElementById('rootValue').value;
+            const type = document.getElementById('rootType').value;
+            const rootChar = getRootSymbolBasedOnLength(value);
+            const cubeRootSup = (type === '3') ? `<span style="font-size: 13px; position: absolute; right: -4px; top: -8px;">٣</span>` : '';
+            const previewHTML = `
+                <span style="display: inline-flex; direction: rtl; align-items: flex-start; position: relative;">
+                    ${cubeRootSup}
+                    <span style="font-family: 'ZA-roots'; font-size: 34px;">${rootChar}</span>
+                    <span style="font-size: 24px; padding: 10px 6px 0 0; text-align: center;">${value}</span>
+                </span>`;
+            document.getElementById('rootPreview').innerHTML = value ? previewHTML : '';
+        }
+
+        // ✅ إظهار الحقول حسب نوع السؤال
+        function updateFields(template) {
+            document.getElementById("valueFields").style.display = (template === "1" || template === "3") ? "block" : "none";
+            document.getElementById("imageField").style.display = (template === "2" || template === "3") ? "block" : "none";
+        }
+
+        // ✅ تحميل الأقسام والدروس + التنشيط عند التحميل
+        document.addEventListener("DOMContentLoaded", function () {
+            document.getElementById('numeratorInput')?.addEventListener('input', updateFractionPreview);
+            document.getElementById('denominatorInput')?.addEventListener('input', updateFractionPreview);
+            document.getElementById('rootValue')?.addEventListener('input', updateRootPreview);
+            document.getElementById('rootType')?.addEventListener('change', updateRootPreview);
+
+            const selected = document.querySelector(".template-selector:checked");
+            if (selected) updateFields(selected.value);
+            document.querySelectorAll(".template-selector").forEach(radio => {
+                radio.addEventListener("change", function () {
+                    updateFields(this.value);
+                });
+            });
+            document.querySelectorAll(".toggle-img").forEach(btn => {
+                btn.addEventListener("click", () => {
+                    const target = document.getElementById(btn.dataset.target);
+                    target.style.display = (target.style.display === "none") ? "block" : "none";
+                });
+            });
+        });
+
+        $('#curriculumSelect').on('change', function () {
+            const curriculumId = $(this).val();
+            $('#sectionSelect').html('<option>جاري التحميل...</option>');
+            $.get(`/Admin/Questions/GetSectionsByCurriculum?curriculumId=${curriculumId}`, function (data) {
+                $('#sectionSelect').empty().append('<option value="">اختر المحور</option>');
+                $.each(data, (i, item) => {
+                    $('#sectionSelect').append(`<option value="${item.id}">${item.title}</option>`);
+                });
+            });
+        });
+
+        $('#sectionSelect').on('change', function () {
+            const sectionId = $(this).val();
+            $('#lessonSelect').html('<option>جاري التحميل...</option>');
+            $.get(`/Admin/Questions/GetLessonsBySection?sectionId=${sectionId}`, function (data) {
+                $('#lessonSelect').empty().append('<option value="">اختر الدرس</option>');
+                $.each(data, (i, item) => {
+                    $('#lessonSelect').append(`<option value="${item.id}">${item.title}</option>`);
+                });
+            });
+        });
+
+        // ✅ الجذر المتداخل (شجرة الجذور)
+          // 🧠 تحديد الرمز المناسب حسب العمق (خط ZA-roots)
+        function getRootCharByLevel(level) {
+            if (level === 1) return '/';
+            if (level === 2) return '*';
+            if (level === 3) return '-';
+            if (level === 4) return '+';
+            return '.'; // للمستويات الأعمق
+        }
+
+        // 🧠 فتح المودال وتحديد الحقل المستهدف
+        function openNestedRootModal(inputId) {
+            nestedRootInputTarget = inputId;
+            nestedRootLevel = 1;
+            document.getElementById('nestedRootsContainer').innerHTML = `
+                <div class="nested-root-level mb-3">
+                    <label>قيمة الجذر المستوى 1</label>
+                    <input type="text" class="form-control root-level-input" placeholder="مثال: ٣ أو جذر آخر" />
+                </div>`;
+            document.getElementById('nestedRootPreview').innerHTML = '';
+            new bootstrap.Modal(document.getElementById('nestedRootModal')).show();
+        }
+
+        // ➕ إضافة مستوى جديد
+        function addRootLevel() {
+            const container = document.getElementById("nestedRootsContainer");
+            nestedRootLevel++;
+
+            const div = document.createElement("div");
+            div.className = "nested-root-level mb-3 row";
+
+            div.innerHTML = `
+                <div class="col-md-2">
+                    <label>درجة الجذر</label>
+                    <input type="number" min="2" value="2" class="form-control root-degree-input" />
+                </div>
+                <div class="col-md-10">
+                    <label>قيمة الجذر المستوى ${nestedRootLevel}</label>
+                    <input type="text" class="form-control root-level-input" placeholder="مثال: ٢٥ أو جذر آخر" />
+                </div>`;
+
+            container.appendChild(div);
+        }
+
+                // 🔍 معاينة تدرج الجذور
+
+              function generateNestedRootPreview() {
+            const degrees = Array.from(document.querySelectorAll('.root-degree-input')).map(x => x.value.trim());
+            const values = Array.from(document.querySelectorAll('.root-level-input')).map(x => x.value.trim());
+
+            let inner = ''; // نبدأ من أعمق جذر ونتداخل لأعلى
+            for (let i = values.length - 1; i >= 0; i--) {
+                const value = values[i] || '';
+                const degree = degrees[i] || '';
+                const rootChar = getRootCharByLevel(values.length - i);
+
+                const supDegree = `<span style="font-size: 12px; position: absolute; right: 1px; top: 3px;">${degree}</span>`;
+
+                const root = `
+                    <span style="display: inline-flex; direction: rtl; align-items: flex-start; position: relative;">
+                        ${supDegree}
+                        <span style="font-family: 'ZA-roots'; font-size: ${36 + (values.length - i) * 2}px;">${rootChar}</span>
+                        <span style=" font-size: 22px; min-width: 40px; padding-top: 10px; padding-right: -250px; text-align: center;">
+                            ${value}${inner}
+                        </span>
+                    </span>
+                `;
+
+                inner = root;
+            }
+
+            document.getElementById('nestedRootPreview').innerHTML = inner;
+        }
+
+
+
+
+
+
+
+        // ✅ إدراج الجذر النهائي في خانة الإدخال
+        function insertNestedRoot() {
+            const preview = document.getElementById('nestedRootPreview').innerHTML;
+            const input = document.getElementById(nestedRootInputTarget);
+            if (!input) return alert("⚠️ لم يتم العثور على خانة الإدخال!");
+
+            const start = input.selectionStart;
+            const end = input.selectionEnd;
+            input.value = input.value.substring(0, start) + preview + input.value.substring(end);
+
+            bootstrap.Modal.getInstance(document.getElementById('nestedRootModal')).hide();
+        }
+
+    </script>
+
+    <script>
+        // let exponentTargetInput = null;
+
+        function openExponentModal(inputId) {
+            exponentTargetInput = document.getElementById(inputId);
+            document.getElementById('baseInput').value = '';
+            document.getElementById('exponentInput').value = '';
+            document.getElementById('exponentPreview').innerHTML = '';
+            new bootstrap.Modal(document.getElementById('exponentModal')).show();
+        }
+
+              function updateExponentPreview() {
+            const base = document.getElementById('baseInput').value;
+            const exponent = document.getElementById('exponentInput').value;
+
+            if (base && exponent) {
+                document.getElementById('exponentPreview').innerHTML =
+                    `<sup style="font-size: 16px;">${exponent}</sup>${base}`;
+            } else {
+                document.getElementById('exponentPreview').innerHTML = '';
+            }
+        }
+
+
+               function insertExponent() {
+            const base = document.getElementById('baseInput').value;
+            const exponent = document.getElementById('exponentInput').value;
+
+            if (!base || !exponent || !exponentTargetInput) return;
+
+            const supHTML = `<sup style="font-size: 14px;">${exponent}</sup>`;
+            const result = `${supHTML}${base}`;
+
+            const start = exponentTargetInput.selectionStart;
+            const end = exponentTargetInput.selectionEnd;
+
+            exponentTargetInput.value =
+                exponentTargetInput.value.substring(0, start) + result + exponentTargetInput.value.substring(end);
+
+            bootstrap.Modal.getInstance(document.getElementById('exponentModal')).hide();
+        }
+
+    </script>
+
+    <script>
+        let rootWithExponentTarget = null;
+
+        function convertBrackets(value) {
+            // نحذف الأقواس الأصلية إذا كانت موجودة
+            const cleaned = value.replace(/\(/g, '').replace(/\)/g, '');
+            return cleaned;
+        }
+
+        function openRootWithExponentModal(inputId) {
+            rootWithExponentTarget = document.getElementById(inputId);
+            document.getElementById('rootBaseValue').value = '';
+            document.getElementById('rootExponentValue').value = '';
+            document.getElementById('rootWithExponentPreview').innerHTML = '';
+            new bootstrap.Modal(document.getElementById('rootWithExponentModal')).show();
+        }
+
+        function updateRootWithExponentPreview() {
+            const base = document.getElementById('rootBaseValue').value.trim();
+            const exponent = document.getElementById('rootExponentValue').value.trim();
+
+            if (!base || !exponent) {
+                document.getElementById('rootWithExponentPreview').innerHTML = '';
+                return;
+            }
+
+            const safeBase = convertBrackets(base);
+
+            const html = `
+            <span style="display:inline-flex; direction: rtl; align-items: flex-start;">
+                <span style="font-family: 'ZA-roots'; font-size: 34px;">*</span>
+                <span style="font-size: 22px; padding-top: 10px; padding-right: 6px;">
+                    <span dir="rtl" style="unicode-bidi: bidi-override;">
+                        <span style="font-size: 26px;">﹙</span>${safeBase}<span style="font-size: 26px;">﹚</span><sup style="font-size: 14px;">${exponent}</sup>
+                    </span>
+                </span>
+            </span>
+            `;
+            document.getElementById('rootWithExponentPreview').innerHTML = html;
+        }
+
+        function insertRootWithExponent() {
+            const base = document.getElementById('rootBaseValue').value.trim();
+            const exponent = document.getElementById('rootExponentValue').value.trim();
+            if (!base || !exponent || !rootWithExponentTarget) return;
+
+            const safeBase = convertBrackets(base);
+            const result = `
+            <span style="display:inline-flex; direction: rtl; align-items: flex-start;">
+                <span style="font-family: 'ZA-roots'; font-size: 34px;">*</span>
+                <span style="font-size: 22px; padding-top: 10px; padding-right: 6px;">
+                    <span dir="rtl" style="unicode-bidi: bidi-override;">
+                        <span style="font-size: 26px;">﹙</span>${safeBase}<span style="font-size: 26px;">﹚</span><sup style="font-size: 14px;">${exponent}</sup>
+                    </span>
+                </span>
+            </span>
+            `;
+
+            const start = rootWithExponentTarget.selectionStart;
+            const end = rootWithExponentTarget.selectionEnd;
+
+            rootWithExponentTarget.value =
+                rootWithExponentTarget.value.substring(0, start) + result + rootWithExponentTarget.value.substring(end);
+
+            bootstrap.Modal.getInstance(document.getElementById('rootWithExponentModal')).hide();
+        }
+    </script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const textArea = document.getElementById("questionText");
+            const preview = document.getElementById("questionPreview");
+
+            if (textArea && preview) {
+                textArea.addEventListener("input", function () {
+                    // نعرض المعادلة كما هي في المعاينة باستخدام innerHTML
+                    preview.innerHTML = textArea.value;
+                });
+            }
+        });
+    </script>
+    <script>
+        let isQuantitative = false;
+
+        // 🔢 تحويل الأرقام إلى هندية مع احترام العناصر داخل HTML
+        function toIndicDigitsSafe(input) {
+            const map = { '0': '٠', '1': '١', '2': '٢', '3': '٣', '4': '٤', '5': '٥', '6': '٦', '7': '٧', '8': '٨', '9': '٩' };
+            let result = '';
+            let insideTag = false;
+
+            for (let i = 0; i < input.length; i++) {
+                const char = input[i];
+                if (char === '<') insideTag = true;
+                if (!insideTag && map[char]) {
+                    result += map[char];
+                } else {
+                    result += char;
+                }
+                if (char === '>') insideTag = false;
+            }
+
+            return result;
+        }
+
+        // 🧠 تحميل نوع المنهج عند تغييره
+        document.getElementById("curriculumSelect")?.addEventListener("change", async function () {
+            const curriculumId = this.value;
+            if (!curriculumId) return;
+
+            try {
+                const response = await fetch(`/Admin/Curriculums/GetCurriculumType?curriculumId=${curriculumId}`);
+                const data = await response.json();
+                isQuantitative = data.isQuantitative === true;
+            } catch (error) {
+                console.error("❌ فشل في جلب نوع المنهج:", error);
+            }
+        });
+
+        // 📌 المعاينة الفورية للسؤال
+        document.addEventListener("DOMContentLoaded", function () {
+            const textArea = document.getElementById("questionText");
+            const preview = document.getElementById("questionPreview");
+
+            if (textArea && preview) {
+                textArea.addEventListener("input", function () {
+                    const value = textArea.value;
+                    preview.innerHTML = isQuantitative ? toIndicDigitsSafe(value) : value;
+                });
+            }
+        });
+    </script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const form = document.querySelector("form");
+            const correctAnswerInputs = document.querySelectorAll("input[name='CorrectAnswer']");
+            const questionText = document.getElementById("questionText");
+
+            form.addEventListener("submit", function (e) {
+                let correctAnswerSelected = false;
+                correctAnswerInputs.forEach(input => {
+                    if (input.checked) correctAnswerSelected = true;
+                });
+
+                // ✅ تحذير إن لم يتم تحديد إجابة صحيحة
+                if (!correctAnswerSelected) {
+                    const confirmSave = confirm("⚠️ لم تقم بتحديد الإجابة الصحيحة. سيتم حفظ السؤال كـ 'غير مُراجع'. هل تريد المتابعة؟");
+                    if (!confirmSave) {
+                        e.preventDefault(); // ❌ إلغاء الحفظ
+                    }
+                }
+
+                // ✅ (اختياري): تحقق من وجود خيارات فاضية
+                let hasEmptyOption = false;
+                document.querySelectorAll("input[id^='optionText_']").forEach(input => {
+                    if (!input.value.trim()) hasEmptyOption = true;
+                });
+
+                if (hasEmptyOption) {
+                    alert("⚠️ يوجد خيارات فارغة. يُرجى تعبئتها أو حذفها.");
+                    e.preventDefault();
+                }
+            });
+        });
+    </script>
+
+    <script>
+        async function loadQuestionPreview() {
+            const question = {
+                Title: document.getElementById("questionText").value,
+                CorrectAnswer: document.querySelector("input[name='CorrectAnswer']:checked")?.value || "",
+                Options: []
+            };
+
+            for (let i = 0; i < 4; i++) {
+                const optionText = document.getElementById(`optionText_${i}`);
+                if (optionText) {
+                    question.Options.push({ Text: optionText.value });
+                }
+            }
+
+            try {
+                const res = await fetch('/Admin/Questions/PreviewFromCreate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(question)
+                });
+
+                const html = await res.text();
+                document.getElementById("questionPreviewContainer").innerHTML = html;
+                new bootstrap.Modal(document.getElementById("questionPreviewModal")).show();
+            } catch (err) {
+                console.error("❌ خطأ في تحميل المعاينة:", err);
+                document.getElementById("questionPreviewContainer").innerHTML = "<div class='text-danger'>فشل في تحميل المعاينة</div>";
+            }
+        }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://unpkg.com/mathlive/dist/mathlive.min.js"></script>
+
+    <script>
+        let targetInputId = null;
+
+        function openMathLiveModal(inputId) {
+            targetInputId = inputId;
+
+            const mathField = document.getElementById('mathlive-field');
+            mathField.setValue(""); // تفريغ القديم
+
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('mathliveModal')).show();
+        }
+
+        function insertMathExpression() {
+            const mathField = document.getElementById('mathlive-field');
+            const latex = mathField.getValue("latex");
+
+            const input = document.getElementById(targetInputId);
+            if (!latex || !input) {
+                alert("لم يتم إدخال معادلة أو تحديد الحقل.");
+                return;
+            }
+
+            const start = input.selectionStart;
+            const end = input.selectionEnd;
+            const latexCode = `\\(${latex}\\)`;
+            input.value = input.value.substring(0, start) + latexCode + input.value.substring(end);
+
+            bootstrap.Modal.getInstance(document.getElementById('mathliveModal')).hide();
+        }
+    </script>
+
+
+
+
+
+    <script>
+        const dropzone = document.getElementById('question-dropzone');
+        const input = document.getElementById('question-image-input');
+        const preview = document.getElementById('question-image-preview');
+
+        // السماح بالسحب
+        ['dragenter', 'dragover'].forEach(evt => {
+            dropzone.addEventListener(evt, e => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropzone.classList.add('bg-info', 'text-white');
+            });
+        });
+
+        ['dragleave', 'drop'].forEach(evt => {
+            dropzone.addEventListener(evt, e => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropzone.classList.remove('bg-info', 'text-white');
+            });
+        });
+
+        dropzone.addEventListener('click', () => input.click());
+
+        dropzone.addEventListener('drop', e => {
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                input.files = e.dataTransfer.files;
+                showPreview(file);
+            }
+        });
+
+        input.addEventListener('change', () => {
+            const file = input.files[0];
+            if (file) showPreview(file);
+        });
+
+        function showPreview(file) {
+            const reader = new FileReader();
+            reader.onload = e => {
+                preview.src = e.target.result;
+                preview.classList.remove('d-none');
+            };
+            reader.readAsDataURL(file);
+        }
+    </script>
+
+
+}

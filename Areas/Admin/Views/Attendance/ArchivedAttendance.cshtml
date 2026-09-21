@@ -1,0 +1,509 @@
+@model QdratNew.ViewModels.Attendance.AttendanceArchivedIndexVM
+
+@{
+    ViewData["Title"] = "أرشيف الحضور";
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet" />
+
+    <style>
+        :root {
+            --ink: #0D1B2A; --ink-2: #2C3E50; --ink-3: #5A6A7A;
+            --ink-4: #8FA0B0; --ink-5: #C8D5E0;
+            --canvas: #F3F6FA; --surface: #FFFFFF;
+            --surface-2: #F8FAFC; --surface-3: #EEF2F7; --border: #DDE4EC;
+            --blue: #1B5EAE; --blue-2: #2471D0; --blue-bg: #E8F1FB; --blue-dark: #103E7A;
+            --emerald: #0D7A5B; --emerald-bg: #E4F5EE;
+            --amber: #985D09; --amber-bg: #FDF0D8;
+            --rose: #BF1030; --rose-bg: #FDEAEE;
+            --violet: #5535B5; --violet-bg: #EDE8F9;
+            --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-xl: 20px;
+            --sh-xs: 0 1px 3px rgba(13,27,42,.06);
+            --sh-sm: 0 2px 8px rgba(13,27,42,.08);
+            --sh-md: 0 4px 18px rgba(13,27,42,.10);
+            --ease: cubic-bezier(.25,.46,.45,.94);
+        }
+
+        .att-archive-page {
+            background: var(--canvas);
+            min-height: 100vh;
+            padding: 32px 28px 64px;
+            direction: rtl;
+            font-family: 'Cairo', sans-serif;
+            color: var(--ink-2);
+        }
+
+        .att-topbar {
+            display: flex; align-items: center; justify-content: space-between;
+            flex-wrap: wrap; gap: 14px; margin-bottom: 28px;
+        }
+
+        .att-brand { display: flex; align-items: center; gap: 13px; }
+        .att-brand-icon {
+            width: 46px; height: 46px; background: var(--amber);
+            border-radius: var(--r-lg);
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; font-size: 20px;
+            box-shadow: 0 4px 14px rgba(152,93,9,.25);
+        }
+        .att-brand-title { font-size: 20px; font-weight: 800; color: var(--ink); line-height: 1.15; }
+        .att-brand-sub   { font-size: 15px; color: var(--ink-4); margin-top: 2px; }
+
+        .btn-back {
+            display: inline-flex; align-items: center; gap: 7px;
+            padding: 10px 20px; background: var(--surface); color: var(--blue);
+            border: 1px solid var(--border); border-radius: var(--r-md);
+            font-size: 15px; font-weight: 800; text-decoration: none;
+            transition: background .15s, transform .12s, border-color .15s, color .15s;
+            box-shadow: var(--sh-xs);
+        }
+        .btn-back:hover { background: var(--blue); border-color: var(--blue); color: #fff; transform: translateY(-1px); }
+
+        .att-alert {
+            border: none; border-radius: var(--r-lg); padding: 14px 18px;
+            font-size: 15px; font-weight: 700; box-shadow: var(--sh-xs);
+            margin-bottom: 18px; display: flex; align-items: center; gap: 8px;
+        }
+        .att-alert.success { background: var(--emerald-bg); color: var(--emerald); }
+        .att-alert.error   { background: var(--rose-bg);    color: var(--rose); }
+
+        /* KPIs */
+        .att-kpis {
+            display: grid; grid-template-columns: repeat(4,1fr); gap: 13px; margin-bottom: 24px;
+        }
+        @@media (max-width: 960px) { .att-kpis { grid-template-columns: repeat(2,1fr); } }
+        @@media (max-width: 480px) { .att-kpis { grid-template-columns: 1fr; } }
+
+        .kpi-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--r-xl); padding: 18px 19px;
+            display: flex; align-items: center; gap: 13px;
+            box-shadow: var(--sh-xs);
+            transition: transform .2s var(--ease), box-shadow .2s;
+            position: relative; overflow: hidden;
+        }
+        .kpi-card::after {
+            content: ''; position: absolute; top: 0; right: 0;
+            width: 4px; height: 100%; border-radius: 0 var(--r-xl) var(--r-xl) 0;
+        }
+        .kpi-card:hover { transform: translateY(-3px); box-shadow: var(--sh-sm); }
+        .kpi-amber::after  { background: var(--amber); }
+        .kpi-blue::after   { background: var(--blue); }
+        .kpi-violet::after { background: var(--violet); }
+        .kpi-emerald::after{ background: var(--emerald); }
+        .kpi-ico {
+            width: 42px; height: 42px; border-radius: var(--r-md);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px; flex-shrink: 0;
+        }
+        .ico-amber   { background: var(--amber-bg);   color: var(--amber); }
+        .ico-blue    { background: var(--blue-bg);    color: var(--blue); }
+        .ico-violet  { background: var(--violet-bg);  color: var(--violet); }
+        .ico-emerald { background: var(--emerald-bg); color: var(--emerald); }
+        .kpi-label { font-size: 13px; font-weight: 700; color: var(--ink-4); letter-spacing:.04em; text-transform:uppercase; margin-bottom:3px; }
+        .kpi-val   { font-size: 22px; font-weight: 800; color: var(--ink); line-height: 1; }
+
+        /* archive note */
+        .archive-note {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--r-xl); box-shadow: var(--sh-xs);
+            padding: 16px 18px; margin-bottom: 22px;
+            display: flex; align-items: flex-start; gap: 12px;
+        }
+        .archive-note-icon {
+            width: 40px; height: 40px; border-radius: var(--r-md);
+            background: var(--amber-bg); color: var(--amber);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px; flex-shrink: 0;
+        }
+        .archive-note-title { font-size: 15px; font-weight: 800; color: var(--ink); margin-bottom: 3px; }
+        .archive-note-text  { font-size: 14px; color: var(--ink-4); line-height: 1.7; }
+
+        /* Batches section */
+        .batches-section-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--r-xl); overflow: visible; box-shadow: var(--sh-sm);
+        }
+        .batches-section-topbar {
+            display: flex; align-items: center; gap: 10px;
+            padding: 14px 18px; border-bottom: 1px solid var(--surface-3); flex-wrap: wrap;
+        }
+        .section-title {
+            display: flex; align-items: center; gap: 8px;
+            font-size: 18px; font-weight: 800; color: var(--ink); margin-left: 10px;
+        }
+        .section-title i { color: var(--amber); }
+        .batch-search-wrap {
+            position: relative; flex: 1; min-width: 220px; max-width: 390px;
+        }
+        .batch-search-wrap i {
+            position: absolute; right: 11px; top: 50%; transform: translateY(-50%);
+            color: var(--ink-4); font-size: 17px; pointer-events: none;
+        }
+        .batch-search-wrap input {
+            width: 100%; padding: 7px 32px 7px 12px;
+            border: 1px solid var(--border); border-radius: var(--r-md);
+            font-size: 15px; background: var(--surface-2); color: var(--ink);
+            transition: border-color .15s, box-shadow .15s;
+        }
+        .batch-search-wrap input:focus {
+            outline: none; border-color: var(--amber);
+            box-shadow: 0 0 0 3px rgba(152,93,9,.10); background: var(--surface);
+        }
+        .total-badge { margin-right: auto; font-size: 14px; color: var(--ink-4); }
+        .total-badge strong { color: var(--amber); font-weight: 800; }
+
+        .batches-grid {
+            display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; padding: 18px;
+        }
+        @@media (max-width: 1200px) { .batches-grid { grid-template-columns: repeat(2,1fr); } }
+        @@media (max-width: 768px)  { .batches-grid { grid-template-columns: 1fr; padding: 14px; } }
+
+        .batch-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--r-xl); box-shadow: var(--sh-xs);
+            transition: transform .18s var(--ease), box-shadow .18s, border-color .18s;
+            overflow: hidden; position: relative;
+        }
+        .batch-card::before {
+            content: ''; position: absolute; top: 0; right: 0;
+            width: 5px; height: 100%; background: var(--amber);
+        }
+        .batch-card:hover { transform: translateY(-4px); box-shadow: var(--sh-md); border-color: #E0B463; }
+
+        .batch-card-body { padding: 18px 18px 16px; }
+
+        .batch-head {
+            display: flex; justify-content: space-between; align-items: flex-start;
+            gap: 12px; margin-bottom: 14px;
+        }
+        .batch-title-wrap { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+        .batch-avatar {
+            width: 38px; height: 38px; border-radius: 50%;
+            background: var(--amber-bg); color: var(--amber);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 17px; flex-shrink: 0;
+        }
+        .batch-title { font-size: 17px; font-weight: 800; color: var(--ink); margin-bottom: 3px; word-break: break-word; }
+        .batch-sub   { font-size: 13px; color: var(--ink-4); line-height: 1.5; word-break: break-word; }
+
+        .archive-pill {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 4px 10px; border-radius: 30px;
+            font-size: 13px; font-weight: 800; white-space: nowrap;
+            background: var(--amber-bg); color: var(--amber);
+        }
+
+        .batch-mini-grid {
+            display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; margin-bottom: 12px;
+        }
+        .batch-mini-stat {
+            background: var(--surface-2); border: 1px solid var(--surface-3);
+            border-radius: var(--r-md); padding: 9px 7px; text-align: center;
+        }
+        .mini-val   { display: block; font-size: 18px; font-weight: 800; color: var(--ink); line-height: 1.1; }
+        .mini-label { display: block; font-size: 12px; color: var(--ink-4); margin-top: 2px; }
+        .text-emerald { color: var(--emerald) !important; }
+        .text-amber   { color: var(--amber)   !important; }
+        .text-violet  { color: var(--violet)  !important; }
+
+        .att-progress-wrap { margin-bottom: 12px; }
+        .att-progress-meta {
+            display: flex; justify-content: space-between; align-items: center;
+            font-size: 13px; color: var(--ink-4); margin-bottom: 5px;
+        }
+        .att-progress-meta strong { color: var(--ink); font-size: 14px; }
+        .att-progress {
+            width: 100%; height: 8px; border-radius: 30px;
+            background: var(--surface-3); overflow: hidden;
+        }
+        .att-progress-bar {
+            height: 100%; background: var(--amber); border-radius: 30px; transition: width .3s ease;
+        }
+
+        .batch-foot-stats {
+            display: flex; justify-content: space-between; gap: 8px;
+            color: var(--ink-4); font-size: 13px; margin-bottom: 14px;
+        }
+        .batch-foot-stats span { display: inline-flex; align-items: center; gap: 5px; }
+
+        .batch-actions { display: grid; grid-template-columns: 1fr; gap: 8px; }
+
+        .batch-open-btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+            width: 100%; background: var(--blue); color: #fff;
+            border: 1px solid var(--blue); border-radius: var(--r-md); padding: 10px 14px;
+            font-size: 15px; font-weight: 800; text-decoration: none;
+            transition: background .16s var(--ease), transform .14s, box-shadow .16s;
+            box-shadow: 0 3px 10px rgba(27,94,174,.20);
+        }
+        .batch-open-btn:hover { color: #fff; background: var(--blue-dark); transform: translateY(-2px); }
+
+        .batch-history-btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+            width: 100%; background: var(--amber-bg); color: var(--amber);
+            border: 1px solid #F5C28A; border-radius: var(--r-md); padding: 9px 14px;
+            font-size: 14px; font-weight: 800; text-decoration: none;
+            transition: background .14s, transform .14s;
+        }
+        .batch-history-btn:hover { background: #F5C28A; color: var(--amber); transform: translateY(-1px); }
+
+        .batch-restore-btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+            width: 100%; background: var(--surface); color: var(--emerald);
+            border: 1px solid rgba(13,122,91,.30); border-radius: var(--r-md); padding: 9px 14px;
+            font-size: 14px; font-weight: 800; cursor: pointer;
+            transition: background .14s, transform .14s, border-color .14s, color .14s;
+        }
+        .batch-restore-btn:hover { background: var(--emerald); border-color: var(--emerald); color: #fff; transform: translateY(-1px); }
+        .restore-form { margin: 0; }
+
+        .batches-empty { text-align: center; padding: 56px 16px; color: var(--ink-4); }
+        .batches-empty i { font-size: 24px; display: block; margin-bottom: 12px; color: var(--ink-5); }
+        .batches-empty-title { font-size: 18px; font-weight: 800; color: var(--ink-3); }
+        .batches-empty-sub   { font-size: 14px; margin-top: 4px; }
+
+        .no-results {
+            display: none; text-align: center; padding: 36px 16px;
+            color: var(--ink-4); border-top: 1px solid var(--surface-3);
+        }
+        .no-results i { display: block; font-size: 22px; margin-bottom: 10px; color: var(--ink-5); }
+
+        @@media (max-width: 768px) {
+            .att-archive-page { padding: 22px 14px 48px; }
+            .batch-search-wrap { max-width: 100%; width: 100%; }
+            .total-badge { margin-right: 0; }
+        }
+    </style>
+}
+
+<div class="att-archive-page">
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="att-alert success">
+            <i class="bi bi-check-circle-fill"></i> @TempData["Success"]
+        </div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="att-alert error">
+            <i class="bi bi-exclamation-circle-fill"></i> @TempData["Error"]
+        </div>
+    }
+
+    <div class="att-topbar">
+        <div class="att-brand">
+            <div class="att-brand-icon"><i class="bi bi-archive-fill"></i></div>
+            <div>
+                <div class="att-brand-title">أرشيف الحضور</div>
+                <div class="att-brand-sub">عرض الدفعات المؤرشفة وسجلات حضورها — قراءة فقط</div>
+            </div>
+        </div>
+
+        <a asp-area="Admin" asp-controller="Attendance" asp-action="Index" class="btn-back">
+            <i class="bi bi-arrow-right-circle"></i>
+            رجوع للحضور والانصراف
+        </a>
+    </div>
+
+    <div class="att-kpis">
+        <div class="kpi-card kpi-amber">
+            <div class="kpi-ico ico-amber"><i class="bi bi-folder2-open"></i></div>
+            <div>
+                <div class="kpi-label">دفعات مؤرشفة</div>
+                <div class="kpi-val">@Model.TotalArchivedBatches</div>
+            </div>
+        </div>
+        <div class="kpi-card kpi-violet">
+            <div class="kpi-ico ico-violet"><i class="bi bi-people-fill"></i></div>
+            <div>
+                <div class="kpi-label">إجمالي الطلاب</div>
+                <div class="kpi-val">@Model.TotalStudents</div>
+            </div>
+        </div>
+        <div class="kpi-card kpi-blue">
+            <div class="kpi-ico ico-blue"><i class="bi bi-easel2"></i></div>
+            <div>
+                <div class="kpi-label">إجمالي المحاضرات</div>
+                <div class="kpi-val">@Model.TotalLectures</div>
+            </div>
+        </div>
+        <div class="kpi-card kpi-emerald">
+            <div class="kpi-ico ico-emerald"><i class="bi bi-graph-up-arrow"></i></div>
+            <div>
+                <div class="kpi-label">متوسط الحضور</div>
+                <div class="kpi-val">@Model.AverageAttendancePercentage%</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="archive-note">
+        <div class="archive-note-icon"><i class="bi bi-info-circle-fill"></i></div>
+        <div>
+            <div class="archive-note-title">ملاحظة الأرشيف</div>
+            <div class="archive-note-text">
+                هذه الصفحة مخصصة لسجلات الحضور المؤرشفة. عرض السجلات متاح حسب الصلاحيات الممنوحة.
+                التعديل غير متاح على الإطلاق. استرجاع الدفعة متاح للمالك والمطور فقط.
+            </div>
+        </div>
+    </div>
+
+    <div class="batches-section-card">
+        <div class="batches-section-topbar">
+            <div class="section-title">
+                <i class="bi bi-grid-3x3-gap-fill"></i>
+                دفعات الأرشيف
+            </div>
+            <div class="batch-search-wrap">
+                <i class="bi bi-search"></i>
+                <input type="text" id="batchSearch" placeholder="ابحث في اسم الدفعة أو الدورة أو المدرب..." />
+            </div>
+            <div class="total-badge">
+                إجمالي: <strong>@Model.TotalArchivedBatches</strong> دفعة
+            </div>
+        </div>
+
+        @if (!Model.BatchCards.Any())
+        {
+            <div class="batches-empty">
+                <i class="bi bi-archive"></i>
+                <div class="batches-empty-title">لا توجد دفعات مؤرشفة</div>
+                <div class="batches-empty-sub">ستظهر هنا الدفعات التي تم أرشفتها من صفحة إدارة الحضور</div>
+            </div>
+        }
+        else
+        {
+            <div class="batches-grid" id="batchesGrid">
+                @foreach (var batch in Model.BatchCards)
+                {
+                    <div class="batch-card"
+                         data-search="@($"{batch.BatchName} {batch.CourseTitle} {batch.InstructorSummary}".ToLower())">
+                        <div class="batch-card-body">
+
+                            <div class="batch-head">
+                                <div class="batch-title-wrap">
+                                    <div class="batch-avatar">
+                                        <i class="bi bi-people-fill"></i>
+                                    </div>
+                                    <div>
+                                        <div class="batch-title">@batch.BatchName</div>
+                                        <div class="batch-sub">@batch.CourseTitle</div>
+                                        <div class="batch-sub">المدرب: @batch.InstructorSummary</div>
+                                    </div>
+                                </div>
+                                <span class="archive-pill">
+                                    <i class="bi bi-archive-fill"></i>
+                                    مؤرشفة
+                                </span>
+                            </div>
+
+                            <div class="batch-mini-grid">
+                                <div class="batch-mini-stat">
+                                    <span class="mini-val">@batch.TotalLectures</span>
+                                    <span class="mini-label">محاضرة</span>
+                                </div>
+                                <div class="batch-mini-stat">
+                                    <span class="mini-val text-violet">@batch.TotalStudents</span>
+                                    <span class="mini-label">طالب</span>
+                                </div>
+                                <div class="batch-mini-stat">
+                                    <span class="mini-val text-emerald">@batch.RecordedLectures</span>
+                                    <span class="mini-label">مسجلة</span>
+                                </div>
+                            </div>
+
+                            <div class="att-progress-wrap">
+                                <div class="att-progress-meta">
+                                    <span>متوسط الحضور</span>
+                                    <strong>@batch.AttendancePercentage%</strong>
+                                </div>
+                                <div class="att-progress">
+                                    <div class="att-progress-bar" style="width:@batch.AttendancePercentage%"></div>
+                                </div>
+                            </div>
+
+                            <div class="batch-foot-stats">
+                                <span><i class="bi bi-clock-history"></i> تأخير: @batch.LateArrivalCount</span>
+                                <span><i class="bi bi-box-arrow-left"></i> إذن مبكر: @batch.EarlyLeavePermissionCount</span>
+                            </div>
+
+                            <div class="batch-actions">
+                                <a asp-area="Admin"
+                                   asp-controller="Attendance"
+                                   asp-action="Lectures"
+                                   asp-route-batchId="@batch.BatchId"
+                                   class="batch-open-btn">
+                                    <i class="bi bi-calendar2-week"></i>
+                                    عرض سجلات الحضور
+                                </a>
+
+                                <a asp-area="Admin"
+                                   asp-controller="Attendance"
+                                   asp-action="ArchiveHistory"
+                                   asp-route-batchId="@batch.BatchId"
+                                   class="batch-history-btn">
+                                    <i class="bi bi-clock-history"></i>
+                                    هيستوري الأرشيف
+                                </a>
+
+                                @if (User.IsInRole("Owner") || User.IsInRole("Developer"))
+                                {
+                                    <form asp-area="Admin"
+                                          asp-controller="Attendance"
+                                          asp-action="RestoreBatches"
+                                          method="post"
+                                          class="restore-form">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="selectedBatchIds" value="@batch.BatchId" />
+                                        <button type="submit" class="batch-restore-btn"
+                                                onclick="return confirm('سيتم إخراج هذه الدفعة من أرشيف الحضور وإعادة تفعيل التعديل عليها. هل تريد المتابعة؟')">
+                                            <i class="bi bi-arrow-counterclockwise"></i>
+                                            استرجاع من الأرشيف
+                                        </button>
+                                    </form>
+                                }
+                            </div>
+
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="no-results" id="noResults">
+                <i class="bi bi-search"></i>
+                <div class="batches-empty-title">لا توجد نتائج مطابقة</div>
+                <div class="batches-empty-sub">جرّب البحث باسم دفعة أو دورة مختلفة</div>
+            </div>
+        }
+    </div>
+
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const searchInput = document.getElementById("batchSearch");
+            const cards = Array.from(document.querySelectorAll(".batch-card"));
+            const noResults = document.getElementById("noResults");
+
+            if (!searchInput) return;
+
+            searchInput.addEventListener("input", function () {
+                const value = (this.value || "").toLowerCase().trim();
+                let visibleCount = 0;
+
+                cards.forEach(function (card) {
+                    const text = card.getAttribute("data-search") || "";
+                    const isVisible = text.includes(value);
+                    card.style.display = isVisible ? "" : "none";
+                    if (isVisible) visibleCount++;
+                });
+
+                if (noResults) noResults.style.display = visibleCount === 0 ? "block" : "none";
+            });
+        });
+    </script>
+}

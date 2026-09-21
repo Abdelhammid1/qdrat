@@ -1,0 +1,1007 @@
+@model QdratNew.ViewModels.Batch.HomeworkSetDetailViewModel
+
+@{
+    ViewData["Title"] = $"تفاصيل واجب: {Model.Title}";
+    Layout = "~/Areas/Admin/Views/Shared/_AdminLayout.cshtml";
+
+    var statusText = Model.IsClosed ? "مغلق"
+        : (Model.EndAt.HasValue && Model.EndAt < DateTime.Now ? "انتهت المدة"
+        : Model.IsSent ? "مفتوح" : "لم يُرسل");
+
+    var statusCss = Model.IsClosed ? "hw-closed"
+        : (Model.EndAt.HasValue && Model.EndAt < DateTime.Now ? "hw-late"
+        : Model.IsSent ? "hw-open" : "hw-pending");
+
+    double safeSubmission = Model.SubmissionPercent < 0 ? 0
+        : Model.SubmissionPercent > 100 ? 100 : Model.SubmissionPercent;
+    string submColor = safeSubmission >= 80 ? "#059669"
+        : safeSubmission >= 60 ? "#d97706" : "#dc2626";
+}
+
+<div class="hwd-page" dir="rtl">
+
+    @* ====== Nav ====== *@
+    <nav class="hwd-nav">
+        <div class="hwd-nav-brand">
+            <a class="hwd-back"
+               asp-area="Admin" asp-controller="Batches" asp-action="Details"
+               asp-route-id="@Model.BatchId">← العودة للدفعة</a>
+            <div class="hwd-sep"></div>
+            <div class="hwd-breadcrumb">
+                <a asp-area="Admin" asp-controller="Batches" asp-action="Index">الدفعات</a>
+                <span>›</span>
+                <a asp-area="Admin" asp-controller="Batches" asp-action="Details"
+                   asp-route-id="@Model.BatchId">@Model.BatchName</a>
+                <span>›</span>
+                <span class="hwd-crumb-current">@Model.Title</span>
+            </div>
+        </div>
+    </nav>
+
+    <div class="hwd-body">
+
+        @* ====== Hero ====== *@
+        <section class="hwd-hero">
+            <div class="hwd-hero-left">
+                <div class="hwd-hw-icon">📝</div>
+                <div class="hwd-hero-info">
+                    <h1 class="hwd-title">@Model.Title</h1>
+                    <div class="hwd-tags">
+                        <span class="hwd-tag neutral">📋 @Model.BatchName</span>
+                        <span class="hwd-tag neutral">📚 @Model.CourseName</span>
+                        <span class="hwd-tag neutral">👤 @Model.InstructorName</span>
+                        <span class="hwd-tag @statusCss">● @statusText</span>
+                        @if (Model.AllowRetake)
+                        {
+                            <span class="hwd-tag info">🔁 يُسمح بالإعادة (×@Model.MaxRetakes)</span>
+                        }
+                    </div>
+                    <div class="hwd-dates">
+                        <span>📅 إرسال: @Model.CreatedAt.ToString("yyyy/MM/dd")</span>
+                        @if (Model.StartAt.HasValue)
+                        {
+                            <span> • بداية: @Model.StartAt.Value.ToString("yyyy/MM/dd HH:mm")</span>
+                        }
+                        @if (Model.EndAt.HasValue)
+                        {
+                            <span> • نهاية: @Model.EndAt.Value.ToString("yyyy/MM/dd HH:mm")</span>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="hwd-hero-stats">
+                <div class="hwd-stat-ring">
+                    <svg viewBox="0 0 100 100" aria-hidden="true">
+                        <circle class="hwd-ring-bg" cx="50" cy="50" r="40"></circle>
+                        <circle class="hwd-ring-fill"
+                                cx="50" cy="50" r="40"
+                                stroke="@submColor"
+                                stroke-dasharray="251.2"
+                                stroke-dashoffset="@((251.2 * (1 - safeSubmission / 100.0)).ToString("0.##"))"></circle>
+                    </svg>
+                    <div class="hwd-ring-val">
+                        @safeSubmission.ToString("0")<small>%</small>
+                    </div>
+                </div>
+                <div class="hwd-ring-label">نسبة التسليم</div>
+            </div>
+        </section>
+
+        @* ====== KPI Strip ====== *@
+        <section class="hwd-kpi-strip">
+            <div class="hwd-kpi g">
+                <div class="hwd-kpi-icon">✅</div>
+                <div class="hwd-kpi-val">@Model.SubmittedCount</div>
+                <div class="hwd-kpi-lbl">سلّموا الواجب</div>
+            </div>
+            <div class="hwd-kpi r">
+                <div class="hwd-kpi-icon">❌</div>
+                <div class="hwd-kpi-val">@Model.MissingCount</div>
+                <div class="hwd-kpi-lbl">لم يسلّموا</div>
+            </div>
+            <div class="hwd-kpi b">
+                <div class="hwd-kpi-icon">👥</div>
+                <div class="hwd-kpi-val">@Model.ExpectedCount</div>
+                <div class="hwd-kpi-lbl">إجمالي الطلاب</div>
+            </div>
+            <div class="hwd-kpi a">
+                <div class="hwd-kpi-icon">⭐</div>
+                <div class="hwd-kpi-val">@Model.AverageScore.ToString("0.#")</div>
+                <div class="hwd-kpi-lbl">متوسط الدرجة</div>
+            </div>
+            <div class="hwd-kpi g">
+                <div class="hwd-kpi-icon">🏆</div>
+                <div class="hwd-kpi-val">@Model.MaxScore.ToString("0.#")</div>
+                <div class="hwd-kpi-lbl">أعلى درجة</div>
+            </div>
+            <div class="hwd-kpi r">
+                <div class="hwd-kpi-icon">📉</div>
+                <div class="hwd-kpi-val">@Model.MinScore.ToString("0.#")</div>
+                <div class="hwd-kpi-lbl">أدنى درجة</div>
+            </div>
+        </section>
+
+        @* ====== Students Table ====== *@
+        <section class="hwd-card">
+            <div class="hwd-card-head">
+                <div class="hwd-ch-left">
+                    <div class="hwd-ch-accent"></div>
+                    <div>
+                        <div class="hwd-ch-title">تفاصيل الطلاب</div>
+                        <div class="hwd-ch-sub">@Model.Students.Count طالب مرتبط بهذا الواجب</div>
+                    </div>
+                </div>
+                <div class="hwd-filter-btns">
+                    <button class="hwd-filter active" onclick="filterTable('all', this)">الكل</button>
+                    <button class="hwd-filter" onclick="filterTable('submitted', this)">سلّموا</button>
+                    <button class="hwd-filter" onclick="filterTable('missing', this)">لم يسلّموا</button>
+                </div>
+            </div>
+
+            <div class="hwd-table-wrap">
+                <table class="hwd-table" id="studentsTable">
+                    <thead>
+                        <tr>
+                            <th style="width:36px">
+                                <input type="checkbox" id="selectAll" class="hwd-chk" title="تحديد الكل" />
+                            </th>
+                            <th>#</th>
+                            <th>الطالب</th>
+                            <th>الحالة</th>
+                            <th>وقت التسليم</th>
+                            <th>الدرجة</th>
+                            <th>التقييم</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @{
+                            int rowNum = 0;
+                        }
+                        @foreach (var s in Model.Students)
+                        {
+                            rowNum++;
+                            string rowClass = s.IsSubmitted ? "row-submitted" : "row-missing";
+                            <tr class="@rowClass hwd-selectable-row"
+                                data-status="@(s.IsSubmitted ? "submitted" : "missing")"
+                                data-student-id="@s.StudentId"
+                                data-student-name="@s.FullName"
+                                data-student-avatar="@s.AvatarText"
+                                data-is-submitted="@s.IsSubmitted.ToString().ToLower()">
+                                <td onclick="event.stopPropagation()">
+                                    <input type="checkbox"
+                                           class="hwd-chk row-chk"
+                                           data-student-id="@s.StudentId"
+                                           data-student-name="@s.FullName"
+                                           data-student-avatar="@s.AvatarText"
+                                           data-is-submitted="@s.IsSubmitted.ToString().ToLower()" />
+                                </td>
+                                <td class="hwd-num">@rowNum</td>
+                                <td>
+                                    <div class="hwd-student-cell">
+                                        <div class="hwd-av">@s.AvatarText</div>
+                                        <span class="hwd-student-name">@s.FullName</span>
+                                        @if (s.IsLate)
+                                        {
+                                            <span class="hwd-late-badge">متأخر</span>
+                                        }
+                                    </div>
+                                </td>
+                                <td>
+                                    @if (s.IsSubmitted)
+                                    {
+                                        <span class="hwd-badge submitted">✅ سلّم</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="hwd-badge missing">❌ لم يسلّم</span>
+                                    }
+                                </td>
+                                <td class="hwd-date-cell">
+                                    @if (s.SubmittedAt.HasValue)
+                                    {
+                                        <span>@s.SubmittedAt.Value.ToString("yyyy/MM/dd")</span>
+                                        <span class="hwd-time">@s.SubmittedAt.Value.ToString("HH:mm")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="hwd-muted">—</span>
+                                    }
+                                </td>
+                                <td class="hwd-score-cell">
+                                    @if (s.Score.HasValue)
+                                    {
+                                        <span class="hwd-score @s.ScoreCssClass">@s.Score.Value.ToString("0.#")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="hwd-muted">—</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (s.Score.HasValue)
+                                    {
+                                        var barW = s.Score.Value > 100 ? 100 : s.Score.Value < 0 ? 0 : s.Score.Value;
+                                        var barColor = s.Score.Value >= 75 ? "#059669"
+                                            : s.Score.Value >= 55 ? "#d97706" : "#dc2626";
+                                        <div class="hwd-score-bar">
+                                            <div class="hwd-score-fill"
+                                                 style="width:@barW.ToString("0")%;background:@barColor"></div>
+                                        </div>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+    </div>
+</div>
+
+<style>
+    :root {
+        --hwd-blue:  #2563eb;
+        --hwd-green: #059669;
+        --hwd-amber: #d97706;
+        --hwd-red:   #dc2626;
+        --hwd-ink:   #1e293b;
+        --hwd-mute:  #64748b;
+        --hwd-bg:    #f1f5f9;
+        --hwd-card:  #fff;
+        --hwd-border:#e2e8f0;
+        --hwd-r:     12px;
+    }
+
+    .hwd-page { background: var(--hwd-bg); min-height: 100vh; font-family: 'Cairo','Tajawal',sans-serif; direction: rtl; }
+
+    /* Nav */
+    .hwd-nav { background: #1e293b; padding: 14px 24px; display: flex; align-items: center; }
+    .hwd-nav-brand { display: flex; align-items: center; gap: 14px; }
+    .hwd-back { color: #94a3b8; text-decoration: none; font-size: .85rem; font-weight: 600; transition: color .15s; }
+    .hwd-back:hover { color: #fff; }
+    .hwd-sep { width: 1px; height: 20px; background: #334155; }
+    .hwd-breadcrumb { display: flex; align-items: center; gap: 6px; font-size: .8rem; color: #64748b; }
+    .hwd-breadcrumb a { color: #94a3b8; text-decoration: none; }
+    .hwd-breadcrumb a:hover { color: #fff; }
+    .hwd-crumb-current { color: #e2e8f0; font-weight: 600; }
+
+    .hwd-body { padding: 24px; max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+    /* Hero */
+    .hwd-hero {
+        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        border-radius: var(--hwd-r);
+        padding: 28px 32px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        color: #fff;
+    }
+    .hwd-hero-left { display: flex; align-items: flex-start; gap: 18px; flex: 1; }
+    .hwd-hw-icon {
+        font-size: 2.8rem; width: 64px; height: 64px;
+        background: rgba(255,255,255,.1); border-radius: 14px;
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
+    }
+    .hwd-hero-info { flex: 1; }
+    .hwd-title { font-size: 1.4rem; font-weight: 800; margin: 0 0 10px; }
+    .hwd-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    .hwd-tag { padding: 4px 10px; border-radius: 20px; font-size: .75rem; font-weight: 600; }
+    .hwd-tag.neutral { background: rgba(255,255,255,.1); color: #cbd5e1; }
+    .hwd-tag.info    { background: rgba(37,99,235,.3);   color: #93c5fd; }
+    .hwd-tag.hw-open   { background: rgba(5,150,105,.3);  color: #6ee7b7; }
+    .hwd-tag.hw-closed { background: rgba(220,38,38,.3);  color: #fca5a5; }
+    .hwd-tag.hw-late   { background: rgba(217,119,6,.3);  color: #fcd34d; }
+    .hwd-tag.hw-pending{ background: rgba(100,116,139,.3);color: #cbd5e1; }
+    .hwd-dates { font-size: .8rem; color: #94a3b8; display: flex; gap: 10px; flex-wrap: wrap; }
+
+    /* Ring */
+    .hwd-hero-stats { text-align: center; flex-shrink: 0; }
+    .hwd-stat-ring { width: 100px; height: 100px; position: relative; margin: 0 auto 8px; }
+    .hwd-stat-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+    .hwd-ring-bg  { fill: none; stroke: rgba(255,255,255,.1); stroke-width: 10; }
+    .hwd-ring-fill { fill: none; stroke-width: 10; stroke-linecap: round; transition: stroke-dashoffset .9s ease; }
+    .hwd-ring-val {
+        position: absolute; inset: 0;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.4rem; font-weight: 800; color: #fff;
+    }
+    .hwd-ring-val small { font-size: .7rem; margin-right: 1px; }
+    .hwd-ring-label { font-size: .75rem; color: #94a3b8; font-weight: 600; }
+
+    /* KPI */
+    .hwd-kpi-strip { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+    .hwd-kpi {
+        background: var(--hwd-card); border-radius: var(--hwd-r);
+        padding: 18px 14px; text-align: center;
+        border-top: 3px solid transparent;
+        box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .hwd-kpi.g { border-top-color: var(--hwd-green); }
+    .hwd-kpi.r { border-top-color: var(--hwd-red); }
+    .hwd-kpi.b { border-top-color: var(--hwd-blue); }
+    .hwd-kpi.a { border-top-color: var(--hwd-amber); }
+    .hwd-kpi-icon { font-size: 1.4rem; margin-bottom: 6px; }
+    .hwd-kpi-val  { font-size: 1.5rem; font-weight: 800; color: var(--hwd-ink); }
+    .hwd-kpi-lbl  { font-size: .72rem; color: var(--hwd-mute); margin-top: 3px; }
+
+    /* Card */
+    .hwd-card { background: var(--hwd-card); border-radius: var(--hwd-r); box-shadow: 0 1px 4px rgba(0,0,0,.06); overflow: hidden; }
+    .hwd-card-head {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 16px 20px; border-bottom: 1px solid var(--hwd-border);
+    }
+    .hwd-ch-left { display: flex; align-items: center; gap: 10px; }
+    .hwd-ch-accent { width: 4px; height: 32px; border-radius: 2px; background: var(--hwd-blue); }
+    .hwd-ch-title { font-size: 1rem; font-weight: 700; color: var(--hwd-ink); }
+    .hwd-ch-sub { font-size: .78rem; color: var(--hwd-mute); margin-top: 2px; }
+    .hwd-filter-btns { display: flex; gap: 6px; }
+    .hwd-filter {
+        padding: 6px 14px; border: 1.5px solid var(--hwd-border); border-radius: 8px;
+        background: #f8fafc; color: var(--hwd-mute); font-size: .8rem; font-weight: 600;
+        cursor: pointer; font-family: 'Cairo','Tajawal',sans-serif; transition: all .15s;
+    }
+    .hwd-filter.active, .hwd-filter:hover { background: var(--hwd-blue); border-color: var(--hwd-blue); color: #fff; }
+
+    /* Table */
+    .hwd-table-wrap { overflow-x: auto; }
+    .hwd-table { width: 100%; border-collapse: collapse; }
+    .hwd-table th {
+        background: #f8fafc; padding: 10px 14px;
+        font-size: .8rem; font-weight: 700; color: var(--hwd-mute);
+        text-align: right; border-bottom: 1px solid var(--hwd-border);
+    }
+    .hwd-table td {
+        padding: 12px 14px; border-bottom: 1px solid #f1f5f9;
+        font-size: .875rem; color: var(--hwd-ink); vertical-align: middle;
+    }
+    .hwd-table tr:hover td { background: #f8fafc; }
+    .hwd-table tr.row-missing  td { background: #fef9f9; }
+    .hwd-table tr.row-submitted td { background: #fff; }
+    .hwd-num { color: var(--hwd-mute); font-size: .75rem; width: 36px; }
+    .hwd-student-cell { display: flex; align-items: center; gap: 10px; }
+    .hwd-av {
+        width: 34px; height: 34px; border-radius: 50%;
+        background: linear-gradient(135deg,#2563eb,#7c3aed);
+        color: #fff; font-size: .8rem; font-weight: 700;
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
+    }
+    .hwd-student-name { font-weight: 600; }
+    .hwd-late-badge {
+        background: #fef3c7; color: #92400e;
+        font-size: .7rem; font-weight: 700; padding: 2px 8px; border-radius: 10px;
+    }
+    .hwd-badge { padding: 4px 10px; border-radius: 20px; font-size: .78rem; font-weight: 700; }
+    .hwd-badge.submitted { background: #d1fae5; color: #065f46; }
+    .hwd-badge.missing   { background: #fee2e2; color: #991b1b; }
+    .hwd-date-cell { display: flex; flex-direction: column; gap: 2px; }
+    .hwd-time { font-size: .72rem; color: var(--hwd-mute); }
+    .hwd-muted { color: #d1d5db; }
+    .hwd-score { font-size: 1rem; font-weight: 800; }
+    .hwd-score.good    { color: var(--hwd-green); }
+    .hwd-score.warn    { color: var(--hwd-amber); }
+    .hwd-score.bad     { color: var(--hwd-red); }
+    .hwd-score.neutral { color: var(--hwd-mute); }
+    .hwd-score-bar { width: 90px; height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
+    .hwd-score-fill { height: 100%; border-radius: 3px; transition: width .6s ease; }
+
+    @@media (max-width: 900px) {
+        .hwd-kpi-strip { grid-template-columns: repeat(3,1fr); }
+        .hwd-hero { flex-direction: column; align-items: flex-start; }
+    }
+    @@media (max-width: 600px) {
+        .hwd-kpi-strip { grid-template-columns: repeat(2,1fr); }
+    }
+
+    /* ===== Checkbox ===== */
+    .hwd-chk {
+        width: 17px; height: 17px;
+        accent-color: var(--hwd-blue);
+        cursor: pointer;
+    }
+
+    /* ===== Selectable Row ===== */
+    .hwd-selectable-row { cursor: pointer; transition: background .12s; }
+    .hwd-selectable-row.is-selected td { background: #eff6ff !important; }
+
+    /* ===== Floating Footer ===== */
+    .hwd-action-footer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: var(--sidebar-w);          /* يتوقف قبل السايدبار RTL */
+        background: #1e293b;
+        border-top: 2px solid #2563eb;
+        padding: 12px 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;          /* توسيط المحتوى */
+        gap: 14px;
+        z-index: 500;
+        transform: translateY(100%);
+        transition: transform .3s cubic-bezier(.16,1,.3,1),
+                    right var(--transition-med, .28s);
+        box-shadow: 0 -8px 32px rgba(0,0,0,.3);
+    }
+    .hwd-action-footer.is-visible {
+        transform: translateY(0);
+    }
+    /* عند طي السايدبار */
+    body.sidebar-is-collapsed .hwd-action-footer {
+        right: var(--sidebar-collapsed-w);
+    }
+
+    /* selection info */
+    .hwd-footer-sel {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #94a3b8;
+        font-size: .82rem;
+        font-weight: 600;
+        min-width: 200px;
+        flex-shrink: 0;
+    }
+    .hwd-footer-avatars {
+        display: flex;
+        gap: -6px;
+    }
+    .hwd-footer-av {
+        width: 30px; height: 30px;
+        border-radius: 50%;
+        background: linear-gradient(135deg,#2563eb,#7c3aed);
+        color: #fff;
+        font-size: .72rem;
+        font-weight: 700;
+        display: flex; align-items: center; justify-content: center;
+        border: 2px solid #1e293b;
+        margin-right: -6px;
+        flex-shrink: 0;
+    }
+    .hwd-footer-count {
+        color: #fff;
+        font-size: .9rem;
+        font-weight: 700;
+    }
+    .hwd-footer-label {
+        color: #94a3b8;
+        font-size: .78rem;
+    }
+
+    .hwd-footer-sep {
+        width: 1px; height: 32px;
+        background: #334155;
+        flex-shrink: 0;
+    }
+
+    /* footer buttons */
+    .hwd-footer-btns {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+    .hwd-fbtn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 9px 16px;
+        border-radius: 8px;
+        font-size: .85rem;
+        font-weight: 700;
+        font-family: 'Cairo','Tajawal',sans-serif;
+        cursor: pointer;
+        border: none;
+        text-decoration: none;
+        transition: opacity .15s, transform .1s;
+        white-space: nowrap;
+    }
+    .hwd-fbtn:hover { opacity: .88; transform: translateY(-1px); }
+    .hwd-fbtn:active { transform: scale(.96); }
+    .hwd-fbtn:disabled, .hwd-fbtn.disabled {
+        opacity: .35;
+        cursor: not-allowed;
+        pointer-events: none;
+    }
+    .hwd-fbtn-blue   { background: #2563eb; color: #fff; }
+    .hwd-fbtn-purple { background: #7c3aed; color: #fff; }
+    .hwd-fbtn-amber  { background: #d97706; color: #fff; }
+    .hwd-fbtn-red    { background: #dc2626; color: #fff; }
+    .hwd-fbtn-ghost  { background: #334155; color: #e2e8f0; }
+
+    .hwd-footer-close {
+        margin-right: auto;
+        background: none;
+        border: none;
+        color: #64748b;
+        font-size: 1.2rem;
+        cursor: pointer;
+        padding: 4px 8px;
+        border-radius: 6px;
+        transition: color .15s, background .15s;
+        font-family: inherit;
+    }
+    .hwd-footer-close:hover { color: #fff; background: #334155; }
+
+    /* ===== Notification Modal ===== */
+    .hwd-overlay {
+        display: none;
+        position: fixed; inset: 0;
+        background: rgba(0,0,0,.55);
+        backdrop-filter: blur(4px);
+        z-index: 9999;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+    }
+    .hwd-overlay.is-open { display: flex; }
+    .hwd-modal {
+        background: #fff;
+        border-radius: 14px;
+        width: 100%;
+        max-width: 500px;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0,0,0,.25);
+        animation: hwdSlideUp .25s cubic-bezier(.16,1,.3,1);
+        direction: rtl;
+    }
+    @@keyframes hwdSlideUp {
+        from { opacity: 0; transform: translateY(20px) scale(.97); }
+        to   { opacity: 1; transform: none; }
+    }
+    .hwd-modal-header {
+        display: flex; align-items: flex-start; gap: 12px;
+        padding: 20px 20px 0;
+    }
+    .hwd-modal-icon {
+        width: 44px; height: 44px;
+        border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.3rem; flex-shrink: 0;
+    }
+    .hwd-modal-icon.amber { background: #fffbeb; }
+    .hwd-modal-icon.red   { background: #fef2f2; }
+    .hwd-modal-title { font-size: 1.1rem; font-weight: 700; color: #111827; margin: 0 0 4px; font-family: 'Cairo','Tajawal',sans-serif; }
+    .hwd-modal-sub   { font-size: .82rem; color: #6b7280; margin: 0; font-family: 'Cairo','Tajawal',sans-serif; }
+    .hwd-modal-x {
+        margin-right: auto; background: none; border: none;
+        font-size: 1.1rem; color: #9ca3af; cursor: pointer;
+        width: 30px; height: 30px; border-radius: 7px;
+        display: flex; align-items: center; justify-content: center;
+        transition: background .15s, color .15s;
+    }
+    .hwd-modal-x:hover { background: #f3f4f6; color: #374151; }
+    .hwd-modal-body { padding: 16px 20px 20px; }
+    .hwd-m-field { margin-bottom: 14px; }
+    .hwd-m-label {
+        display: block; font-size: .82rem; font-weight: 600;
+        color: #374151; margin-bottom: 7px; font-family: 'Cairo','Tajawal',sans-serif;
+    }
+    .hwd-m-input, .hwd-m-select, .hwd-m-textarea {
+        width: 100%; border: 1.5px solid #d1d5db; border-radius: 8px;
+        padding: 9px 12px; font-size: .875rem; font-family: 'Cairo','Tajawal',sans-serif;
+        color: #111827; background: #fafafa; direction: rtl; box-sizing: border-box;
+        transition: border-color .2s, box-shadow .2s;
+    }
+    .hwd-m-input:focus, .hwd-m-select:focus, .hwd-m-textarea:focus {
+        outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.1); background: #fff;
+    }
+    .hwd-m-textarea { resize: vertical; }
+    .hwd-modal-footer {
+        display: flex; gap: 8px; justify-content: flex-end;
+        padding-top: 12px; border-top: 1px solid #f3f4f6; margin-top: 4px;
+    }
+    .hwd-m-btn {
+        padding: 9px 20px; border-radius: 8px; font-size: .875rem; font-weight: 700;
+        font-family: 'Cairo','Tajawal',sans-serif; cursor: pointer; border: none;
+        transition: opacity .15s;
+    }
+    .hwd-m-btn:hover { opacity: .9; }
+    .hwd-m-btn-ghost  { background: #f3f4f6; color: #374151; }
+    .hwd-m-btn-amber  { background: #d97706; color: #fff; }
+    .hwd-m-btn-red    { background: #dc2626; color: #fff; }
+
+    /* Reset warning box */
+    .hwd-reset-warn {
+        background: #fef2f2; border: 1px solid #fca5a5;
+        border-radius: 8px; padding: 12px 14px; margin-bottom: 14px;
+        font-size: .82rem; color: #991b1b; font-family: 'Cairo','Tajawal',sans-serif; line-height: 1.6;
+    }
+    .hwd-reset-student {
+        display: flex; align-items: center; gap: 10px;
+        background: #f8fafc; border: 1px solid #e2e8f0;
+        border-radius: 8px; padding: 10px 14px; margin-bottom: 14px;
+    }
+    .hwd-reset-av {
+        width: 36px; height: 36px; border-radius: 50%;
+        background: linear-gradient(135deg,#2563eb,#7c3aed);
+        color: #fff; font-size: .85rem; font-weight: 700;
+        display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .hwd-reset-name { font-weight: 700; font-size: .9rem; font-family: 'Cairo','Tajawal',sans-serif; }
+
+    /* مساحة سفلية للمحتوى عند ظهور الفوتر */
+    #qdratMain.footer-open { padding-bottom: 72px; }
+</style>
+
+@* ============================================================
+   الـ Footer الطافي للإجراءات
+   ============================================================ *@
+<div class="hwd-action-footer" id="actionFooter">
+    <div class="hwd-footer-sel">
+        <div class="hwd-footer-avatars" id="footerAvatars"></div>
+        <div>
+            <div class="hwd-footer-count"><span id="selCount">0</span> طالب محدد</div>
+            <div class="hwd-footer-label" id="selNames">—</div>
+        </div>
+    </div>
+
+    <div class="hwd-footer-sep"></div>
+
+    <div class="hwd-footer-btns">
+        @* مراجعة الأسئلة — فردي فقط *@
+        <a id="btnReview" class="hwd-fbtn hwd-fbtn-blue disabled"
+           href="#" target="_blank" title="مراجعة إجابات الطالب">
+            📋 مراجعة الأسئلة
+        </a>
+
+        @* تقرير ولي الأمر — فردي فقط *@
+        <a id="btnParentReport" class="hwd-fbtn hwd-fbtn-purple disabled"
+           href="#" target="_blank" title="تقرير ولي الأمر">
+            📊 تقرير ولي الأمر
+        </a>
+
+        @* إرسال إشعار — متعدد مسموح *@
+        <button type="button" class="hwd-fbtn hwd-fbtn-amber" id="btnNotif"
+                onclick="openHwModal('modalNotif')">
+            🔔 إرسال إشعار
+        </button>
+
+        @* إعادة الواجب — فردي فقط *@
+        <button type="button" class="hwd-fbtn hwd-fbtn-red disabled" id="btnReset"
+                onclick="openResetModal()">
+            🔄 إعادة الواجب
+        </button>
+    </div>
+
+    <button class="hwd-footer-close" onclick="clearSelection()" title="إلغاء التحديد">✕</button>
+</div>
+
+@* ============================================================
+   Modal: إرسال إشعار
+   ============================================================ *@
+<div class="hwd-overlay" id="modalNotif">
+    <div class="hwd-modal">
+        <div class="hwd-modal-header">
+            <div class="hwd-modal-icon amber">🔔</div>
+            <div>
+                <h2 class="hwd-modal-title">إرسال إشعار</h2>
+                <p class="hwd-modal-sub" id="notifSubtitle">للطلاب المحددين</p>
+            </div>
+            <button class="hwd-modal-x" onclick="closeHwModal('modalNotif')">✕</button>
+        </div>
+        <div class="hwd-modal-body">
+            <form asp-area="Admin" asp-controller="Batches"
+                  asp-action="SendHomeworkStudentNotification" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="homeworkSetId" value="@Model.HomeworkSetId" />
+                <input type="hidden" name="batchId" value="@Model.BatchId" />
+                <input type="hidden" name="studentIds" id="notifStudentIds" value="" />
+
+                <div class="hwd-m-field">
+                    <label class="hwd-m-label">نوع الإشعار</label>
+                    <select name="notifType" class="hwd-m-select">
+                        <option value="reminder">📌 تذكير بحل الواجب</option>
+                        <option value="warning">⚠ تنبيه تأخر في التسليم</option>
+                        <option value="result">🏆 إشعار بنتيجة الواجب</option>
+                        <option value="general">📢 إشعار عام</option>
+                    </select>
+                </div>
+
+                <div class="hwd-m-field">
+                    <label class="hwd-m-label" for="notifMsg">نص الإشعار</label>
+                    <textarea id="notifMsg" name="message" class="hwd-m-textarea"
+                              rows="3" placeholder="اكتب نص الإشعار..." maxlength="400" required></textarea>
+                </div>
+
+                <div class="hwd-modal-footer">
+                    <button type="button" class="hwd-m-btn hwd-m-btn-ghost"
+                            onclick="closeHwModal('modalNotif')">إلغاء</button>
+                    <button type="submit" class="hwd-m-btn hwd-m-btn-amber">🔔 إرسال الإشعار</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@* ============================================================
+   Modal: إعادة الواجب
+   ============================================================ *@
+<div class="hwd-overlay" id="modalReset">
+    <div class="hwd-modal">
+        <div class="hwd-modal-header">
+            <div class="hwd-modal-icon red">🔄</div>
+            <div>
+                <h2 class="hwd-modal-title">إعادة تعيين الواجب</h2>
+                <p class="hwd-modal-sub">سيتم حذف الإجابات والدرجة السابقة</p>
+            </div>
+            <button class="hwd-modal-x" onclick="closeHwModal('modalReset')">✕</button>
+        </div>
+        <div class="hwd-modal-body">
+            <div class="hwd-reset-student">
+                <div class="hwd-reset-av" id="resetAvatar">—</div>
+                <div class="hwd-reset-name" id="resetName">—</div>
+            </div>
+
+            <div class="hwd-reset-warn">
+                ⚠ <strong>تحذير:</strong> سيتم حذف جميع إجابات الطالب ودرجته في هذا الواجب نهائياً،
+                وسيعود الواجب إلى حالة "لم يُسلَّم". هذا الإجراء لا يمكن التراجع عنه.
+            </div>
+
+            <form asp-area="Admin" asp-controller="Batches"
+                  asp-action="ResetStudentHomework" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="homeworkSetId" value="@Model.HomeworkSetId" />
+                <input type="hidden" name="batchId"       value="@Model.BatchId" />
+                <input type="hidden" name="studentId"     id="resetStudentId" value="" />
+
+                <div class="hwd-modal-footer">
+                    <button type="button" class="hwd-m-btn hwd-m-btn-ghost"
+                            onclick="closeHwModal('modalReset')">إلغاء</button>
+                    <button type="submit" class="hwd-m-btn hwd-m-btn-red">🔄 تأكيد الإعادة</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    /* ===== Filter ===== */
+    function filterTable(type, btn) {
+        document.querySelectorAll('.hwd-filter').forEach(function (b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        document.querySelectorAll('#studentsTable tbody tr').forEach(function (row) {
+            row.style.display = (type === 'all' || row.dataset.status === type) ? '' : 'none';
+        });
+    }
+
+    /* ===== Modals ===== */
+    function openHwModal(id) {
+        var el = document.getElementById(id);
+        if (el) { el.classList.add('is-open'); document.body.style.overflow = 'hidden'; }
+    }
+    function closeHwModal(id) {
+        var el = document.getElementById(id);
+        if (el) { el.classList.remove('is-open'); document.body.style.overflow = ''; }
+    }
+    document.querySelectorAll('.hwd-overlay').forEach(function (ov) {
+        ov.addEventListener('click', function (e) { if (e.target === ov) closeHwModal(ov.id); });
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            document.querySelectorAll('.hwd-overlay.is-open').forEach(function (el) {
+                closeHwModal(el.id);
+            });
+        }
+    });
+
+    /* ===== Selection State ===== */
+    var selected = {};   // { studentId: { name, avatar, isSubmitted } }
+
+    function getSelectedArray() {
+        return Object.keys(selected).map(function (id) {
+            return Object.assign({ id: id }, selected[id]);
+        });
+    }
+
+    function updateFooter() {
+        var arr = getSelectedArray();
+        var footer = document.getElementById('actionFooter');
+        var count  = arr.length;
+
+        if (count === 0) {
+            footer.classList.remove('is-visible');
+            var mainEl = document.getElementById('qdratMain');
+            if (mainEl) mainEl.classList.remove('footer-open');
+            return;
+        }
+
+        footer.classList.add('is-visible');
+        var main = document.getElementById('qdratMain');
+        if (main) main.classList.add('footer-open');
+
+        /* Avatars (max 3) */
+        var avatarHtml = '';
+        arr.slice(0, 3).forEach(function (s) {
+            avatarHtml += '<div class="hwd-footer-av">' + s.avatar + '</div>';
+        });
+        document.getElementById('footerAvatars').innerHTML = avatarHtml;
+
+        /* Count and names */
+        document.getElementById('selCount').textContent = count;
+        if (count === 1) {
+            document.getElementById('selNames').textContent = arr[0].name;
+        } else {
+            document.getElementById('selNames').textContent =
+                arr.slice(0, 2).map(function (s) { return s.name.split(' ')[0]; }).join('، ')
+                + (count > 2 ? ' و' + (count - 2) + ' آخرين' : '');
+        }
+
+        /* Single vs Multi */
+        var single     = count === 1;
+        var s          = single ? arr[0] : null;
+        var isSubmitted= single && s.isSubmitted === 'true';
+
+        /* Review button */
+        var btnReview = document.getElementById('btnReview');
+        if (single && isSubmitted) {
+            var reviewUrl = '@Url.Action("Review", "HomeworkManagement", new { area = "Admin" })'
+                + '?studentId=' + (s ? s.id : '') + '&homeworkSetId=@Model.HomeworkSetId';
+            btnReview.href = reviewUrl;
+            btnReview.classList.remove('disabled');
+        } else {
+            btnReview.href = '#';
+            btnReview.classList.add('disabled');
+            btnReview.title = isSubmitted ? 'اختر طالباً واحداً فقط' : 'الطالب لم يسلّم الواجب';
+        }
+
+        /* Parent report button */
+        var btnParent = document.getElementById('btnParentReport');
+        if (single && isSubmitted) {
+            var parentUrl = '@Url.Action("HomeworkParentReport", "HomeworkManagement", new { area = "Admin" })'
+                + '?homeworkSetId=@Model.HomeworkSetId&studentId=' + (s ? s.id : '');
+            btnParent.href = parentUrl;
+            btnParent.classList.remove('disabled');
+        } else {
+            btnParent.href = '#';
+            btnParent.classList.add('disabled');
+            btnParent.title = isSubmitted ? 'اختر طالباً واحداً فقط' : 'الطالب لم يسلّم الواجب';
+        }
+
+        /* Notif student ids */
+        document.getElementById('notifStudentIds').value =
+            arr.map(function (s) { return s.id; }).join(',');
+        document.getElementById('notifSubtitle').textContent =
+            count === 1 ? 'للطالب: ' + arr[0].name : count + ' طلاب محددين';
+
+        /* Reset button */
+        var btnReset = document.getElementById('btnReset');
+        if (single && isSubmitted) {
+            btnReset.classList.remove('disabled');
+        } else {
+            btnReset.classList.add('disabled');
+            btnReset.title = isSubmitted ? 'اختر طالباً واحداً فقط' : 'الطالب لم يسلّم الواجب';
+        }
+    }
+
+    function toggleRow(studentId, name, avatar, isSubmitted, checkboxEl) {
+        var row = checkboxEl
+            ? checkboxEl.closest('tr')
+            : document.querySelector('tr[data-student-id="' + studentId + '"]');
+
+        if (selected[studentId]) {
+            delete selected[studentId];
+            if (row) row.classList.remove('is-selected');
+            if (checkboxEl) checkboxEl.checked = false;
+            else {
+                var chk = document.querySelector('.row-chk[data-student-id="' + studentId + '"]');
+                if (chk) chk.checked = false;
+            }
+        } else {
+            selected[studentId] = { name: name, avatar: avatar, isSubmitted: isSubmitted };
+            if (row) row.classList.add('is-selected');
+            if (checkboxEl) checkboxEl.checked = true;
+            else {
+                var chk = document.querySelector('.row-chk[data-student-id="' + studentId + '"]');
+                if (chk) chk.checked = true;
+            }
+        }
+        updateFooter();
+    }
+
+    function clearSelection() {
+        selected = {};
+        document.querySelectorAll('.row-chk').forEach(function (c) { c.checked = false; });
+        document.querySelectorAll('.hwd-selectable-row').forEach(function (r) {
+            r.classList.remove('is-selected');
+        });
+        document.getElementById('selectAll').checked = false;
+        updateFooter();
+    }
+
+    function openResetModal() {
+        var arr = getSelectedArray();
+        if (arr.length !== 1) return;
+        var s = arr[0];
+        document.getElementById('resetStudentId').value = s.id;
+        document.getElementById('resetAvatar').textContent = s.avatar;
+        document.getElementById('resetName').textContent = s.name;
+        openHwModal('modalReset');
+    }
+
+    /* ===== Event Wiring ===== */
+    document.addEventListener('DOMContentLoaded', function () {
+
+        /* Animate ring */
+        var ring = document.querySelector('.hwd-ring-fill');
+        if (ring) {
+            var orig = ring.getAttribute('stroke-dashoffset');
+            ring.setAttribute('stroke-dashoffset', '251.2');
+            setTimeout(function () {
+                ring.style.transition = 'stroke-dashoffset .9s ease';
+                ring.setAttribute('stroke-dashoffset', orig);
+            }, 200);
+        }
+
+        /* Animate score bars */
+        document.querySelectorAll('.hwd-score-fill').forEach(function (el) {
+            var w = el.style.width;
+            el.style.width = '0';
+            setTimeout(function () { el.style.width = w; }, 300);
+        });
+
+        /* Row click → select */
+        document.querySelectorAll('.hwd-selectable-row').forEach(function (row) {
+            row.addEventListener('click', function () {
+                var id    = row.dataset.studentId;
+                var name  = row.dataset.studentName;
+                var av    = row.dataset.studentAvatar;
+                var isSub = row.dataset.isSubmitted;
+                var chk   = row.querySelector('.row-chk');
+                toggleRow(id, name, av, isSub, chk);
+            });
+        });
+
+        /* Individual checkbox */
+        document.querySelectorAll('.row-chk').forEach(function (chk) {
+            chk.addEventListener('change', function (e) {
+                e.stopPropagation();
+                var id    = chk.dataset.studentId;
+                var name  = chk.dataset.studentName;
+                var av    = chk.dataset.studentAvatar;
+                var isSub = chk.dataset.isSubmitted;
+                if (chk.checked && !selected[id]) {
+                    selected[id] = { name: name, avatar: av, isSubmitted: isSub };
+                    chk.closest('tr').classList.add('is-selected');
+                } else if (!chk.checked && selected[id]) {
+                    delete selected[id];
+                    chk.closest('tr').classList.remove('is-selected');
+                }
+                updateFooter();
+                var allChks   = document.querySelectorAll('.row-chk:not([style*="display:none"])');
+                var checkedChks = document.querySelectorAll('.row-chk:checked:not([style*="display:none"])');
+                document.getElementById('selectAll').checked =
+                    allChks.length > 0 && allChks.length === checkedChks.length;
+            });
+        });
+
+        /* Select all checkbox */
+        document.getElementById('selectAll').addEventListener('change', function () {
+            var checked = this.checked;
+            document.querySelectorAll('#studentsTable tbody tr').forEach(function (row) {
+                if (row.style.display === 'none') return;
+                var chk   = row.querySelector('.row-chk');
+                var id    = row.dataset.studentId;
+                var name  = row.dataset.studentName;
+                var av    = row.dataset.studentAvatar;
+                var isSub = row.dataset.isSubmitted;
+                if (checked) {
+                    chk.checked = true;
+                    selected[id] = { name: name, avatar: av, isSubmitted: isSub };
+                    row.classList.add('is-selected');
+                } else {
+                    chk.checked = false;
+                    delete selected[id];
+                    row.classList.remove('is-selected');
+                }
+            });
+            updateFooter();
+        });
+    });
+</script>

@@ -1,0 +1,1757 @@
+﻿@model QdratNew.ViewModels.Attendance.AdminBatchLecturesVM
+@using System.Text.Json
+@using Microsoft.AspNetCore.Authorization
+@using QdratNew.Security.AdminPermissions
+@inject IAuthorizationService AuthorizationService
+
+@{
+    ViewData["Title"] = $"محاضرات دفعة {Model.BatchName}";
+    var jsonOpts = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    var studentsJson              = JsonSerializer.Serialize(Model.Students, jsonOpts);
+    var curriculumInstructorsJson = JsonSerializer.Serialize(Model.CurriculumInstructors, jsonOpts);
+    var isArchived      = ViewBag.IsArchived as bool? ?? false;
+    var isArchiveOwner  = ViewBag.IsArchiveOwner as bool? ?? false;
+
+    var canMark    = (await AuthorizationService.AuthorizeAsync(User, AdminPermissionPolicies.Attendance_Mark)).Succeeded;
+    var canArchive = (await AuthorizationService.AuthorizeAsync(User, AdminPermissionPolicies.Attendance_Archive)).Succeeded;
+}
+
+@section Styles {
+    <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet" />
+
+    <style>
+        :root {
+            --ink: #0D1B2A;
+            --ink-2: #2C3E50;
+            --ink-3: #5A6A7A;
+            --ink-4: #8FA0B0;
+            --ink-5: #C8D5E0;
+            --canvas: #F3F6FA;
+            --surface: #FFFFFF;
+            --surface-2: #F8FAFC;
+            --surface-3: #EEF2F7;
+            --border: #DDE4EC;
+            --blue: #1B5EAE;
+            --blue-2: #2471D0;
+            --blue-bg: #E8F1FB;
+            --blue-dark: #103E7A;
+            --emerald: #0D7A5B;
+            --emerald-bg: #E4F5EE;
+            --amber: #985D09;
+            --amber-bg: #FDF0D8;
+            --rose: #BF1030;
+            --rose-bg: #FDEAEE;
+            --violet: #5535B5;
+            --violet-bg: #EDE8F9;
+            --r-sm: 6px;
+            --r-md: 10px;
+            --r-lg: 14px;
+            --r-xl: 20px;
+            --sh-xs: 0 1px 3px rgba(13,27,42,.06);
+            --sh-sm: 0 2px 8px rgba(13,27,42,.08);
+            --sh-md: 0 4px 18px rgba(13,27,42,.10);
+            --ease: cubic-bezier(.25,.46,.45,.94);
+        }
+
+        .attendance-page {
+            background: var(--canvas);
+            min-height: 100vh;
+            padding: 32px 28px 64px;
+            direction: rtl;
+            font-family: 'Cairo';
+            color: var(--ink-2);
+        }
+
+        .attendance-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-bottom: 28px;
+        }
+
+        .attendance-brand {
+            display: flex;
+            align-items: center;
+            gap: 13px;
+        }
+
+        .attendance-brand-icon {
+            width: 46px;
+            height: 46px;
+            background: var(--blue);
+            border-radius: var(--r-lg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 18px;
+            box-shadow: 0 4px 14px rgba(27,94,174,.28);
+        }
+
+        .attendance-brand-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--ink);
+            line-height: 1.15;
+        }
+
+        .attendance-brand-sub {
+            font-size: 14px;
+            color: var(--ink-4);
+            margin-top: 2px;
+        }
+
+        .top-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn-secondary-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            background: var(--surface);
+            color: var(--blue);
+            border: 1px solid #B6D3F4;
+            border-radius: var(--r-md);
+            padding: 10px 20px;
+            font-size: 16px;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            transition: background .16s var(--ease), transform .14s, box-shadow .16s;
+        }
+
+            .btn-secondary-action:hover {
+                background: var(--blue-bg);
+                color: var(--blue-dark);
+                transform: translateY(-2px);
+                box-shadow: var(--sh-sm);
+            }
+
+        .attendance-alert {
+            border: none;
+            border-radius: var(--r-lg);
+            padding: 14px 18px;
+            font-size: 15px;
+            font-weight: 700;
+            box-shadow: var(--sh-xs);
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .attendance-alert-success {
+            background: var(--emerald-bg);
+            color: var(--emerald);
+        }
+
+        .attendance-alert-danger {
+            background: var(--rose-bg);
+            color: var(--rose);
+        }
+
+        .attendance-kpis {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 13px;
+            margin-bottom: 24px;
+        }
+
+        @@media (max-width: 960px) {
+            .attendance-kpis {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @@media (max-width: 480px) {
+            .attendance-kpis {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .kpi-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            padding: 18px 19px;
+            display: flex;
+            align-items: center;
+            gap: 13px;
+            box-shadow: var(--sh-xs);
+            transition: transform .2s var(--ease), box-shadow .2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+            .kpi-card::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                right: 0;
+                width: 4px;
+                height: 100%;
+                border-radius: 0 var(--r-xl) var(--r-xl) 0;
+            }
+
+            .kpi-card:hover {
+                transform: translateY(-3px);
+                box-shadow: var(--sh-sm);
+            }
+
+        .kpi-blue::after {
+            background: var(--blue);
+        }
+
+        .kpi-emerald::after {
+            background: var(--emerald);
+        }
+
+        .kpi-amber::after {
+            background: var(--amber);
+        }
+
+        .kpi-rose::after {
+            background: var(--rose);
+        }
+
+        .kpi-ico {
+            width: 42px;
+            height: 42px;
+            border-radius: var(--r-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .ico-blue {
+            background: var(--blue-bg);
+            color: var(--blue);
+        }
+
+        .ico-emerald {
+            background: var(--emerald-bg);
+            color: var(--emerald);
+        }
+
+        .ico-amber {
+            background: var(--amber-bg);
+            color: var(--amber);
+        }
+
+        .ico-rose {
+            background: var(--rose-bg);
+            color: var(--rose);
+        }
+
+        .kpi-label {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--ink-4);
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            margin-bottom: 3px;
+        }
+
+        .kpi-val {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--ink);
+            line-height: 1;
+        }
+
+        .attendance-filter-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            padding: 18px 22px 21px;
+            box-shadow: var(--sh-xs);
+            margin-bottom: 22px;
+        }
+
+        .attendance-filter-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--ink-4);
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            margin-bottom: 14px;
+        }
+
+        .attendance-filter-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr auto;
+            gap: 12px;
+            align-items: end;
+        }
+
+        @@media (max-width: 1100px) {
+            .attendance-filter-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @@media (max-width: 640px) {
+            .attendance-filter-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .attendance-field label {
+            display: block;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--ink-3);
+            margin-bottom: 5px;
+        }
+
+        .attendance-select,
+        .attendance-date {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: var(--r-md);
+            font-size: 16px;
+            background: var(--surface-2);
+            color: var(--ink);
+            transition: border-color .16s, box-shadow .16s;
+            appearance: none;
+            -webkit-appearance: none;
+        }
+
+        .attendance-select {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238FA0B0' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: left 10px center;
+            padding-left: 30px;
+        }
+
+            .attendance-select:focus,
+            .attendance-date:focus {
+                outline: none;
+                border-color: var(--blue-2);
+                box-shadow: 0 0 0 3px rgba(36,113,208,.11);
+                background-color: var(--surface);
+            }
+
+        .filter-btn-row {
+            display: flex;
+            gap: 7px;
+        }
+
+        .btn-filter {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 9px 20px;
+            height: 42px;
+            background: var(--blue);
+            color: #fff;
+            border: none;
+            border-radius: var(--r-md);
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background .15s, transform .12s;
+        }
+
+            .btn-filter:hover {
+                background: var(--blue-dark);
+                color: #fff;
+                transform: translateY(-1px);
+            }
+
+        .btn-reset {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            padding: 8px 14px;
+            height: 42px;
+            border: 1px solid var(--border);
+            border-radius: var(--r-md);
+            font-size: 15px;
+            color: var(--ink-3);
+            background: var(--surface);
+            text-decoration: none;
+            transition: all .15s;
+        }
+
+            .btn-reset:hover {
+                background: var(--rose-bg);
+                border-color: #F5BBC4;
+                color: var(--rose);
+            }
+
+        .attendance-table-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            overflow: visible;
+            box-shadow: var(--sh-sm);
+            margin-bottom: 24px;
+        }
+
+        .attendance-table-topbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 11px 16px;
+            border-bottom: 1px solid var(--surface-3);
+            flex-wrap: wrap;
+        }
+
+        .table-section-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 16px;
+            font-weight: 800;
+            color: var(--ink);
+            margin-left: 10px;
+        }
+
+            .table-section-title i {
+                color: var(--blue);
+            }
+
+        .attendance-table-search-wrap {
+            position: relative;
+            flex: 1;
+            min-width: 220px;
+            max-width: 390px;
+        }
+
+            .attendance-table-search-wrap i {
+                position: absolute;
+                right: 11px;
+                top: 50%;
+                transform: translateY(-50%);
+                color: var(--ink-4);
+                font-size: 15px;
+                pointer-events: none;
+            }
+
+            .attendance-table-search-wrap input {
+                width: 100%;
+                padding: 7px 32px 7px 12px;
+                border: 1px solid var(--border);
+                border-radius: var(--r-md);
+                font-size: 16px;
+                background: var(--surface-2);
+                color: var(--ink);
+                transition: border-color .15s, box-shadow .15s;
+            }
+
+                .attendance-table-search-wrap input:focus {
+                    outline: none;
+                    border-color: var(--blue-2);
+                    box-shadow: 0 0 0 3px rgba(36,113,208,.1);
+                    background: var(--surface);
+                }
+
+        .attendance-count-badge {
+            margin-right: auto;
+            font-size: 14px;
+            color: var(--ink-4);
+        }
+
+            .attendance-count-badge strong {
+                color: var(--blue);
+                font-weight: 700;
+            }
+
+        .table-responsive-safe {
+            width: 100%;
+            overflow-x: auto;
+            overflow-y: visible;
+        }
+
+        #lecturesTable {
+            width: 100% !important;
+            border-collapse: collapse;
+        }
+
+            #lecturesTable thead th {
+                background: var(--surface-2) !important;
+                padding: 11px 15px !important;
+                font-size: 13px !important;
+                font-weight: 700 !important;
+                color: var(--ink-4) !important;
+                text-transform: uppercase;
+                letter-spacing: .05em;
+                white-space: nowrap;
+                border: none !important;
+                text-align: center;
+            }
+
+            #lecturesTable tbody tr {
+                border-bottom: 1px solid var(--surface-3);
+                transition: background .1s;
+            }
+
+                #lecturesTable tbody tr:last-child {
+                    border-bottom: none;
+                }
+
+                #lecturesTable tbody tr:hover {
+                    background: #F5F8FD;
+                }
+
+            #lecturesTable td {
+                padding: 11px 15px !important;
+                vertical-align: middle !important;
+                font-size: 16px !important;
+                color: var(--ink-2);
+                border: none !important;
+                text-align: center;
+            }
+
+        .today-row {
+            background: #FFFBEB;
+        }
+
+        .lecture-title-cell {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-align: right;
+        }
+
+        .lecture-avatar {
+            width: 33px;
+            height: 33px;
+            border-radius: 50%;
+            background: var(--blue-bg);
+            color: var(--blue);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .lecture-item-name {
+            font-weight: 600;
+            color: var(--ink);
+            font-size: 16px;
+        }
+
+        .today-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: var(--amber-bg);
+            color: var(--amber);
+            padding: 3px 9px;
+            border-radius: 30px;
+            font-size: 12px;
+            font-weight: 700;
+            margin-top: 4px;
+            width: max-content;
+        }
+
+        .instructor-tag,
+        .section-tag,
+        .location-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 10px;
+            border-radius: 30px;
+            font-size: 14px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .instructor-tag {
+            background: var(--violet-bg);
+            color: var(--violet);
+        }
+
+        .section-tag {
+            background: var(--blue-bg);
+            color: var(--blue);
+        }
+
+        .location-tag {
+            background: var(--surface-3);
+            color: var(--ink-3);
+        }
+
+        .date-chip {
+            font-size: 14px;
+            color: var(--ink-3);
+            white-space: nowrap;
+        }
+
+        .num-val {
+            font-weight: 700;
+            color: var(--ink);
+            font-size: 17px;
+        }
+
+        .num-unit {
+            font-size: 13px;
+            color: var(--ink-4);
+            display: block;
+            margin-top: 1px;
+        }
+
+        .count-success {
+            color: var(--emerald);
+        }
+
+        .count-danger {
+            color: var(--rose);
+        }
+
+        .count-warning {
+            color: var(--amber);
+        }
+
+        .count-info {
+            color: var(--blue-2);
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 5px 11px;
+            border-radius: 30px;
+            font-size: 14px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .sp-recorded {
+            background: var(--emerald-bg);
+            color: var(--emerald);
+        }
+
+        .sp-pending {
+            background: var(--surface-3);
+            color: var(--ink-4);
+        }
+
+        .attendance-act-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            flex-wrap: nowrap;
+            position: relative;
+            overflow: visible;
+        }
+
+        .act-btn {
+            position: relative;
+            width: 34px;
+            height: 34px;
+            min-width: 34px;
+            padding: 0;
+            border-radius: var(--r-sm);
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+            border: 1.5px solid transparent;
+            cursor: pointer;
+            background: transparent;
+            transition: all .15s;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            overflow: visible;
+        }
+
+            .act-btn i {
+                margin: 0;
+                font-size: 13px;
+                line-height: 1;
+            }
+
+            .act-btn .act-text {
+                position: absolute;
+                bottom: calc(100% + 8px);
+                right: 50%;
+                transform: translateX(50%) translateY(4px);
+                background: var(--ink);
+                color: #fff;
+                font-size: 11px;
+                font-weight: 600;
+                padding: 5px 9px;
+                border-radius: 6px;
+                opacity: 0;
+                visibility: hidden;
+                pointer-events: none;
+                transition: opacity .15s ease, transform .15s ease, visibility .15s ease;
+                z-index: 9999;
+                box-shadow: 0 4px 12px rgba(13,27,42,.18);
+                min-width: max-content;
+            }
+
+                .act-btn .act-text::after {
+                    content: "";
+                    position: absolute;
+                    top: 100%;
+                    right: 50%;
+                    transform: translateX(50%);
+                    border-width: 5px;
+                    border-style: solid;
+                    border-color: var(--ink) transparent transparent transparent;
+                }
+
+            .act-btn:hover .act-text {
+                opacity: 1;
+                visibility: visible;
+                transform: translateX(50%) translateY(0);
+            }
+
+        .act-record {
+            background: var(--blue-bg);
+            color: var(--blue);
+            border-color: #B6D3F4;
+        }
+
+            .act-record:hover {
+                background: var(--blue);
+                color: #fff;
+                border-color: var(--blue);
+            }
+
+        .act-report {
+            background: var(--violet-bg);
+            color: var(--violet);
+            border-color: #D7CDF8;
+        }
+
+            .act-report:hover {
+                background: var(--violet);
+                color: #fff;
+                border-color: var(--violet);
+            }
+
+        .dataTables_wrapper {
+            direction: rtl;
+            overflow: visible;
+        }
+
+            .dataTables_wrapper .dataTables_filter {
+                display: none;
+            }
+
+            .dataTables_wrapper .dataTables_length,
+            .dataTables_wrapper .dataTables_info {
+                padding: 9px 16px;
+                font-size: 14px;
+                color: var(--ink-4);
+            }
+
+            .dataTables_wrapper .dataTables_paginate {
+                padding: 9px 16px;
+            }
+
+                .dataTables_wrapper .dataTables_paginate .paginate_button {
+                    border-radius: var(--r-sm) !important;
+                    font-size: 14px !important;
+                    padding: 4px 10px !important;
+                    border: 1px solid var(--border) !important;
+                    margin: 0 2px !important;
+                    color: var(--ink-3) !important;
+                }
+
+                    .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+                    .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
+                        background: var(--blue) !important;
+                        border-color: var(--blue) !important;
+                        color: #fff !important;
+                    }
+
+                    .dataTables_wrapper .dataTables_paginate .paginate_button:hover:not(.current):not(.disabled) {
+                        background: var(--blue-bg) !important;
+                        border-color: #B6D3F4 !important;
+                        color: var(--blue) !important;
+                    }
+
+            .dataTables_wrapper .dataTables_length select {
+                border: 1px solid var(--border);
+                border-radius: var(--r-sm);
+                padding: 3px 8px;
+                font-size: 14px;
+                color: var(--ink);
+            }
+
+        div.dataTables_wrapper div.dataTables_paginate,
+        div.dataTables_wrapper div.dataTables_info,
+        div.dataTables_wrapper div.dataTables_length {
+            border-top: 1px solid var(--surface-3);
+            background: var(--surface-2);
+        }
+
+        .attendance-empty {
+            text-align: center;
+            padding: 56px 16px;
+            color: var(--ink-4);
+        }
+
+            .attendance-empty i {
+                font-size: 18px;
+                display: block;
+                margin-bottom: 12px;
+                color: var(--ink-5);
+            }
+
+        .attendance-empty-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--ink-3);
+        }
+
+        .attendance-empty-sub {
+            font-size: 14px;
+            margin-top: 4px;
+        }
+
+        @@media (max-width: 768px) {
+            .attendance-page {
+                padding: 22px 14px 48px;
+            }
+
+            .top-actions {
+                width: 100%;
+            }
+
+            .btn-secondary-action {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .attendance-filter-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .filter-btn-row {
+                width: 100%;
+            }
+
+            .btn-filter,
+            .btn-reset {
+                width: 100%;
+            }
+
+            .attendance-table-topbar {
+                align-items: stretch;
+            }
+
+            .attendance-table-search-wrap {
+                max-width: 100%;
+                width: 100%;
+            }
+
+            .attendance-count-badge {
+                margin-right: 0;
+            }
+        }
+
+        /* ─── Archive banner ─── */
+        .archive-banner {
+            display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+            background: var(--amber-bg); border: 1.5px solid #F4D493;
+            border-radius: var(--r-lg); padding: 14px 18px; margin-bottom: 20px;
+        }
+        .archive-banner-left { display: flex; align-items: center; gap: 10px; }
+        .archive-banner-icon { font-size: 20px; color: var(--amber); }
+        .archive-banner-title { font-size: 16px; font-weight: 800; color: var(--amber); }
+        .archive-banner-sub { font-size: 13px; color: #7a4a05; margin-top: 2px; }
+        .archive-banner-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .btn-archive-action {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 8px 16px; border-radius: var(--r-md);
+            font-size: 14px; font-weight: 700; text-decoration: none;
+            border: 1.5px solid;
+            transition: all .15s;
+        }
+        .btn-archive-history { background: var(--surface); color: var(--amber); border-color: #F4D493; }
+        .btn-archive-history:hover { background: var(--amber); color: #fff; border-color: var(--amber); }
+        .btn-archive-manage { background: var(--surface); color: var(--blue); border-color: #B6D3F4; }
+        .btn-archive-manage:hover { background: var(--blue); color: #fff; border-color: var(--blue); }
+
+        /* ─── Clickable KPI ─── */
+        .kpi-card.kpi-clickable { cursor: pointer; }
+        .kpi-card.kpi-clickable:hover { border-color: #b6d3f4; }
+        .kpi-hint { font-size: 11px; color: var(--ink-4); margin-top: 4px; }
+
+        /* ─── Offcanvas ─── */
+        .students-offcanvas .offcanvas-header { background: var(--blue); color: #fff; padding: 18px 20px; direction: rtl; }
+        .students-offcanvas .offcanvas-header .btn-close { filter: invert(1); }
+        .students-offcanvas .offcanvas-body { padding: 0; direction: rtl; background: var(--canvas); }
+        .students-offcanvas { width: 480px !important; }
+
+        .student-search-bar { padding: 14px 16px; background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
+        .student-search-bar input { width: 100%; padding: 8px 36px 8px 12px; border: 1px solid var(--border); border-radius: var(--r-md); font-size: 14px; background: var(--surface-2); }
+        .student-search-bar .s-icon { position: absolute; right: 27px; top: 50%; transform: translateY(-50%); color: var(--ink-4); font-size: 15px; pointer-events: none; }
+
+        .student-list { padding: 12px; }
+        .student-row { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 13px 14px; margin-bottom: 8px; display: flex; align-items: center; gap: 12px; transition: box-shadow .15s, border-color .15s; }
+        .student-row:hover { box-shadow: var(--sh-sm); border-color: #b6d3f4; }
+        .student-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--blue-bg); color: var(--blue); display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 800; flex-shrink: 0; }
+        .student-info { flex: 1; min-width: 0; }
+        .student-name { font-size: 14px; font-weight: 800; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .student-meta { display: flex; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
+        .student-meta-badge { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 20px; }
+        .meta-att  { background: var(--emerald-bg); color: var(--emerald); }
+        .meta-hw   { background: var(--blue-bg); color: var(--blue); }
+
+        .student-icon-btns { display: flex; gap: 6px; }
+        .icon-btn { width: 34px; height: 34px; border-radius: var(--r-md); border: 1px solid var(--border); background: var(--surface-2); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 15px; transition: all .15s; color: var(--ink-3); }
+        .icon-btn:hover { transform: translateY(-2px); }
+        .icon-btn.btn-att { border-color: #b6d3f4; background: var(--blue-bg); color: var(--blue); }
+        .icon-btn.btn-att:hover { background: var(--blue); color: #fff; box-shadow: 0 4px 12px rgba(27,94,174,.25); }
+        .icon-btn.btn-hw  { border-color: #bfe5d6; background: var(--emerald-bg); color: var(--emerald); }
+        .icon-btn.btn-hw:hover  { background: var(--emerald); color: #fff; box-shadow: 0 4px 12px rgba(13,122,91,.25); }
+
+        /* ─── Modals ─── */
+        .ux-modal .modal-dialog { max-width: 680px; }
+        .ux-modal .modal-content { border: none; border-radius: var(--r-xl); overflow: hidden; box-shadow: 0 20px 60px rgba(13,27,42,.18); }
+        .ux-modal .modal-header { padding: 20px 24px; border: none; background: linear-gradient(135deg,var(--blue-dark) 0%,var(--blue-2) 100%); color: #fff; direction: rtl; }
+        .ux-modal .modal-title { font-size: 17px; font-weight: 800; }
+        .ux-modal .modal-header .btn-close { filter: invert(1); opacity: .8; }
+        .ux-modal .modal-body { padding: 24px; direction: rtl; background: var(--canvas); max-height: 72vh; overflow-y: auto; }
+        .ux-modal .modal-footer { border: none; background: var(--surface); padding: 16px 24px; direction: rtl; }
+
+        .modal-student-header { display: flex; align-items: center; gap: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 14px 16px; margin-bottom: 20px; }
+        .modal-student-avatar { width: 48px; height: 48px; border-radius: 50%; background: var(--blue-bg); color: var(--blue); display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 800; flex-shrink: 0; }
+        .modal-student-name { font-size: 16px; font-weight: 800; color: var(--ink); }
+        .modal-student-sub  { font-size: 13px; color: var(--ink-4); margin-top: 2px; }
+        .modal-stat-pills { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+        .modal-stat-pill { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 30px; font-size: 12px; font-weight: 700; }
+        .pill-blue    { background: var(--blue-bg);    color: var(--blue); }
+        .pill-emerald { background: var(--emerald-bg); color: var(--emerald); }
+        .pill-amber   { background: var(--amber-bg);   color: var(--amber); }
+        .pill-rose    { background: var(--rose-bg);    color: var(--rose); }
+
+        /* ─── Attendance Calendar ─── */
+        .att-month-group { margin-bottom: 22px; }
+        .att-month-title { font-size: 13px; font-weight: 800; color: var(--ink-4); letter-spacing: .05em; text-transform: uppercase; padding-bottom: 8px; margin-bottom: 10px; border-bottom: 2px solid var(--border); display: flex; align-items: center; gap: 6px; }
+        .att-month-title i { color: var(--blue); }
+        .att-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+        .att-cell { border-radius: var(--r-lg); padding: 12px 10px; text-align: center; border: 1px solid transparent; transition: transform .15s, box-shadow .15s; }
+        .att-cell:hover { transform: translateY(-2px); box-shadow: var(--sh-sm); }
+        .att-present { background: #EDFAF3; border-color: #A7E0C2; color: #0D7A5B; }
+        .att-late    { background: var(--amber-bg); border-color: #F4D493; color: var(--amber); }
+        .att-absent  { background: var(--rose-bg);  border-color: #F5BBC4; color: var(--rose); }
+        .att-none    { background: var(--surface-3); border-color: var(--border); color: var(--ink-4); }
+        .att-date-num { font-size: 20px; font-weight: 900; line-height: 1; margin-bottom: 4px; }
+        .att-date-str { font-size: 10px; font-weight: 700; opacity: .7; margin-bottom: 8px; }
+        .att-title    { font-size: 11px; font-weight: 700; line-height: 1.35; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .att-badge    { display: inline-flex; align-items: center; gap: 3px; padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 800; background: rgba(255,255,255,.6); }
+
+        /* ─── Homework Timeline ─── */
+        .hw-timeline { display: flex; flex-direction: column; gap: 10px; }
+        .hw-timeline-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 14px 16px; display: flex; align-items: flex-start; gap: 14px; transition: box-shadow .15s, border-color .15s; position: relative; }
+        .hw-timeline-item:hover { box-shadow: var(--sh-sm); border-color: #B6D3F4; }
+        .hw-timeline-item.solved   { border-right: 4px solid var(--emerald); }
+        .hw-timeline-item.unsolved { border-right: 4px solid var(--rose); }
+        .hw-tl-date  { flex-shrink: 0; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-md); padding: 8px 10px; text-align: center; min-width: 58px; }
+        .hw-tl-month { font-size: 10px; font-weight: 800; color: var(--ink-4); text-transform: uppercase; }
+        .hw-tl-day   { font-size: 22px; font-weight: 900; color: var(--ink); line-height: 1; }
+        .hw-tl-body  { flex: 1; min-width: 0; }
+        .hw-tl-title { font-size: 14px; font-weight: 800; color: var(--ink); margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .hw-tl-status { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .hw-tl-badge  { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 30px; font-size: 12px; font-weight: 800; }
+        .tl-solved    { background: var(--emerald-bg); color: var(--emerald); }
+        .tl-unsolved  { background: var(--rose-bg);    color: var(--rose); }
+        .tl-score     { background: var(--blue-bg);     color: var(--blue); }
+        .tl-student   { background: var(--amber-bg);    color: var(--amber); }
+        .tl-parent    { background: var(--violet-bg);   color: var(--violet); }
+        .tl-no-contact{ background: var(--surface-3);   color: var(--ink-4); }
+        .hw-tl-icon   { flex-shrink: 0; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+        .tl-icon-solved   { background: var(--emerald-bg); color: var(--emerald); }
+        .tl-icon-unsolved { background: var(--rose-bg);    color: var(--rose); }
+
+        /* ─── Homework Curriculum Group ─── */
+        .hw-curriculum-group { margin-bottom: 20px; }
+        .hw-curriculum-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 10px 14px; margin-bottom: 12px; background: var(--blue-bg); border: 1px solid #b6d3f4; border-radius: var(--r-lg); }
+        .hw-curriculum-label { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 800; color: var(--blue); }
+        .hw-curriculum-instructor { display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; background: rgba(27,94,174,.12); color: var(--blue-dark); border: 1px solid #b6d3f4; }
+
+        @@media (max-width: 768px) {
+            .ux-modal .modal-dialog { max-width: 100%; margin: .5rem; }
+            .students-offcanvas { width: 100% !important; }
+        }
+    </style>
+}
+
+<div class="attendance-page">
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="attendance-alert attendance-alert-success">
+            <i class="bi bi-check-circle-fill"></i>
+            @TempData["Success"]
+        </div>
+    }
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="attendance-alert attendance-alert-danger">
+            <i class="bi bi-exclamation-circle-fill"></i>
+            @TempData["Error"]
+        </div>
+    }
+
+    @if (isArchived)
+    {
+        <div class="archive-banner">
+            <div class="archive-banner-left">
+                <div class="archive-banner-icon"><i class="bi bi-archive-fill"></i></div>
+                <div>
+                    <div class="archive-banner-title">دفعة مؤرشفة — وضع القراءة فقط</div>
+                    <div class="archive-banner-sub">لا يمكن تعديل سجلات الحضور لهذه الدفعة. يمكن الاطلاع فقط.</div>
+                </div>
+            </div>
+            <div class="archive-banner-actions">
+                @if (canArchive)
+                {
+                    <a asp-area="Admin" asp-controller="Attendance" asp-action="ArchiveHistory"
+                       asp-route-batchId="@Model.BatchId" class="btn-archive-action btn-archive-history">
+                        <i class="bi bi-clock-history"></i> الهيستوري
+                    </a>
+                    <a asp-area="Admin" asp-controller="Attendance" asp-action="ManageArchiveAccess"
+                       asp-route-batchId="@Model.BatchId" class="btn-archive-action btn-archive-manage">
+                        <i class="bi bi-shield-lock-fill"></i> الموافقات
+                    </a>
+                }
+            </div>
+        </div>
+    }
+
+    <div class="attendance-topbar">
+        <div class="attendance-brand">
+            <div class="attendance-brand-icon">
+                <i class="bi bi-calendar2-week-fill"></i>
+            </div>
+            <div>
+                <div class="attendance-brand-title">محاضرات الدفعة</div>
+                <div class="attendance-brand-sub">
+                    @Model.BatchName - @Model.CourseTitle
+                </div>
+            </div>
+        </div>
+
+        <div class="top-actions">
+            <a asp-area="Admin"
+               asp-controller="Attendance"
+               asp-action="Index"
+               asp-route-instructorId="@Model.InstructorId"
+               class="btn-secondary-action">
+                <i class="bi bi-arrow-left"></i>
+                رجوع للدفعات
+            </a>
+        </div>
+    </div>
+
+    <div class="attendance-kpis">
+
+        <div class="kpi-card kpi-blue kpi-clickable"
+             data-bs-toggle="offcanvas" data-bs-target="#studentsOffcanvas"
+             role="button" title="عرض قائمة الطلاب">
+            <div class="kpi-ico ico-blue">
+                <i class="bi bi-people"></i>
+            </div>
+            <div>
+                <div class="kpi-label">طلاب الدفعة</div>
+                <div class="kpi-val">@Model.TotalStudents</div>
+                <div class="kpi-hint">اضغط لعرض القائمة</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-amber">
+            <div class="kpi-ico ico-amber">
+                <i class="bi bi-easel2"></i>
+            </div>
+            <div>
+                <div class="kpi-label">محاضرات الدفعة</div>
+                <div class="kpi-val">@Model.TotalLectures</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-emerald">
+            <div class="kpi-ico ico-emerald">
+                <i class="bi bi-check2-circle"></i>
+            </div>
+            <div>
+                <div class="kpi-label">تم تسجيلها</div>
+                <div class="kpi-val">@Model.CompletedAttendanceLectures</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-rose">
+            <div class="kpi-ico ico-rose">
+                <i class="bi bi-exclamation-triangle"></i>
+            </div>
+            <div>
+                <div class="kpi-label">لم تسجل بعد</div>
+                <div class="kpi-val">@Model.PendingAttendanceLectures</div>
+            </div>
+        </div>
+
+    </div>
+
+    <form method="get"
+          asp-area="Admin"
+          asp-controller="Attendance"
+          asp-action="Lectures"
+          class="attendance-filter-card">
+
+        <div class="attendance-filter-title">
+            <i class="bi bi-sliders" style="color:var(--blue)"></i>
+            تصفية المحاضرات
+        </div>
+
+        <input type="hidden" name="batchId" value="@Model.BatchId" />
+
+        <div class="attendance-filter-grid">
+
+            <div class="attendance-field">
+                <label>
+                    <i class="bi bi-person-badge" style="color:var(--violet);margin-left:4px"></i>
+                    المدرب
+                </label>
+
+                <select name="instructorId" class="attendance-select">
+                    <option value="">كل المدربين</option>
+                    @foreach (var item in Model.Instructors)
+                    {
+                        if (item.Selected)
+                        {
+                            <option value="@item.Value" selected>@item.Text</option>
+                        }
+                        else
+                        {
+                            <option value="@item.Value">@item.Text</option>
+                        }
+                    }
+                </select>
+            </div>
+
+            <div class="attendance-field">
+                <label>
+                    <i class="bi bi-calendar-event" style="color:var(--emerald);margin-left:4px"></i>
+                    من تاريخ
+                </label>
+
+                <input type="date"
+                       name="dateFrom"
+                       class="attendance-date"
+                       value="@(Model.DateFrom.HasValue? Model.DateFrom.Value.ToString("yyyy-MM-dd") : "")" />
+            </div>
+
+            <div class="attendance-field">
+                <label>
+                    <i class="bi bi-calendar-check" style="color:var(--amber);margin-left:4px"></i>
+                    إلى تاريخ
+                </label>
+
+                <input type="date"
+                       name="dateTo"
+                       class="attendance-date"
+                       value="@(Model.DateTo.HasValue? Model.DateTo.Value.ToString("yyyy-MM-dd") : "")" />
+            </div>
+
+            <div class="attendance-field">
+                <div class="filter-btn-row">
+                    <button type="submit" class="btn-filter">
+                        <i class="bi bi-funnel"></i>
+                        تصفية
+                    </button>
+
+                    <a asp-area="Admin"
+                       asp-controller="Attendance"
+                       asp-action="Lectures"
+                       asp-route-batchId="@Model.BatchId"
+                       class="btn-reset">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                        إلغاء
+                    </a>
+                </div>
+            </div>
+
+        </div>
+    </form>
+
+    <div class="attendance-table-card">
+
+        <div class="attendance-table-topbar">
+            <div class="table-section-title">
+                <i class="bi bi-table"></i>
+                محاضرات @Model.BatchName
+            </div>
+
+            <div class="attendance-table-search-wrap">
+                <i class="bi bi-search"></i>
+                <input type="text"
+                       id="lecturesSearch"
+                       placeholder="ابحث في المحاضرة أو المدرب أو المحور أو الحالة..." />
+            </div>
+
+            <div class="attendance-count-badge">
+                إجمالي: <strong>@Model.Lectures.Count</strong> محاضرة
+            </div>
+        </div>
+
+        <div class="table-responsive-safe">
+            <table id="lecturesTable">
+                <thead>
+                    <tr>
+                        <th style="text-align:right; width:20%">المحاضرة</th>
+                        <th style="width:13%">المدرب</th>
+                        <th style="width:11%">التاريخ</th>
+                        <th style="width:12%">المحور</th>
+                        <th style="width:8%">الطلاب</th>
+                        <th style="width:8%">الحضور</th>
+                        <th style="width:8%">الغياب</th>
+                        <th style="width:7%">تأخير</th>
+                        <th style="width:8%">إذن مبكر</th>
+                        <th style="width:9%">الحالة</th>
+                        <th style="width:8%">الإجراء</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    @if (Model.Lectures.Any())
+                    {
+                        foreach (var item in Model.Lectures)
+                        {
+                            <tr class="@(item.IsToday ? "today-row" : "")">
+                                <td style="text-align:right">
+                                    <div class="lecture-title-cell">
+                                        <div class="lecture-avatar">
+                                            <i class="bi bi-easel2"></i>
+                                        </div>
+
+                                        <div>
+                                            <div class="lecture-item-name">@item.Title</div>
+
+                                            @if (item.IsToday)
+                                            {
+                                                <span class="today-pill">
+                                                    <i class="bi bi-calendar-day"></i>
+                                                    اليوم
+                                                </span>
+                                            }
+                                        </div>
+                                    </div>
+                                </td>
+
+                                <td>
+                                    <span class="instructor-tag">
+                                        <i class="bi bi-person-badge"></i>
+                                        @item.InstructorName
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="date-chip">
+                                        <i class="bi bi-calendar-event" style="margin-left:4px;color:var(--ink-4)"></i>
+                                        @item.Date.ToString("yyyy/MM/dd")
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="section-tag">
+                                        <i class="bi bi-diagram-3"></i>
+                                        @item.SectionTitle
+                                    </span>
+                                </td>
+
+
+                                <td>
+                                    <span class="num-val">@item.TotalStudents</span>
+                                    <span class="num-unit">طالب</span>
+                                </td>
+
+                                <td>
+                                    <span class="num-val count-success">@item.PresentCount</span>
+                                    <span class="num-unit">@item.AttendancePercentage%</span>
+                                </td>
+
+                                <td>
+                                    <span class="num-val count-danger">@item.AbsentCount</span>
+                                </td>
+
+                                <td>
+                                    <span class="num-val count-warning">@item.LateArrivalCount</span>
+                                </td>
+
+                                <td>
+                                    <span class="num-val count-info">@item.EarlyLeavePermissionCount</span>
+                                </td>
+
+                                <td>
+                                    @if (item.HasAttendance)
+                                    {
+                                        <span class="status-pill sp-recorded">
+                                            <i class="bi bi-check-circle"></i>
+                                            مسجل
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="status-pill sp-pending">
+                                            <i class="bi bi-dash-circle"></i>
+                                            لم يسجل
+                                        </span>
+                                    }
+                                </td>
+
+                                <td>
+                                    <div class="attendance-act-row">
+                                        @if (!isArchived && canMark)
+                                        {
+                                            <a asp-area="Admin"
+                                               asp-controller="Attendance"
+                                               asp-action="Record"
+                                               asp-route-lectureId="@item.LectureId"
+                                               class="act-btn act-record"
+                                               aria-label="تسجيل">
+                                                <i class="bi bi-pencil-square"></i>
+                                                <span class="act-text">تسجيل</span>
+                                            </a>
+                                        }
+                                        else if (isArchived)
+                                        {
+                                            <span class="act-btn" style="opacity:.4;cursor:not-allowed;background:var(--surface-3);border-color:var(--border);color:var(--ink-4)"
+                                                  title="مؤرشفة — لا يمكن التعديل">
+                                                <i class="bi bi-lock-fill"></i>
+                                            </span>
+                                        }
+
+                                        <a asp-area="Admin"
+                                           asp-controller="Attendance"
+                                           asp-action="LectureReport"
+                                           asp-route-lectureId="@item.LectureId"
+                                           class="act-btn act-report"
+                                           aria-label="تقرير">
+                                            <i class="bi bi-file-earmark-bar-graph"></i>
+                                            <span class="act-text">تقرير</span>
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (!Model.Lectures.Any())
+        {
+            <div class="attendance-empty">
+                <i class="bi bi-inbox"></i>
+                <div class="attendance-empty-title">لا توجد محاضرات لهذه الدفعة حسب الفلتر الحالي</div>
+                <div class="attendance-empty-sub">جرّب تغيير فلتر المدرب أو التاريخ</div>
+            </div>
+        }
+
+    </div>
+
+</div>
+
+@* ══════════════════════════════════════════════════
+   OFFCANVAS — قائمة الطلاب
+   ══════════════════════════════════════════════════ *@
+<div class="offcanvas offcanvas-end students-offcanvas" tabindex="-1" id="studentsOffcanvas"
+     aria-labelledby="studentsOffcanvasLabel" data-bs-scroll="true">
+
+    <div class="offcanvas-header">
+        <div>
+            <h5 class="offcanvas-title" id="studentsOffcanvasLabel" style="font-size:17px;font-weight:800">
+                <i class="bi bi-people-fill me-2"></i> طلاب الدفعة
+            </h5>
+            <div style="font-size:13px;opacity:.8;margin-top:3px">@Model.BatchName — @Model.TotalStudents طالب</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+
+    <div class="offcanvas-body">
+
+        <div class="student-search-bar" style="position:relative">
+            <i class="s-icon bi bi-search"></i>
+            <input type="text" id="studentSearch" placeholder="ابحث باسم الطالب..." style="padding-right:36px" />
+        </div>
+
+        <div class="student-list" id="studentList">
+            @foreach (var s in Model.Students)
+            {
+                var attPct = s.TotalLectures > 0 ? (int)Math.Round(s.AttendedCount * 100.0 / s.TotalLectures) : 0;
+                var hwPct  = s.TotalHomeworks > 0 ? (int)Math.Round(s.SolvedHomeworks * 100.0 / s.TotalHomeworks) : 0;
+                var initial = s.FullName.Length > 0 ? s.FullName[0].ToString() : "ط";
+
+                <div class="student-row" data-student-name="@s.FullName.ToLower()">
+                    <div class="student-avatar">@initial</div>
+                    <div class="student-info">
+                        <div class="student-name">@s.FullName</div>
+                        <div class="student-meta">
+                            <span class="student-meta-badge meta-att">
+                                <i class="bi bi-calendar2-check"></i> @s.AttendedCount/@s.TotalLectures حضور
+                            </span>
+                            <span class="student-meta-badge meta-hw">
+                                <i class="bi bi-clipboard2-check"></i> @s.SolvedHomeworks/@s.TotalHomeworks واجب
+                            </span>
+                        </div>
+                    </div>
+                    <div class="student-icon-btns">
+                        <button class="icon-btn btn-att"
+                                title="تقويم الحضور"
+                                onclick="openAttModal(@s.StudentId)">
+                            <i class="bi bi-calendar2-week-fill"></i>
+                        </button>
+                        <button class="icon-btn btn-hw"
+                                title="سجل الواجبات"
+                                onclick="openHwModal(@s.StudentId)">
+                            <i class="bi bi-clipboard2-data-fill"></i>
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+
+    </div>
+</div>
+
+@* ══════════════════════════════════════════════════
+   MODAL 1 — تقويم الحضور
+   ══════════════════════════════════════════════════ *@
+<div class="modal fade ux-modal" id="attendanceModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-calendar2-week-fill me-2"></i>
+                    تقويم الحضور
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="attendanceModalBody"></div>
+            <div class="modal-footer">
+                <div id="attendanceModalSummary" style="font-size:13px;color:var(--ink-4);margin-left:auto"></div>
+                <button type="button" class="btn btn-sm" data-bs-dismiss="modal"
+                        style="background:var(--surface-3);color:var(--ink-3);border:none;border-radius:var(--r-md);padding:7px 16px;font-weight:700">
+                    إغلاق
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* ══════════════════════════════════════════════════
+   MODAL 2 — سجل الواجبات
+   ══════════════════════════════════════════════════ *@
+<div class="modal fade ux-modal" id="homeworkModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-clipboard2-data-fill me-2"></i>
+                    سجل الواجبات
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="homeworkModalBody"></div>
+            <div class="modal-footer">
+                <div id="homeworkModalSummary" style="font-size:13px;color:var(--ink-4);margin-left:auto"></div>
+                <button type="button" class="btn btn-sm" data-bs-dismiss="modal"
+                        style="background:var(--surface-3);color:var(--ink-3);border:none;border-radius:var(--r-md);padding:7px 16px;font-weight:700">
+                    إغلاق
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+    <script>
+        // ── بيانات الطلاب والمناهج ──────────────────────────────────
+        const studentsData          = @Html.Raw(studentsJson);
+        const curriculumInstructors = @Html.Raw(curriculumInstructorsJson);
+
+        document.addEventListener("DOMContentLoaded", function () {
+
+            var table = $('#lecturesTable').DataTable({
+                language: {
+                    url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json'
+                },
+                pageLength: 10,
+                lengthMenu: [[10, 20, 30, 50, 100, -1], [10, 20, 30, 50, 100, "الكل"]],
+                order: [[2, "desc"]],
+                dom: 'Brtip',
+                columnDefs: [
+                    { orderable: false, targets: [10] }
+                ]
+            });
+
+            $('#lecturesSearch').on('input', function () {
+                table.search($(this).val()).draw();
+            });
+
+            // بحث في الطلاب
+            const studentSearchInput = document.getElementById("studentSearch");
+            const studentRows = Array.from(document.querySelectorAll(".student-row"));
+            if (studentSearchInput) {
+                studentSearchInput.addEventListener("input", function () {
+                    const val = this.value.toLowerCase().trim();
+                    studentRows.forEach(r => {
+                        r.style.display = (r.dataset.studentName || "").includes(val) ? "" : "none";
+                    });
+                });
+            }
+        });
+
+        // ── helpers ─────────────────────────────────────────────────
+        function findStudent(id) {
+            return studentsData.find(s => s.studentId === id);
+        }
+
+        function initials(name) {
+            if (!name) return "ط";
+            const parts = name.trim().split(" ");
+            return parts.length >= 2 ? parts[0][0] + parts[1][0] : parts[0][0];
+        }
+
+        // ═══════════════════════════════════════════════════════
+        // MODAL 1 — تقويم الحضور
+        // ═══════════════════════════════════════════════════════
+        function openAttModal(studentId) {
+            const s = findStudent(studentId);
+            if (!s) return;
+
+            const attPct = s.totalLectures > 0
+                ? Math.round(s.attendedCount * 100 / s.totalLectures) : 0;
+
+            const body = document.getElementById("attendanceModalBody");
+            body.innerHTML = `
+              <div class="modal-student-header">
+                <div class="modal-student-avatar">${initials(s.fullName)}</div>
+                <div>
+                  <div class="modal-student-name">${s.fullName}</div>
+                  <div class="modal-stat-pills">
+                    <span class="modal-stat-pill pill-blue">
+                      <i class="bi bi-calendar2-check"></i> ${s.attendedCount} / ${s.totalLectures} محاضرة
+                    </span>
+                    <span class="modal-stat-pill ${attPct >= 75 ? 'pill-emerald' : attPct >= 50 ? 'pill-amber' : 'pill-rose'}">
+                      <i class="bi bi-pie-chart-fill"></i> ${attPct}% حضور
+                    </span>
+                  </div>
+                </div>
+              </div>
+              ${buildAttCalendar(s.lectures)}
+            `;
+
+            document.getElementById("attendanceModalSummary").innerHTML =
+                `حضر <strong>${s.attendedCount}</strong> من أصل <strong>${s.totalLectures}</strong> محاضرة`;
+
+            new bootstrap.Modal(document.getElementById("attendanceModal")).show();
+        }
+
+        function buildAttCalendar(lectures) {
+            if (!lectures || lectures.length === 0)
+                return `<div style="text-align:center;padding:40px;color:var(--ink-4)">
+                          <i class="bi bi-calendar-x" style="font-size:28px;display:block;margin-bottom:10px"></i>
+                          لا توجد محاضرات مسجّلة
+                        </div>`;
+
+            const groups = {};
+            lectures.forEach(l => {
+                const key = l.monthLabel || l.date.slice(0, 7);
+                if (!groups[key]) groups[key] = [];
+                groups[key].push(l);
+            });
+
+            let html = '';
+            for (const [month, items] of Object.entries(groups)) {
+                html += `<div class="att-month-group">
+                           <div class="att-month-title">
+                             <i class="bi bi-calendar3"></i> ${month}
+                           </div>
+                           <div class="att-grid">`;
+                items.forEach(l => {
+                    const parts   = (l.date || "").split("/");
+                    const dayNum  = parts[2] || "—";
+                    const dateStr = l.date || "";
+
+                    let cls, icon, badge;
+                    if (!l.hasRecord) {
+                        cls = "att-none"; icon = "bi-dash-circle"; badge = "غير مسجّل";
+                    } else if (!l.isPresent) {
+                        cls = "att-absent"; icon = "bi-x-circle-fill"; badge = "غائب";
+                    } else if (l.isLate) {
+                        cls = "att-late"; icon = "bi-clock-fill"; badge = "متأخر";
+                    } else {
+                        cls = "att-present"; icon = "bi-check-circle-fill"; badge = "حاضر";
+                    }
+
+                    html += `
+                      <div class="att-cell ${cls}" title="${l.title} — ${dateStr}">
+                        <div class="att-date-num">${dayNum}</div>
+                        <div class="att-date-str">${dateStr}</div>
+                        <div class="att-title">${l.title}</div>
+                        <div class="att-badge">
+                          <i class="bi ${icon}"></i> ${badge}
+                        </div>
+                      </div>`;
+                });
+                html += `</div></div>`;
+            }
+            return html;
+        }
+
+        // ═══════════════════════════════════════════════════════
+        // MODAL 2 — سجل الواجبات
+        // ═══════════════════════════════════════════════════════
+        function openHwModal(studentId) {
+            const s = findStudent(studentId);
+            if (!s) return;
+
+            const hwPct = s.totalHomeworks > 0
+                ? Math.round(s.solvedHomeworks * 100 / s.totalHomeworks) : 0;
+
+            const body = document.getElementById("homeworkModalBody");
+            body.innerHTML = `
+              <div class="modal-student-header">
+                <div class="modal-student-avatar">${initials(s.fullName)}</div>
+                <div>
+                  <div class="modal-student-name">${s.fullName}</div>
+                  <div class="modal-stat-pills">
+                    <span class="modal-stat-pill pill-blue">
+                      <i class="bi bi-clipboard2-fill"></i> ${s.totalHomeworks} واجب
+                    </span>
+                    <span class="modal-stat-pill ${hwPct >= 75 ? 'pill-emerald' : hwPct >= 40 ? 'pill-amber' : 'pill-rose'}">
+                      <i class="bi bi-check2-circle"></i> ${s.solvedHomeworks} محلول (${hwPct}%)
+                    </span>
+                  </div>
+                </div>
+              </div>
+              ${buildHwTimeline(s.homeworks)}
+            `;
+
+            document.getElementById("homeworkModalSummary").innerHTML =
+                `حلّ <strong>${s.solvedHomeworks}</strong> من أصل <strong>${s.totalHomeworks}</strong> واجب`;
+
+            new bootstrap.Modal(document.getElementById("homeworkModal")).show();
+        }
+
+        function buildHwTimeline(homeworks) {
+            if (!homeworks || homeworks.length === 0)
+                return `<div style="text-align:center;padding:40px;color:var(--ink-4)">
+                          <i class="bi bi-clipboard2-x" style="font-size:28px;display:block;margin-bottom:10px"></i>
+                          لا توجد واجبات مرسلة
+                        </div>`;
+
+            const grouped = {};
+            const NO_CURR = "__none__";
+            homeworks.forEach(h => {
+                const key = (h.curriculumId != null) ? String(h.curriculumId) : NO_CURR;
+                if (!grouped[key]) grouped[key] = [];
+                grouped[key].push(h);
+            });
+
+            const orderedKeys = Object.keys(grouped).filter(k => k !== NO_CURR);
+            if (grouped[NO_CURR]) orderedKeys.push(NO_CURR);
+
+            let html = '';
+            orderedKeys.forEach(key => {
+                const items = grouped[key];
+                if (key !== NO_CURR) {
+                    const cid      = parseInt(key);
+                    const currInfo = curriculumInstructors.find(c => c.curriculumId === cid);
+                    const title    = (currInfo && currInfo.curriculumTitle) ? currInfo.curriculumTitle : "منهج";
+                    const instr    = (currInfo && currInfo.instructorName)  ? currInfo.instructorName  : "";
+                    html += `
+                      <div class="hw-curriculum-group">
+                        <div class="hw-curriculum-header">
+                          <div class="hw-curriculum-label">
+                            <i class="bi bi-book-half"></i>
+                            <span>قسم ${title}</span>
+                          </div>
+                          ${instr ? `<span class="hw-curriculum-instructor">
+                            <i class="bi bi-person-badge-fill"></i> ${instr}
+                          </span>` : ''}
+                        </div>
+                        <div class="hw-timeline">`;
+                } else {
+                    html += `<div class="hw-curriculum-group"><div class="hw-timeline">`;
+                }
+
+                items.forEach(h => {
+                    const parts = (h.date || "").split("/");
+                    const day   = parts[2] || "—";
+                    const mon   = parts[1] || "—";
+
+                    const isSolved    = h.isSolved;
+                    const itemCls     = isSolved ? "solved" : "unsolved";
+                    const iconCls     = isSolved ? "tl-icon-solved" : "tl-icon-unsolved";
+                    const iconName    = isSolved ? "bi-check-circle-fill" : "bi-x-circle-fill";
+                    const statusBadge = isSolved
+                        ? `<span class="hw-tl-badge tl-solved"><i class="bi bi-check-circle-fill"></i> تم الحل</span>`
+                        : `<span class="hw-tl-badge tl-unsolved"><i class="bi bi-x-circle-fill"></i> لم يُحل</span>`;
+
+                    const scoreBadge = (isSolved && h.score != null)
+                        ? `<span class="hw-tl-badge tl-score"><i class="bi bi-star-fill"></i> ${Math.round(h.score)}%</span>`
+                        : "";
+
+                    let contactBadge = "";
+                    if (!isSolved) {
+                        if (h.parentContacted) {
+                            contactBadge = `<span class="hw-tl-badge tl-parent"><i class="bi bi-people-fill"></i> تم تبليغ ولي الأمر</span>`;
+                        } else if (h.studentContacted) {
+                            contactBadge = `<span class="hw-tl-badge tl-student"><i class="bi bi-bell-fill"></i> تم تذكير الطالب</span>`;
+                        } else {
+                            contactBadge = `<span class="hw-tl-badge tl-no-contact"><i class="bi bi-dash"></i> لم يتم التواصل</span>`;
+                        }
+                    }
+
+                    html += `
+                      <div class="hw-timeline-item ${itemCls}">
+                        <div class="hw-tl-date">
+                          <div class="hw-tl-month">${mon}</div>
+                          <div class="hw-tl-day">${day}</div>
+                        </div>
+                        <div class="hw-tl-body">
+                          <div class="hw-tl-title" title="${h.title}">${h.title}</div>
+                          <div class="hw-tl-status">
+                            ${statusBadge}${scoreBadge}${contactBadge}
+                          </div>
+                        </div>
+                        <div class="hw-tl-icon ${iconCls}">
+                          <i class="bi ${iconName}"></i>
+                        </div>
+                      </div>`;
+                });
+
+                html += `    </div></div>`;
+            });
+
+            return html;
+        }
+    </script>
+}

@@ -1,0 +1,611 @@
+@model QdratNew.ViewModels.Students.ExamSolveViewModel
+@using QdratNew.Helpers
+
+@{
+    var isPerf = Model.ExamType == "Performance";
+    Func<string, string> ToSafe = s => NumberHelper.ToIndicNumbersSafe(s);
+}
+@{
+    var q = Model.Question;
+    var isRTL = q?.IsRTL ?? true;
+
+    Func<string, string> T = key =>
+    {
+        if (isRTL) return key;
+        return key switch
+        {
+            "السؤال"                    => "Question",
+            "من"                        => "of",
+            "المحور"                    => "Section",
+            "القيمة الأولى"            => "Value A",
+            "القيمة الثانية"           => "Value B",
+            "إنهاء وتسليم الاختبار"    => "Submit Exam",
+            "السابق"                    => "Prev",
+            "التالي"                    => "Next",
+            "ضع علامة للمراجعة"        => "Flag",
+            "مراجعة الأسئلة"           => "Review All",
+            "مراجعة سريعة"             => "Quick Review",
+            "مجاب"                     => "Answered",
+            "علامة مراجعة"             => "Flagged",
+            "غير مجاب"                 => "Unanswered",
+            "السؤال الحالي"            => "Current",
+            "من أصل"                   => "of",
+            "إنهاء الاختبار"           => "End Exam",
+            _ => key
+        };
+    };
+}
+
+@if (q == null)
+{
+    <div class="qx-error-state">⚠️ لم يتم تحميل السؤال بشكل صحيح.</div>
+    return;
+}
+
+@* ─── الحاوية الرئيسية ─── *@
+<div class="qx-shell @(isRTL ? "qx-rtl" : "qx-ltr") @(Model.ForceReviewVisible && !Model.IsExamSubmitted ? "exam-in-review-mode" : "")"
+     dir="@(isRTL ? "rtl" : "ltr")">
+
+    <form id="exam-question-form"
+          method="post"
+          autocomplete="off"
+          onsubmit="return false;"
+          data-submit-url="@Model.SubmitAnswerUrl"
+          data-final-submit-url="@Model.FinalSubmitUrl"
+          data-exam-type="@Model.ExamType"
+          data-exam-id="@Model.ExamAssignmentId"
+          data-current-question-id="@Model.CurrentQuestionId">
+
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="id"               value="@Model.ExamAssignmentId" />
+        <input type="hidden" name="q"                value="@Model.CurrentQuestionId" />
+        <input type="hidden" name="timeTakenSeconds" id="timeTakenSeconds" value="0" />
+        <input type="hidden" id="questionStartTime"  value="@Model.QuestionStartTime.ToString("o")" />
+        <input type="hidden" id="hdnSubmitAnswerUrl" value="@Model.SubmitAnswerUrl" />
+        <input type="hidden" id="hdnFinalSubmitUrl"  value="@Model.FinalSubmitUrl" />
+        <input type="hidden" id="hdnExamType"        value="@Model.ExamType" />
+
+        @* ─── شريط رأس السؤال ─── *@
+        <div class="qx-header">
+            <div class="qx-header__meta">
+                <div class="qx-question-badge">
+                    <span class="qx-question-badge__label">@T("السؤال")</span>
+                    <span class="qx-question-badge__num">
+                        @(q.IsQuantitative
+                            ? NumberHelper.ToIndicNumbersSafe(Model.CurrentIndex.ToString())
+                            : Model.CurrentIndex.ToString())
+                    </span>
+                    <span class="qx-question-badge__sep">/</span>
+                    <span class="qx-question-badge__total">
+                        @(q.IsQuantitative
+                            ? NumberHelper.ToIndicNumbersSafe(Model.Total.ToString())
+                            : Model.Total.ToString())
+                    </span>
+                </div>
+
+                @if (isPerf && !string.IsNullOrWhiteSpace(q.SectionTitle))
+                {
+                    <div class="qx-section-chip">
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                            <path d="M1 2.828c.885-.37 2.154-.769 3.388-.893 1.33-.134 2.458.063 3.112.752v9.746c-.935-.53-2.12-.603-3.213-.493-1.18.12-2.37.461-3.287.811V2.828zm7.5-.141c.654-.689 1.782-.886 3.112-.752 1.234.124 2.503.523 3.388.893v9.923c-.918-.35-2.107-.692-3.287-.81-1.094-.111-2.278-.039-3.213.492V2.687zM8 1.783C7.015.936 5.65.507 4.388.38c-1.33-.134-2.886.106-4.044.631C.189 1.16 0 1.473 0 1.81V13.5a.5.5 0 0 0 .595.49c.832-.17 1.9-.38 3.093-.494 1.25-.122 2.54.003 3.462.537.026.014.054.022.082.025A.5.5 0 0 0 7.5 14v-12a.5.5 0 0 0-.146-.353l-.354-.353zm1 0 .354.353A.5.5 0 0 1 9.5 2.5v12a.5.5 0 0 0 .268-.025c.921-.534 2.21-.659 3.462-.537 1.192.114 2.261.324 3.093.494A.5.5 0 0 0 16 13.5V1.81c0-.337-.19-.65-.488-.8-1.158-.525-2.714-.765-4.044-.63C10.35.507 8.985.936 8 1.783z"/>
+                        </svg>
+                        @T("المحور"): @q.SectionTitle
+                    </div>
+                }
+            </div>
+
+            <div class="question-stopwatch-badge" aria-live="off" aria-label="وقت السؤال الحالي">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor"
+                     viewBox="0 0 16 16" aria-hidden="true" class="stopwatch-icon">
+                    <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8z"/>
+                    <path d="M7.5 3a.5.5 0 0 1 .5.5v4.236l2.83 1.944a.5.5 0 0 1-.555.832L7.277 8.42A.5.5 0 0 1 7 8V3.5a.5.5 0 0 1 .5-.5z"/>
+                    <path d="M6.5 0a.5.5 0 0 0 0 1h3a.5.5 0 0 0 0-1h-3z"/>
+                    <path d="M11.354 1.146a.5.5 0 0 0-.708.708L12.293 3.5a.5.5 0 1 0 .708-.708L11.354 1.146z"/>
+                </svg>
+                <span id="question-stopwatch" class="stopwatch-digits">00:00</span>
+            </div>
+        </div>
+
+        @await Html.PartialAsync("_ExamQuestionContent", new QdratNew.ViewModels.Students.ExamQuestionContentVm
+        {
+            Question = q,
+            SelectedAnswer = Model.SelectedAnswer
+        })
+
+        @* ─── شريط التنقل السفلي ─── *@
+        @if (!Model.IsReviewMode && Model.CurrentIndex < Model.Total)
+        {
+            <div class="exam-nav-fixed qx-nav-bar">
+                <button type="button"
+                        class="qx-nav-btn qx-nav-btn--prev exam-nav-button"
+                        data-nav="prev"
+                        @(Model.CurrentIndex == 1 ? "disabled" : "")>
+                    @if (isRTL)
+                    {
+                        <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/>
+                        </svg>
+                        <span>@T("السابق")</span>
+                    }
+                    else
+                    {
+                        <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M11.354 1.646a.5.5 0 0 0-.708 0l-6 6a.5.5 0 0 0 0 .708l6 6a.5.5 0 0 0 .708-.708L6.707 8l4.647-4.646a.5.5 0 0 0 0-.708z"/>
+                        </svg>
+                        <span>@T("السابق")</span>
+                    }
+                </button>
+
+                <button type="button"
+                        class="qx-nav-btn qx-nav-btn--flag exam-nav-button"
+                        data-nav="review">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                        <path d="M14.778.085A.5.5 0 0 1 15 .5V8a.5.5 0 0 1-.314.464L14.5 8l.186.464-.003.001-.006.003-.023.009a12.435 12.435 0 0 1-.397.15c-.264.095-.631.223-1.047.35-.816.252-1.879.523-2.71.523-.847 0-1.548-.28-2.158-.525l-.028-.01C7.68 8.71 7.14 8.5 6.5 8.5c-.7 0-1.638.23-2.437.477A19.626 19.626 0 0 0 3 9.342V15.5a.5.5 0 0 1-1 0V.5a.5.5 0 0 1 1 0v.282c.226-.079.496-.17.79-.26C4.606.272 5.67 0 6.5 0c.84 0 1.524.277 2.121.519l.043.018C9.286.788 9.828 1 10.5 1c.7 0 1.638-.23 2.437-.477a19.587 19.587 0 0 0 1.5-.554.5.5 0 0 1 .34-.884z"/>
+                    </svg>
+                    <span>@T("ضع علامة للمراجعة")</span>
+                </button>
+
+                <button type="button"
+                        class="qx-nav-btn qx-nav-btn--next exam-nav-button"
+                        data-nav="next">
+                    @if (isRTL)
+                    {
+                        <span>@T("التالي")</span>
+                        <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M11.354 1.646a.5.5 0 0 0-.708 0l-6 6a.5.5 0 0 0 0 .708l6 6a.5.5 0 0 0 .708-.708L6.707 8l4.647-4.646a.5.5 0 0 0 0-.708z"/>
+                        </svg>
+                    }
+                    else
+                    {
+                        <span>@T("التالي")</span>
+                        <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/>
+                        </svg>
+                    }
+                </button>
+            </div>
+        }
+        else
+        {
+            <div class="exam-show-review-wrap qx-review-trigger-wrap">
+                <button type="button"
+                        class="qx-review-trigger-btn exam-nav-button"
+                        data-nav="showReview">
+                    <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                        <path d="M5 10.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1h-2a.5.5 0 0 1-.5-.5zm0-2a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5zm0-2a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5zm0-2a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5z"/>
+                        <path d="M3 0h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2zm0 1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H3z"/>
+                    </svg>
+                    @T("مراجعة الأسئلة")
+                </button>
+            </div>
+        }
+
+    </form>
+</div>
+
+@* ════════════════════════════════════════════════
+   إحصائيات الإجابات (تُحسب دائماً)
+   ════════════════════════════════════════════════ *@
+@{
+    int revAnswered   = 0;
+    int revMarked     = 0;
+    int revUnanswered = 0;
+
+    foreach (var sid in Model.AllQuestionIds ?? new System.Collections.Generic.List<System.Guid>())
+    {
+        bool sAns  = (Model.AnswersMap?.TryGetValue(sid, out var sm) == true && !string.IsNullOrWhiteSpace(sm))
+                  || (Model.AnsweredQuestions?.ContainsKey(sid) == true && Model.AnsweredQuestions[sid]);
+        bool sMark = Model.ReviewMarkedIds?.Contains(sid) == true;
+
+        if (sMark)       revMarked++;
+        else if (sAns)   revAnswered++;
+        else             revUnanswered++;
+    }
+
+    var jsAnsweredCount     = revAnswered + revMarked;
+    var jsReviewMarkedCount = revMarked;
+    var jsTotalQuestions    = Model.Total;
+}
+
+@* ════════════════════════════════════════════════
+   لوحة المراجعة النهائية
+   ════════════════════════════════════════════════ *@
+@if (Model.ForceReviewVisible && !Model.IsExamSubmitted)
+{
+    <div id="review-panel"
+         class="review-panel-container qx-review-panel @(isRTL ? "rtl-mode" : "ltr-mode")"
+         dir="@(isRTL ? "rtl" : "ltr")"
+         data-entry-time="">
+
+        @* ─── رأس اللوحة ─── *@
+        <div class="qx-review-head">
+            <div class="qx-review-head__icon">
+                <svg width="22" height="22" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                    <path d="M2.5 3a.5.5 0 0 0 0 1h11a.5.5 0 0 0 0-1h-11zm5 3a.5.5 0 0 0 0 1h6a.5.5 0 0 0 0-1h-6zm0 3a.5.5 0 0 0 0 1h6a.5.5 0 0 0 0-1h-6zm-5 3a.5.5 0 0 0 0 1h11a.5.5 0 0 0 0-1h-11z"/>
+                </svg>
+            </div>
+            <div>
+                <h5 class="qx-review-head__title">@T("مراجعة سريعة")</h5>
+                <p class="qx-review-head__sub">@T("من أصل") <strong>@Model.Total</strong> @(isRTL ? "سؤال" : "questions")</p>
+            </div>
+        </div>
+
+        @* ─── شريط التقدم ─── *@
+        @{
+            var pct = jsTotalQuestions > 0 ? (int)Math.Round((double)jsAnsweredCount / jsTotalQuestions * 100) : 0;
+        }
+        <div class="qx-progress-track">
+            <div class="qx-progress-fill" style="width:@pct%"></div>
+        </div>
+        <div class="qx-progress-label">
+            <span>@(isRTL ? "أُجيب عليه" : "Answered")</span>
+            <span>@jsAnsweredCount / @jsTotalQuestions</span>
+        </div>
+
+        @* ─── إحصائيات ثلاثية ─── *@
+        <div class="qx-review-stats">
+            <div class="qx-rstat qx-rstat--answered">
+                <span class="qx-rstat__num">@ToSafe(revAnswered.ToString())</span>
+                <span class="qx-rstat__lbl">@T("مجاب")</span>
+            </div>
+            <div class="qx-rstat qx-rstat--flagged">
+                <span class="qx-rstat__num">@ToSafe(revMarked.ToString())</span>
+                <span class="qx-rstat__lbl">@T("علامة مراجعة")</span>
+            </div>
+            <div class="qx-rstat qx-rstat--unanswered">
+                <span class="qx-rstat__num">@ToSafe(revUnanswered.ToString())</span>
+                <span class="qx-rstat__lbl">@T("غير مجاب")</span>
+            </div>
+        </div>
+
+        @* ─── شبكة أزرار الأسئلة ─── *@
+        <div class="qx-q-grid review-grid" role="list">
+            @for (int i = 0; i < Model.AllQuestionIds.Count; i++)
+            {
+                var qid     = Model.AllQuestionIds[i];
+                bool isAns  = (Model.AnswersMap?.TryGetValue(qid, out var ma) == true && !string.IsNullOrWhiteSpace(ma))
+                           || (Model.AnsweredQuestions?.ContainsKey(qid) == true && Model.AnsweredQuestions[qid]);
+                bool isMark = Model.ReviewMarkedIds.Contains(qid);
+                bool isCurr = qid == Model.CurrentQuestionId;
+
+                string stateCss = isMark  ? "qx-qbtn--flagged"    :
+                                  isAns   ? "qx-qbtn--answered"   :
+                                            "qx-qbtn--unanswered";
+
+                string currCss  = isCurr  ? "review-btn--current qx-qbtn--current" : "";
+
+                // Bootstrap color classes still needed for review-jump styling
+                string bsCss    = isMark  ? "btn-warning"         :
+                                  isAns   ? "btn-success"         :
+                                            "btn-outline-secondary";
+
+                string ariaLabel = (isMark ? "علامة مراجعة، " :
+                                   isAns   ? "مجاب، "          : "غير مجاب، ")
+                                   + $"السؤال {i + 1}";
+
+                <button type="button"
+                        class="btn @bsCss review-btn-circle review-jump qx-qbtn @stateCss @currCss"
+                        data-target="@qid"
+                        data-index="@i"
+                        aria-label="@ariaLabel"
+                        role="listitem"
+                        title="@ariaLabel">
+                    @ToSafe((i + 1).ToString())
+                </button>
+            }
+        </div>
+
+        @* ─── أسطورة الألوان ─── *@
+        <div class="qx-legend">
+            <span class="qx-legend__item qx-legend__item--answered">
+                <span class="qx-legend__dot"></span>@T("مجاب")
+            </span>
+            <span class="qx-legend__item qx-legend__item--flagged">
+                <span class="qx-legend__dot"></span>@T("علامة مراجعة")
+            </span>
+            <span class="qx-legend__item qx-legend__item--unanswered">
+                <span class="qx-legend__dot"></span>@T("غير مجاب")
+            </span>
+        </div>
+
+        @* ─── زر الإنهاء ─── *@
+        <div class="review-submit-wrap qx-submit-wrap">
+            <button type="button"
+                    class="btn btn-danger btn-lg review-submit-btn qx-submit-btn"
+                    id="submitExam"
+                    data-action="openSubmitAlert">
+                <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                    <path d="M6.95.435c.58-.58 1.52-.58 2.1 0l6.515 6.516c.58.58.58 1.519 0 2.098L9.05 15.565c-.58.58-1.519.58-2.098 0L.435 9.05a1.482 1.482 0 0 1 0-2.098L6.95.435zm1.4.7a.495.495 0 0 0-.7 0L1.134 7.65a.495.495 0 0 0 0 .7l6.516 6.516a.495.495 0 0 0 .7 0l6.516-6.516a.495.495 0 0 0 0-.7L8.35 1.134zM8 4a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-1 0v-3A.5.5 0 0 1 8 4zm0 7a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/>
+                </svg>
+                @T("إنهاء وتسليم الاختبار")
+            </button>
+        </div>
+
+    </div>
+}
+
+<script>
+    window.__examStats = {
+        total:    @jsTotalQuestions,
+        answered: @jsAnsweredCount,
+        marked:   @jsReviewMarkedCount,
+        isRTL:    @(isRTL ? "true" : "false")
+    };
+</script>
+
+@await Html.PartialAsync("_ExamOptionSelectionScript")
+
+@await Html.PartialAsync("_UnifiedExamStyles")
+
+<script>
+    /* ══════════════════════════════════════════════════════════
+       تتبع جلسة المراجعة
+       - reviewEntryTime  : وقت دخول وضع المراجعة
+       - reviewNavLog     : سجل التنقلات أثناء المراجعة
+       مكشوفان على window.__reviewTracking لاستخدامهما في
+       StartViews عند إرسال طلب الإنهاء النهائي.
+    ══════════════════════════════════════════════════════════ */
+    (function () {
+        'use strict';
+
+        /* ══════════════════════════════════════════════════════════
+           ⏱ عداد وقت السؤال المرئي
+        ══════════════════════════════════════════════════════════ */
+        var _swInterval = null;
+
+        window.startStopwatch = function () {
+            clearInterval(_swInterval);
+            var el = document.getElementById('question-stopwatch');
+            var badge = el ? el.closest('.question-stopwatch-badge') : null;
+            if (!el) return;
+
+            // إعادة تعيين اللون عند بدء سؤال جديد
+            if (badge) badge.className = badge.className
+                .replace(/\s*sw-warning/g, '')
+                .replace(/\s*sw-alert/g, '');
+
+            _swInterval = setInterval(function () {
+                var startTime = window.questionStartTime || Date.now();
+                var s = Math.floor((Date.now() - startTime) / 1000);
+                var mm = String(Math.floor(s / 60)).padStart(2, '0');
+                var ss = String(s % 60).padStart(2, '0');
+                el.textContent = mm + ':' + ss;
+
+                // تغيير اللون بعد دقيقتين (تحذير) وبعد خمس دقائق (تنبيه)
+                if (badge) {
+                    if (s >= 300) {
+                        badge.classList.add('sw-alert');
+                        badge.classList.remove('sw-warning');
+                    } else if (s >= 120) {
+                        badge.classList.add('sw-warning');
+                        badge.classList.remove('sw-alert');
+                    }
+                }
+            }, 1000);
+        };
+
+        window.stopStopwatch = function () {
+            clearInterval(_swInterval);
+            _swInterval = null;
+        };
+
+        // ابدأ الساعة فور تحميل الـ partial
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', window.startStopwatch);
+        } else {
+            window.startStopwatch();
+        }
+
+        // تهيئة الكائن العام مرة واحدة فقط
+        if (!window.__reviewTracking) {
+            window.__reviewTracking = {
+                isActive:   false,
+                entryTime:  null,
+                navLog:     []
+            };
+        }
+
+        var rt = window.__reviewTracking;
+
+        /* ── تفعيل التتبع ── */
+        function activateReview() {
+            if (rt.isActive) return;
+            rt.isActive  = true;
+            rt.entryTime = Date.now();
+            rt.navLog    = [];
+
+            var panel = document.getElementById('review-panel');
+            if (panel) panel.dataset.entryTime = rt.entryTime;
+
+            // أوقف العداد عند دخول وضع المراجعة
+            window.stopStopwatch();
+        }
+
+        /* ── تسجيل انتقال ── */
+        function logNav(fromId, toId) {
+            rt.navLog.push({ from: fromId, to: toId, ts: Date.now() });
+        }
+
+        /* ── تفعيل فوري إن كانت اللوحة ظاهرة عند التحميل ── */
+        if (document.getElementById('review-panel')) {
+            activateReview();
+        }
+
+        /* ── مراقبة النقرات (delegation) ── */
+        document.addEventListener('click', function (e) {
+
+            // زر "مراجعة الأسئلة" → ابدأ التتبع
+            var showBtn = e.target.closest('[data-nav="showReview"]');
+            if (showBtn) {
+                activateReview();
+                return;
+            }
+
+            // زر رقم سؤال في الشبكة → سجّل الانتقال
+            var jumpBtn = e.target.closest('.review-jump');
+            if (jumpBtn && rt.isActive) {
+                var form = document.getElementById('exam-question-form');
+                var fromId = form ? form.dataset.currentQuestionId : '';
+                var toId   = jumpBtn.dataset.target || '';
+                if (fromId !== toId) logNav(fromId, toId);
+            }
+        });
+
+    })();
+</script>
+
+<script>
+(function () {
+    'use strict';
+
+    /* ══════════════════════════════════════════════════════════
+       1. منع فتح الاختبار في أكثر من تبويب (BroadcastChannel)
+    ══════════════════════════════════════════════════════════ */
+    var form = document.getElementById('exam-question-form');
+    var examId = form ? form.dataset.examId : null;
+
+    if (examId && typeof BroadcastChannel !== 'undefined') {
+        var examTabKey = 'exam_active_' + examId;
+        var bc = new BroadcastChannel(examTabKey);
+
+        bc.postMessage('ping');
+
+        bc.onmessage = function (e) {
+            if (e.data === 'ping') {
+                bc.postMessage('taken');
+            }
+            if (e.data === 'taken') {
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        title: 'تحذير',
+                        text: 'الاختبار مفتوح في تبويب آخر. سيتم إغلاق هذه النافذة.',
+                        icon: 'warning',
+                        allowOutsideClick: false,
+                        showConfirmButton: true,
+                        confirmButtonText: 'حسناً'
+                    }).then(function () { window.close(); });
+                } else {
+                    alert('الاختبار مفتوح في تبويب آخر.');
+                    window.close();
+                }
+            }
+        };
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       2. اعتراض زر "إنهاء الاختبار" — عرض تأكيد مع إحصائيات
+       ثم إرسال بيانات المراجعة وإعادة تفعيل زر الإرسال.
+    ══════════════════════════════════════════════════════════ */
+    var _submitAlertActive = false;
+
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('#submitExam');
+        if (!btn) return;
+
+        // المرور الثاني (بعد تأكيد المستخدم) — لا نعترضه
+        if (_submitAlertActive) {
+            _submitAlertActive = false;
+            return;
+        }
+
+        e.stopPropagation();
+        e.preventDefault();
+
+        var f   = document.getElementById('exam-question-form');
+        var rt  = window.__reviewTracking || {};
+        var st  = window.__examStats || {};
+
+        var isRTL = st.isRTL !== false;
+
+        // نحسب من DOM لأن window.__examStats لا يُحدَّث بعد تنقل AJAX
+        var grid = document.querySelector('.review-grid');
+        var flaggedBtns    = grid ? grid.querySelectorAll('.qx-qbtn--flagged').length    : 0;
+        var answeredBtns   = grid ? grid.querySelectorAll('.qx-qbtn--answered').length   : 0;
+        var unansweredBtns = grid ? grid.querySelectorAll('.qx-qbtn--unanswered').length : 0;
+        var domTotal       = flaggedBtns + answeredBtns + unansweredBtns;
+
+        var total      = domTotal > 0 ? domTotal           : (st.total    || 0);
+        var answered   = domTotal > 0 ? (answeredBtns + flaggedBtns) : (st.answered || 0);
+        var marked     = domTotal > 0 ? flaggedBtns        : (st.marked   || 0);
+        var unanswered = domTotal > 0 ? unansweredBtns     : Math.max(0, total - answered);
+
+        var title      = isRTL ? 'هل أنت متأكد من إنهاء الاختبار؟' : 'Submit your exam?';
+        var cancelTxt  = isRTL ? 'العودة للاختبار'  : 'Continue Exam';
+        var confirmTxt = isRTL ? 'إنهاء نهائياً'    : 'Submit Now';
+        var dir        = isRTL ? 'rtl' : 'ltr';
+
+        var html = '<div class="ess-wrap" dir="' + dir + '">'
+            + '<div class="ess-row ess-answered">'
+            +   '<span class="ess-num">' + answered  + '</span>'
+            +   '<span class="ess-label">' + (isRTL ? 'سؤال أجبت عليه'           : 'answered') + '</span>'
+            + '</div>'
+            + '<div class="ess-row ess-unanswered">'
+            +   '<span class="ess-num">' + unanswered + '</span>'
+            +   '<span class="ess-label">' + (isRTL ? 'سؤال لم تُجب عليه'        : 'not answered') + '</span>'
+            + '</div>'
+            + '<div class="ess-row ess-marked">'
+            +   '<span class="ess-num">' + marked    + '</span>'
+            +   '<span class="ess-label">' + (isRTL ? 'سؤال بعلامة مراجعة'       : 'flagged for review') + '</span>'
+            + '</div>'
+            + '</div>'
+            + '<style>'
+            + '.ess-wrap{display:flex;flex-direction:column;gap:.55rem;padding:.4rem 0;}'
+            + '.ess-row{display:flex;align-items:center;gap:.7rem;padding:.55rem 1rem;border-radius:10px;font-family:inherit;}'
+            + '.ess-answered{background:#e8f5e9;}.ess-unanswered{background:#ffeaea;}.ess-marked{background:#fff8e1;}'
+            + '.ess-num{font-size:1.65rem;font-weight:800;min-width:2.4ch;text-align:center;line-height:1;}'
+            + '.ess-answered .ess-num{color:#2e7d32;}.ess-unanswered .ess-num{color:#c62828;}.ess-marked .ess-num{color:#e65100;}'
+            + '.ess-label{font-size:.92rem;color:#555;}'
+            + '</style>';
+
+        if (typeof Swal === 'undefined') {
+            // SweetAlert غير محمّل — اعتراض مباشر
+            _submitAlertActive = true;
+            btn.click();
+            return;
+        }
+
+        Swal.fire({
+            title:             title,
+            html:              html,
+            icon:              'question',
+            showCancelButton:  true,
+            confirmButtonText: confirmTxt,
+            cancelButtonText:  cancelTxt,
+            confirmButtonColor: '#d33',
+            cancelButtonColor:  '#3085d6',
+            reverseButtons:    !isRTL,
+            customClass:       { popup: isRTL ? 'swal2-rtl' : '' }
+        }).then(function (result) {
+            if (!result.isConfirmed) return;
+
+            // أرسل بيانات سلوك المراجعة (fire-and-forget)
+            if (f) {
+                var finalUrl = f.dataset.finalSubmitUrl || '';
+                var saveUrl  = finalUrl.replace(/\/[^/]+$/, '/SaveReviewBehavior');
+                if (saveUrl && saveUrl !== finalUrl) {
+                    var payload = JSON.stringify({
+                        examAssignmentId: parseInt(f.dataset.examId, 10) || 0,
+                        reviewNavLog:     JSON.stringify((rt.navLog) || [])
+                    });
+                    if (navigator.sendBeacon) {
+                        navigator.sendBeacon(saveUrl, new Blob([payload], { type: 'application/json' }));
+                    } else {
+                        fetch(saveUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: payload,
+                            keepalive: true
+                        }).catch(function () {});
+                    }
+                }
+            }
+
+            // أعِد النقر — يفعّل المعالج في StartView
+            _submitAlertActive = true;
+            btn.click();
+        });
+
+    }, true); // capture=true → يعمل قبل أي مستمع في StartViews
+
+})();
+</script>

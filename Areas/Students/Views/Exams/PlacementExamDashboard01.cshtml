@@ -1,0 +1,343 @@
+﻿@model QdratNew.ViewModels.Students.PlacementExamDashboardViewModel
+
+@{
+    ViewData["Title"] = "لوحة اختبارات تحديد المستوى";
+}
+<h4 class="fw-bold text-primary text-center mb-4">📈 لوحة تحليل أختبار تحديد المستوي</h4>
+
+<div class="container py-3">
+
+    <!-- 🧾 كارت بيانات الطالب + شعار المركز -->
+    <div class="dashboard-card p-4 mb-5 shadow-sm border-0 rounded-4 bg-gradient position-relative"
+         style="background: linear-gradient(135deg, #eef6ff, #ffffff);">
+
+        <div class="row align-items-center">
+            <div class="col-md-2 text-center">
+                <div class="p-2">
+                    <img src="~/images/160×100.png" alt="شعار مركز القدرات"
+                         class="rounded-3 shadow-sm logo-center" style="width:160;height:100px;" />
+                </div>
+            </div>
+
+            <div class="col-md-10">
+                <div class="row small gy-1">
+                    <div class="col-md-6">
+                        <h5 class="mb-1"><strong>👨‍🎓 الطالب:</strong> <span class="fw-bold text-qdrat">@Model.StudentName</span></h5>
+                        <p class="mb-1"><strong>📘 المنهج:</strong> <span>@Model.CurriculumTitle</span></p>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>📅 آخر اختبار:</strong> @(Model.ProgressTimeline?.LastOrDefault()?.ExamDate.ToString("yyyy-MM-dd") ?? "—")</p>
+                        <h6 class="mb-1"><strong>🎯 النتيجة الأخيرة:</strong> <span class="fw-bold text-success">@Model.LatestScore%</span></h6>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 📊 لوحة التحليل السريع -->
+
+    <div class="row g-4 mb-5 text-center">
+        <div class="col-md-3 col-6">
+            <div class="card border-0 shadow-sm p-3 rounded-4 h-100 bg-gradient"
+                 style="background: linear-gradient(135deg, #e0f2fe, #ffffff);">
+                <i class="bi bi-bar-chart-fill text-primary fs-4 mb-2"></i>
+                <div class="text-muted small mb-1">عدد اختبارات المستوى</div>
+                <h3 class="fw-bold text-primary">@Model.TotalPlacementExams</h3>
+            </div>
+        </div>
+
+        <div class="col-md-3 col-6">
+            <div class="card border-0 shadow-sm p-3 rounded-4 h-100 bg-gradient"
+                 style="background: linear-gradient(135deg, #dcfce7, #ffffff);">
+                <i class="bi bi-trophy-fill text-success fs-4 mb-2"></i>
+                <div class="text-muted small mb-1">أعلى نتيجة</div>
+                <h3 class="fw-bold text-success">@Model.ProgressTimeline.Max(x => x.Score)%</h3>
+            </div>
+        </div>
+
+        <div class="col-md-3 col-6">
+            <div class="card border-0 shadow-sm p-3 rounded-4 h-100 bg-gradient"
+                 style="background: linear-gradient(135deg, #e0f7fa, #ffffff);">
+                <i class="bi bi-activity text-info fs-4 mb-2"></i>
+                <div class="text-muted small mb-1">متوسط الأداء</div>
+                <h3 class="fw-bold text-info">@Math.Round(Model.ProgressTimeline.Average(x => x.Score), 1)%</h3>
+            </div>
+        </div>
+
+        <div class="col-md-3 col-6">
+            <div class="card border-0 shadow-sm p-3 rounded-4 h-100 bg-gradient"
+                 style="background: linear-gradient(135deg, #fde68a, #fff9c4);">
+                <i class="bi bi-speedometer2 text-warning fs-4 mb-2"></i>
+                <div class="text-muted small mb-1">آخر نتيجة</div>
+                <h3 class="fw-bold text-warning">@Model.LatestScore%</h3>
+            </div>
+        </div>
+    </div>
+
+    <!-- 📈 الرسم البياني لتطور الأداء -->
+    <div class="card shadow-sm border-0 rounded-4 mb-5 p-4 text-center">
+        <h6 class="fw-bold text-center mb-3">تطور النتائج في اختبارات تحديد المستوى</h6>
+
+        @if (Model.ProgressTimeline == null || !Model.ProgressTimeline.Any())
+        {
+            <p class="text-muted">لم يُجرَ أي اختبار بعد.</p>
+        }
+        else if (Model.ProgressTimeline.Count == 1)
+        {
+            <!-- ✅ حالة اختبار واحد فقط -->
+            <div class="position-relative mx-auto" style="max-width: 280px;">
+                <canvas id="singleExamGauge" height="220"></canvas>
+                <div class="position-absolute top-50 start-50 translate-middle text-center">
+                    <div class="fs-1 fw-bold text-primary">@Model.ProgressTimeline.First().Score%</div>
+                    <div class="text-muted small">نتيجة الاختبار</div>
+                </div>
+            </div>
+        }
+        else
+        {
+            <!-- ✅ حالة أكثر من اختبار -->
+            <canvas id="multiExamChart" height="200"></canvas>
+        }
+    </div>
+
+
+
+    <!-- 📋 جدول الاختبارات -->
+    <div class="card shadow-sm border-0 rounded-4 mt-5">
+        <div class="card-header bg-qdrat text-white rounded-top-4 py-3">
+            <h5 class="fw-bold mb-0"><i class="bi bi-list-check"></i> قائمة اختبارات تحديد المستوى</h5>
+        </div>
+        <div class="card-body bg-light rounded-bottom-4">
+            @if (Model.PlacementExams == null || !Model.PlacementExams.Any())
+            {
+                <p class="text-muted text-center my-4">لا توجد اختبارات حالياً.</p>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table align-middle text-center table-hover mb-0">
+                        <thead class="table-primary">
+                            <tr>
+                                <th>عنوان الاختبار</th>
+                                <th>تاريخ الإرسال</th>
+                                <th>الحالة</th>
+                                <th>الإجراءات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var exam in Model.PlacementExams)
+                            {
+                                var isAvailable = DateTime.Now >= exam.AssignedAt;
+                                <tr class="bg-white">
+                                    <td class="fw-semibold">@exam.Title</td>
+                                    <td>@exam.AssignedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                                    <td>
+                                        @if (exam.IsSubmitted)
+                                        {
+                                            <span class="badge bg-success bg-opacity-75 text-dark">
+                                                <i class="bi bi-check-circle-fill"></i> تم الحل
+                                            </span>
+                                        }
+                                        else if (!isAvailable)
+                                        {
+                                            <span class="badge bg-secondary bg-opacity-75">
+                                                <i class="bi bi-clock-history"></i> لم يبدأ بعد
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-warning bg-opacity-75 text-dark">
+                                                <i class="bi bi-hourglass-split"></i> متاح للحل
+                                            </span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                            @if (!exam.IsSubmitted && isAvailable)
+                                            {
+                                                <!-- زر بدء الحل -->
+                                                <a href="@Url.Action("StartPlacementExam", "Exams", new { area = "Students", assignmentId = exam.ExamAssignmentId })"
+                                                   class="btn btn-sm btn-primary">
+                                                    <i class="bi bi-pencil-square"></i> بدء الحل
+                                                </a>
+                                            }
+                                            else if (exam.IsSubmitted)
+                                            {
+                                                <!-- زر التقرير -->
+                                                <a href="@Url.Action("PlacementReport", "Exams", new { area = "Students", assignmentId = exam.ExamAssignmentId })"
+                                                   class="btn btn-sm btn-success">
+                                                    <i class="bi bi-bar-chart-line"></i> التقرير
+                                                </a>
+
+                                                <!-- زر المراجعة -->
+                                                <a href="@Url.Action("PlacementReview", "Exams", new { area = "Students", assignmentId = exam.ExamAssignmentId })"
+                                                   class="btn btn-sm btn-warning text-dark">
+                                                    <i class="bi bi-eye"></i> المراجعة
+                                                </a>
+
+                                                <!-- زر التفاصيل -->
+                                                <a href="@Url.Action("PlacementResult", "Exams", new { area = "Students", assignmentId = exam.ExamAssignmentId })"
+                                                   class="btn btn-sm btn-info text-white">
+                                                    <i class="bi bi-info-circle"></i> التفاصيل
+                                                </a>
+                                            }
+                                            else
+                                            {
+                                                <!-- اختبار مغلق -->
+                                                <button class="btn btn-sm btn-secondary" disabled>
+                                                    <i class="bi bi-lock-fill"></i> مغلق
+                                                </button>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+
+
+
+
+
+    <!-- 🧠 نقاط القوة والضعف -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-6">
+            <div class="card shadow-sm border-0 rounded-4 p-3 h-100 bg-light">
+                <h6 class="fw-bold text-success mb-3"><i class="bi bi-graph-up"></i> نقاط القوة</h6>
+                <ul class="list-unstyled mb-0">
+                    @if (Model.Strengths.Any())
+                    {
+                        @foreach (var s in Model.Strengths)
+                        {
+                            <li class="mb-2 d-flex justify-content-between align-items-center">
+                                <span>✅ @s</span>
+                                <span class="badge bg-success bg-opacity-10 text-success border border-success">جيد</span>
+                            </li>
+                        }
+                    }
+                    else
+                    {
+                        <li class="text-muted">لم يتم تحديد نقاط قوة بعد.</li>
+                    }
+                </ul>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card shadow-sm border-0 rounded-4 p-3 h-100 bg-light">
+                <h6 class="fw-bold text-danger mb-3"><i class="bi bi-graph-down"></i> نقاط الضعف</h6>
+                <ul class="list-unstyled mb-0">
+                    @if (Model.Weaknesses.Any())
+                    {
+                        @foreach (var w in Model.Weaknesses)
+                        {
+                            <li class="mb-2 d-flex justify-content-between align-items-center">
+                                <span>⚠️ @w.SectionName</span>
+                                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger">@w.Accuracy%</span>
+                            </li>
+                        }
+                    }
+                    else
+                    {
+                        <li class="text-muted">لا توجد نقاط ضعف واضحة.</li>
+                    }
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- 💡 التوصية الذكية -->
+    <div class="card shadow-sm border-0 rounded-4 p-4 text-center"
+         style="background: linear-gradient(135deg, #f9fafb, #eef2ff);">
+        <h5 class="fw-bold text-primary mb-3">
+            <i class="bi bi-lightbulb-fill text-warning"></i> التوصية الذكية
+        </h5>
+        <p class="fs-5 text-secondary">@Model.Recommendation</p>
+    </div>
+
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        const timeline = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ProgressTimeline ?? new List<QdratNew.ViewModels.Students.PlacementExamProgressEntry>()));
+
+        if (!timeline || timeline.length === 0) {
+            console.log("لا توجد اختبارات لعرضها.");
+        }
+        else if (timeline.length === 1) {
+            const ctx = document.getElementById('singleExamGauge');
+            const score = timeline[0].Score;
+            const rest = 100 - score;
+            const color = score >= 80 ? '#10b981' : (score >= 60 ? '#f59e0b' : '#ef4444');
+
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['النتيجة', 'باقي %'],
+                    datasets: [{
+                        data: [score, rest],
+                        backgroundColor: [color, '#e5e7eb'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    cutout: '75%',
+                    rotation: -90,
+                    circumference: 180,
+                    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                    responsive: true
+                }
+            });
+        }
+        else if (timeline.length > 1) {
+            const ctx = document.getElementById('multiExamChart');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: timeline.map(x => new Date(x.ExamDate).toLocaleDateString('ar-SA')),
+                    datasets: [{
+                        label: 'النتائج (%)',
+                        data: timeline.map(x => x.Score),
+                        backgroundColor: '#339999',
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    plugins: { legend: { display: false } },
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: { callback: v => v + '%' }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+}
+
+<style>
+    .logo-center {
+        width: 100px;
+        height: 100px;
+        object-fit: contain;
+        transition: transform 0.3s ease;
+    }
+
+        .logo-center:hover {
+            transform: scale(1.05);
+        }
+
+    canvas {
+        background: linear-gradient(180deg, #f9fafb 0%, #ffffff 100%);
+        border-radius: 12px;
+    }
+</style>

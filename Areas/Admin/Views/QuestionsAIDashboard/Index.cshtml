@@ -1,0 +1,194 @@
+﻿@model QdratNew.ViewModels.Question.QuestionAIDashboardViewModel
+@{
+    ViewData["Title"] = "تحليل الأسئلة الذكية";
+}
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            fetch("/Admin/QuestionsAIDashboard/GetDashboardData")
+                .then(res => res.json())
+                .then(data => {
+                    document.querySelector(".card h3.text-primary").textContent = data.totalQuestions;
+                    document.querySelector(".card h3.text-success").textContent = data.reviewedQuestions;
+                    document.querySelector(".card h3.text-danger").textContent = data.unansweredQuestions;
+
+                    // 📊 شهري
+                    const monthLabels = data.questionsOverTime.map(q => q.month);
+                    const monthCounts = data.questionsOverTime.map(q => q.count);
+                    new Chart(document.getElementById('monthlyQuestionsChart'), {
+                        type: 'bar',
+                        data: {
+                            labels: monthLabels,
+                            datasets: [{ label: 'عدد الأسئلة', data: monthCounts }]
+                        }
+                    });
+
+                    // 🧠 صعوبة
+                    const diffLabels = Object.keys(data.questionsPerDifficulty);
+                    const diffData = Object.values(data.questionsPerDifficulty);
+                    new Chart(document.getElementById('difficultyPieChart'), {
+                        type: 'pie',
+                        data: {
+                            labels: diffLabels,
+                            datasets: [{ data: diffData }]
+                        }
+                    });
+
+                    // 📚 حسب المنهج
+                    const curriculumLabels = Object.keys(data.questionsPerCurriculum);
+                    const curriculumCounts = Object.values(data.questionsPerCurriculum);
+                    new Chart(document.getElementById('curriculumChart'), {
+                        type: 'bar',
+                        data: {
+                            labels: curriculumLabels,
+                            datasets: [{ label: 'عدد الأسئلة', data: curriculumCounts }]
+                        }
+                    });
+
+                    // ✅ نسبة النجاح
+                    new Chart(document.getElementById('successRateChart'), {
+                        type: 'line',
+                        data: {
+                            labels: data.smartInsights.map(q => q.title),
+                            datasets: [{
+                                label: 'نسبة النجاح',
+                                data: data.smartInsights.map(q => q.successRate)
+                            }]
+                        }
+                    });
+
+                    // ⏱ وقت الحل
+                    new Chart(document.getElementById('longTimeChart'), {
+                        type: 'bar',
+                        data: {
+                            labels: data.smartInsights.map(q => q.title),
+                            datasets: [{
+                                label: 'الزمن',
+                                data: data.smartInsights.map(q => q.avgTimeToSolve)
+                            }]
+                        }
+                    });
+
+                    // 📌 أكثر الأسئلة فشلًا
+                    const topFailed = data.smartInsights
+                        .filter(q => q.successRate < 60)
+                        .sort((a, b) => a.successRate - b.successRate)
+                        .slice(0, 5);
+                    new Chart(document.getElementById('mostFailedChart'), {
+                        type: 'bar',
+                        data: {
+                            labels: topFailed.map(q => q.title),
+                            datasets: [{ label: 'نسبة النجاح', data: topFailed.map(q => q.successRate) }]
+                        },
+                        options: { indexAxis: 'y' }
+                    });
+
+                    // 📅 خلال آخر 30 يوم
+                    const last30Days = data.questionsOverTime.filter(q => {
+                        const monthDate = new Date(`1 ${q.month} ${new Date().getFullYear()}`);
+                        return (new Date() - monthDate) / (1000 * 60 * 60 * 24) <= 30;
+                    });
+                    new Chart(document.getElementById('lastMonthQuestionsChart'), {
+                        type: 'bar',
+                        data: {
+                            labels: last30Days.map(q => q.month),
+                            datasets: [{ label: 'عدد الأسئلة', data: last30Days.map(q => q.count) }]
+                        }
+                    });
+
+                    // 📈 رسم مركب
+                    new Chart(document.getElementById('combinedChart'), {
+                        type: 'line',
+                        data: {
+                            labels: data.smartInsights.map(q => q.title),
+                            datasets: [
+                                {
+                                    label: 'النجاح (%)',
+                                    data: data.smartInsights.map(q => q.successRate),
+                                    borderColor: 'blue',
+                                    yAxisID: 'y'
+                                },
+                                {
+                                    label: 'الزمن (ثواني)',
+                                    data: data.smartInsights.map(q => q.avgTimeToSolve),
+                                    borderColor: 'green',
+                                    yAxisID: 'y1'
+                                }
+                            ]
+                        },
+                        options: {
+                            scales: {
+                                y: { type: 'linear', position: 'left' },
+                                y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false } }
+                            }
+                        }
+                    });
+
+                    // 🧠 جدول AI
+                    const tbody = document.querySelector("table tbody");
+                    tbody.innerHTML = "";
+                    data.smartInsights.forEach(q => {
+                        const row = document.createElement("tr");
+                        row.innerHTML = `
+                            <td>${q.questionId.substring(0, 6)}...</td>
+                            <td>${q.title}</td>
+                            <td>${q.successRate.toFixed(1)}%</td>
+                            <td>${q.avgTimeToSolve.toFixed(2)} ثانية</td>
+                            <td>${q.aiComment}</td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                });
+        });
+    </script>
+}
+
+<div class="container-fluid">
+    <h2 class="mb-4 text-primary">لوحة تحليل الأسئلة الذكية</h2>
+
+    <div class="row mb-4">
+        <div class="col-md-4"><div class="card shadow-sm p-3 text-center"><h6 class="text-muted">إجمالي الأسئلة</h6><h3 class="text-primary">0</h3></div></div>
+        <div class="col-md-4"><div class="card shadow-sm p-3 text-center"><h6 class="text-muted">الأسئلة المراجعة</h6><h3 class="text-success">0</h3></div></div>
+        <div class="col-md-4"><div class="card shadow-sm p-3 text-center"><h6 class="text-muted">الأسئلة بدون إجابة</h6><h3 class="text-danger">0</h3></div></div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-6"><div class="card p-3"><h6>توزيع الأسئلة شهريًا</h6><canvas id="monthlyQuestionsChart"></canvas></div></div>
+        <div class="col-md-6"><div class="card p-3"><h6>نسبة الأسئلة حسب الصعوبة</h6><canvas id="difficultyPieChart"></canvas></div></div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-4"><div class="card p-3"><h6>الأسئلة حسب المنهج</h6><canvas id="curriculumChart"></canvas></div></div>
+        <div class="col-md-4"><div class="card p-3"><h6>معدل النجاح للأسئلة</h6><canvas id="successRateChart"></canvas></div></div>
+        <div class="col-md-4"><div class="card p-3"><h6>الأسئلة التي تستغرق وقتًا طويلاً</h6><canvas id="longTimeChart"></canvas></div></div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-6"><div class="card p-3"><h6>أكثر الأسئلة فشلًا</h6><canvas id="mostFailedChart"></canvas></div></div>
+        <div class="col-md-6"><div class="card p-3"><h6>عدد الأسئلة آخر 30 يوم</h6><canvas id="lastMonthQuestionsChart"></canvas></div></div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-12"><div class="card p-3"><h6>مقارنة نسبة النجاح والزمن</h6><canvas id="combinedChart"></canvas></div></div>
+    </div>
+
+    <div class="card shadow-sm p-4">
+        <h5 class="mb-3">تحليل AI للأسئلة</h5>
+        <table class="table table-bordered table-hover text-center">
+            <thead class="table-light">
+                <tr>
+                    <th>الكود</th>
+                    <th>عنوان السؤال</th>
+                    <th>نسبة النجاح</th>
+                    <th>الزمن المتوسط</th>
+                    <th>تعليق AI</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td colspan="5">تحميل...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>

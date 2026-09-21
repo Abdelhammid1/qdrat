@@ -1,0 +1,1167 @@
+@model QdratNew.ViewModels.Exam.PlacementExamDetailsViewModel
+
+@{
+    ViewData["Title"] = "تفاصيل اختبار تحديد المستوى";
+    var completedCount    = Model.StudentStatuses.Count(s => s.HasStatus && s.Status == QdratNew.Enums.ExamStatus.Completed);
+    var pendingCount      = Model.StudentStatuses.Count(s => s.HasStatus && s.Status == QdratNew.Enums.ExamStatus.Pending);
+    var notStartedCount   = Model.StudentStatuses.Count(s => !s.HasStatus);
+    var totalStudents     = Model.StudentStatuses.Count;
+    var avgScore          = completedCount > 0
+                                ? Model.StudentStatuses.Where(s => s.Score.HasValue).Average(s => s.Score!.Value)
+                                : 0.0;
+    var completionPct     = totalStudents > 0 ? (int)Math.Round((double)completedCount / totalStudents * 100) : 0;
+    var isSent            = Model.AssignedBatches.Any(b => b.IsSentToStudents);
+}
+
+<!-- ============================================================
+     PlacementDetails — Modern RTL Admin Page
+     ============================================================ -->
+<style>
+    :root {
+        --pd-primary:      #4361ee;
+        --pd-primary-soft: #eef0fd;
+        --pd-success:      #2ec4b6;
+        --pd-success-soft: #eaf8f7;
+        --pd-warning:      #f4a261;
+        --pd-warning-soft: #fef3eb;
+        --pd-danger:       #e63946;
+        --pd-danger-soft:  #fdeaea;
+        --pd-purple:       #7b2d8b;
+        --pd-purple-soft:  #f3eaf6;
+        --pd-dark:         #1a1d2e;
+        --pd-surface:      #ffffff;
+        --pd-surface-2:    #f7f8fc;
+        --pd-border:       #e8eaf0;
+        --pd-text:         #1a1d2e;
+        --pd-text-muted:   #6b7280;
+        --pd-radius:       14px;
+        --pd-radius-sm:    8px;
+        --pd-shadow:       0 2px 12px rgba(67,97,238,.08);
+        --pd-shadow-md:    0 8px 32px rgba(67,97,238,.12);
+        --pd-font:         'Cairo', 'Segoe UI', sans-serif;
+        --pd-ease:         cubic-bezier(.4,0,.2,1);
+    }
+
+    /* ── Reset / Base ────────────────────────────── */
+    .pd-page { direction: rtl; font-family: var(--pd-font); color: var(--pd-text); }
+
+    /* ── Page Header ─────────────────────────────── */
+    .pd-hero {
+        background: linear-gradient(135deg, var(--pd-primary) 0%, #6b8ef5 100%);
+        border-radius: var(--pd-radius);
+        padding: 28px 32px;
+        margin-bottom: 28px;
+        position: relative;
+        overflow: hidden;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+    }
+    .pd-hero::before {
+        content: '';
+        position: absolute;
+        inset-inline-start: -60px;
+        top: -60px;
+        width: 220px; height: 220px;
+        border-radius: 50%;
+        background: rgba(255,255,255,.07);
+        pointer-events: none;
+    }
+    .pd-hero::after {
+        content: '';
+        position: absolute;
+        inset-inline-start: 40px;
+        bottom: -80px;
+        width: 160px; height: 160px;
+        border-radius: 50%;
+        background: rgba(255,255,255,.05);
+        pointer-events: none;
+    }
+    .pd-hero-content { position: relative; z-index: 1; flex: 1; min-width: 0; }
+    .pd-hero-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(255,255,255,.2);
+        border: 1px solid rgba(255,255,255,.3);
+        border-radius: 20px;
+        padding: 4px 14px;
+        font-size: .78rem;
+        font-weight: 600;
+        margin-bottom: 10px;
+    }
+    .pd-hero-title {
+        font-size: 1.6rem;
+        font-weight: 800;
+        margin: 0 0 8px;
+        line-height: 1.3;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .pd-hero-meta {
+        font-size: .88rem;
+        opacity: .85;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+    }
+    .pd-hero-meta span { display: flex; align-items: center; gap: 5px; }
+    .pd-hero-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        flex-shrink: 0;
+        position: relative;
+        z-index: 1;
+    }
+    @@media (max-width: 600px) {
+        .pd-hero { flex-direction: column; align-items: flex-start; }
+        .pd-hero-actions { flex-direction: row; }
+        .pd-hero-title { white-space: normal; }
+    }
+
+    /* ── Stats Grid ──────────────────────────────── */
+    .pd-stats {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+        margin-bottom: 28px;
+    }
+    @@media (max-width: 900px) { .pd-stats { grid-template-columns: repeat(2,1fr); } }
+    @@media (max-width: 500px) { .pd-stats { grid-template-columns: 1fr; } }
+
+    .pd-stat {
+        background: var(--pd-surface);
+        border: 1px solid var(--pd-border);
+        border-radius: var(--pd-radius);
+        padding: 20px 22px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        box-shadow: var(--pd-shadow);
+        transition: transform .2s var(--pd-ease), box-shadow .2s var(--pd-ease);
+    }
+    .pd-stat:hover { transform: translateY(-3px); box-shadow: var(--pd-shadow-md); }
+    .pd-stat-icon {
+        width: 52px; height: 52px;
+        border-radius: 12px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.4rem;
+        flex-shrink: 0;
+    }
+    .pd-stat-icon.blue   { background: var(--pd-primary-soft); color: var(--pd-primary); }
+    .pd-stat-icon.teal   { background: var(--pd-success-soft); color: var(--pd-success); }
+    .pd-stat-icon.orange { background: var(--pd-warning-soft); color: var(--pd-warning); }
+    .pd-stat-icon.purple { background: var(--pd-purple-soft);  color: var(--pd-purple);  }
+    .pd-stat-val  { font-size: 1.7rem; font-weight: 800; line-height: 1; }
+    .pd-stat-lbl  { font-size: .8rem;  color: var(--pd-text-muted); margin-top: 3px; }
+
+    /* ── Info Row ────────────────────────────────── */
+    .pd-info-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        margin-bottom: 28px;
+    }
+    @@media (max-width: 700px) { .pd-info-row { grid-template-columns: 1fr; } }
+
+    /* ── Card base ───────────────────────────────── */
+    .pd-card {
+        background: var(--pd-surface);
+        border: 1px solid var(--pd-border);
+        border-radius: var(--pd-radius);
+        box-shadow: var(--pd-shadow);
+        overflow: hidden;
+    }
+    .pd-card-head {
+        padding: 16px 22px;
+        border-bottom: 1px solid var(--pd-border);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 700;
+        font-size: .95rem;
+    }
+    .pd-card-head .pd-head-icon {
+        width: 34px; height: 34px;
+        border-radius: 8px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1rem;
+    }
+    .pd-card-body { padding: 20px 22px; }
+
+    /* ── Info list ───────────────────────────────── */
+    .pd-info-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+    .pd-info-list li {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        padding-bottom: 12px;
+        border-bottom: 1px dashed var(--pd-border);
+    }
+    .pd-info-list li:last-child { border-bottom: none; padding-bottom: 0; }
+    .pd-info-label { color: var(--pd-text-muted); font-size: .85rem; flex-shrink: 0; }
+    .pd-info-value { font-weight: 600; font-size: .9rem; text-align: start; }
+
+    /* ── Badge ───────────────────────────────────── */
+    .pd-badge {
+        display: inline-flex; align-items: center; gap: 5px;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: .78rem;
+        font-weight: 700;
+    }
+    .pd-badge.green  { background: var(--pd-success-soft); color: #1a8077; }
+    .pd-badge.yellow { background: var(--pd-warning-soft); color: #b05a00; }
+    .pd-badge.red    { background: var(--pd-danger-soft);  color: #b52a31; }
+    .pd-badge.grey   { background: #f0f0f5; color: #6b7280; }
+    .pd-badge.blue   { background: var(--pd-primary-soft); color: #2c46b8; }
+
+    /* ── Reference Code Box ──────────────────────── */
+    .pd-ref-box {
+        background: linear-gradient(135deg, #fff8f0 0%, #fef3eb 100%);
+        border: 2px dashed var(--pd-warning);
+        border-radius: var(--pd-radius-sm);
+        padding: 18px;
+        text-align: center;
+        margin-top: 12px;
+    }
+    .pd-ref-code {
+        font-size: 2rem;
+        font-weight: 900;
+        letter-spacing: 8px;
+        color: var(--pd-primary);
+        font-family: 'Courier New', monospace;
+        direction: ltr;
+    }
+    .pd-ref-label { font-size: .78rem; color: var(--pd-text-muted); margin-top: 4px; }
+
+    /* ── Progress bar ────────────────────────────── */
+    .pd-progress-wrap { margin-top: 14px; }
+    .pd-progress-bar-bg {
+        background: #e8eaf0;
+        border-radius: 99px;
+        height: 8px;
+        overflow: hidden;
+    }
+    .pd-progress-bar-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--pd-primary), var(--pd-success));
+        border-radius: 99px;
+        transition: width .8s var(--pd-ease);
+    }
+    .pd-progress-labels {
+        display: flex;
+        justify-content: space-between;
+        font-size: .77rem;
+        color: var(--pd-text-muted);
+        margin-top: 5px;
+    }
+
+    /* ── Section Accordion ───────────────────────── */
+    .pd-section-block {
+        background: var(--pd-surface);
+        border: 1px solid var(--pd-border);
+        border-radius: var(--pd-radius);
+        margin-bottom: 14px;
+        overflow: hidden;
+        box-shadow: var(--pd-shadow);
+    }
+    .pd-section-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 22px;
+        cursor: pointer;
+        user-select: none;
+        transition: background .15s;
+        gap: 12px;
+    }
+    .pd-section-toggle:hover { background: var(--pd-surface-2); }
+    .pd-section-toggle-right { display: flex; align-items: center; gap: 12px; }
+    .pd-section-title { font-weight: 700; font-size: .95rem; }
+    .pd-chevron {
+        width: 28px; height: 28px;
+        border-radius: 50%;
+        background: var(--pd-primary-soft);
+        color: var(--pd-primary);
+        display: flex; align-items: center; justify-content: center;
+        font-size: .7rem;
+        transition: transform .25s var(--pd-ease);
+        flex-shrink: 0;
+    }
+    .pd-section-block.open .pd-chevron { transform: rotate(180deg); }
+    .pd-section-body { display: none; border-top: 1px solid var(--pd-border); }
+    .pd-section-block.open .pd-section-body { display: block; }
+
+    /* ── Questions Table ─────────────────────────── */
+    .pd-qtable { width: 100%; border-collapse: collapse; }
+    .pd-qtable thead { background: var(--pd-surface-2); }
+    .pd-qtable th {
+        padding: 11px 14px;
+        font-size: .8rem;
+        font-weight: 700;
+        color: var(--pd-text-muted);
+        text-align: center;
+        border-bottom: 1px solid var(--pd-border);
+        white-space: nowrap;
+    }
+    .pd-qtable th:first-child { width: 50px; }
+    .pd-qtable th.text-start  { text-align: right; }
+    .pd-qtable td {
+        padding: 12px 14px;
+        font-size: .87rem;
+        border-bottom: 1px solid #f0f2f8;
+        vertical-align: middle;
+        text-align: center;
+    }
+    .pd-qtable td.text-start { text-align: right; }
+    .pd-qtable tbody tr:last-child td { border-bottom: none; }
+    .pd-qtable tbody tr:hover { background: #fafbff; }
+    .pd-q-num {
+        width: 28px; height: 28px;
+        background: var(--pd-primary-soft);
+        color: var(--pd-primary);
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center; justify-content: center;
+        font-weight: 700;
+        font-size: .8rem;
+        margin: auto;
+    }
+    .pd-lesson-chip {
+        display: inline-flex; align-items: center; gap: 4px;
+        background: var(--pd-surface-2);
+        border: 1px solid var(--pd-border);
+        border-radius: 6px;
+        padding: 3px 10px;
+        font-size: .78rem;
+        color: var(--pd-text-muted);
+    }
+
+    /* ── Students Section ────────────────────────── */
+    .pd-students-wrap { margin-top: 28px; }
+    .pd-students-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+    .pd-section-heading {
+        font-size: 1.05rem;
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .pd-section-heading-icon {
+        width: 34px; height: 34px;
+        border-radius: 8px;
+        background: var(--pd-primary-soft);
+        color: var(--pd-primary);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1rem;
+    }
+
+    /* ── Filter Tabs ─────────────────────────────── */
+    .pd-tabs {
+        display: flex;
+        gap: 6px;
+        background: var(--pd-surface-2);
+        border: 1px solid var(--pd-border);
+        border-radius: 10px;
+        padding: 4px;
+    }
+    .pd-tab {
+        padding: 6px 16px;
+        border-radius: 7px;
+        font-size: .82rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all .18s;
+        border: none;
+        background: transparent;
+        color: var(--pd-text-muted);
+        white-space: nowrap;
+    }
+    .pd-tab.active {
+        background: var(--pd-primary);
+        color: #fff;
+        box-shadow: 0 2px 8px rgba(67,97,238,.3);
+    }
+
+    /* ── Students Table ──────────────────────────── */
+    .pd-stable { width: 100%; border-collapse: collapse; }
+    .pd-stable thead { background: var(--pd-surface-2); }
+    .pd-stable th {
+        padding: 11px 16px;
+        font-size: .82rem;
+        font-weight: 700;
+        color: var(--pd-text-muted);
+        text-align: center;
+        border-bottom: 1px solid var(--pd-border);
+        white-space: nowrap;
+    }
+    .pd-stable td {
+        padding: 13px 16px;
+        font-size: .88rem;
+        border-bottom: 1px solid #f0f2f8;
+        vertical-align: middle;
+        text-align: center;
+    }
+    .pd-stable tbody tr:last-child td { border-bottom: none; }
+    .pd-stable tbody tr:hover { background: #fafbff; }
+    .pd-student-avatar {
+        width: 36px; height: 36px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--pd-primary), #6b8ef5);
+        color: #fff;
+        font-weight: 700;
+        font-size: .88rem;
+        display: inline-flex;
+        align-items: center; justify-content: center;
+        margin-left: 10px;
+        flex-shrink: 0;
+    }
+    .pd-student-cell { display: flex; align-items: center; }
+    .pd-score-pill {
+        display: inline-flex; align-items: center;
+        font-weight: 700;
+        font-size: .88rem;
+        gap: 3px;
+    }
+    .pd-score-high  { color: #1a8077; }
+    .pd-score-mid   { color: #b05a00; }
+    .pd-score-low   { color: #b52a31; }
+
+    /* ── Action Buttons ──────────────────────────── */
+    .pd-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 9px 18px;
+        border-radius: 9px;
+        font-size: .85rem;
+        font-weight: 600;
+        font-family: var(--pd-font);
+        cursor: pointer;
+        border: none;
+        transition: all .18s var(--pd-ease);
+        text-decoration: none;
+        white-space: nowrap;
+    }
+    .pd-btn-primary {
+        background: var(--pd-primary);
+        color: #fff;
+        box-shadow: 0 3px 10px rgba(67,97,238,.3);
+    }
+    .pd-btn-primary:hover {
+        background: #3451d1;
+        box-shadow: 0 5px 18px rgba(67,97,238,.4);
+        transform: translateY(-1px);
+        color: #fff;
+        text-decoration: none;
+    }
+    .pd-btn-ghost {
+        background: var(--pd-surface-2);
+        color: var(--pd-text-muted);
+        border: 1px solid var(--pd-border);
+    }
+    .pd-btn-ghost:hover {
+        background: var(--pd-primary-soft);
+        color: var(--pd-primary);
+        border-color: var(--pd-primary);
+        text-decoration: none;
+    }
+    .pd-btn-warn-outline {
+        background: transparent;
+        color: var(--pd-warning);
+        border: 1.5px solid var(--pd-warning);
+        padding: 6px 12px;
+        font-size: .8rem;
+    }
+    .pd-btn-warn-outline:hover {
+        background: var(--pd-warning-soft);
+    }
+    .pd-btn-danger-outline {
+        background: transparent;
+        color: var(--pd-danger);
+        border: 1.5px solid var(--pd-danger);
+        padding: 6px 12px;
+        font-size: .8rem;
+    }
+    .pd-btn-danger-outline:hover {
+        background: var(--pd-danger-soft);
+    }
+    .pd-action-group { display: flex; gap: 6px; justify-content: center; }
+
+    /* ── Empty State ─────────────────────────────── */
+    .pd-empty {
+        text-align: center;
+        padding: 40px 20px;
+        color: var(--pd-text-muted);
+    }
+    .pd-empty-icon { font-size: 2.5rem; margin-bottom: 10px; opacity: .5; }
+    .pd-empty-text { font-size: .9rem; }
+
+    /* ── Alerts ──────────────────────────────────── */
+    .pd-alert {
+        padding: 13px 18px;
+        border-radius: var(--pd-radius-sm);
+        font-size: .88rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+    .pd-alert.success { background: var(--pd-success-soft); color: #1a8077; border-right: 4px solid var(--pd-success); }
+    .pd-alert.danger  { background: var(--pd-danger-soft);  color: #b52a31; border-right: 4px solid var(--pd-danger);  }
+
+    /* ── Footer Bar ──────────────────────────────── */
+    .pd-footer-bar {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 10px;
+        margin-top: 32px;
+        padding-top: 20px;
+        border-top: 1px solid var(--pd-border);
+    }
+
+    /* ── Dark mode ───────────────────────────────── */
+    @@media (prefers-color-scheme: dark) {
+        :root {
+            --pd-surface:    #1e2235;
+            --pd-surface-2:  #252a40;
+            --pd-border:     #2e3452;
+            --pd-text:       #e0e3ef;
+            --pd-text-muted: #8b92b0;
+        }
+        .pd-hero::before, .pd-hero::after { background: rgba(255,255,255,.04); }
+    }
+</style>
+
+<div class="pd-page">
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="pd-alert success">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+            @TempData["Success"]
+        </div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="pd-alert danger">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            @TempData["Error"]
+        </div>
+    }
+
+    <!-- ── Hero Header ─────────────────────────────── -->
+    <div class="pd-hero">
+        <div class="pd-hero-content">
+            <div class="pd-hero-badge">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+                اختبار تحديد المستوى
+            </div>
+            <h1 class="pd-hero-title">@Model.Title</h1>
+            <div class="pd-hero-meta">
+                @if (!string.IsNullOrEmpty(Model.CourseName))
+                {
+                    <span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+                        @Model.CourseName
+                    </span>
+                }
+                <span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    @Model.CreatedAt.ToString("yyyy/MM/dd")
+                </span>
+                <span>
+                    @if (Model.IsInLab)
+                    {
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                        <text>حضوري داخل المعمل</text>
+                    }
+                    else
+                    {
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+                        <text>أونلاين</text>
+                    }
+                </span>
+            </div>
+        </div>
+        <div class="pd-hero-actions">
+            <a asp-action="Index" class="pd-btn pd-btn-ghost" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+                عودة
+            </a>
+            <a asp-action="Create" class="pd-btn pd-btn-primary" style="background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.35);box-shadow:none;color:#fff;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                إرسال جديد
+            </a>
+        </div>
+    </div>
+
+    <!-- ── Stats Row ───────────────────────────────── -->
+    <div class="pd-stats">
+        <div class="pd-stat">
+            <div class="pd-stat-icon blue">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+            </div>
+            <div>
+                <div class="pd-stat-val">@Model.TotalQuestions</div>
+                <div class="pd-stat-lbl">إجمالي الأسئلة</div>
+            </div>
+        </div>
+        <div class="pd-stat">
+            <div class="pd-stat-icon teal">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+            <div>
+                <div class="pd-stat-val">@Model.DurationMinutes</div>
+                <div class="pd-stat-lbl">المدة (دقيقة)</div>
+            </div>
+        </div>
+        <div class="pd-stat">
+            <div class="pd-stat-icon orange">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+            </div>
+            <div>
+                <div class="pd-stat-val">@totalStudents</div>
+                <div class="pd-stat-lbl">إجمالي الطلاب</div>
+            </div>
+        </div>
+        <div class="pd-stat">
+            <div class="pd-stat-icon purple">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            </div>
+            <div>
+                <div class="pd-stat-val">@completionPct<span style="font-size:.9rem;font-weight:600;">%</span></div>
+                <div class="pd-stat-lbl">نسبة الإنجاز</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Info Cards Row ──────────────────────────── -->
+    <div class="pd-info-row">
+
+        <!-- General Info -->
+        <div class="pd-card">
+            <div class="pd-card-head">
+                <div class="pd-head-icon" style="background:var(--pd-primary-soft);color:var(--pd-primary);">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                </div>
+                معلومات عامة
+            </div>
+            <div class="pd-card-body">
+                <ul class="pd-info-list">
+                    <li>
+                        <span class="pd-info-label">عنوان الاختبار</span>
+                        <span class="pd-info-value">@Model.Title</span>
+                    </li>
+                    @if (!string.IsNullOrEmpty(Model.CourseName))
+                    {
+                        <li>
+                            <span class="pd-info-label">الكورس المرتبط</span>
+                            <span class="pd-info-value">@Model.CourseName</span>
+                        </li>
+                    }
+                    <li>
+                        <span class="pd-info-label">تاريخ الإنشاء</span>
+                        <span class="pd-info-value">@Model.CreatedAt.ToString("yyyy/MM/dd — HH:mm")</span>
+                    </li>
+                    <li>
+                        <span class="pd-info-label">عدد الأقسام</span>
+                        <span class="pd-info-value">
+                            <span class="pd-badge blue">@Model.Sections.Count قسم</span>
+                        </span>
+                    </li>
+                    <li>
+                        <span class="pd-info-label">طلاب أتمّوا الاختبار</span>
+                        <span class="pd-info-value">
+                            <span class="pd-badge green">@completedCount مكتمل</span>
+                            <span class="pd-badge yellow" style="margin-right:6px;">@pendingCount معلّق</span>
+                        </span>
+                    </li>
+                    @if (completedCount > 0)
+                    {
+                        <li>
+                            <span class="pd-info-label">متوسط الدرجات</span>
+                            <span class="pd-info-value" style="font-size:1rem;">
+                                @avgScore.ToString("F1")<span style="color:var(--pd-text-muted);font-size:.8rem;"> / 100</span>
+                            </span>
+                        </li>
+                    }
+                </ul>
+
+                <!-- Progress bar -->
+                @if (totalStudents > 0)
+                {
+                    <div class="pd-progress-wrap">
+                        <div class="pd-progress-bar-bg">
+                            <div class="pd-progress-bar-fill" style="width:@completionPct%"></div>
+                        </div>
+                        <div class="pd-progress-labels">
+                            <span>@completedCount من أصل @totalStudents طالب أتمّوا الاختبار</span>
+                            <span>@completionPct%</span>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Exam Settings -->
+        <div class="pd-card">
+            <div class="pd-card-head">
+                <div class="pd-head-icon" style="background:var(--pd-success-soft);color:var(--pd-success);">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/></svg>
+                </div>
+                إعدادات الاختبار
+            </div>
+            <div class="pd-card-body">
+                <ul class="pd-info-list">
+                    <li>
+                        <span class="pd-info-label">إجمالي الأسئلة</span>
+                        <span class="pd-info-value">@Model.TotalQuestions سؤال</span>
+                    </li>
+                    <li>
+                        <span class="pd-info-label">مدة الاختبار</span>
+                        <span class="pd-info-value">@Model.DurationMinutes دقيقة</span>
+                    </li>
+                    <li>
+                        <span class="pd-info-label">طريقة التقديم</span>
+                        <span class="pd-info-value">
+                            @if (Model.IsInLab)
+                            {
+                                <span class="pd-badge yellow">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+                                    حضوري داخل المعمل
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="pd-badge green">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+                                    أونلاين
+                                </span>
+                            }
+                        </span>
+                    </li>
+                </ul>
+
+                @if (Model.IsInLab && !string.IsNullOrEmpty(Model.ReferenceCode))
+                {
+                    <div class="pd-ref-box">
+                        <div style="font-size:.8rem;font-weight:700;color:var(--pd-text-muted);margin-bottom:8px;">
+                            الكود المرجعي لفتح الاختبار
+                        </div>
+                        <div class="pd-ref-code">@Model.ReferenceCode</div>
+                        <div class="pd-ref-label">يُعطى هذا الكود للطلاب داخل المعمل فقط</div>
+                    </div>
+                }
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ── Assigned Batches ───────────────────────────── -->
+    @if (Model.AssignedBatches.Any())
+    {
+        <div style="margin-bottom: 28px;">
+            <div class="pd-section-heading" style="margin-bottom:14px;">
+                <div class="pd-section-heading-icon" style="background:var(--pd-purple-soft);color:var(--pd-purple);">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+                </div>
+                الدفعات المرتبطة
+                <span class="pd-badge blue">@Model.AssignedBatches.Count دفعة</span>
+            </div>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                @foreach (var batch in Model.AssignedBatches)
+                {
+                    <div class="pd-card" style="padding:16px 20px;display:flex;align-items:center;gap:14px;min-width:220px;flex:1;">
+                        <div style="width:42px;height:42px;border-radius:10px;background:var(--pd-purple-soft);color:var(--pd-purple);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+                        </div>
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-weight:700;font-size:.93rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">@batch.BatchName</div>
+                            <div style="font-size:.78rem;color:var(--pd-text-muted);margin-top:3px;">@batch.StudentCount طالب مسجّل</div>
+                        </div>
+                        @if (batch.IsSentToStudents)
+                        {
+                            <span class="pd-badge green" style="flex-shrink:0;">
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
+                                تم الإرسال
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="pd-badge grey" style="flex-shrink:0;">
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                لم يُرسل بعد
+                            </span>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    <!-- ── Sections & Questions ─────────────────────── -->
+    <div style="margin-bottom: 28px;">
+        <div class="pd-section-heading" style="margin-bottom:16px;">
+            <div class="pd-section-heading-icon">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+            </div>
+            أسئلة الاختبار
+            <span class="pd-badge blue">@Model.Sections.Count قسم — @Model.TotalQuestions سؤال</span>
+        </div>
+
+        @if (Model.Sections.Any())
+        {
+            int sIdx = 0;
+            foreach (var sec in Model.Sections)
+            {
+                sIdx++;
+                string openClass = sIdx == 1 ? "open" : "";
+                <div class="pd-section-block @openClass" id="sec-@sec.SectionId">
+                    <div class="pd-section-toggle" onclick="toggleSection('sec-@sec.SectionId')">
+                        <div class="pd-section-toggle-right">
+                            <div class="pd-q-num" style="width:32px;height:32px;font-size:.88rem;">@sIdx</div>
+                            <span class="pd-section-title">@sec.SectionTitle</span>
+                            <span class="pd-badge blue">@sec.Questions.Count سؤال</span>
+                        </div>
+                        <div class="pd-chevron">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
+                        </div>
+                    </div>
+                    <div class="pd-section-body">
+                        <table class="pd-qtable">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th class="text-start">نص السؤال</th>
+                                    <th>المؤشر / الدرس</th>
+                                    <th>الصعوبة</th>
+                                    <th>الإجابة الصحيحة</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var q in sec.Questions.OrderBy(x => x.Order))
+                                {
+                                    string diffClass = q.Difficulty == QdratNew.Enums.DifficultyLevel.Easy   ? "green"
+                                                     : q.Difficulty == QdratNew.Enums.DifficultyLevel.Medium ? "yellow"
+                                                     : "red";
+                                    string diffLabel = q.Difficulty == QdratNew.Enums.DifficultyLevel.Easy   ? "سهل"
+                                                     : q.Difficulty == QdratNew.Enums.DifficultyLevel.Medium ? "متوسط"
+                                                     : "صعب";
+                                    <tr>
+                                        <td><div class="pd-q-num">@q.Order</div></td>
+                                        <td class="text-start">@Html.Raw(QdratNew.Helpers.NumberHelper.ToIndicNumbersSafe(q.Title))</td>
+                                        <td>
+                                            @if (!string.IsNullOrEmpty(q.LessonTitle))
+                                            {
+                                                <span class="pd-lesson-chip">
+                                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+                                                    @q.LessonTitle
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span style="color:var(--pd-text-muted);font-size:.8rem;">—</span>
+                                            }
+                                        </td>
+                                        <td><span class="pd-badge @diffClass">@diffLabel</span></td>
+                                        <td style="max-width:220px;text-align:right;">
+                                            @Html.Raw(QdratNew.Helpers.NumberHelper.ToIndicNumbersSafe(q.CorrectAnswer ?? "—"))
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+        }
+        else
+        {
+            <div class="pd-card">
+                <div class="pd-empty">
+                    <div class="pd-empty-icon">📭</div>
+                    <div class="pd-empty-text">لا توجد أسئلة مرتبطة بهذا الاختبار</div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- ── Students Status ─────────────────────────── -->
+    <div class="pd-students-wrap">
+        <div class="pd-students-header">
+            <div class="pd-section-heading">
+                <div class="pd-section-heading-icon" style="background:var(--pd-warning-soft);color:var(--pd-warning);">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+                </div>
+                حالة الطلاب
+                <span class="pd-badge grey">@totalStudents طالب</span>
+            </div>
+
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                <div class="pd-tabs">
+                    <button class="pd-tab active" onclick="filterStudents('all', this)">
+                        الكل <span style="background:rgba(255,255,255,.25);padding:1px 7px;border-radius:10px;font-size:.75rem;margin-right:3px;">@totalStudents</span>
+                    </button>
+                    <button class="pd-tab" onclick="filterStudents('completed', this)">
+                        مكتمل <span style="margin-right:3px;color:inherit;opacity:.7;font-size:.75rem;">@completedCount</span>
+                    </button>
+                    <button class="pd-tab" onclick="filterStudents('pending', this)">
+                        قيد الانتظار <span style="margin-right:3px;color:inherit;opacity:.7;font-size:.75rem;">@pendingCount</span>
+                    </button>
+                    @if (notStartedCount > 0)
+                    {
+                        <button class="pd-tab" onclick="filterStudents('notstarted', this)">
+                            لم يُرسل بعد <span style="margin-right:3px;color:inherit;opacity:.7;font-size:.75rem;">@notStartedCount</span>
+                        </button>
+                    }
+                </div>
+
+                <a asp-action="Create" class="pd-btn pd-btn-primary" style="font-size:.83rem;padding:8px 16px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    إرسال جديد
+                </a>
+            </div>
+        </div>
+
+        <div class="pd-card">
+            @if (Model.StudentStatuses.Any())
+            {
+                <table class="pd-stable" id="students-table">
+                    <thead>
+                        <tr>
+                            <th style="text-align:right;padding-right:22px;">الطالب</th>
+                            <th>الدفعة</th>
+                            <th>الحالة</th>
+                            <th>تاريخ الإسناد</th>
+                            <th>تاريخ التسليم</th>
+                            <th>الدرجة</th>
+                            <th>الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="students-tbody">
+                        @foreach (var student in Model.StudentStatuses)
+                        {
+                            string statusClass, badgeClass, badgeLabel;
+
+                            if (!student.HasStatus)
+                            {
+                                statusClass = "notstarted";
+                                badgeClass  = "grey";
+                                badgeLabel  = "لم يُرسل بعد";
+                            }
+                            else if (student.Status == QdratNew.Enums.ExamStatus.Completed)
+                            {
+                                statusClass = "completed";
+                                badgeClass  = "green";
+                                badgeLabel  = "تم الحل";
+                            }
+                            else if (student.Status == QdratNew.Enums.ExamStatus.Pending)
+                            {
+                                statusClass = "pending";
+                                badgeClass  = "yellow";
+                                badgeLabel  = "قيد الانتظار";
+                            }
+                            else if (student.Status == QdratNew.Enums.ExamStatus.InProgress)
+                            {
+                                statusClass = "pending";
+                                badgeClass  = "blue";
+                                badgeLabel  = "قيد الحل";
+                            }
+                            else
+                            {
+                                statusClass = "other";
+                                badgeClass  = "grey";
+                                badgeLabel  = student.Status.ToString();
+                            }
+
+                            string initials   = student.StudentName.Length >= 2
+                                                    ? student.StudentName.Substring(0, 2)
+                                                    : student.StudentName;
+                            string scoreClass = student.Score.HasValue
+                                                    ? (student.Score >= 80 ? "pd-score-high"
+                                                     : student.Score >= 50 ? "pd-score-mid"
+                                                     : "pd-score-low")
+                                                    : "";
+
+                            <tr data-status="@statusClass">
+                                <td style="text-align:right;padding-right:22px;">
+                                    <div class="pd-student-cell">
+                                        <div class="pd-student-avatar" style="@(statusClass=="notstarted"?"background:linear-gradient(135deg,#9ca3af,#6b7280);":"")">@initials</div>
+                                        <span style="font-weight:600;">@student.StudentName</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(student.BatchName))
+                                    {
+                                        <span class="pd-lesson-chip">@student.BatchName</span>
+                                    }
+                                    else { <span style="color:#ccc;">—</span> }
+                                </td>
+                                <td>
+                                    <span class="pd-badge @badgeClass">
+                                        @if (student.Status == QdratNew.Enums.ExamStatus.Completed && student.HasStatus)
+                                        {
+                                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
+                                        }
+                                        else if (!student.HasStatus)
+                                        {
+                                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                        }
+                                        else
+                                        {
+                                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                        }
+                                        @badgeLabel
+                                    </span>
+                                </td>
+                                <td style="color:var(--pd-text-muted);font-size:.83rem;">
+                                    @if (student.HasStatus)
+                                    {
+                                        @student.AssignedAt.ToString("yyyy/MM/dd")<text><br/></text><span style="font-size:.76rem;">@student.AssignedAt.ToString("HH:mm")</span>
+                                    }
+                                    else { <span style="color:#ccc;">—</span> }
+                                </td>
+                                <td style="color:var(--pd-text-muted);font-size:.83rem;">
+                                    @if (student.SubmittedAt.HasValue)
+                                    {
+                                        @student.SubmittedAt.Value.ToString("yyyy/MM/dd")<text><br/></text><span style="font-size:.76rem;">@student.SubmittedAt.Value.ToString("HH:mm")</span>
+                                    }
+                                    else { <span style="color:#ccc;">—</span> }
+                                </td>
+                                <td>
+                                    @if (student.Score.HasValue)
+                                    {
+                                        <span class="pd-score-pill @scoreClass">
+                                            @student.Score<span style="font-size:.75rem;opacity:.6;">/100</span>
+                                        </span>
+                                    }
+                                    else { <span style="color:#ccc;">—</span> }
+                                </td>
+                                <td>
+                                    <div class="pd-action-group">
+                                        @if (student.HasStatus)
+                                        {
+                                            <button class="pd-btn pd-btn-warn-outline"
+                                                    onclick="confirmResend(@Model.ExamId, @student.StudentId, '@student.StudentName')">
+                                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+                                                إعادة إرسال
+                                            </button>
+                                            <button class="pd-btn pd-btn-danger-outline"
+                                                    onclick="confirmRemove(@Model.ExamId, @student.StudentId, '@student.StudentName')">
+                                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                                                حذف
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <span style="font-size:.78rem;color:var(--pd-text-muted);">في انتظار الإرسال</span>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            else
+            {
+                <div class="pd-empty">
+                    <div class="pd-empty-icon">👥</div>
+                    <div class="pd-empty-text">لا يوجد طلاب مرتبطون بهذا الاختبار</div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- ── Footer Bar ──────────────────────────────── -->
+    <div class="pd-footer-bar">
+        <a asp-action="Index" class="pd-btn pd-btn-ghost">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+            عودة إلى قائمة الاختبارات
+        </a>
+    </div>
+
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script>
+        /* ── Section accordion ──────────────────── */
+        function toggleSection(id) {
+            const el = document.getElementById(id);
+            if (el) el.classList.toggle('open');
+        }
+
+        /* ── Students filter ────────────────────── */
+        function filterStudents(filter, btn) {
+            document.querySelectorAll('.pd-tab').forEach(t => t.classList.remove('active'));
+            btn.classList.add('active');
+
+            document.querySelectorAll('#students-tbody tr').forEach(row => {
+                if (filter === 'all') {
+                    row.style.display = '';
+                } else if (filter === 'pending') {
+                    // pending = قيد الانتظار أو قيد الحل (كلاهما status=pending في data-status)
+                    row.style.display = row.dataset.status === 'pending' ? '' : 'none';
+                } else {
+                    row.style.display = row.dataset.status === filter ? '' : 'none';
+                }
+            });
+        }
+
+        /* ── SweetAlert actions ─────────────────── */
+        function confirmResend(examId, studentId, studentName) {
+            Swal.fire({
+                title: 'إعادة إرسال الاختبار',
+                html: `هل تريد إعادة إرسال الاختبار للطالب:<br><strong>${studentName}</strong>؟`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'نعم، أعد الإرسال',
+                cancelButtonText: 'إلغاء',
+                confirmButtonColor: '#4361ee',
+                cancelButtonColor: '#6b7280',
+                customClass: { popup: 'text-end' }
+            }).then(result => {
+                if (result.isConfirmed) {
+                    window.location.href = `/Admin/ExamAssignments/ResendPlacement?examId=${examId}&studentId=${studentId}`;
+                }
+            });
+        }
+
+        function confirmRemove(examId, studentId, studentName) {
+            Swal.fire({
+                title: 'حذف الاختبار',
+                html: `هل أنت متأكد من حذف الاختبار للطالب:<br><strong>${studentName}</strong>؟`,
+                icon: 'error',
+                showCancelButton: true,
+                confirmButtonText: 'نعم، احذف',
+                cancelButtonText: 'إلغاء',
+                confirmButtonColor: '#e63946',
+                cancelButtonColor: '#6b7280',
+                customClass: { popup: 'text-end' }
+            }).then(result => {
+                if (result.isConfirmed) {
+                    window.location.href = `/Admin/ExamAssignments/RemovePlacement?examId=${examId}&studentId=${studentId}`;
+                }
+            });
+        }
+    </script>
+}

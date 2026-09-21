@@ -1,0 +1,168 @@
+﻿@model QdratNew.ViewModels.Partner.HomeworkDraft.HomeworkDraftPreviewVM
+
+@{
+    ViewData["Title"] = "مراجعة نموذج الواجب";
+}
+
+@functions {
+    string ShortHtml(string html, int length = 45)
+    {
+        if (string.IsNullOrWhiteSpace(html)) return "";
+
+        var plain = System.Text.RegularExpressions.Regex
+            .Replace(html, "<.*?>", string.Empty);
+
+        return plain.Length <= length
+            ? plain
+            : plain.Substring(0, length) + "...";
+    }
+}
+
+<div class="container mt-4" dir="rtl">
+
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h3 class="fw-bold mb-1">📝 مراجعة نموذج الواجب</h3>
+            <div class="text-muted small">
+                راجع الأسئلة وتأكد من توازنها قبل الإرسال.
+            </div>
+        </div>
+
+        <a asp-action="Index" class="btn btn-outline-secondary">
+            رجوع
+        </a>
+    </div>
+
+    <!-- Summary -->
+    <div class="card shadow-sm border-0 rounded-4 mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <strong>العنوان</strong>
+                    <div class="text-muted">@Model.Title</div>
+                </div>
+                <div class="col-md-4">
+                    <strong>الدورة</strong>
+                    <div class="text-muted">@Model.CourseName</div>
+                </div>
+                <div class="col-md-4">
+                    <strong>عدد الأسئلة</strong>
+                    <div class="text-muted">@Model.TotalQuestions</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Questions grouped by Lesson -->
+    @foreach (var group in Model.LessonGroups)
+    {
+        <div class="card shadow-sm border-0 rounded-4 mb-4">
+
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <strong>📌 @group.LessonTitle</strong>
+
+                <a asp-action="AddQuestion"
+                   asp-route-draftId="@Model.DraftId"
+                   asp-route-lessonId="@group.LessonId"
+                   class="btn btn-sm btn-outline-success">
+                    ➕ إضافة سؤال
+                </a>
+            </div>
+
+            <div class="card-body p-0">
+                <ol class="list-group list-group-numbered list-group-flush">
+                    @foreach (var q in group.Questions)
+                    {
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+
+                            <div class="fw-semibold text-truncate" style="max-width:70%">
+                                @ShortHtml(q.Title)
+                            </div>
+
+                            <div class="btn-group btn-group-sm">
+
+                                <!-- Preview -->
+                                <button type="button"
+                                        class="btn btn-outline-primary"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#questionPreviewModal"
+                                        data-question-id="@q.QuestionId">
+                                    👁️
+                                </button>
+
+                                <!-- Replace -->
+                                <a asp-action="ReplaceQuestion"
+                                   asp-route-draftId="@Model.DraftId"
+                                   asp-route-oldQuestionId="@q.QuestionId"
+                                   asp-route-lessonId="@group.LessonId"
+                                   class="btn btn-outline-warning">
+                                    🔁
+                                </a>
+                            </div>
+                        </li>
+                    }
+                </ol>
+            </div>
+        </div>
+    }
+
+    <!-- Send Draft -->
+    <div class="d-flex justify-content-end gap-2">
+
+        <!-- 1️⃣ حفظ كمسودة فقط -->
+        <a asp-action="Index"
+           class="btn btn-outline-secondary px-4">
+            💾 حفظ كمسودة
+        </a>
+
+        <!-- 2️⃣ حفظ كمسودة + الانتقال لإعداد الإرسال -->
+        <a asp-action="SendDraft"
+           asp-route-draftId="@Model.DraftId"
+           class="btn btn-outline-primary px-4">
+            ⚙️ حفظ واستكمال الإرسال
+        </a>
+
+        <!-- 3️⃣ إرسال مباشر -->
+        <a asp-action="SendDraft"
+           asp-route-draftId="@Model.DraftId"
+           class="btn btn-success px-4">
+            🚀 إرسال الواجب
+        </a>
+
+    </div>
+
+</div>
+
+<!-- Question Preview Modal -->
+<div class="modal fade" id="questionPreviewModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">معاينة السؤال</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="questionPreviewContent">
+                <div class="text-center text-muted py-5">جاري التحميل...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.getElementById('questionPreviewModal')
+            .addEventListener('show.bs.modal', function (event) {
+
+                const button = event.relatedTarget;
+                const questionId = button.getAttribute('data-question-id');
+                const container = document.getElementById('questionPreviewContent');
+
+                container.innerHTML = 'جاري التحميل...';
+
+                fetch('/Partner/HomeworkDrafts/PreviewQuestion?questionId=' + questionId)
+                    .then(r => r.text())
+                    .then(html => container.innerHTML = html);
+            });
+    </script>
+}

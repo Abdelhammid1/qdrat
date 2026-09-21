@@ -1,0 +1,214 @@
+@model QdratNew.ViewModels.Students.BatchIndexVm
+
+@{
+    ViewData["Title"] = "إدارة الطلاب — الدفعات";
+    var batches = Model?.Batches ?? new List<QdratNew.ViewModels.Students.BatchCardVm>();
+    int total  = Model?.TotalStudents ?? 0;
+    int totB   = Model?.TotalBatches ?? 0;
+    int activeB = Model?.ActiveBatches ?? 0;
+    int totC   = Model?.TotalCourses ?? 0;
+}
+
+<link rel="stylesheet" href="~/css/admin-batch-index.css" asp-append-version="true" />
+
+<div class="bi-page" dir="rtl">
+
+    <div class="bi-topbar">
+        <div class="bi-brand">
+            <div class="bi-brand-icon"><i class="fas fa-layer-group"></i></div>
+            <div>
+                <div class="bi-brand-title">إدارة الطلاب — الدفعات</div>
+                <div class="bi-brand-sub">تصفح الدفعات وعرض قوائم طلابها ومتابعة أدائهم</div>
+            </div>
+        </div>
+        <div class="bi-top-actions">
+            <a asp-area="Admin" asp-controller="Students" asp-action="Dashboard" class="bi-btn bi-btn-ghost">
+                <i class="fas fa-chart-line"></i> لوحة التحليل
+            </a>
+            <a asp-area="Admin" asp-controller="Students" asp-action="Create" class="bi-btn bi-btn-primary">
+                <i class="fas fa-plus-circle"></i> إضافة طالب
+            </a>
+        </div>
+    </div>
+
+    <div class="bi-kpis">
+        <div class="bi-kpi bi-kpi--blue">
+            <div class="bi-kpi-icon"><i class="fas fa-users"></i></div>
+            <div class="bi-kpi-body">
+                <div class="bi-kpi-label">إجمالي الطلاب</div>
+                <div class="bi-kpi-val" data-target="@total">0</div>
+                <div class="bi-kpi-hint">جميع الطلاب المسجلين</div>
+            </div>
+            <div class="bi-kpi-bg"><i class="fas fa-users"></i></div>
+        </div>
+        <div class="bi-kpi bi-kpi--violet">
+            <div class="bi-kpi-icon"><i class="fas fa-layer-group"></i></div>
+            <div class="bi-kpi-body">
+                <div class="bi-kpi-label">إجمالي الدفعات</div>
+                <div class="bi-kpi-val" data-target="@totB">0</div>
+                <div class="bi-kpi-hint">الدفعات المتاحة</div>
+            </div>
+            <div class="bi-kpi-bg"><i class="fas fa-layer-group"></i></div>
+        </div>
+        <div class="bi-kpi bi-kpi--green">
+            <div class="bi-kpi-icon"><i class="fas fa-check-circle"></i></div>
+            <div class="bi-kpi-body">
+                <div class="bi-kpi-label">دفعات نشطة</div>
+                <div class="bi-kpi-val" data-target="@activeB">0</div>
+                <div class="bi-kpi-hint">@(totB > 0 ? Math.Round(activeB * 100.0 / totB, 0) : 0)% من الإجمالي</div>
+            </div>
+            <div class="bi-kpi-bg"><i class="fas fa-check-circle"></i></div>
+        </div>
+        <div class="bi-kpi bi-kpi--amber">
+            <div class="bi-kpi-icon"><i class="fas fa-book-open"></i></div>
+            <div class="bi-kpi-body">
+                <div class="bi-kpi-label">الدورات</div>
+                <div class="bi-kpi-val" data-target="@totC">0</div>
+                <div class="bi-kpi-hint">دورات مرتبطة بالدفعات</div>
+            </div>
+            <div class="bi-kpi-bg"><i class="fas fa-book-open"></i></div>
+        </div>
+    </div>
+
+    <div class="bi-filter">
+        <div class="bi-filter-row">
+            <div class="bi-search-wrap">
+                <i class="fas fa-search bi-search-ico"></i>
+                <input type="text" id="biSearch" class="bi-search" placeholder="ابحث بالاسم أو الدورة أو الفرع..." />
+            </div>
+            <div class="bi-filter-toggles">
+                <button class="bi-toggle bi-toggle--active" data-filter="all">الكل</button>
+                <button class="bi-toggle" data-filter="active">نشطة</button>
+                <button class="bi-toggle" data-filter="inactive">موقوفة</button>
+            </div>
+        </div>
+        <div class="bi-filter-count">
+            المعروض: <strong id="biVisibleCount">@batches.Count</strong> من <strong>@batches.Count</strong> دفعة
+        </div>
+    </div>
+
+    @if (!batches.Any())
+    {
+        <div class="bi-empty">
+            <div class="bi-empty-icon"><i class="fas fa-layer-group"></i></div>
+            <div class="bi-empty-title">لا توجد دفعات مسجلة</div>
+            <div class="bi-empty-sub">أنشئ دفعة جديدة أو راجع إعدادات النظام</div>
+        </div>
+    }
+    else
+    {
+        <div class="bi-grid" id="biBatchGrid">
+            @foreach (var batch in batches)
+            {
+                string statusCss    = batch.IsActive ? "active" : "inactive";
+                string statusText   = batch.IsActive ? "نشطة" : "موقوفة";
+                string courseLetter = batch.CourseName != "—" ? batch.CourseName.Substring(0, 1) : "د";
+                <div class="bi-card"
+                     data-search="@($"{batch.BatchName} {batch.CourseName} {batch.BranchName}".ToLower())"
+                     data-status="@statusCss">
+                    <div class="bi-card-header">
+                        <div class="bi-card-avatar">@courseLetter</div>
+                        <div class="bi-card-header-info">
+                            <div class="bi-card-name">@batch.BatchName</div>
+                            <div class="bi-card-meta">
+                                <span class="bi-meta-chip"><i class="fas fa-book"></i> @batch.CourseName</span>
+                                <span class="bi-meta-chip"><i class="fas fa-building"></i> @batch.BranchName</span>
+                            </div>
+                        </div>
+                        <div class="bi-status bi-status--@statusCss">
+                            <i class="fas fa-circle"></i> @statusText
+                        </div>
+                    </div>
+                    <div class="bi-card-stats">
+                        <div class="bi-stat">
+                            <div class="bi-stat-icon bi-stat-icon--blue"><i class="fas fa-users"></i></div>
+                            <div class="bi-stat-body">
+                                <div class="bi-stat-val">@batch.StudentCount</div>
+                                <div class="bi-stat-lbl">طالب</div>
+                            </div>
+                        </div>
+                        <div class="bi-stat">
+                            <div class="bi-stat-icon bi-stat-icon--green"><i class="fas fa-venus-mars"></i></div>
+                            <div class="bi-stat-body">
+                                <div class="bi-stat-val">@batch.GenderLabel</div>
+                                <div class="bi-stat-lbl">النوع</div>
+                            </div>
+                        </div>
+                        <div class="bi-stat">
+                            <div class="bi-stat-icon bi-stat-icon--amber"><i class="fas fa-calendar-alt"></i></div>
+                            <div class="bi-stat-body">
+                                <div class="bi-stat-val">@batch.StartDate.ToString("MM/yyyy")</div>
+                                <div class="bi-stat-lbl">بداية</div>
+                            </div>
+                        </div>
+                        <div class="bi-stat">
+                            <div class="bi-stat-icon bi-stat-icon--slate"><i class="fas fa-calendar-check"></i></div>
+                            <div class="bi-stat-body">
+                                <div class="bi-stat-val">@(batch.EndDate.HasValue ? batch.EndDate.Value.ToString("MM/yyyy") : "مفتوحة")</div>
+                                <div class="bi-stat-lbl">نهاية</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bi-card-footer">
+                        <a asp-area="Admin" asp-controller="Students" asp-action="BatchStudents"
+                           asp-route-id="@batch.BatchId" class="bi-view-btn">
+                            <i class="fas fa-users"></i>
+                            عرض قائمة الطلاب
+                            <span class="bi-badge">@batch.StudentCount</span>
+                        </a>
+                    </div>
+                </div>
+            }
+        </div>
+        <div id="biNoResults" class="bi-empty bi-hidden">
+            <div class="bi-empty-icon"><i class="fas fa-search"></i></div>
+            <div class="bi-empty-title">لا توجد دفعات مطابقة</div>
+            <div class="bi-empty-sub">غيّر نص البحث أو الفلتر</div>
+        </div>
+    }
+
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('.bi-kpi-val[data-target]').forEach(function (el) {
+            var t = parseInt(el.getAttribute('data-target'), 10) || 0;
+            if (t === 0) { el.textContent = '0'; return; }
+            var s = null;
+            (function step(ts) {
+                if (!s) s = ts;
+                var p = Math.min((ts - s) / 800, 1);
+                var e = 1 - Math.pow(1 - p, 3);
+                el.textContent = Math.round(e * t).toLocaleString('ar-SA');
+                if (p < 1) requestAnimationFrame(step);
+            })(performance.now());
+        });
+        var cards = Array.from(document.querySelectorAll('.bi-card'));
+        var visEl = document.getElementById('biVisibleCount');
+        var noRes = document.getElementById('biNoResults');
+        var searchEl = document.getElementById('biSearch');
+        var currentFilter = 'all';
+        function applyFilters() {
+            var q = (searchEl.value || '').trim().toLowerCase();
+            var shown = 0;
+            cards.forEach(function (c) {
+                var ok = (q === '' || (c.dataset.search || '').indexOf(q) !== -1)
+                      && (currentFilter === 'all' || c.dataset.status === currentFilter);
+                c.style.display = ok ? '' : 'none';
+                if (ok) shown++;
+            });
+            if (visEl) visEl.textContent = shown;
+            if (noRes) noRes.classList.toggle('bi-hidden', shown !== 0);
+        }
+        searchEl && searchEl.addEventListener('input', applyFilters);
+        document.querySelectorAll('.bi-toggle').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                document.querySelectorAll('.bi-toggle').forEach(function (b) { b.classList.remove('bi-toggle--active'); });
+                btn.classList.add('bi-toggle--active');
+                currentFilter = btn.getAttribute('data-filter');
+                applyFilters();
+            });
+        });
+        applyFilters();
+    });
+</script>

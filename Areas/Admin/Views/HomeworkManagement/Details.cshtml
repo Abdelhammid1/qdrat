@@ -1,0 +1,1233 @@
+@model QdratNew.ViewModels.Homework.HomeworkSetDetailsViewModel
+@using QdratNew.Helpers
+
+@{
+    ViewData["Title"] = "تفاصيل الواجب";
+
+    var questions = Model.Questions ?? new List<QdratNew.ViewModels.Homework.HomeworkQuestionDetailsItemViewModel>();
+
+    var sectionGroups = questions
+        .GroupBy(q => string.IsNullOrWhiteSpace(q.SectionTitle) || q.SectionTitle == "—" ? "أسئلة الواجب" : q.SectionTitle)
+        .Select(g => new { SectionTitle = g.Key, Questions = g.OrderBy(q => q.Order).ToList() })
+        .ToList();
+
+    var easyQuestionsCount = questions.Count(q => GetDifficultyKey(q.DifficultyLevel) == "easy");
+    var mediumQuestionsCount = questions.Count(q => GetDifficultyKey(q.DifficultyLevel) == "medium");
+    var hardQuestionsCount = questions.Count(q => GetDifficultyKey(q.DifficultyLevel) == "hard");
+}
+
+@functions {
+    string GetDifficultyKey(int difficultyLevel)
+    {
+        if (difficultyLevel <= 0) return "easy";
+        if (difficultyLevel == 1) return "medium";
+        return "hard";
+    }
+
+    string GetDifficultyText(int difficultyLevel)
+    {
+        if (difficultyLevel <= 0) return "سهل";
+        if (difficultyLevel == 1) return "متوسط";
+        if (difficultyLevel == 2) return "صعب";
+        return "صعب جدًا";
+    }
+
+    string GetDifficultyIcon(int difficultyLevel)
+    {
+        var key = GetDifficultyKey(difficultyLevel);
+
+        if (key == "easy") return "bi bi-check-circle";
+        if (key == "medium") return "bi bi-exclamation-circle";
+
+        return "bi bi-fire";
+    }
+
+    string CleanText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "—";
+        }
+
+        var text = System.Text.RegularExpressions.Regex.Replace(value, "<.*?>", " ");
+        text = System.Net.WebUtility.HtmlDecode(text);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ").Trim();
+
+        return string.IsNullOrWhiteSpace(text) ? "—" : text;
+    }
+
+    string ShortText(string? value, int maxLength)
+    {
+        var text = CleanText(value);
+
+        if (text == "—")
+        {
+            return text;
+        }
+
+        if (text.Length <= maxLength)
+        {
+            return text;
+        }
+
+        return text.Substring(0, maxLength) + "...";
+    }
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet" />
+
+    <style>
+        :root {
+            --pr-bg: #f4f7fb;
+            --pr-surface: #111827;
+            --pr-card: #ffffff;
+            --pr-border: #dbe4ef;
+            --pr-accent: #2563eb;
+            --pr-success: #16a34a;
+            --pr-danger: #dc2626;
+            --pr-warning: #f59e0b;
+            --pr-text: #0f172a;
+            --pr-muted: #64748b;
+            --pr-radius: 14px;
+            --pr-radius-sm: 9px;
+            --pr-transition: .2s cubic-bezier(.4,0,.2,1);
+        }
+
+        body {
+            background: var(--pr-bg) !important;
+        }
+
+        .pr-page {
+            direction: rtl;
+            min-height: 100vh;
+            padding: 28px 0 60px;
+            font-family: 'Cairo', Arial, sans-serif;
+        }
+
+        .pr-header {
+            background: #fff;
+            border: 1px solid var(--pr-border);
+            border-radius: var(--pr-radius);
+            padding: 18px 22px;
+            box-shadow: 0 8px 22px rgba(15,23,42,.06);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .pr-header-title {
+            color: var(--pr-text);
+            font-size: 22px;
+            font-weight: 900;
+            margin: 0;
+            line-height: 1.2;
+        }
+
+            .pr-header-title i {
+                color: var(--pr-accent);
+            }
+
+        .pr-header-sub {
+            color: #475569;
+            font-size: 13px;
+            font-weight: 700;
+            margin-top: 6px;
+            line-height: 1.8;
+        }
+
+        .pr-header-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .btn-pr-primary,
+        .btn-pr-success,
+        .btn-pr-outline {
+            border-radius: var(--pr-radius-sm);
+            padding: 8px 18px;
+            font-size: 13px;
+            font-weight: 900;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            text-decoration: none;
+            border: 1px solid transparent;
+            transition: var(--pr-transition);
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .btn-pr-primary {
+            background: var(--pr-accent);
+            border-color: var(--pr-accent);
+            color: #fff;
+        }
+
+        .btn-pr-success {
+            background: var(--pr-success);
+            border-color: var(--pr-success);
+            color: #fff;
+        }
+
+        .btn-pr-outline {
+            background: #fff;
+            border-color: #cbd5e1;
+            color: #334155;
+        }
+
+            .btn-pr-primary:hover,
+            .btn-pr-success:hover,
+            .btn-pr-outline:hover {
+                transform: translateY(-1px);
+                text-decoration: none;
+            }
+
+        .btn-pr-primary:hover,
+        .btn-pr-success:hover {
+            color: #fff;
+        }
+
+        .btn-pr-outline:hover {
+            background: #f1f5f9;
+            color: #0f172a;
+        }
+
+        .pr-hero {
+            background: linear-gradient(135deg, #1a2540 0%, #1c3052 60%, #162440 100%);
+            border: 1px solid rgba(255,255,255,.08);
+            border-radius: var(--pr-radius);
+            padding: 28px 32px;
+            margin-bottom: 24px;
+            color: #fff;
+            box-shadow: 0 14px 32px rgba(15,23,42,.18);
+        }
+
+        .pr-hero-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            background: rgba(255,255,255,.10);
+            border: 1px solid rgba(255,255,255,.16);
+            border-radius: 999px;
+            padding: 5px 12px;
+            font-size: 12px;
+            font-weight: 900;
+            margin-bottom: 12px;
+        }
+
+        .pr-hero-title {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 900;
+            line-height: 1.35;
+        }
+
+        .pr-hero-sub {
+            color: #cbd5e1;
+            font-size: 13px;
+            font-weight: 700;
+            margin-top: 8px;
+        }
+
+        .pr-chips {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+
+        .pr-chip {
+            background: rgba(255,255,255,.08);
+            border: 1px solid rgba(255,255,255,.10);
+            border-radius: 13px;
+            padding: 14px;
+            text-align: center;
+        }
+
+        .pr-chip-val {
+            font-size: 22px;
+            font-weight: 900;
+            line-height: 1;
+        }
+
+        .pr-chip-lbl {
+            margin-top: 7px;
+            color: #cbd5e1;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .pr-section-label {
+            font-size: 14px;
+            font-weight: 900;
+            color: #334155;
+            margin: 20px 0 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+            .pr-section-label::after {
+                content: "";
+                flex: 1;
+                height: 1px;
+                background: #dbe4ef;
+            }
+
+        .pr-info-panel,
+        .pr-difficulty-card,
+        .pr-section-card {
+            background: #fff;
+            border: 1px solid var(--pr-border);
+            border-radius: var(--pr-radius);
+            box-shadow: 0 8px 22px rgba(15,23,42,.05);
+            margin-bottom: 22px;
+        }
+
+        .pr-info-panel,
+        .pr-difficulty-card {
+            padding: 22px 24px;
+        }
+
+        .pr-info-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+
+        .pr-info-card {
+            background: #f8fafc;
+            border: 1px solid #dbe4ef;
+            border-radius: var(--pr-radius-sm);
+            padding: 14px;
+        }
+
+        .pr-info-label {
+            color: var(--pr-muted);
+            font-size: 12px;
+            font-weight: 800;
+            margin-bottom: 6px;
+        }
+
+        .pr-info-value {
+            color: var(--pr-text);
+            font-size: 15px;
+            font-weight: 900;
+            word-break: break-word;
+        }
+
+        .pr-difficulty-head,
+        .pr-section-card-header,
+        .pr-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .pr-difficulty-head {
+            margin-bottom: 14px;
+        }
+
+        .pr-difficulty-title,
+        .pr-section-card-title {
+            margin: 0;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 16px;
+            font-weight: 900;
+            color: #0f172a;
+        }
+
+        .pr-difficulty-total,
+        .pr-selected-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #eff6ff;
+            color: #1d4ed8;
+            border: 1px solid #bfdbfe;
+            border-radius: 999px;
+            padding: 5px 12px;
+            font-size: 12px;
+            font-weight: 900;
+        }
+
+        .pr-difficulty-links {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        .pr-difficulty-link {
+            border: 1px solid #dbe4ef;
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 13px 14px;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            color: #0f172a;
+            transition: var(--pr-transition);
+            cursor: pointer;
+        }
+
+            .pr-difficulty-link:hover,
+            .pr-difficulty-link.is-active {
+                transform: translateY(-1px);
+                border-color: #93c5fd;
+                box-shadow: 0 10px 24px rgba(37,99,235,.12);
+                color: #0f172a;
+            }
+
+            .pr-difficulty-link.is-active {
+                outline: 2px solid rgba(37,99,235,.16);
+            }
+
+        .pr-difficulty-name {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 900;
+        }
+
+        .pr-difficulty-count {
+            font-size: 18px;
+            font-weight: 900;
+        }
+
+        .pr-difficulty-easy .pr-difficulty-count,
+        .pr-difficulty-easy .pr-difficulty-name i {
+            color: #15803d;
+        }
+
+        .pr-difficulty-medium .pr-difficulty-count,
+        .pr-difficulty-medium .pr-difficulty-name i {
+            color: #b45309;
+        }
+
+        .pr-difficulty-hard .pr-difficulty-count,
+        .pr-difficulty-hard .pr-difficulty-name i {
+            color: #b91c1c;
+        }
+
+        .pr-difficulty-reset {
+            border: 0;
+            background: transparent;
+            color: #2563eb;
+            font-size: 12px;
+            font-weight: 900;
+            padding: 0;
+        }
+
+        .pr-toolbar {
+            background: #111827;
+            color: #e2e8f0;
+            border-radius: var(--pr-radius);
+            padding: 14px 16px;
+            margin-bottom: 14px;
+        }
+
+        .pr-toolbar-title {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 15px;
+            font-weight: 900;
+        }
+
+        .pr-section-card-header {
+            padding: 16px 18px;
+            border-bottom: 1px solid var(--pr-border);
+        }
+
+        .pr-section-card.is-hidden-by-difficulty {
+            display: none;
+        }
+
+        .pr-table-panel {
+            overflow: hidden;
+        }
+
+            .pr-table-panel .table {
+                margin: 0;
+                vertical-align: middle;
+                table-layout: fixed;
+            }
+
+                .pr-table-panel .table thead th {
+                    background: #f8fafc;
+                    color: #475569;
+                    border-bottom: 1px solid var(--pr-border);
+                    font-size: 12px;
+                    font-weight: 900;
+                    padding: 11px 8px;
+                    white-space: nowrap;
+                    vertical-align: middle;
+                }
+
+                .pr-table-panel .table tbody td {
+                    color: #0f172a;
+                    border-bottom: 1px solid #edf2f7;
+                    padding: 10px 8px;
+                    font-size: 13px;
+                    font-weight: 700;
+                    vertical-align: middle;
+                }
+
+        .pr-col-order {
+            width: 56px;
+        }
+
+        .pr-col-question {
+            width: 230px;
+        }
+
+        .pr-col-curriculum {
+            width: 115px;
+        }
+
+        .pr-col-section {
+            width: 115px;
+        }
+
+        .pr-col-lesson {
+            width: 125px;
+        }
+
+        .pr-col-difficulty {
+            width: 105px;
+        }
+
+        .pr-col-answer {
+            width: 125px;
+        }
+
+        .pr-col-actions {
+            width: 130px;
+        }
+
+        .pr-q-title {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            min-width: 0;
+            max-width: 100%;
+        }
+
+        .pr-q-title-inner {
+            min-width: 0;
+            max-width: 100%;
+        }
+
+        .pr-q-title-text {
+            color: #0f172a;
+            font-size: 13px;
+            font-weight: 900;
+            line-height: 1.6;
+            max-width: 155px;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            display: block;
+        }
+
+        .pr-short-cell {
+            max-width: 105px;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            display: inline-block;
+            vertical-align: middle;
+        }
+
+        .pr-answer-short {
+            max-width: 105px;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            display: inline-block;
+            vertical-align: middle;
+        }
+
+        .pr-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            border-radius: 999px;
+            padding: 5px 9px;
+            font-size: 11px;
+            font-weight: 900;
+            white-space: nowrap;
+            max-width: 100%;
+        }
+
+        .pr-badge-primary {
+            background: #dbeafe;
+            color: #1d4ed8;
+        }
+
+        .pr-badge-confirmed {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .pr-badge-warning {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .pr-badge-danger {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .pr-badge-empty {
+            background: #f1f5f9;
+            color: #475569;
+        }
+
+        .pr-action-group {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 5px;
+            flex-wrap: nowrap;
+        }
+
+        .pr-action-btn {
+            width: 30px;
+            height: 30px;
+            border-radius: 9px;
+            border: 1px solid transparent;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            transition: var(--pr-transition);
+            padding: 0;
+            flex-shrink: 0;
+        }
+
+            .pr-action-btn.preview {
+                color: #1d4ed8;
+                background: #dbeafe;
+                border-color: #bfdbfe;
+            }
+
+            .pr-action-btn.edit {
+                color: #92400e;
+                background: #fef3c7;
+                border-color: #fde68a;
+            }
+
+            .pr-action-btn.delete {
+                color: #991b1b;
+                background: #fee2e2;
+                border-color: #fecaca;
+            }
+
+            .pr-action-btn:hover {
+                transform: translateY(-1px);
+                text-decoration: none;
+            }
+
+        .pr-empty,
+        .pr-no-difficulty-results {
+            padding: 34px;
+            text-align: center;
+            color: #64748b;
+            font-weight: 800;
+        }
+
+        .pr-no-difficulty-results {
+            display: none;
+            background: #fff;
+            border: 1px dashed #cbd5e1;
+            border-radius: var(--pr-radius);
+            margin-bottom: 22px;
+        }
+
+        .pr-empty i {
+            font-size: 36px;
+            color: #94a3b8;
+            display: block;
+            margin-bottom: 10px;
+        }
+
+        .pr-modal .modal-content {
+            border: 0;
+            border-radius: var(--pr-radius);
+            overflow: hidden;
+        }
+
+        .pr-modal .modal-header {
+            background: #111827;
+            color: #fff;
+            border: 0;
+        }
+
+        .pr-modal .modal-title {
+            font-size: 16px;
+            font-weight: 900;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .pr-modal .modal-body {
+            background: #f8fafc;
+            padding: 18px;
+        }
+
+        @@media (max-width: 1200px) {
+            .pr-table-panel .table {
+                table-layout: auto;
+            }
+
+            .pr-col-question {
+                min-width: 220px;
+            }
+
+            .pr-col-curriculum,
+            .pr-col-section,
+            .pr-col-lesson {
+                min-width: 120px;
+            }
+
+            .pr-col-answer {
+                min-width: 120px;
+            }
+        }
+
+        @@media (max-width: 992px) {
+            .pr-info-grid,
+            .pr-chips {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @@media (max-width: 768px) {
+            .pr-page {
+                padding: 18px 0 40px;
+            }
+
+            .pr-info-grid,
+            .pr-chips,
+            .pr-difficulty-links {
+                grid-template-columns: 1fr;
+            }
+
+            .pr-q-title-text {
+                max-width: 180px;
+            }
+        }
+    </style>
+}
+
+<div class="pr-page container-fluid px-4">
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success fw-bold">@TempData["SuccessMessage"]</div>
+    }
+
+    <div class="pr-header">
+        <div>
+            <h1 class="pr-header-title">
+                <i class="bi bi-journal-check me-2"></i>
+                تفاصيل الواجب
+            </h1>
+            <div class="pr-header-sub">
+                مراجعة بيانات الواجب والأسئلة المرتبطة به بدون عرض بيانات الطلاب داخل صفحة التفاصيل.
+            </div>
+        </div>
+
+        <div class="pr-header-actions">
+            <a asp-action="Index" class="btn-pr-outline">
+                <i class="bi bi-arrow-right"></i>
+                رجوع
+            </a>
+
+            <a asp-action="StudentsReport"
+               asp-route-homeworkSetId="@Model.HomeworkSetId"
+               class="btn-pr-primary">
+                <i class="bi bi-people"></i>
+                عرض الطلاب وأداء الواجب
+            </a>
+
+            <a asp-action="ManageHomeworkQuestions"
+               asp-route-homeworkSetId="@Model.HomeworkSetId"
+               class="btn-pr-success">
+                <i class="bi bi-list-check"></i>
+                إدارة أسئلة الواجب
+            </a>
+        </div>
+    </div>
+
+    <div class="pr-hero">
+        <div class="row g-4 align-items-center">
+            <div class="col-lg-5">
+                <div class="pr-hero-label">
+                    <i class="bi bi-hash"></i>
+                    واجب رقم @Model.HomeworkSetId
+                </div>
+
+                <h2 class="pr-hero-title">@Model.Title</h2>
+
+                <div class="pr-hero-sub">
+                    الدفعة: @Model.BatchName
+                    @if (!string.IsNullOrWhiteSpace(Model.CompletionTitle))
+                    {
+                        <span> | @Model.CompletionTitle</span>
+                    }
+                </div>
+            </div>
+
+            <div class="col-lg-7">
+                <div class="pr-chips">
+                    <div class="pr-chip">
+                        <div class="pr-chip-val" style="color:#bfdbfe;">@Model.TotalQuestions</div>
+                        <div class="pr-chip-lbl">إجمالي الأسئلة</div>
+                    </div>
+
+                    <div class="pr-chip">
+                        <div class="pr-chip-val" style="color:#86efac;">@Model.TotalSections</div>
+                        <div class="pr-chip-lbl">محاور</div>
+                    </div>
+
+                    <div class="pr-chip">
+                        <div class="pr-chip-val" style="color:#fde68a;">@Model.TotalLessons</div>
+                        <div class="pr-chip-lbl">مؤشرات</div>
+                    </div>
+
+                    <div class="pr-chip">
+                        <div class="pr-chip-val" style="color:#fca5a5;">@Model.AssignedStudentsCount</div>
+                        <div class="pr-chip-lbl">طلاب مرتبطون</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="pr-section-label">معلومات الواجب</div>
+
+    <div class="pr-info-panel">
+        <div class="pr-info-grid">
+            <div class="pr-info-card">
+                <div class="pr-info-label">عنوان الواجب</div>
+                <div class="pr-info-value">@Model.Title</div>
+            </div>
+
+            <div class="pr-info-card">
+                <div class="pr-info-label">رقم الواجب</div>
+                <div class="pr-info-value">@Model.HomeworkSetId</div>
+            </div>
+
+            <div class="pr-info-card">
+                <div class="pr-info-label">تاريخ الإنشاء / الإرسال</div>
+                <div class="pr-info-value">@Model.CreatedAt.ToString("yyyy/MM/dd HH:mm")</div>
+            </div>
+
+            <div class="pr-info-card">
+                <div class="pr-info-label">الدفعة</div>
+                <div class="pr-info-value">@Model.BatchName</div>
+            </div>
+
+            <div class="pr-info-card">
+                <div class="pr-info-label">المنهج</div>
+                <div class="pr-info-value">@Model.CurriculumTitle</div>
+            </div>
+
+            <div class="pr-info-card">
+                <div class="pr-info-label">حالة الإرسال</div>
+                <div class="pr-info-value">@(Model.IsSent ? "تم الإرسال" : "لم يتم الإرسال")</div>
+            </div>
+
+            <div class="pr-info-card">
+                <div class="pr-info-label">نافذة الحل</div>
+                <div class="pr-info-value">
+                    @(Model.StartAt.HasValue? Model.StartAt.Value.ToString("yyyy/MM/dd HH:mm") : "—")
+                    -
+                    @(Model.EndAt.HasValue? Model.EndAt.Value.ToString("yyyy/MM/dd HH:mm") : "—")
+                </div>
+            </div>
+
+            <div class="pr-info-card">
+                <div class="pr-info-label">إعادة المحاولة</div>
+                <div class="pr-info-value">@(Model.AllowRetake ? $"مسموحة ({Model.MaxRetakes})" : "غير مسموحة")</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="pr-difficulty-card">
+        <div class="pr-difficulty-head">
+            <h5 class="pr-difficulty-title">
+                <i class="bi bi-bar-chart-steps"></i>
+                مستوى أسئلة الواجب
+            </h5>
+
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+                <span class="pr-difficulty-total" id="difficultyVisibleCount">@Model.TotalQuestions سؤال</span>
+                <button type="button" class="pr-difficulty-reset" data-difficulty-filter="all">عرض الكل</button>
+            </div>
+        </div>
+
+        <div class="pr-difficulty-links">
+            <a href="#" class="pr-difficulty-link pr-difficulty-easy" data-difficulty-filter="easy">
+                <span class="pr-difficulty-name">
+                    <i class="bi bi-check-circle"></i>
+                    السهل
+                </span>
+                <span class="pr-difficulty-count" data-difficulty-count="easy">@easyQuestionsCount</span>
+            </a>
+
+            <a href="#" class="pr-difficulty-link pr-difficulty-medium" data-difficulty-filter="medium">
+                <span class="pr-difficulty-name">
+                    <i class="bi bi-exclamation-circle"></i>
+                    المتوسط
+                </span>
+                <span class="pr-difficulty-count" data-difficulty-count="medium">@mediumQuestionsCount</span>
+            </a>
+
+            <a href="#" class="pr-difficulty-link pr-difficulty-hard" data-difficulty-filter="hard">
+                <span class="pr-difficulty-name">
+                    <i class="bi bi-fire"></i>
+                    الصعب
+                </span>
+                <span class="pr-difficulty-count" data-difficulty-count="hard">@hardQuestionsCount</span>
+            </a>
+        </div>
+    </div>
+
+    <div class="pr-section-label">أسئلة الواجب حسب المحاور</div>
+
+    <div class="pr-toolbar">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <div class="pr-toolbar-title">
+                <i class="bi bi-table"></i>
+                جدول أسئلة الواجب
+            </div>
+
+            <span class="pr-selected-badge">
+                <i class="bi bi-question-circle"></i>
+                @Model.TotalQuestions سؤال
+            </span>
+
+            <span class="pr-selected-badge">
+                <i class="bi bi-diagram-3"></i>
+                @Model.TotalSections محور
+            </span>
+        </div>
+
+        <a asp-action="ManageHomeworkQuestions"
+           asp-route-homeworkSetId="@Model.HomeworkSetId"
+           class="btn-pr-outline"
+           style="background:transparent;color:#e2e8f0;border-color:#334155;">
+            <i class="bi bi-list-check"></i>
+            إدارة الأسئلة
+        </a>
+    </div>
+
+    <div class="pr-no-difficulty-results" id="difficultyNoResults">
+        لا توجد أسئلة مطابقة لمستوى الصعوبة المحدد.
+    </div>
+
+    @if (sectionGroups.Any())
+    {
+        foreach (var sectionGroup in sectionGroups)
+        {
+            <div class="pr-section-card" data-section-card>
+                <div class="pr-section-card-header">
+                    <h5 class="pr-section-card-title">
+                        <i class="bi bi-diagram-3" style="color:#60a5fa;"></i>
+                        @sectionGroup.SectionTitle
+                    </h5>
+
+                    <span class="pr-selected-badge" data-section-question-count="@sectionGroup.Questions.Count">
+                        <i class="bi bi-question-circle"></i>
+                        @sectionGroup.Questions.Count سؤال
+                    </span>
+                </div>
+
+                <div class="pr-table-panel">
+                    <div class="table-responsive">
+                        <table class="table table-hover text-center w-100">
+                            <thead>
+                                <tr>
+                                    <th class="pr-col-order">#</th>
+                                    <th class="pr-col-question">السؤال</th>
+                                    <th class="pr-col-curriculum">المنهج</th>
+                                    <th class="pr-col-section">المحور</th>
+                                    <th class="pr-col-lesson">المؤشر</th>
+                                    <th class="pr-col-difficulty">الصعوبة</th>
+                                    <th class="pr-col-answer">الإجابة</th>
+                                    <th class="pr-col-actions">الإجراءات</th>
+                                </tr>
+                            </thead>
+
+                            <tbody>
+                                @foreach (var q in sectionGroup.Questions)
+                                {
+                                    var difficultyKey = GetDifficultyKey(q.DifficultyLevel);
+                                    var difficultyText = GetDifficultyText(q.DifficultyLevel);
+                                    var difficultyIcon = GetDifficultyIcon(q.DifficultyLevel);
+                                    var difficultyClass = difficultyKey == "easy"
+                                    ? "pr-badge-confirmed"
+                                    : difficultyKey == "medium"
+                                    ? "pr-badge-warning"
+                                    : "pr-badge-danger";
+
+                                    var fullQuestionText = CleanText(q.Title);
+                                    var shortQuestionText = ShortText(q.Title, 20);
+
+                                    var fullCorrectAnswer = CleanText(q.CorrectAnswer);
+                                    var shortCorrectAnswer = ShortText(q.CorrectAnswer, 16);
+
+                                    <tr data-question-row data-difficulty="@difficultyKey">
+                                        <td>
+                                            <span class="pr-badge pr-badge-primary">@q.Order</span>
+                                        </td>
+
+                                        <td class="text-end">
+                                            <div class="pr-q-title">
+                                                <button type="button"
+                                                        class="pr-action-btn preview flex-shrink-0"
+                                                        onclick="previewHomeworkQuestion('@q.QuestionId')"
+                                                        title="معاينة السؤال">
+                                                    <i class="bi bi-eye"></i>
+                                                </button>
+
+                                                <div class="pr-q-title-inner">
+                                                    @if (!string.IsNullOrWhiteSpace(q.ReferenceNumber))
+                                                    {
+                                                        <div class="mb-1">
+                                                            <span class="pr-badge pr-badge-empty">@q.ReferenceNumber</span>
+                                                        </div>
+                                                    }
+
+                                                    <span class="pr-q-title-text" title="@fullQuestionText">
+                                                        @Html.Raw(NumberHelper.ToIndicNumbersSafe(shortQuestionText))
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </td>
+
+                                        <td>
+                                            <span class="pr-badge pr-badge-empty pr-short-cell" title="@CleanText(q.CurriculumTitle)">
+                                                @ShortText(q.CurriculumTitle, 12)
+                                            </span>
+                                        </td>
+
+                                        <td>
+                                            <span class="pr-badge pr-badge-empty pr-short-cell" title="@CleanText(q.SectionTitle)">
+                                                @ShortText(q.SectionTitle, 12)
+                                            </span>
+                                        </td>
+
+                                        <td>
+                                            <span class="pr-badge pr-badge-empty pr-short-cell" title="@CleanText(q.LessonTitle)">
+                                                @ShortText(q.LessonTitle, 12)
+                                            </span>
+                                        </td>
+
+                                        <td>
+                                            <span class="pr-badge @difficultyClass">
+                                                <i class="@difficultyIcon"></i>
+                                                @difficultyText
+                                            </span>
+                                        </td>
+
+                                        <td>
+                                            @if (!string.IsNullOrWhiteSpace(q.CorrectAnswer))
+                                            {
+                                                <span class="pr-badge pr-badge-confirmed pr-answer-short" title="@fullCorrectAnswer">
+                                                    @Html.Raw(NumberHelper.ToIndicNumbersSafe(shortCorrectAnswer))
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="pr-badge pr-badge-danger">بدون</span>
+                                            }
+                                        </td>
+
+                                        <td>
+                                            <div class="pr-action-group">
+                                                <button type="button"
+                                                        class="pr-action-btn preview"
+                                                        onclick="previewHomeworkQuestion('@q.QuestionId')"
+                                                        title="معاينة">
+                                                    <i class="bi bi-eye"></i>
+                                                </button>
+
+                                                <a class="pr-action-btn edit"
+                                                   asp-area="Admin"
+                                                   asp-controller="Questions"
+                                                   asp-action="Edit"
+                                                   asp-route-id="@q.QuestionId"
+                                                   title="تعديل السؤال">
+                                                    <i class="bi bi-pencil-square"></i>
+                                                </a>
+
+                                                <form asp-action="RemoveQuestionFromHomework"
+                                                      asp-route-homeworkSetId="@Model.HomeworkSetId"
+                                                      asp-route-questionId="@q.QuestionId"
+                                                      method="post"
+                                                      class="d-inline"
+                                                      onsubmit="return confirm('هل تريد حذف هذا السؤال من الواجب؟');">
+                                                    <button type="submit" class="pr-action-btn delete" title="حذف من الواجب">
+                                                        <i class="bi bi-trash-fill"></i>
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="pr-info-panel">
+            <div class="pr-empty">
+                <i class="bi bi-inbox"></i>
+                لا توجد أسئلة مرتبطة بهذا الواجب.
+            </div>
+        </div>
+    }
+</div>
+
+<div class="modal fade pr-modal" id="homeworkQuestionPreviewModal" tabindex="-1" dir="rtl">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content text-end">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-eye"></i>
+                    معاينة السؤال
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body" id="homeworkQuestionPreviewBody">
+                <div class="pr-empty">
+                    <i class="bi bi-hourglass-split"></i>
+                    جارٍ التحميل...
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function previewHomeworkQuestion(id) {
+            const body = document.getElementById('homeworkQuestionPreviewBody');
+
+            body.innerHTML = `
+                <div class="pr-empty">
+                    <i class="bi bi-hourglass-split"></i>
+                    جارٍ التحميل...
+                </div>`;
+
+            const modal = new bootstrap.Modal(document.getElementById('homeworkQuestionPreviewModal'));
+            modal.show();
+
+            fetch(`/Admin/HomeworkManagement/PreviewHomeworkQuestion?id=${id}`)
+                .then(async response => {
+                    if (!response.ok) {
+                        throw new Error('preview_failed');
+                    }
+
+                    const html = await response.text();
+
+                    if (html.includes('DeveloperExceptionPage') || html.includes('System.InvalidOperationException')) {
+                        throw new Error('server_exception');
+                    }
+
+                    return html;
+                })
+                .then(html => {
+                    body.innerHTML = html;
+                })
+                .catch(() => {
+                    body.innerHTML = `
+                        <div class="pr-empty">
+                            <i class="bi bi-exclamation-triangle text-danger"></i>
+                            تعذر تحميل معاينة السؤال.
+                        </div>`;
+                });
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const difficultyControls = document.querySelectorAll('[data-difficulty-filter]');
+            const difficultyLinks = document.querySelectorAll('.pr-difficulty-link[data-difficulty-filter]');
+            const questionRows = document.querySelectorAll('[data-question-row]');
+            const sectionCards = document.querySelectorAll('[data-section-card]');
+            const visibleCount = document.getElementById('difficultyVisibleCount');
+            const noResults = document.getElementById('difficultyNoResults');
+
+            function formatArabicNumber(value) {
+                return Number(value || 0).toLocaleString('ar-EG');
+            }
+
+            function applyDifficultyFilter(filter) {
+                let totalVisible = 0;
+
+                difficultyLinks.forEach(link => {
+                    link.classList.toggle('is-active', link.dataset.difficultyFilter === filter && filter !== 'all');
+                });
+
+                questionRows.forEach(row => {
+                    const shouldShow = filter === 'all' || row.dataset.difficulty === filter;
+
+                    row.style.display = shouldShow ? '' : 'none';
+
+                    if (shouldShow) {
+                        totalVisible++;
+                    }
+                });
+
+                sectionCards.forEach(card => {
+                    const rows = Array.from(card.querySelectorAll('[data-question-row]'));
+                    const shownRows = rows.filter(row => row.style.display !== 'none');
+                    const countBadge = card.querySelector('[data-section-question-count]');
+
+                    card.classList.toggle('is-hidden-by-difficulty', shownRows.length === 0);
+
+                    if (countBadge) {
+                        countBadge.innerHTML = `<i class="bi bi-question-circle"></i> ${formatArabicNumber(shownRows.length)} سؤال`;
+                    }
+                });
+
+                if (visibleCount) {
+                    visibleCount.textContent = formatArabicNumber(totalVisible) + ' سؤال';
+                }
+
+                if (noResults) {
+                    noResults.style.display = totalVisible === 0 ? 'block' : 'none';
+                }
+            }
+
+            difficultyControls.forEach(control => {
+                control.addEventListener('click', function (event) {
+                    event.preventDefault();
+                    applyDifficultyFilter(control.dataset.difficultyFilter || 'all');
+                });
+            });
+        });
+    </script>
+}

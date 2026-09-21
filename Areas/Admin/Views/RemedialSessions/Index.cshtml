@@ -1,0 +1,145 @@
+﻿@model IEnumerable<QdratNew.ViewModels.Remedial.RemedialSessionSummaryVm>
+@{
+    ViewData["Title"] = "🎯 إدارة الجلسات العلاجية";
+}
+
+<link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+
+<h2 class="text-center fw-bold mt-3">
+    <i class="bi bi-activity text-primary"></i> إدارة الجلسات العلاجية
+</h2>
+
+<div class="table-responsive mt-4 shadow-sm p-3 bg-white rounded">
+    <table id="sessionsTable" class="table table-striped table-hover align-middle text-center">
+        <thead class="table-success text-center">
+            <tr>
+                <th>👤 الطالب</th>
+                <th>📘 الخطة العلاجية</th>
+                <th>📅 تاريخ الإنشاء</th>
+                <th>⌛ الحالة</th>
+                <th>🕒 مدة المشاهدة</th>
+                <th>📈 متوسط التقييم</th>
+                <th>⚙️ التحكم</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var s in Model)
+            {
+                <tr>
+                    <td>@s.StudentName</td>
+                    <td>@s.PlanTitle</td>
+                    <td>@s.CreatedAt.ToString("yyyy/MM/dd")</td>
+
+                    <td>
+                        @if (s.IsCompleted)
+                        {
+                            <span class="badge bg-success"><i class="bi bi-check-circle"></i> منتهية</span>
+                        }
+                        else if (s.IsConfirmed)
+                        {
+                            <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split"></i> قيد التنفيذ</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary"><i class="bi bi-pause-circle"></i> لم تبدأ</span>
+                        }
+                    </td>
+
+                    <td>@Math.Round(s.WatchedMinutes, 1) دقيقة</td>
+                    <td>@Math.Round(s.AverageScore, 1)%</td>
+
+                    <td>
+                        <!-- زر تأكيد الحضور -->
+                        @if (!s.IsConfirmed && !s.IsCompleted)
+                        {
+                            <button class="btn btn-sm btn-success confirm-session" data-id="@s.Id" title="تأكيد حضور الطالب">
+                                <i class="bi bi-person-check"></i>
+                            </button>
+                        }
+
+                        <!-- زر إنهاء الجلسة -->
+                        @if (s.IsConfirmed && !s.IsCompleted)
+                        {
+                            <button class="btn btn-sm btn-danger complete-session" data-id="@s.Id" title="إنهاء الجلسة">
+                                <i class="bi bi-flag-fill"></i>
+                            </button>
+                        }
+
+                        <!-- زر عرض تقرير التقدم -->
+                        <a class="btn btn-sm btn-info"
+                           href="@Url.Action("ProgressReport", "RemedialSessions", new { area = "Admin", id = s.Id })"
+                           title="عرض تقرير التقدم">
+                            <i class="bi bi-bar-chart-line"></i>
+                        </a>
+
+                        <!-- زر تعديل -->
+                        <a class="btn btn-sm btn-outline-primary"
+                           href="@Url.Action("Edit", "RemedialSessions", new { area = "Admin", id = s.Id })"
+                           title="تعديل الجلسة">
+                            <i class="bi bi-pencil-square"></i>
+                        </a>
+                        <a class="btn btn-sm btn-warning text-dark"
+                           href="@Url.Action("WeakSections", "RemedialAnalysis", new { area = "Admin", studentId = s.StudentId })"
+                           title="عرض المحاور الضعيفة للطالب">
+                            <i class="bi bi-lightbulb"></i> تحليل المحاور
+                        </a>
+                        <!-- زر حذف -->
+                        <button class="btn btn-sm btn-outline-danger delete-session" data-id="@s.Id" title="حذف الجلسة">
+                            <i class="bi bi-trash3"></i>
+                        </button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@section Scripts {
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+    <script>
+        $(document).ready(function () {
+            // ✅ تهيئة DataTable
+            $('#sessionsTable').DataTable({
+                language: { url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json" },
+                pageLength: 10,
+                order: [[2, "desc"]],
+                columnDefs: [{ orderable: false, targets: [6] }]
+            });
+
+            // ✅ تأكيد الحضور
+            $(document).on('click', '.confirm-session', function () {
+                var id = $(this).data('id');
+                $.post('/Admin/RemedialSessions/ConfirmAttendance', { id: id }, function (res) {
+                    alert(res.message);
+                    location.reload();
+                });
+            });
+
+            // ✅ إنهاء الجلسة
+            $(document).on('click', '.complete-session', function () {
+                var id = $(this).data('id');
+                if (confirm('هل تريد إنهاء هذه الجلسة العلاجية؟')) {
+                    $.post('/Admin/RemedialSessions/CompleteSession', { id: id }, function (res) {
+                        alert(res.message);
+                        location.reload();
+                    });
+                }
+            });
+
+            // ✅ حذف الجلسة
+            $(document).on('click', '.delete-session', function () {
+                var id = $(this).data('id');
+                if (confirm('هل أنت متأكد من حذف هذه الجلسة؟')) {
+                    $.post('/Admin/RemedialSessions/Delete', { id: id }, function (res) {
+                        alert(res.message);
+                        location.reload();
+                    });
+                }
+            });
+        });
+    </script>
+}

@@ -1,0 +1,100 @@
+@model QdratNew.ViewModels.IntegrityGuard.BlockedViewModel
+@{
+    ViewData["Title"] = "المحاولة متوقفة";
+    Layout = null;
+    var dashboardUrl = Url.Action("Index", "Dashboard", new { area = "Students" });
+    var targetUrl = string.IsNullOrWhiteSpace(Model.ReturnUrl) ? dashboardUrl : Model.ReturnUrl;
+    var showSelfResolve = Model.CanSelfResolve && Model.AttemptType.HasValue && Model.AttemptEntityId.HasValue;
+}
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>المحاولة متوقفة</title>
+    <link href="~/css/site.css" rel="stylesheet" />
+    <style>
+        body { display:flex; align-items:center; justify-content:center; min-height:100vh; background:#f1f5f9; font-family:'Cairo','Tajawal',system-ui,sans-serif; margin:0; }
+        .box { background:#fff; border-radius:16px; padding:2.5rem; text-align:center; max-width:440px; box-shadow:0 20px 60px rgba(0,0,0,.12); }
+        .box .icon { font-size:3rem; margin-bottom:.75rem; }
+        .box h3 { color:#7f1d1d; margin-bottom:.5rem; }
+        .box p { color:#64748b; line-height:1.7; }
+        .box a.dash-link { display:inline-block; margin-top:1rem; background:#3b82f6; color:#fff; padding:.6rem 1.6rem; border-radius:10px; text-decoration:none; font-weight:600; }
+        .box .self-resolve-btn { display:inline-block; margin-top:1rem; margin-inline-end:8px; background:#2fa86a; color:#fff; padding:.6rem 1.6rem; border:none; border-radius:10px; font-weight:700; cursor:pointer; font-family:inherit; font-size:.95rem; }
+        .box .self-resolve-btn:disabled { opacity:.6; cursor:default; }
+        .box .self-resolve-msg { margin-top:.5rem; font-size:.85rem; }
+        .box .self-resolve-msg.error { color:#df4b4b; }
+        .box .self-resolve-msg.success { color:#2fa86a; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <div class="icon">🚫</div>
+        <h3>هذه المحاولة متوقفة حاليًا</h3>
+        <p>تم رصد مخالفة (استخدام ترجمة المتصفح) وتم إيقاف هذه المحاولة تلقائيًا.</p>
+
+        @if (showSelfResolve)
+        {
+            <p>يمكنك العودة لمتابعة الحل مرة واحدة فقط. إذا رُصدت المخالفة مرة أخرى فلن تتمكن من العودة تلقائيًا، وسيلزم عندها التواصل مع المشرف على المنصة لإعادة فتحها.</p>
+            <button type="button" id="selfResolveBtn" class="self-resolve-btn">الرجوع مرة واحدة ومتابعة الحل</button>
+            <div id="selfResolveMsg" class="self-resolve-msg"></div>
+        }
+        else
+        {
+            <p>تواصل مع المشرف على المنصة لإعادة فتحها.</p>
+        }
+
+        <div>
+            <a asp-area="Students" asp-controller="Dashboard" asp-action="Index" class="dash-link">لوحة التحكم</a>
+        </div>
+    </div>
+
+    @Html.AntiForgeryToken()
+
+    @if (showSelfResolve)
+    {
+        <script>
+            (function () {
+                var btn = document.getElementById('selfResolveBtn');
+                var msg = document.getElementById('selfResolveMsg');
+                var targetUrl = @Html.Raw(Json.Serialize(targetUrl));
+
+                btn.addEventListener('click', async function () {
+                    btn.disabled = true;
+                    btn.textContent = 'جارٍ المعالجة...';
+                    msg.textContent = '';
+                    msg.className = 'self-resolve-msg';
+
+                    try {
+                        var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+                        var res = await fetch('/Students/IntegrityGuard/SelfResolve', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
+                            body: JSON.stringify({
+                                attemptType: @Model.AttemptType.Value,
+                                attemptEntityId: @Model.AttemptEntityId.Value
+                            })
+                        });
+                        var data = await res.json();
+
+                        if (data && data.success) {
+                            msg.textContent = data.message || 'تم فتح المحاولة، جارٍ التحويل...';
+                            msg.className = 'self-resolve-msg success';
+                            window.location.href = targetUrl;
+                        } else {
+                            msg.textContent = (data && data.message) || 'تعذّر إعادة فتح المحاولة';
+                            msg.className = 'self-resolve-msg error';
+                            btn.remove();
+                        }
+                    } catch (e) {
+                        msg.textContent = 'تعذّر الاتصال بالخادم، حاول مرة أخرى.';
+                        msg.className = 'self-resolve-msg error';
+                        btn.disabled = false;
+                        btn.textContent = 'الرجوع مرة واحدة ومتابعة الحل';
+                    }
+                });
+            })();
+        </script>
+    }
+</body>
+</html>

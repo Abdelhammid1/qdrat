@@ -1,0 +1,1463 @@
+﻿@using QdratNew.ViewModels.Students
+@model StudentFilterViewModel
+
+@{
+    ViewData["Title"] = "لوحة الطلاب";
+
+    var students = Model.Students != null
+        ? Model.Students.ToList()
+        : new List<QdratNew.ViewModels.StudentViewModel>();
+
+    var totalStudents = students.Count;
+
+    var activeStudents = students.Count(s =>
+        !string.IsNullOrWhiteSpace(s.EnrollmentStatus)
+        && (s.EnrollmentStatus == "نشط" || s.EnrollmentStatus == "Active"));
+
+    var inactiveStudents = totalStudents - activeStudents;
+
+    var maleStudents = students.Count(s =>
+        !string.IsNullOrWhiteSpace(s.Gender)
+        && (s.Gender == "ذكر" || s.Gender == "Male"));
+
+    var femaleStudents = students.Count(s =>
+        !string.IsNullOrWhiteSpace(s.Gender)
+        && (s.Gender == "أنثى" || s.Gender == "Female"));
+
+    var studentsWithPhone = students.Count(s => !string.IsNullOrWhiteSpace(s.PhoneNumber));
+    var studentsWithWhatsApp = students.Count(s => !string.IsNullOrWhiteSpace(s.WhatsAppNumber));
+    var studentsWithEmail = students.Count(s => !string.IsNullOrWhiteSpace(s.Email));
+
+    var levelsCount = students
+        .Where(s => !string.IsNullOrWhiteSpace(s.Level))
+        .Select(s => s.Level)
+        .Distinct()
+        .Count();
+
+    string SafeText(string? value, string fallback = "غير محدد")
+    {
+        return string.IsNullOrWhiteSpace(value) ? fallback : value;
+    }
+
+    string BuildAvatar(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return "ط";
+        }
+
+        var cleaned = name.Trim();
+        var parts = cleaned.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        if (parts.Length >= 2)
+        {
+            return (parts[0].Substring(0, 1) + parts[1].Substring(0, 1)).ToUpper();
+        }
+
+        return cleaned.Substring(0, Math.Min(2, cleaned.Length)).ToUpper();
+    }
+
+    string ResolveStatusCss(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status))
+        {
+            return "neutral";
+        }
+
+        if (status == "نشط" || status == "Active")
+        {
+            return "active";
+        }
+
+        if (status.Contains("موقوف") || status.Contains("غير") || status.Contains("Inactive"))
+        {
+            return "danger";
+        }
+
+        return "warning";
+    }
+
+    string IsSelected(string? current, string? value)
+    {
+        return current == value ? "selected" : null;
+    }
+}
+
+<div class="students-dashboard-page" dir="rtl">
+
+    <section class="students-command-hero">
+        <div class="hero-main">
+            <div class="hero-icon">
+                <i class="fas fa-user-graduate"></i>
+            </div>
+
+            <div>
+                <div class="hero-eyebrow">غرفة متابعة الطلاب</div>
+                <h1>لوحة تشغيل وتحليل الطلاب</h1>
+                <p>
+                    متابعة الطلاب حسب الفرع، الدفعة، النوع، المستوى، وحالة التسجيل مع وصول مباشر لملف الطالب التحليلي.
+                </p>
+            </div>
+        </div>
+
+        <div class="hero-actions">
+            <a asp-area="Admin"
+               asp-controller="Students"
+               asp-action="Index"
+               class="hero-btn ghost">
+                <i class="fas fa-list"></i>
+                قائمة الطلاب
+            </a>
+
+            <a asp-area="Admin"
+               asp-controller="Students"
+               asp-action="Create"
+               class="hero-btn primary">
+                <i class="fas fa-plus-circle"></i>
+                إضافة طالب
+            </a>
+        </div>
+    </section>
+
+    <section class="kpi-grid">
+
+        <article class="kpi-card blue">
+            <div class="kpi-icon blue">
+                <i class="fas fa-users"></i>
+            </div>
+            <div>
+                <span>إجمالي الطلاب</span>
+                <strong>@totalStudents</strong>
+                <small>حسب نتائج الفلترة الحالية</small>
+            </div>
+        </article>
+
+        <article class="kpi-card green">
+            <div class="kpi-icon green">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <div>
+                <span>طلاب نشطون</span>
+                <strong>@activeStudents</strong>
+                <small>@((totalStudents > 0 ? Math.Round((activeStudents / (double)totalStudents) * 100, 1) : 0).ToString("0.#"))% من المعروض</small>
+            </div>
+        </article>
+
+        <article class="kpi-card amber">
+            <div class="kpi-icon amber">
+                <i class="fas fa-user-clock"></i>
+            </div>
+            <div>
+                <span>غير نشطين</span>
+                <strong>@inactiveStudents</strong>
+                <small>يحتاجون مراجعة حالة التسجيل</small>
+            </div>
+        </article>
+
+        <article class="kpi-card purple">
+            <div class="kpi-icon purple">
+                <i class="fas fa-layer-group"></i>
+            </div>
+            <div>
+                <span>المستويات</span>
+                <strong>@levelsCount</strong>
+                <small>مستويات تعليمية ضمن النتائج</small>
+            </div>
+        </article>
+
+        <article class="kpi-card teal">
+            <div class="kpi-icon teal">
+                <i class="fab fa-whatsapp"></i>
+            </div>
+            <div>
+                <span>واتساب متاح</span>
+                <strong>@studentsWithWhatsApp</strong>
+                <small>للتواصل السريع مع الطالب</small>
+            </div>
+        </article>
+
+        <article class="kpi-card slate">
+            <div class="kpi-icon slate">
+                <i class="fas fa-envelope"></i>
+            </div>
+            <div>
+                <span>بريد إلكتروني</span>
+                <strong>@studentsWithEmail</strong>
+                <small>جاهزون لاستقبال التقارير</small>
+            </div>
+        </article>
+
+    </section>
+
+    <section class="filter-card">
+        <div class="filter-head">
+            <div>
+                <span>تصفية تشغيلية</span>
+                <h2>حدد نطاق الطلاب المطلوب متابعته</h2>
+            </div>
+
+            <a asp-area="Admin"
+               asp-controller="Students"
+               asp-action="Dashboard"
+               class="reset-link">
+                <i class="fas fa-undo-alt"></i>
+                إعادة ضبط
+            </a>
+        </div>
+
+        <form asp-area="Admin"
+              asp-controller="Students"
+              asp-action="Dashboard"
+              method="get">
+
+            <div class="filter-grid">
+
+                <div class="field">
+                    <label>
+                        <i class="fas fa-code-branch"></i>
+                        الفرع
+                    </label>
+                    <select name="SelectedBranchId" class="form-control-custom">
+                        <option value="">كل الفروع</option>
+                        @foreach (var branch in Model.Branches)
+                        {
+                            <option value="@branch.Value" selected="@IsSelected(Model.SelectedBranchId, branch.Value)">
+                                @branch.Text
+                            </option>
+                        }
+                    </select>
+                </div>
+
+                <div class="field">
+                    <label>
+                        <i class="fas fa-users"></i>
+                        الدفعة
+                    </label>
+                    <select name="SelectedBatchId" class="form-control-custom">
+                        <option value="">كل الدفعات</option>
+                        @foreach (var batch in Model.Batches)
+                        {
+                            <option value="@batch.Value" selected="@IsSelected(Model.SelectedBatchId, batch.Value)">
+                                @batch.Text
+                            </option>
+                        }
+                    </select>
+                </div>
+
+                <div class="field">
+                    <label>
+                        <i class="fas fa-venus-mars"></i>
+                        النوع
+                    </label>
+                    <select name="Gender" class="form-control-custom">
+                        <option value="">الكل</option>
+                        <option value="ذكر" selected="@IsSelected(Model.Gender, "ذكر")">ذكر</option>
+                        <option value="أنثى" selected="@IsSelected(Model.Gender, "أنثى")">أنثى</option>
+                        <option value="Male" selected="@IsSelected(Model.Gender, "Male")">Male</option>
+                        <option value="Female" selected="@IsSelected(Model.Gender, "Female")">Female</option>
+                    </select>
+                </div>
+
+                <div class="field">
+                    <label>
+                        <i class="fas fa-layer-group"></i>
+                        المستوى
+                    </label>
+                    <select name="Level" class="form-control-custom">
+                        <option value="">كل المستويات</option>
+                        <option value="أول ثانوي" selected="@IsSelected(Model.Level, "أول ثانوي")">أول ثانوي</option>
+                        <option value="ثاني ثانوي" selected="@IsSelected(Model.Level, "ثاني ثانوي")">ثاني ثانوي</option>
+                        <option value="ثالث ثانوي" selected="@IsSelected(Model.Level, "ثالث ثانوي")">ثالث ثانوي</option>
+                        <option value="جامعي" selected="@IsSelected(Model.Level, "جامعي")">جامعي</option>
+                    </select>
+                </div>
+
+                <div class="field">
+                    <label>
+                        <i class="fas fa-toggle-on"></i>
+                        حالة التسجيل
+                    </label>
+                    <select name="EnrollmentStatus" class="form-control-custom">
+                        <option value="">كل الحالات</option>
+                        <option value="نشط" selected="@IsSelected(Model.EnrollmentStatus, "نشط")">نشط</option>
+                        <option value="غير نشط" selected="@IsSelected(Model.EnrollmentStatus, "غير نشط")">غير نشط</option>
+                        <option value="موقوف" selected="@IsSelected(Model.EnrollmentStatus, "موقوف")">موقوف</option>
+                        <option value="Active" selected="@IsSelected(Model.EnrollmentStatus, "Active")">Active</option>
+                        <option value="Inactive" selected="@IsSelected(Model.EnrollmentStatus, "Inactive")">Inactive</option>
+                    </select>
+                </div>
+
+                <div class="field submit-field">
+                    <button type="submit" class="filter-btn">
+                        <i class="fas fa-filter"></i>
+                        تطبيق الفلتر
+                    </button>
+                </div>
+
+            </div>
+        </form>
+    </section>
+
+    <section class="split-panel">
+
+        <div class="analytics-card">
+            <div class="panel-head">
+                <div>
+                    <span>توزيع سريع</span>
+                    <h2>قراءة أولية لنتائج الطلاب</h2>
+                </div>
+            </div>
+
+            <div class="mini-stats-grid">
+
+                <div class="mini-stat">
+                    <div class="mini-stat-top">
+                        <span>ذكور</span>
+                        <strong>@maleStudents</strong>
+                    </div>
+                    <div class="mini-bar">
+                        <div style="width:@((totalStudents > 0 ? Math.Round((maleStudents / (double)totalStudents) * 100, 0) : 0))%"></div>
+                    </div>
+                </div>
+
+                <div class="mini-stat">
+                    <div class="mini-stat-top">
+                        <span>إناث</span>
+                        <strong>@femaleStudents</strong>
+                    </div>
+                    <div class="mini-bar purple">
+                        <div style="width:@((totalStudents > 0 ? Math.Round((femaleStudents / (double)totalStudents) * 100, 0) : 0))%"></div>
+                    </div>
+                </div>
+
+                <div class="mini-stat">
+                    <div class="mini-stat-top">
+                        <span>جوال متاح</span>
+                        <strong>@studentsWithPhone</strong>
+                    </div>
+                    <div class="mini-bar green">
+                        <div style="width:@((totalStudents > 0 ? Math.Round((studentsWithPhone / (double)totalStudents) * 100, 0) : 0))%"></div>
+                    </div>
+                </div>
+
+                <div class="mini-stat">
+                    <div class="mini-stat-top">
+                        <span>واتساب متاح</span>
+                        <strong>@studentsWithWhatsApp</strong>
+                    </div>
+                    <div class="mini-bar teal">
+                        <div style="width:@((totalStudents > 0 ? Math.Round((studentsWithWhatsApp / (double)totalStudents) * 100, 0) : 0))%"></div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <div class="decision-card">
+            <div class="panel-head">
+                <div>
+                    <span>تنبيهات تشغيلية</span>
+                    <h2>ما الذي يحتاج انتباه؟</h2>
+                </div>
+            </div>
+
+            <div class="decision-list">
+                @if (inactiveStudents > 0)
+                {
+                    <div class="decision-item danger">
+                        <i class="fas fa-user-slash"></i>
+                        <div>
+                            <strong>طلاب غير نشطين</strong>
+                            <span>يوجد @inactiveStudents طالب غير نشط ضمن النتائج الحالية.</span>
+                        </div>
+                    </div>
+                }
+
+                @if (studentsWithPhone < totalStudents)
+                {
+                    <div class="decision-item warning">
+                        <i class="fas fa-phone-slash"></i>
+                        <div>
+                            <strong>بيانات تواصل ناقصة</strong>
+                            <span>يوجد @(totalStudents - studentsWithPhone) طالب بدون رقم جوال.</span>
+                        </div>
+                    </div>
+                }
+
+                @if (studentsWithWhatsApp < totalStudents)
+                {
+                    <div class="decision-item warning">
+                        <i class="fab fa-whatsapp"></i>
+                        <div>
+                            <strong>واتساب غير مكتمل</strong>
+                            <span>يوجد @(totalStudents - studentsWithWhatsApp) طالب بدون رقم واتساب.</span>
+                        </div>
+                    </div>
+                }
+
+                @if (totalStudents == 0)
+                {
+                    <div class="decision-item neutral">
+                        <i class="fas fa-filter"></i>
+                        <div>
+                            <strong>لا توجد نتائج</strong>
+                            <span>غيّر الفلاتر أو أعد ضبط البحث.</span>
+                        </div>
+                    </div>
+                }
+
+                @if (inactiveStudents == 0 && totalStudents > 0 && studentsWithPhone == totalStudents && studentsWithWhatsApp == totalStudents)
+                {
+                    <div class="decision-item good">
+                        <i class="fas fa-check-circle"></i>
+                        <div>
+                            <strong>حالة بيانات جيدة</strong>
+                            <span>كل الطلاب المعروضين نشطون وبيانات التواصل الأساسية مكتملة.</span>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+    </section>
+
+    <section class="students-table-card">
+
+        <div class="table-topbar">
+            <div>
+                <span>نتائج الطلاب</span>
+                <h2>قائمة الطلاب حسب الفلتر الحالي</h2>
+            </div>
+
+            <div class="table-search-wrap">
+                <i class="fas fa-search"></i>
+                <input type="text"
+                       id="studentsLiveSearch"
+                       placeholder="بحث سريع داخل النتائج..." />
+            </div>
+
+            <div class="count-badge">
+                المعروض: <strong id="visibleRows">@totalStudents</strong>
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <table class="students-table" id="studentsDashboardTable">
+                <thead>
+                    <tr>
+                        <th style="width:30%; text-align:right;">الطالب</th>
+                        <th>النوع</th>
+                        <th>المستوى</th>
+                     
+                        <th>البريد</th>
+                        <th>الحالة</th>
+                        <th>الإجراء</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var student in students)
+                    {
+                        var statusCss = ResolveStatusCss(student.EnrollmentStatus);
+                        var rowSearch = $"{student.FullName} {student.Gender} {student.Level} {student.PhoneNumber} {student.WhatsAppNumber} {student.Email} {student.EnrollmentStatus}".ToLower();
+
+                        <tr data-search="@rowSearch">
+                            <td style="text-align:right;">
+                                <div class="student-cell">
+                                    <div class="student-avatar">
+                                        @BuildAvatar(student.FullName)
+                                    </div>
+
+                                    <div>
+                                        <strong>@SafeText(student.FullName, "طالب بدون اسم")</strong>
+                                        <span>ID: @student.StudentID</span>
+                                    </div>
+                                </div>
+                            </td>
+
+                            <td>
+                                <span class="meta-pill purple">
+                                    <i class="fas fa-venus-mars"></i>
+                                    @SafeText(student.Gender)
+                                </span>
+                            </td>
+
+                            <td>
+                                <span class="meta-pill teal">
+                                    <i class="fas fa-layer-group"></i>
+                                    @SafeText(student.Level)
+                                </span>
+                            </td>
+
+                           
+
+                            <td>
+                                <span class="contact-pill email @(string.IsNullOrWhiteSpace(student.Email) ? "empty" : "")">
+                                    <i class="fas fa-envelope"></i>
+                                    @SafeText(student.Email, "غير متاح")
+                                </span>
+                            </td>
+
+                            <td>
+                                <span class="status-pill @statusCss">
+                                    <i class="fas fa-circle"></i>
+                                    @SafeText(student.EnrollmentStatus)
+                                </span>
+                            </td>
+
+                            <td>
+                                <div class="row-actions">
+                                    <a asp-area="Admin"
+                                       asp-controller="Students"
+                                       asp-action="Details"
+                                       asp-route-id="@student.StudentID"
+                                       class="act-btn view"
+                                       title="فتح ملف الطالب">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+
+                                    <a asp-area="Admin"
+                                       asp-controller="Students"
+                                       asp-action="Edit"
+                                       asp-route-id="@student.StudentID"
+                                       class="act-btn edit"
+                                       title="تعديل الطالب">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (!students.Any())
+        {
+            <div class="empty-box">
+                <i class="fas fa-user-graduate"></i>
+                <strong>لا توجد نتائج</strong>
+                <span>لم يتم العثور على طلاب مطابقين للفلاتر الحالية.</span>
+            </div>
+        }
+        else
+        {
+            <div id="noLiveRows" class="empty-box d-none">
+                <i class="fas fa-search"></i>
+                <strong>لا توجد نتائج مطابقة للبحث</strong>
+                <span>غيّر كلمة البحث داخل النتائج الحالية.</span>
+            </div>
+        }
+
+    </section>
+
+</div>
+
+<style>
+    .students-dashboard-page {
+        --font: 'Cairo', 'Tahoma', sans-serif;
+        --ink: #0d1117;
+        --ink-3: #374151;
+        --mute: #6b7280;
+        --mute-2: #9ca3af;
+        --mute-3: #d1d5db;
+        --bg: #f4f6fb;
+        --bg-2: #eef1f8;
+        --surface: #ffffff;
+        --border: #e5e8f0;
+        --green: #059669;
+        --green-lt: #d1fae5;
+        --green-dk: #064e3b;
+        --blue: #2563eb;
+        --blue-lt: #dbeafe;
+        --blue-dk: #1e3a8a;
+        --amber: #d97706;
+        --amber-lt: #fef3c7;
+        --amber-dk: #78350f;
+        --red: #dc2626;
+        --red-lt: #fee2e2;
+        --red-dk: #7f1d1d;
+        --purple: #7c3aed;
+        --purple-lt: #ede9fe;
+        --purple-dk: #3b0764;
+        --teal: #0891b2;
+        --teal-lt: #cffafe;
+        --slate: #475569;
+        --slate-lt: #e2e8f0;
+        --radius: 14px;
+        --radius-lg: 22px;
+        --shadow: 0 2px 16px rgba(13, 17, 23, .07);
+        --shadow-sm: 0 1px 6px rgba(13, 17, 23, .05);
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: var(--font);
+        padding: 24px;
+    }
+
+        .students-dashboard-page *,
+        .students-dashboard-page *::before,
+        .students-dashboard-page *::after {
+            box-sizing: border-box;
+        }
+
+        .students-dashboard-page a {
+            text-decoration: none;
+        }
+
+    .students-command-hero {
+        background: linear-gradient(135deg, #0d1117, #172554);
+        color: #fff;
+        border-radius: var(--radius-lg);
+        padding: 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 18px;
+        margin-bottom: 16px;
+        box-shadow: var(--shadow);
+    }
+
+    .hero-main {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        min-width: 0;
+    }
+
+    .hero-icon {
+        width: 58px;
+        height: 58px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, .10);
+        border: 1px solid rgba(255, 255, 255, .12);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        flex-shrink: 0;
+    }
+
+    .hero-eyebrow {
+        color: #93c5fd;
+        font-size: 12px;
+        font-weight: 900;
+        margin-bottom: 4px;
+    }
+
+    .students-command-hero h1 {
+        margin: 0;
+        font-size: 24px;
+        font-weight: 900;
+    }
+
+    .students-command-hero p {
+        margin: 6px 0 0;
+        color: rgba(255, 255, 255, .68);
+        font-size: 13px;
+        line-height: 1.7;
+        max-width: 760px;
+    }
+
+    .hero-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .hero-btn {
+        border-radius: 12px;
+        padding: 10px 15px;
+        font-size: 12.5px;
+        font-weight: 800;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        white-space: nowrap;
+        transition: .15s;
+    }
+
+        .hero-btn.primary {
+            background: var(--blue);
+            color: #fff;
+        }
+
+        .hero-btn.ghost {
+            background: rgba(255, 255, 255, .08);
+            color: rgba(255, 255, 255, .82);
+            border: 1px solid rgba(255, 255, 255, .12);
+        }
+
+        .hero-btn:hover {
+            transform: translateY(-1px);
+            color: #fff;
+        }
+
+    .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+
+    .kpi-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 16px;
+        min-height: 132px;
+        box-shadow: var(--shadow-sm);
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        position: relative;
+        overflow: hidden;
+        transition: .15s;
+    }
+
+        .kpi-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+        }
+
+        .kpi-card::after {
+            content: '';
+            position: absolute;
+            right: 14px;
+            left: 14px;
+            bottom: 0;
+            height: 3px;
+            border-radius: 999px 999px 0 0;
+        }
+
+        .kpi-card.blue::after {
+            background: var(--blue);
+        }
+
+        .kpi-card.green::after {
+            background: var(--green);
+        }
+
+        .kpi-card.amber::after {
+            background: var(--amber);
+        }
+
+        .kpi-card.purple::after {
+            background: var(--purple);
+        }
+
+        .kpi-card.teal::after {
+            background: var(--teal);
+        }
+
+        .kpi-card.slate::after {
+            background: var(--slate);
+        }
+
+    .kpi-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 13px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 17px;
+        flex-shrink: 0;
+    }
+
+        .kpi-icon.blue {
+            background: var(--blue-lt);
+            color: var(--blue-dk);
+        }
+
+        .kpi-icon.green {
+            background: var(--green-lt);
+            color: var(--green-dk);
+        }
+
+        .kpi-icon.amber {
+            background: var(--amber-lt);
+            color: var(--amber-dk);
+        }
+
+        .kpi-icon.purple {
+            background: var(--purple-lt);
+            color: var(--purple-dk);
+        }
+
+        .kpi-icon.teal {
+            background: var(--teal-lt);
+            color: #155e75;
+        }
+
+        .kpi-icon.slate {
+            background: var(--slate-lt);
+            color: #334155;
+        }
+
+    .kpi-card span {
+        display: block;
+        color: var(--mute);
+        font-size: 12px;
+        font-weight: 900;
+        margin-bottom: 6px;
+    }
+
+    .kpi-card strong {
+        display: block;
+        color: var(--ink);
+        font-size: 28px;
+        font-weight: 900;
+        line-height: 1;
+    }
+
+    .kpi-card small {
+        display: block;
+        color: var(--mute-2);
+        font-size: 10.5px;
+        font-weight: 700;
+        margin-top: 8px;
+        line-height: 1.5;
+    }
+
+    .filter-card,
+    .analytics-card,
+    .decision-card,
+    .students-table-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-sm);
+    }
+
+    .filter-card {
+        padding: 18px;
+        margin-bottom: 16px;
+    }
+
+    .filter-head,
+    .panel-head,
+    .table-topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+    }
+
+    .filter-head {
+        margin-bottom: 14px;
+    }
+
+        .filter-head span,
+        .panel-head span,
+        .table-topbar span {
+            display: block;
+            color: var(--blue);
+            font-size: 11px;
+            font-weight: 900;
+            margin-bottom: 3px;
+        }
+
+        .filter-head h2,
+        .panel-head h2,
+        .table-topbar h2 {
+            margin: 0;
+            color: var(--ink);
+            font-size: 15px;
+            font-weight: 900;
+        }
+
+    .reset-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        background: var(--bg-2);
+        color: var(--ink-3);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 9px 13px;
+        font-size: 12px;
+        font-weight: 800;
+    }
+
+        .reset-link:hover {
+            background: var(--red-lt);
+            color: var(--red-dk);
+        }
+
+    .filter-grid {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 12px;
+        align-items: end;
+    }
+
+    .field label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--ink-3);
+        font-size: 11.5px;
+        font-weight: 900;
+        margin-bottom: 6px;
+    }
+
+        .field label i {
+            color: var(--blue);
+        }
+
+    .form-control-custom {
+        width: 100%;
+        min-height: 42px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: #fff;
+        padding: 9px 12px;
+        color: var(--ink);
+        font-size: 12.5px;
+        font-family: var(--font);
+        outline: none;
+        transition: .15s;
+    }
+
+        .form-control-custom:focus {
+            border-color: var(--blue);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, .10);
+        }
+
+    .filter-btn {
+        width: 100%;
+        min-height: 42px;
+        border: 0;
+        border-radius: 12px;
+        background: var(--blue);
+        color: #fff;
+        font-size: 12.5px;
+        font-weight: 900;
+        font-family: var(--font);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        box-shadow: 0 8px 20px rgba(37, 99, 235, .18);
+    }
+
+        .filter-btn:hover {
+            background: #1d4ed8;
+        }
+
+    .split-panel {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 390px;
+        gap: 16px;
+        margin-bottom: 16px;
+    }
+
+    .analytics-card,
+    .decision-card {
+        padding: 18px;
+    }
+
+    .mini-stats-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 14px;
+    }
+
+    .mini-stat {
+        background: var(--bg-2);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 13px;
+    }
+
+    .mini-stat-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+
+        .mini-stat-top span {
+            color: var(--mute);
+            font-size: 11.5px;
+            font-weight: 900;
+        }
+
+        .mini-stat-top strong {
+            color: var(--ink);
+            font-size: 18px;
+            font-weight: 900;
+        }
+
+    .mini-bar {
+        height: 7px;
+        background: var(--mute-3);
+        border-radius: 999px;
+        overflow: hidden;
+    }
+
+        .mini-bar div {
+            height: 100%;
+            border-radius: 999px;
+            background: var(--blue);
+        }
+
+        .mini-bar.green div {
+            background: var(--green);
+        }
+
+        .mini-bar.purple div {
+            background: var(--purple);
+        }
+
+        .mini-bar.teal div {
+            background: var(--teal);
+        }
+
+    .decision-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: 14px;
+    }
+
+    .decision-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        border-radius: 14px;
+        padding: 12px;
+        border: 1px solid var(--border);
+        background: var(--bg-2);
+    }
+
+        .decision-item i {
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            background: #fff;
+        }
+
+        .decision-item strong {
+            display: block;
+            color: var(--ink);
+            font-size: 12.5px;
+            font-weight: 900;
+            margin-bottom: 2px;
+        }
+
+        .decision-item span {
+            display: block;
+            color: var(--mute);
+            font-size: 11.5px;
+            line-height: 1.6;
+        }
+
+        .decision-item.good {
+            background: var(--green-lt);
+            border-color: rgba(5, 150, 105, .18);
+        }
+
+        .decision-item.warning {
+            background: var(--amber-lt);
+            border-color: rgba(217, 119, 6, .18);
+        }
+
+        .decision-item.danger {
+            background: var(--red-lt);
+            border-color: rgba(220, 38, 38, .18);
+        }
+
+        .decision-item.neutral {
+            background: var(--bg-2);
+        }
+
+    .students-table-card {
+        overflow: hidden;
+    }
+
+    .table-topbar {
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border);
+        background: linear-gradient(180deg, #ffffff, #f8fafc);
+    }
+
+    .table-search-wrap {
+        min-width: 300px;
+        max-width: 420px;
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 0 13px;
+        min-height: 40px;
+    }
+
+        .table-search-wrap i {
+            color: var(--mute-2);
+        }
+
+        .table-search-wrap input {
+            border: 0;
+            outline: 0;
+            width: 100%;
+            font-family: var(--font);
+            font-size: 12.5px;
+            color: var(--ink);
+        }
+
+    .count-badge {
+        background: var(--bg-2);
+        color: var(--ink-3);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 7px 12px;
+        font-size: 11.5px;
+        font-weight: 900;
+        white-space: nowrap;
+    }
+
+        .count-badge strong {
+            color: var(--blue);
+        }
+
+    .table-wrap {
+        width: 100%;
+        overflow-x: auto;
+    }
+
+    .students-table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 1050px;
+    }
+
+        .students-table th {
+            background: var(--bg-2);
+            color: var(--mute);
+            font-size: 11px;
+            font-weight: 900;
+            padding: 11px 16px;
+            border-bottom: 1px solid var(--border);
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .students-table td {
+            color: var(--ink-3);
+            font-size: 12.5px;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        .students-table tbody tr:hover td {
+            background: #f8fafc;
+        }
+
+    .student-cell {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        min-width: 0;
+    }
+
+    .student-avatar {
+        width: 42px;
+        height: 42px;
+        border-radius: 14px;
+        background: linear-gradient(135deg, #1e3a8a, #2563eb);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 900;
+        flex-shrink: 0;
+        box-shadow: 0 7px 18px rgba(37, 99, 235, .20);
+    }
+
+    .student-cell strong {
+        display: block;
+        color: var(--ink);
+        font-size: 12px;
+        font-weight: 900;
+        line-height: 1.3;
+        white-space: nowrap;
+    }
+
+    .student-cell span {
+        display: block;
+        color: var(--mute);
+        font-size: 10.5px;
+        margin-top: 3px;
+        text-align: right;
+    }
+
+    .meta-pill,
+    .contact-pill,
+    .status-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        max-width: 190px;
+        border-radius: 999px;
+        padding: 5px 9px;
+        font-size: 11px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+        .meta-pill.purple {
+            background: var(--purple-lt);
+            color: var(--purple-dk);
+            border: 1px solid rgba(124, 58, 237, .16);
+        }
+
+        .meta-pill.teal {
+            background: var(--teal-lt);
+            color: #155e75;
+            border: 1px solid rgba(8, 145, 178, .16);
+        }
+
+    .contact-pill {
+        background: var(--blue-lt);
+        color: var(--blue-dk);
+        border: 1px solid rgba(37, 99, 235, .16);
+    }
+
+        .contact-pill.whatsapp {
+            background: var(--green-lt);
+            color: var(--green-dk);
+            border-color: rgba(5, 150, 105, .16);
+        }
+
+        .contact-pill.email {
+            background: var(--slate-lt);
+            color: #334155;
+            border-color: rgba(71, 85, 105, .16);
+        }
+
+        .contact-pill.empty {
+            background: var(--bg-2);
+            color: var(--mute);
+            border-color: var(--border);
+        }
+
+    .status-pill i {
+        font-size: 7px;
+    }
+
+    .status-pill.active {
+        background: var(--green-lt);
+        color: var(--green-dk);
+        border: 1px solid rgba(5, 150, 105, .18);
+    }
+
+    .status-pill.warning {
+        background: var(--amber-lt);
+        color: var(--amber-dk);
+        border: 1px solid rgba(217, 119, 6, .18);
+    }
+
+    .status-pill.danger {
+        background: var(--red-lt);
+        color: var(--red-dk);
+        border: 1px solid rgba(220, 38, 38, .18);
+    }
+
+    .status-pill.neutral {
+        background: var(--bg-2);
+        color: var(--mute);
+        border: 1px solid var(--border);
+    }
+
+    .row-actions {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+    }
+
+    .act-btn {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        border: 1px solid;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: .15s;
+        font-size: 13px;
+    }
+
+        .act-btn.view {
+            background: var(--blue-lt);
+            color: var(--blue-dk);
+            border-color: rgba(37, 99, 235, .18);
+        }
+
+        .act-btn.edit {
+            background: var(--amber-lt);
+            color: var(--amber-dk);
+            border-color: rgba(217, 119, 6, .18);
+        }
+
+        .act-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
+        }
+
+    .empty-box {
+        padding: 46px 20px;
+        text-align: center;
+        color: var(--mute);
+    }
+
+        .empty-box i {
+            display: block;
+            font-size: 34px;
+            color: var(--mute-2);
+            margin-bottom: 10px;
+        }
+
+        .empty-box strong {
+            display: block;
+            color: var(--ink);
+            font-size: 16px;
+            font-weight: 900;
+            margin-bottom: 4px;
+        }
+
+        .empty-box span {
+            display: block;
+            font-size: 12px;
+        }
+
+    .d-none {
+        display: none !important;
+    }
+
+    @@media (max-width: 1300px) {
+        .kpi-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .filter-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .split-panel {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .students-dashboard-page {
+            padding: 14px;
+        }
+
+        .students-command-hero {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+        .hero-actions {
+            width: 100%;
+        }
+
+        .hero-btn {
+            flex: 1;
+            justify-content: center;
+        }
+
+        .kpi-grid,
+        .filter-grid,
+        .mini-stats-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .table-topbar {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+        .table-search-wrap {
+            min-width: 100%;
+            max-width: 100%;
+        }
+    }
+
+    @@media (max-width: 520px) {
+        .kpi-grid,
+        .filter-grid,
+        .mini-stats-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .hero-main {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+    }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const searchInput = document.getElementById('studentsLiveSearch');
+        const visibleRows = document.getElementById('visibleRows');
+        const noLiveRows = document.getElementById('noLiveRows');
+        const rows = Array.from(document.querySelectorAll('#studentsDashboardTable tbody tr'));
+
+        function normalize(value) {
+            if (!value) {
+                return '';
+            }
+
+            return value.toString().trim().toLowerCase();
+        }
+
+        function applyLiveSearch() {
+            const searchValue = normalize(searchInput ? searchInput.value : '');
+            let shown = 0;
+
+            rows.forEach(function (row) {
+                const rowSearch = normalize(row.getAttribute('data-search'));
+                const visible = searchValue === '' || rowSearch.indexOf(searchValue) !== -1;
+
+                row.style.display = visible ? '' : 'none';
+
+                if (visible) {
+                    shown++;
+                }
+            });
+
+            if (visibleRows) {
+                visibleRows.textContent = shown;
+            }
+
+            if (noLiveRows) {
+                noLiveRows.classList.toggle('d-none', shown !== 0);
+            }
+        }
+
+        if (searchInput) {
+            searchInput.addEventListener('input', applyLiveSearch);
+        }
+
+        applyLiveSearch();
+    });
+</script>

@@ -1,0 +1,345 @@
+﻿@model QdratNew.ViewModels.Question.QuestionDisplayViewModel
+@using QdratNew.Helpers
+
+@if (Model == null)
+{
+    <div class="alert alert-danger">⚠️ Model is null</div>
+    return;
+}
+
+@{
+    var isRTL = Model.IsRTL;
+
+    Func<string, string> T = key =>
+    {
+        if (isRTL) return key;
+
+        return key switch
+        {
+            "القيمة الأولى" => "Value A",
+            "القيمة الثانية" => "Value B",
+            "هذه هي الإجابة الصحيحة" => "Correct Answer",
+            _ => key
+        };
+    };
+}
+
+<style>
+
+    /* =========================
+       Wrapper
+    ========================= */
+    .question-wrapper-bg {
+        background: linear-gradient(135deg, #f6f9fc, #eef5f9);
+        padding: 20px;
+        border-radius: 20px;
+    }
+
+    /* =========================
+       Question Card
+    ========================= */
+    .question-card {
+        border-radius: 16px;
+        padding: 25px;
+        background: #ffffff;
+        box-shadow: 0 10px 30px rgba(0,0,0,.06);
+    }
+
+    /* =========================
+       Question Title
+    ========================= */
+    .question-title {
+        font-size: 22px;
+        font-weight: bold;
+        line-height: 1.8;
+    }
+
+    /* =========================
+       Content Fix (IMPORTANT)
+    ========================= */
+    .question-content {
+        unicode-bidi: isolate;
+    }
+
+        /* حماية SVG */
+        .question-content svg {
+            direction: ltr !important;
+        }
+
+    /* =========================
+       Grid Layout
+    ========================= */
+    .options-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 15px;
+        margin-top: 20px;
+    }
+
+    /* =========================
+       Option Card (FIXED)
+    ========================= */
+    .option-card {
+        border: 1px solid #ddd;
+        border-radius: 12px;
+        padding: 20px 15px;
+        background: #fafafa;
+        transition: 0.2s;
+        cursor: pointer;
+        position: relative;
+        /* ✅ السماح للـ HTML ياخد مساحته */
+        display: block;
+        min-height: 100px;
+       
+    }
+
+            /* دعم الكسور */
+            .option-card .question-content span,
+            .option-card .question-content div {
+                display: inline-block;
+            }
+
+        /* Hover */
+        .option-card:hover {
+            border-color: #339999;
+            background: #f0fefe;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(0,0,0,.08);
+        }
+
+        /* Correct Answer */
+        .option-card.correct {
+            border: 2px solid #198754;
+            background: #e9f7ef;
+            box-shadow: 0 4px 12px rgba(25,135,84,0.15);
+        }
+
+        /* =========================
+       Content Alignment
+    ========================= */
+        .option-card .question-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+        }
+
+        .option-card .question-content {
+            direction: rtl;
+        }
+
+        /* =========================
+       SVG FIX (IMPORTANT)
+    ========================= */
+        .option-card svg {
+            width: 90px;
+            height: 70px;
+            display: block;
+        }
+
+        .option-card .question-content {
+            display: block;
+            text-align: center;
+            width: 100%;
+            line-height: 1.8;
+        }
+
+            /* مهم جدًا: لا تلمس span القادمة من الداتابيز */
+            .option-card .question-content span {
+                display: inline-block;
+            }
+
+                /* السماح بالـ block داخل الكسر */
+                .option-card .question-content span span {
+                    display: block;
+                }
+        /* =========================
+       Images
+    ========================= */
+        .option-card img {
+            display: block;
+            margin: auto;
+            max-height: 80px;
+        }
+
+    /* =========================
+       Correct Badge
+    ========================= */
+    .correct-badge {
+        position: absolute;
+        top: 8px;
+        right: 8px; /* سيتم عكسها بـ RTL */
+        background: #198754;
+        color: #fff;
+        font-size: 11px;
+        padding: 3px 8px;
+        border-radius: 6px;
+        z-index: 2;
+    }
+
+    /* =========================
+       RTL / LTR
+    ========================= */
+    .rtl-mode {
+        direction: rtl;
+        text-align: right;
+    }
+
+    .ltr-mode {
+        direction: ltr;
+        text-align: left;
+    }
+
+    /* عكس البادج في RTL */
+    .rtl-mode .correct-badge {
+        right: 8px;
+    }
+
+    .ltr-mode .correct-badge {
+        left: 8px;
+    }
+
+    .question-title[style*="ltr"] {
+        text-align: left;
+    }
+
+    .question-title[style*="rtl"] {
+        text-align: right;
+    }
+
+    .verbal-passage {
+        background: #f8f9fa;
+        border: 1px dashed #bbb;
+        padding: 15px;
+        margin-top: 15px;
+        margin-bottom: 15px;
+        line-height: 1.8;
+    }
+
+        .verbal-passage audio,
+        .verbal-passage video {
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,.1);
+        }
+
+    .fraction sup,
+    .fraction sub {
+        font-size: 14px;
+        line-height: 1;
+    }
+</style>
+
+<div class="question-wrapper-bg">
+    <div class="question-card @(isRTL ? "rtl-mode" : "ltr-mode")">
+
+        @if (!string.IsNullOrWhiteSpace(Model.VerbalPassageContent)
+                || !string.IsNullOrEmpty(Model.VerbalPassageMediaUrl))
+        {
+            <div class="verbal-passage question-content mt-3">
+
+                <!-- 🔥 الميديا -->
+                @if (!string.IsNullOrEmpty(Model.VerbalPassageMediaUrl))
+                {
+                    <div class="text-center mb-3">
+
+                        @if (Model.VerbalPassageType == QdratNew.Enums.PassageType.Audio)
+                        {
+                            <audio controls style="width:100%; max-width:400px;">
+                                <source src="@Model.VerbalPassageMediaUrl" />
+                            </audio>
+                        }
+                        else if (Model.VerbalPassageType == QdratNew.Enums.PassageType.Video)
+                        {
+                            <video controls style="max-width:100%;">
+                                <source src="@Model.VerbalPassageMediaUrl" />
+                            </video>
+                        }
+
+                    </div>
+                }
+
+                <!-- 🔥 النص -->
+                @if (!string.IsNullOrWhiteSpace(Model.VerbalPassageContent))
+                {
+            <div>
+                @Html.Raw(Model.IsQuantitative
+                                ? NumberHelper.ToIndicNumbersSafe(Model.VerbalPassageContent)
+                                : Model.VerbalPassageContent)
+            </div>
+                        }
+
+            </div>
+        }
+
+
+
+
+    <!-- السؤال -->
+        <div class="question-title question-content"
+             style="direction:@(isRTL ? "rtl" : "ltr");">
+        @Html.Raw(Model.IsQuantitative
+                ? NumberHelper.ToIndicNumbersSafe(Model.Title)
+                : Model.Title)
+    </div>
+
+    <!-- الصورة -->
+    @if (!string.IsNullOrEmpty(Model.ImageUrl))
+    {
+        <div class="text-center mt-3">
+            <img src="@Model.ImageUrl" class="img-fluid" style="max-height:200px;" />
+        </div>
+    }
+
+    <!-- المقارنة -->
+    @if (Model.DisplayType == QdratNew.Enums.QuestionDisplayType.ComparisonText
+            || Model.DisplayType == QdratNew.Enums.QuestionDisplayType.ComparisonWithImage)
+    {
+        <div class="row text-center mt-3">
+            <div class="col">
+                <strong>@T("القيمة الأولى")</strong>
+                <div>@Html.Raw(NumberHelper.ToIndicNumbersSafe(Model.ComparisonValue1 ?? "-"))</div>
+            </div>
+            <div class="col">
+                <strong>@T("القيمة الثانية")</strong>
+                <div>@Html.Raw(NumberHelper.ToIndicNumbersSafe(Model.ComparisonValue2 ?? "-"))</div>
+            </div>
+        </div>
+    }
+
+    <!-- الخيارات -->
+    <div class="options-grid">
+
+        @for (int i = 0; i < Model.Options.Count; i++)
+        {
+            var option = Model.Options[i];
+            var isCorrect = Model.IsAnswerConfirmed && Model.SelectedCorrectIndex == i;
+
+            <div class="option-card @(isCorrect ? "correct" : "")">
+
+                @if (isCorrect)
+                {
+                    <div class="correct-badge ali">
+                        ✔ @T("الصحيحة")
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(option.ImageUrl))
+                {
+                    <img src="@option.ImageUrl" />
+                }
+                else
+                {
+                <div class="question-content">
+                    @Html.Raw(Model.IsQuantitative
+                                ? NumberHelper.ToIndicNumbersSafe(option.Text ?? "-")
+                                : option.Text)
+            </div>
+                        }
+
+        </div>
+                }
+
+    </div>
+
+</div>
+</div>

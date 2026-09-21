@@ -1,0 +1,976 @@
+﻿@model IEnumerable<QdratNew.ViewModels.Course.CourseFormViewModel>
+
+@{
+    ViewData["Title"] = "إدارة الدورات";
+
+    var coursesList = Model != null
+        ? Model.ToList()
+        : new List<QdratNew.ViewModels.Course.CourseFormViewModel>();
+
+    var totalCourses = coursesList.Count;
+
+    var activeCourses = coursesList.Count(x =>
+        x.EndDate.Date >= DateTime.Today);
+
+    var endedCourses = totalCourses - activeCourses;
+
+    var linkedProjects = coursesList
+        .Where(x => !string.IsNullOrWhiteSpace(x.ProjectName))
+        .Select(x => x.ProjectName)
+        .Distinct()
+        .Count();
+}
+
+@section Styles {
+    <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+    <link href="https://cdn.datatables.net/buttons/2.4.1/css/buttons.bootstrap5.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet" />
+
+    <style>
+        :root {
+            --ink: #0D1B2A;
+            --ink-2: #2C3E50;
+            --ink-3: #5A6A7A;
+            --ink-4: #8FA0B0;
+            --ink-5: #C8D5E0;
+            --canvas: #F3F6FA;
+            --surface: #FFFFFF;
+            --surface-2: #F8FAFC;
+            --surface-3: #EEF2F7;
+            --border: #DDE4EC;
+            --blue: #1B5EAE;
+            --blue-2: #2471D0;
+            --blue-bg: #E8F1FB;
+            --blue-dark: #103E7A;
+            --emerald: #0D7A5B;
+            --emerald-bg: #E4F5EE;
+            --amber: #985D09;
+            --amber-bg: #FDF0D8;
+            --rose: #BF1030;
+            --rose-bg: #FDEAEE;
+            --violet: #5535B5;
+            --violet-bg: #EDE8F9;
+            --r-sm: 6px;
+            --r-md: 10px;
+            --r-lg: 14px;
+            --r-xl: 20px;
+            --sh-xs: 0 1px 3px rgba(13,27,42,.06);
+            --sh-sm: 0 2px 8px rgba(13,27,42,.08);
+            --sh-md: 0 4px 18px rgba(13,27,42,.10);
+            --ease: cubic-bezier(.25,.46,.45,.94);
+        }
+
+        .courses-page {
+            background: var(--canvas);
+            min-height: 100vh;
+            padding: 32px 28px 64px;
+            direction: rtl;
+            font-family: 'Cairo';
+            color: var(--ink-2);
+        }
+
+        .courses-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-bottom: 28px;
+        }
+
+        .courses-brand {
+            display: flex;
+            align-items: center;
+            gap: 13px;
+        }
+
+        .courses-brand-icon {
+            width: 46px;
+            height: 46px;
+            background: var(--blue);
+            border-radius: var(--r-lg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 18px;
+            box-shadow: 0 4px 14px rgba(27,94,174,.28);
+        }
+
+        .courses-brand-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--ink);
+            line-height: 1.15;
+        }
+
+        .courses-brand-sub {
+            font-size: 14px;
+            color: var(--ink-4);
+            margin-top: 2px;
+            line-height: 1.8;
+        }
+
+        .top-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn-main-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            background: var(--blue);
+            color: #fff;
+            border: none;
+            border-radius: var(--r-md);
+            padding: 10px 20px;
+            font-size: 16px;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            box-shadow: 0 3px 10px rgba(27,94,174,.28);
+            transition: background .16s var(--ease), transform .14s, box-shadow .16s;
+        }
+
+            .btn-main-action:hover {
+                background: var(--blue-dark);
+                color: #fff;
+                transform: translateY(-2px);
+                box-shadow: 0 6px 18px rgba(27,94,174,.32);
+            }
+
+        .courses-alert {
+            border: none;
+            border-radius: var(--r-lg);
+            padding: 14px 18px;
+            font-size: 15px;
+            font-weight: 700;
+            box-shadow: var(--sh-xs);
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--emerald-bg);
+            color: var(--emerald);
+        }
+
+        .courses-kpis {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 13px;
+            margin-bottom: 24px;
+        }
+
+        @@media (max-width: 960px) {
+            .courses-kpis {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @@media (max-width: 480px) {
+            .courses-kpis {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .kpi-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            padding: 18px 19px;
+            display: flex;
+            align-items: center;
+            gap: 13px;
+            box-shadow: var(--sh-xs);
+            transition: transform .2s var(--ease), box-shadow .2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+            .kpi-card::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                right: 0;
+                width: 4px;
+                height: 100%;
+                border-radius: 0 var(--r-xl) var(--r-xl) 0;
+            }
+
+            .kpi-card:hover {
+                transform: translateY(-3px);
+                box-shadow: var(--sh-sm);
+            }
+
+        .kpi-blue::after {
+            background: var(--blue);
+        }
+
+        .kpi-emerald::after {
+            background: var(--emerald);
+        }
+
+        .kpi-amber::after {
+            background: var(--amber);
+        }
+
+        .kpi-violet::after {
+            background: var(--violet);
+        }
+
+        .kpi-ico {
+            width: 42px;
+            height: 42px;
+            border-radius: var(--r-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .ico-blue {
+            background: var(--blue-bg);
+            color: var(--blue);
+        }
+
+        .ico-emerald {
+            background: var(--emerald-bg);
+            color: var(--emerald);
+        }
+
+        .ico-amber {
+            background: var(--amber-bg);
+            color: var(--amber);
+        }
+
+        .ico-violet {
+            background: var(--violet-bg);
+            color: var(--violet);
+        }
+
+        .kpi-label {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--ink-4);
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            margin-bottom: 3px;
+        }
+
+        .kpi-val {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--ink);
+            line-height: 1;
+        }
+
+        .courses-table-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            overflow: visible;
+            box-shadow: var(--sh-sm);
+            margin-bottom: 24px;
+        }
+
+        .courses-table-topbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 11px 16px;
+            border-bottom: 1px solid var(--surface-3);
+            flex-wrap: wrap;
+        }
+
+        .table-section-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 16px;
+            font-weight: 800;
+            color: var(--ink);
+            margin-left: 10px;
+        }
+
+            .table-section-title i {
+                color: var(--blue);
+            }
+
+        .courses-table-search-wrap {
+            position: relative;
+            flex: 1;
+            min-width: 220px;
+            max-width: 390px;
+        }
+
+            .courses-table-search-wrap i {
+                position: absolute;
+                right: 11px;
+                top: 50%;
+                transform: translateY(-50%);
+                color: var(--ink-4);
+                font-size: 15px;
+                pointer-events: none;
+            }
+
+            .courses-table-search-wrap input {
+                width: 100%;
+                padding: 7px 32px 7px 12px;
+                border: 1px solid var(--border);
+                border-radius: var(--r-md);
+                font-size: 16px;
+                background: var(--surface-2);
+                color: var(--ink);
+                transition: border-color .15s, box-shadow .15s;
+            }
+
+                .courses-table-search-wrap input:focus {
+                    outline: none;
+                    border-color: var(--blue-2);
+                    box-shadow: 0 0 0 3px rgba(36,113,208,.1);
+                    background: var(--surface);
+                }
+
+        .courses-count-badge {
+            margin-right: auto;
+            font-size: 14px;
+            color: var(--ink-4);
+        }
+
+            .courses-count-badge strong {
+                color: var(--blue);
+                font-weight: 700;
+            }
+
+        .table-responsive-safe {
+            width: 100%;
+            overflow-x: auto;
+            overflow-y: visible;
+        }
+
+        #coursesTable {
+            width: 100% !important;
+            border-collapse: collapse;
+        }
+
+            #coursesTable thead th {
+                background: var(--surface-2) !important;
+                padding: 11px 15px !important;
+                font-size: 13px !important;
+                font-weight: 700 !important;
+                color: var(--ink-4) !important;
+                text-transform: uppercase;
+                letter-spacing: .05em;
+                white-space: nowrap;
+                border: none !important;
+                text-align: center;
+            }
+
+            #coursesTable tbody tr {
+                border-bottom: 1px solid var(--surface-3);
+                transition: background .1s;
+            }
+
+                #coursesTable tbody tr:last-child {
+                    border-bottom: none;
+                }
+
+                #coursesTable tbody tr:hover {
+                    background: #F5F8FD;
+                }
+
+            #coursesTable td {
+                padding: 11px 15px !important;
+                vertical-align: middle !important;
+                font-size: 16px !important;
+                color: var(--ink-2);
+                border: none !important;
+                text-align: center;
+            }
+
+        .course-title-cell {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-align: right;
+        }
+
+        .course-avatar {
+            width: 33px;
+            height: 33px;
+            border-radius: 50%;
+            background: var(--blue-bg);
+            color: var(--blue);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .course-item-name {
+            font-weight: 700;
+            color: var(--ink);
+            font-size: 16px;
+            line-height: 1.7;
+        }
+
+        .project-chip,
+        .date-chip,
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 11px;
+            border-radius: 30px;
+            font-size: 14px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .project-chip {
+            background: var(--violet-bg);
+            color: var(--violet);
+        }
+
+        .project-empty-chip {
+            background: var(--surface-3);
+            color: var(--ink-4);
+        }
+
+        .date-chip {
+            background: var(--surface-3);
+            color: var(--ink-3);
+            direction: ltr;
+        }
+
+        .status-pill {
+            padding: 5px 11px;
+        }
+
+        .sp-active {
+            background: var(--emerald-bg);
+            color: var(--emerald);
+        }
+
+        .sp-ended {
+            background: var(--rose-bg);
+            color: var(--rose);
+        }
+
+        .courses-act-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            flex-wrap: nowrap;
+            position: relative;
+            overflow: visible;
+        }
+
+        .act-btn {
+            position: relative;
+            width: 34px;
+            height: 34px;
+            min-width: 34px;
+            padding: 0;
+            border-radius: var(--r-sm);
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+            border: 1.5px solid transparent;
+            cursor: pointer;
+            background: transparent;
+            transition: all .15s;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            overflow: visible;
+        }
+
+            .act-btn i {
+                margin: 0;
+                font-size: 13px;
+                line-height: 1;
+            }
+
+            .act-btn .act-text {
+                position: absolute;
+                bottom: calc(100% + 8px);
+                right: 50%;
+                transform: translateX(50%) translateY(4px);
+                background: var(--ink);
+                color: #fff;
+                font-size: 11px;
+                font-weight: 600;
+                padding: 5px 9px;
+                border-radius: 6px;
+                opacity: 0;
+                visibility: hidden;
+                pointer-events: none;
+                transition: opacity .15s ease, transform .15s ease, visibility .15s ease;
+                z-index: 9999;
+                box-shadow: 0 4px 12px rgba(13,27,42,.18);
+                min-width: max-content;
+            }
+
+                .act-btn .act-text::after {
+                    content: "";
+                    position: absolute;
+                    top: 100%;
+                    right: 50%;
+                    transform: translateX(50%);
+                    border-width: 5px;
+                    border-style: solid;
+                    border-color: var(--ink) transparent transparent transparent;
+                }
+
+            .act-btn:hover .act-text {
+                opacity: 1;
+                visibility: visible;
+                transform: translateX(50%) translateY(0);
+            }
+
+        .act-edit {
+            background: var(--surface-3);
+            color: var(--ink-3);
+            border-color: var(--border);
+        }
+
+            .act-edit:hover {
+                background: var(--ink-3);
+                color: #fff;
+                border-color: var(--ink-3);
+            }
+
+        .act-view {
+            background: var(--blue-bg);
+            color: var(--blue);
+            border-color: #B6D3F4;
+        }
+
+            .act-view:hover {
+                background: var(--blue);
+                color: #fff;
+                border-color: var(--blue);
+            }
+
+        .act-delete {
+            background: var(--rose-bg);
+            color: var(--rose);
+            border-color: #F5B8C2;
+        }
+
+            .act-delete:hover {
+                background: var(--rose);
+                color: #fff;
+                border-color: var(--rose);
+            }
+
+        .dt-buttons {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            padding: 10px 16px 0;
+        }
+
+            .dt-buttons .btn {
+                border-radius: var(--r-sm) !important;
+                font-size: 13px !important;
+                font-weight: 700 !important;
+                padding: 6px 12px !important;
+            }
+
+        .dataTables_wrapper {
+            direction: rtl;
+            overflow: visible;
+        }
+
+            .dataTables_wrapper .dataTables_filter {
+                display: none;
+            }
+
+            .dataTables_wrapper .dataTables_length,
+            .dataTables_wrapper .dataTables_info {
+                padding: 9px 16px;
+                font-size: 14px;
+                color: var(--ink-4);
+            }
+
+            .dataTables_wrapper .dataTables_paginate {
+                padding: 9px 16px;
+            }
+
+                .dataTables_wrapper .dataTables_paginate .paginate_button {
+                    border-radius: var(--r-sm) !important;
+                    font-size: 14px !important;
+                    padding: 4px 10px !important;
+                    border: 1px solid var(--border) !important;
+                    margin: 0 2px !important;
+                    color: var(--ink-3) !important;
+                }
+
+                    .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+                    .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
+                        background: var(--blue) !important;
+                        border-color: var(--blue) !important;
+                        color: #fff !important;
+                    }
+
+                    .dataTables_wrapper .dataTables_paginate .paginate_button:hover:not(.current):not(.disabled) {
+                        background: var(--blue-bg) !important;
+                        border-color: #B6D3F4 !important;
+                        color: var(--blue) !important;
+                    }
+
+            .dataTables_wrapper .dataTables_length select {
+                border: 1px solid var(--border);
+                border-radius: var(--r-sm);
+                padding: 3px 8px;
+                font-size: 14px;
+                color: var(--ink);
+            }
+
+        div.dataTables_wrapper div.dataTables_paginate,
+        div.dataTables_wrapper div.dataTables_info,
+        div.dataTables_wrapper div.dataTables_length {
+            border-top: 1px solid var(--surface-3);
+            background: var(--surface-2);
+        }
+
+        .courses-empty {
+            text-align: center;
+            padding: 56px 16px;
+            color: var(--ink-4);
+        }
+
+            .courses-empty i {
+                font-size: 18px;
+                display: block;
+                margin-bottom: 12px;
+                color: var(--ink-5);
+            }
+
+        .courses-empty-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--ink-3);
+        }
+
+        .courses-empty-sub {
+            font-size: 14px;
+            margin-top: 4px;
+        }
+
+        @@media (max-width: 768px) {
+            .courses-page {
+                padding: 22px 14px 48px;
+            }
+
+            .top-actions {
+                width: 100%;
+            }
+
+            .btn-main-action {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .courses-table-topbar {
+                align-items: stretch;
+            }
+
+            .courses-table-search-wrap {
+                max-width: 100%;
+                width: 100%;
+            }
+
+            .courses-count-badge {
+                margin-right: 0;
+            }
+        }
+    </style>
+}
+
+<div class="courses-page">
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="courses-alert">
+            <i class="bi bi-check-circle-fill"></i>
+            @TempData["SuccessMessage"]
+        </div>
+    }
+
+    <div class="courses-topbar">
+        <div class="courses-brand">
+            <div class="courses-brand-icon">
+                <i class="bi bi-journal-bookmark-fill"></i>
+            </div>
+
+            <div>
+                <div class="courses-brand-title">إدارة الدورات</div>
+                <div class="courses-brand-sub">
+                    إدارة الدورات التدريبية وربطها بالبرامج ومتابعة فترات التشغيل.
+                </div>
+            </div>
+        </div>
+
+        <div class="top-actions">
+            <a asp-action="Create" class="btn-main-action">
+                <i class="bi bi-plus-circle"></i>
+                إضافة دورة جديدة
+            </a>
+        </div>
+    </div>
+
+    <div class="courses-kpis">
+
+        <div class="kpi-card kpi-blue">
+            <div class="kpi-ico ico-blue">
+                <i class="bi bi-journal-bookmark"></i>
+            </div>
+            <div>
+                <div class="kpi-label">إجمالي الدورات</div>
+                <div class="kpi-val">@totalCourses</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-emerald">
+            <div class="kpi-ico ico-emerald">
+                <i class="bi bi-check-circle"></i>
+            </div>
+            <div>
+                <div class="kpi-label">دورات نشطة</div>
+                <div class="kpi-val">@activeCourses</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-amber">
+            <div class="kpi-ico ico-amber">
+                <i class="bi bi-calendar-x"></i>
+            </div>
+            <div>
+                <div class="kpi-label">دورات منتهية</div>
+                <div class="kpi-val">@endedCourses</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-violet">
+            <div class="kpi-ico ico-violet">
+                <i class="bi bi-diagram-3"></i>
+            </div>
+            <div>
+                <div class="kpi-label">برامج مرتبطة</div>
+                <div class="kpi-val">@linkedProjects</div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="courses-table-card">
+
+        <div class="courses-table-topbar">
+            <div class="table-section-title">
+                <i class="bi bi-table"></i>
+                قائمة الدورات التدريبية
+            </div>
+
+            <div class="courses-table-search-wrap">
+                <i class="bi bi-search"></i>
+                <input type="text"
+                       id="coursesSearch"
+                       placeholder="ابحث في اسم الدورة أو البرنامج أو التاريخ..." />
+            </div>
+
+            <div class="courses-count-badge">
+                إجمالي: <strong>@totalCourses</strong> دورة
+            </div>
+        </div>
+
+        @if (!coursesList.Any())
+        {
+            <div class="courses-empty">
+                <i class="bi bi-inbox"></i>
+                <div class="courses-empty-title">لا توجد دورات مسجلة</div>
+                <div class="courses-empty-sub">يمكنك إضافة دورة جديدة من أعلى الصفحة</div>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive-safe">
+                <table id="coursesTable">
+                    <thead>
+                        <tr>
+                            <th style="text-align:right; width:30%">اسم الدورة</th>
+                            <th style="width:24%">البرنامج</th>
+                            <th style="width:16%">تاريخ البدء</th>
+                            <th style="width:16%">تاريخ الانتهاء</th>
+                            <th style="width:10%">الحالة</th>
+                            <th style="width:14%">العمليات</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @foreach (var course in coursesList)
+                        {
+                            var isActive = course.EndDate.Date >= DateTime.Today;
+
+                            <tr>
+                                <td style="text-align:right">
+                                    <div class="course-title-cell">
+                                        <div class="course-avatar">
+                                            <i class="bi bi-journal-bookmark"></i>
+                                        </div>
+                                        <span class="course-item-name">@course.Name</span>
+                                    </div>
+                                </td>
+
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(course.ProjectName))
+                                    {
+                                        <span class="project-chip">
+                                            <i class="bi bi-diagram-3"></i>
+                                            @course.ProjectName
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="project-chip project-empty-chip">
+                                            <i class="bi bi-dash-circle"></i>
+                                            غير متوفر
+                                        </span>
+                                    }
+                                </td>
+
+                                <td>
+                                    <span class="date-chip">
+                                        <i class="bi bi-calendar-event"></i>
+                                        @course.StartDate.ToString("yyyy-MM-dd")
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="date-chip">
+                                        <i class="bi bi-calendar-check"></i>
+                                        @course.EndDate.ToString("yyyy-MM-dd")
+                                    </span>
+                                </td>
+
+                                <td>
+                                    @if (isActive)
+                                    {
+                                        <span class="status-pill sp-active">
+                                            <i class="bi bi-check-circle"></i>
+                                            نشطة
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="status-pill sp-ended">
+                                            <i class="bi bi-x-circle"></i>
+                                            منتهية
+                                        </span>
+                                    }
+                                </td>
+
+                                <td>
+                                    <div class="courses-act-row">
+
+                                        <a asp-action="Edit"
+                                           asp-route-id="@course.Id"
+                                           class="act-btn act-edit"
+                                           aria-label="تعديل">
+                                            <i class="bi bi-pencil-square"></i>
+                                            <span class="act-text">تعديل</span>
+                                        </a>
+
+                                        <a asp-action="Details"
+                                           asp-route-id="@course.Id"
+                                           class="act-btn act-view"
+                                           aria-label="تفاصيل">
+                                            <i class="bi bi-info-circle"></i>
+                                            <span class="act-text">تفاصيل</span>
+                                        </a>
+
+                                        <a asp-action="Delete"
+                                           asp-route-id="@course.Id"
+                                           class="act-btn act-delete"
+                                           aria-label="حذف">
+                                            <i class="bi bi-trash"></i>
+                                            <span class="act-text">حذف</span>
+                                        </a>
+
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+    </div>
+
+</div>
+
+@section Scripts {
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.flash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.0/jszip.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js"></script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            var tableElement = document.getElementById('coursesTable');
+
+            if (tableElement) {
+                var table = $('#coursesTable').DataTable({
+                    language: {
+                        url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json"
+                    },
+                    pageLength: 10,
+                    lengthMenu: [[5, 10, 25, 50, 100, -1], [5, 10, 25, 50, 100, "الكل"]],
+                    order: [[2, "desc"]],
+                    responsive: true,
+                    stateSave: true,
+                    dom: 'Brtip',
+                    buttons: [
+                        {
+                            extend: 'copy',
+                            text: '<i class="bi bi-copy"></i> نسخ',
+                            className: 'btn btn-secondary'
+                        },
+                        {
+                            extend: 'excel',
+                            text: '<i class="bi bi-file-earmark-excel"></i> Excel',
+                            className: 'btn btn-success'
+                        },
+                        {
+                            extend: 'print',
+                            text: '<i class="bi bi-printer"></i> طباعة',
+                            className: 'btn btn-primary'
+                        }
+                    ],
+                    columnDefs: [
+                        { orderable: false, targets: [5] }
+                    ]
+                });
+
+                $('#coursesSearch').on('input', function () {
+                    table.search(this.value).draw();
+                });
+            }
+        });
+    </script>
+}

@@ -1,0 +1,269 @@
+﻿@model QdratNew.ViewModels.Homework.HomeworkFullReportVm
+@using Newtonsoft.Json
+
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row align-items-center mb-4">
+        <div class="col-md-6 d-flex align-items-center">
+            <img src="/images/avatar.png" class="rounded-circle me-3" width="60" height="60" />
+            <div>
+                <h5 class="mb-1">@Model.StudentName</h5>
+                <small class="text-muted">الدفعة: @Model.BatchName</small>
+            </div>
+        </div>
+        <div class="col-md-6 text-end">
+            <a asp-action="DownloadReportPdf"
+               asp-route-homeworkSetId="@Model.HomeworkSetId"
+               class="btn btn-outline-primary">
+                <i class="bi bi-file-earmark-pdf"></i> تحميل PDF
+            </a>
+        </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="row g-3">
+        <div class="col-md-3 col-6">
+            <div class="card text-center shadow-sm h-100">
+                <div class="card-body">
+                    <h6 class="text-muted">درجة الطالب</h6>
+                    <h3 class="fw-bold">@Model.Percentage %</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card text-center shadow-sm h-100">
+                <div class="card-body">
+                    <h6 class="text-muted">الوقت المستغرق</h6>
+                    <h3 class="fw-bold">@Model.TimeSpentMinutes دقيقة</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card text-center shadow-sm h-100">
+                <div class="card-body">
+                    <h6 class="text-muted">الترتيب</h6>
+                    <h3 class="fw-bold">@Model.Rank / @Model.TotalStudents</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card text-center shadow-sm h-100">
+                <div class="card-body">
+                    <h6 class="text-muted">التقييم</h6>
+                    <h3>
+                        @{
+                            int stars = 1;
+                            if (Model.Percentage >= 90) stars = 5;
+                            else if (Model.Percentage >= 75) stars = 4;
+                            else if (Model.Percentage >= 60) stars = 3;
+                            else if (Model.Percentage >= 40) stars = 2;
+
+                            for (int s = 0; s < stars; s++)
+                            {
+                                <text>⭐</text>
+                                ;
+                            }
+                            for (int s = stars; s < 5; s++)
+                            {
+
+                                <text>☆</text>
+                                ;
+                            }
+                        }
+                    </h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="row mt-4 g-3">
+        <!-- Donut Chart -->
+        <div class="col-lg-6 col-12">
+            <div class="card shadow-sm">
+                <div class="card-header text-center fw-bold">توزيع الإجابات</div>
+                <div class="card-body" style="height:300px;">
+                    @if (Context.Request.Headers["User-Agent"].ToString().Contains("wkhtmltopdf"))
+                    {
+                        <img src="@Model.DonutChartUrl" alt="توزيع الإجابات" class="img-fluid" />
+                    }
+                    else
+                    {
+                        <canvas id="donutChart"></canvas>
+                    }
+                </div>
+                <div class="card-footer">
+                    <div class="d-flex justify-content-around text-center">
+                        <div>📋 إجمالي الأسئلة<br /><strong>@Model.Questions.Count()</strong></div>
+                        <div>✅ صحيحة<br /><strong>@Model.CorrectAnswers</strong></div>
+                        <div>❌ خاطئة<br /><strong>@Model.WrongAnswers</strong></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bar Chart -->
+        <div class="col-lg-6 col-12">
+            <div class="card shadow-sm">
+                <div class="card-header text-center fw-bold">الأداء حسب المحاور</div>
+                <div class="card-body" style="height:300px;">
+                    @if (Context.Request.Headers["User-Agent"].ToString().Contains("wkhtmltopdf"))
+                    {
+                        <img src="@Model.BarChartUrl" alt="الأداء حسب المحاور" class="img-fluid" />
+                    }
+                    else
+                    {
+                        <canvas id="barChart"></canvas>
+                    }
+                </div>
+                <div class="card-footer">
+                    <div class="d-flex justify-content-around text-center">
+                        <div>📚 عدد المحاور<br /><strong>@Model.SectionScores.Count</strong></div>
+                        <div>🔝 أعلى دقة<br /><strong>@(Model.SectionScores.Any() ? Model.SectionScores.Max(s => s.Value) : 0)%</strong></div>
+                        <div>🔻 أقل دقة<br /><strong>@(Model.SectionScores.Any() ? Model.SectionScores.Min(s => s.Value) : 0)%</strong></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header text-center fw-bold">
+                    <i class="bi bi-graph-up"></i> تفاصيل إضافية
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 text-center">
+
+                        <!-- أفضل محور -->
+                        <div class="col-md-3 col-6">
+                            <div class="p-3 border rounded h-100 bg-light">
+                                <h6 class="fw-bold text-success">
+                                    <i class="bi bi-trophy-fill"></i> أفضل محور
+                                </h6>
+                                <p class="mb-1">@Model.BestSection</p>
+                                <div class="progress" style="height: 8px;">
+                                    <div class="progress-bar bg-success"
+                                         role="progressbar"
+                                         style="width:@Model.BestSectionScore%">
+                                    </div>
+                                </div>
+                                <small class="text-success fw-bold">@Model.BestSectionScore %</small>
+                            </div>
+                        </div>
+
+                        <!-- أسوأ محور -->
+                        <div class="col-md-3 col-6">
+                            <div class="p-3 border rounded h-100 bg-light">
+                                <h6 class="fw-bold text-danger">
+                                    <i class="bi bi-exclamation-triangle-fill"></i> أسوأ محور
+                                </h6>
+                                <p class="mb-1">@Model.WorstSection</p>
+                                <div class="progress" style="height: 8px;">
+                                    <div class="progress-bar bg-danger"
+                                         role="progressbar"
+                                         style="width:@Model.WorstSectionScore%">
+                                    </div>
+                                </div>
+                                <small class="text-danger fw-bold">@Model.WorstSectionScore %</small>
+                            </div>
+                        </div>
+
+                        <!-- أسرع سؤال -->
+                        <div class="col-md-3 col-6">
+                            <div class="p-3 border rounded h-100 bg-light">
+                                <h6 class="fw-bold text-primary">
+                                    <i class="bi bi-lightning-fill"></i> أسرع سؤال
+                                </h6>
+                                @if (!string.IsNullOrEmpty(Model.FastestQuestionText))
+                                {
+                                    <p class="mb-1">سؤال @Model.FastestQuestionIndex</p>
+@*                                     <p class="fw-bold text-dark">"@Model.FastestQuestionText"</p>
+ *@                                    <small><i class="bi bi-stopwatch"></i> @Model.FastestQuestionTime ثانية</small>
+                                    <p class="@(Model.FastestQuestionCorrect ? "text-success fw-bold" : "text-danger fw-bold") mt-1">
+                                        @(Model.FastestQuestionCorrect ? "✔️ صحيح" : "❌ خطأ")
+                                    </p>
+                                }
+                                else
+                                {
+                                    <p class="text-muted">لا يوجد بيانات</p>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- أبطأ سؤال -->
+                        <div class="col-md-3 col-6">
+                            <div class="p-3 border rounded h-100 bg-light">
+                                <h6 class="fw-bold text-warning">
+                                    <i class="bi bi-hourglass-split"></i> أبطأ سؤال
+                                </h6>
+                                @if (!string.IsNullOrEmpty(Model.SlowestQuestionText))
+                                {
+                                    <p class="mb-1">سؤال @Model.SlowestQuestionIndex</p>
+@*                                     <p class="fw-bold text-dark">"@Model.SlowestQuestionText"</p>
+ *@                                    <small><i class="bi bi-stopwatch"></i> @Model.SlowestQuestionTime ثانية</small>
+                                    <p class="@(Model.SlowestQuestionCorrect ? "text-success fw-bold" : "text-danger fw-bold") mt-1">
+                                        @(Model.SlowestQuestionCorrect ? "✔️ صحيح" : "❌ خطأ")
+                                    </p>
+                                }
+                                else
+                                {
+                                    <p class="text-muted">لا يوجد بيانات</p>
+                                }
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+
+</div>
+
+@section Scripts {
+    @if (!Context.Request.Headers["User-Agent"].ToString().Contains("wkhtmltopdf"))
+    {
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script>
+            // Doughnut Chart
+            new Chart(document.getElementById("donutChart"), {
+                type: 'doughnut',
+                data: {
+                    labels: ["صحيحة", "خاطئة"],
+                    datasets: [{
+                        data: [@Model.CorrectAnswers, @Model.WrongAnswers],
+                        backgroundColor: ["#339999", "#da784d"]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+
+            // Bar Chart
+            new Chart(document.getElementById("barChart"), {
+                type: 'bar',
+                data: {
+                    labels: @Html.Raw(JsonConvert.SerializeObject(Model.SectionScores?.Keys.ToList() ?? new List<string>())),
+                    datasets: [{
+                        label: 'النسبة %',
+                        data: @Html.Raw(JsonConvert.SerializeObject(Model.SectionScores?.Values.ToList() ?? new List<double>())),
+                        backgroundColor: "#339999"
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true, max: 100 }
+                    }
+                }
+            });
+        </script>
+    }
+}

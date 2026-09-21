@@ -1,0 +1,145 @@
+﻿@model QdratNew.ViewModels.Exam.LessonQuestionsViewModel
+@using QdratNew.Helpers
+
+<div class="container py-4">
+
+    <!-- 🧭 كروت الإحصائيات -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3 col-6">
+            <div class="card text-center shadow-sm border-0">
+                <div class="card-body">
+                    <h6 class="fw-bold text-muted">إجمالي الأسئلة</h6>
+                    <h3 class="fw-bold">@NumberHelper.ToIndicNumbersSafe(Model.TotalQuestions.ToString())</h3>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3 col-6">
+            <div class="card text-center shadow-sm border-0 text-success">
+                <div class="card-body">
+                    <h6 class="fw-bold">إجابات صحيحة</h6>
+                    <h3 class="fw-bold">@NumberHelper.ToIndicNumbersSafe(Model.CorrectAnswers.ToString())</h3>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3 col-6">
+            <div class="card text-center shadow-sm border-0 text-danger">
+                <div class="card-body">
+                    <h6 class="fw-bold">إجابات خاطئة</h6>
+                    <h3 class="fw-bold">@NumberHelper.ToIndicNumbersSafe(Model.WrongAnswers.ToString())</h3>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3 col-6">
+            <div class="card text-center shadow-sm border-0 text-info">
+                <div class="card-body">
+                    <h6 class="fw-bold">⏱️ متوسط الزمن</h6>
+                    <h4 class="fw-bold">@Model.AvgTimeFormatted</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🧩 عنوان المؤشر -->
+    <h4 class="fw-bold text-primary mb-3">
+        <i class="fas fa-book me-2"></i> المؤشر: @Model.LessonTitle
+    </h4>
+    <h6 class="text-muted mb-4">📚 المحور: @Model.SectionTitle</h6>
+
+    <!-- 📋 عرض الأسئلة -->
+    <div class="row g-4">
+        @foreach (var q in Model.Questions)
+        {
+            Func<string, string> convert = s => q.IsQuantitative ? NumberHelper.ToIndicNumbersSafe(s) : s;
+
+            <div class="col-md-6">
+                <div class="card shadow-sm mb-3 border-0 rounded-3">
+                    <div class="card-header bg-qdrat text-white fw-bold">
+                        @Html.Raw(convert(q.QuestionText))
+                    </div>
+
+                    <div class="card-body">
+                        @if (!string.IsNullOrWhiteSpace(q.ImageUrl))
+                        {
+                            <div class="text-center mb-3">
+                                <img src="@Url.Content(q.ImageUrl)" class="img-fluid rounded shadow-sm" style="max-height:200px;" />
+                            </div>
+                        }
+
+                        <!-- 🔹 الخيارات مع تمييز الصحيح والخاطئ -->
+                        <ul class="list-group mb-3">
+                            @foreach (var opt in q.Options)
+                            {
+                                var isCorrect = opt.Text == q.CorrectAnswer;
+                                var isWrong = opt.Text == q.StudentAnswer && opt.Text != q.CorrectAnswer;
+                                var successRate = q.OptionSuccessRates.ContainsKey(opt.Text)
+                                ? q.OptionSuccessRates[opt.Text]
+                                : 0;
+
+                                <li class="list-group-item d-flex justify-content-between align-items-center
+                                                   @(isCorrect ? "list-group-item-success" : isWrong ? "list-group-item-danger" : "")">
+
+                                    <div>
+                                        @if (!string.IsNullOrWhiteSpace(opt.ImageUrl))
+                                        {
+                                            <img src="@Url.Content(opt.ImageUrl)" class="img-fluid me-2" style="max-height:50px;" />
+                                        }
+                                        else
+                                        {
+                                            @Html.Raw(convert(opt.Text))
+                                        }
+                                    </div>
+
+                                    <span class="badge bg-secondary rounded-pill">
+                                        @NumberHelper.ToIndicNumbersSafe(successRate.ToString())%
+                                    </span>
+                                </li>
+                            }
+                        </ul>
+
+                        <!-- ⏱️ الوقت المستغرق لكل سؤال -->
+                        <p class="mb-2">
+                            <strong>⏱️ الوقت المستغرق:</strong>
+                            @{
+                                var totalSeconds = (int)q.AvgTimeSeconds;
+                                var minutes = totalSeconds / 60;
+                                var seconds = totalSeconds % 60;
+                                var formatted = $"{NumberHelper.ToIndicNumbersSafe(minutes.ToString())} دقيقة {NumberHelper.ToIndicNumbersSafe(seconds.ToString())} ثانية";
+                            }
+                            @formatted
+                        </p>
+
+                        <!-- 💪 مؤشر الصعوبة -->
+                        <p class="mb-2">
+                            <strong>💪 مؤشر الصعوبة:</strong>
+                            <span class="@(q.DifficultyIndex >= 70 ? "text-danger" : q.DifficultyIndex >= 40 ? "text-warning" : "text-success") fw-bold">
+                                @NumberHelper.ToIndicNumbersSafe(q.DifficultyIndex.ToString())%
+                            </span>
+                        </p>
+
+                        <!-- 📊 نسبة النجاح -->
+                        <p class="mb-0">
+                            <strong>📊 نسبة النجاح:</strong>
+                            <div class="progress mt-1" style="height:20px;">
+                                <div class="progress-bar bg-success" style="width:@q.SuccessRate%">
+                                    @NumberHelper.ToIndicNumbersSafe(q.SuccessRate.ToString())%
+                                </div>
+                            </div>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- 🔙 زر الرجوع -->
+    <div class="mt-4 text-start">
+        <a asp-area="Admin" asp-controller="ExamAssignments" asp-action="SectionLessons"
+           asp-route-assignmentId="@Model.AssignmentId" asp-route-sectionId="@Model.SectionId"
+           class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-right"></i> رجوع إلى المؤشرات
+        </a>
+    </div>
+</div>

@@ -1,0 +1,286 @@
+﻿@model QdratNew.ViewModels.Students.ExamSolveViewModel
+@{
+    ViewData["Title"] = "بدء الاختبار";
+    Layout = "~/Views/Shared/_QuestionStudentLayout.cshtml";
+}
+
+<!-- منع الرجوع والـ Cache -->
+<script>
+    window.addEventListener("pageshow", e => {
+        if (e.persisted) location.reload();
+    });
+
+    history.pushState(null, "", location.href);
+    window.onpopstate = function () {
+        history.pushState(null, "", location.href);
+        location.href = "/Students/Exams/ErrorMessage?msg=لقد انتهى الاختبار ولا يمكن الرجوع.";
+    };
+</script>
+
+<meta http-equiv="Cache-Control" content="no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-store" />
+<meta http-equiv="Expires" content="0" />
+
+<div class="container-fluid mt-3 px-3 px-md-4">
+
+    <!-- العنوان والمؤقت -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="fw-bold text-qdrat">📝 الاختبار: @Model.ExamTitle</h4>
+        <div class="fw-bold text-danger">
+            الوقت المتبقي: <span id="time-remaining"></span>
+        </div>
+    </div>
+
+    <!-- Overlay تحميل -->
+    <div id="loadingOverlay"
+         style="display:none; position:fixed; inset:0; background:rgba(255,255,255,.85);
+                z-index:9999; align-items:center; justify-content:center; flex-direction:column;">
+        <div class="spinner-border text-primary"></div>
+        <p class="mt-3 fw-bold">جاري تحميل السؤال...</p>
+    </div>
+
+    <!-- السؤال -->
+    <div id="question-container">
+        @await Html.PartialAsync("_SolveUnifiedExamPartial", Model)
+    </div>
+</div>
+
+<!-- Fullscreen Lock -->
+<div id="examLockOverlay">
+    <div class="exam-lock-box text-center">
+        <h3 class="fw-bold mb-3">🚫 لا يمكنك الخروج من وضع الاختبار</h3>
+        <p class="mb-4">يجب العودة لوضع الشاشة الكاملة لمتابعة الاختبار.</p>
+        <button id="returnToExamBtn" class="btn btn-primary btn-lg">العودة للاختبار</button>
+    </div>
+</div>
+
+<style>
+    #examLockOverlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,.95);
+        display: none;
+        z-index: 999999;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+    }
+
+    .exam-lock-box {
+        background: rgba(255,255,255,.08);
+        border-radius: 16px;
+        padding: 40px;
+        max-width: 520px;
+    }
+</style>
+
+@section Scripts {
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script>
+        /* =====================================================
+           🔑 متغيرات عامة (نفس الواجبات)
+        ===================================================== */
+        window.questionStartTime = Date.now();
+        let isSubmitting = false;
+
+        /* =====================================================
+           ⏱ حساب زمن السؤال (نفس الواجبات 100%)
+        ===================================================== */
+        function resetQuestionTimer() {
+            window.questionStartTime = Date.now();
+            if (typeof window.startStopwatch === 'function') window.startStopwatch();
+        }
+
+        function getTimeTaken() {
+            const seconds = Math.floor((Date.now() - window.questionStartTime) / 1000);
+            return seconds > 0 ? seconds : 1;
+        }
+
+        /* =====================================================
+           🕓 مؤقت الاختبار العام
+        ===================================================== */
+        function initMainTimer() {
+            let remaining = parseInt('@Model.RemainingSeconds') || 0;
+            const end = Date.now() + remaining * 1000;
+            const el = document.getElementById("time-remaining");
+
+            const timer = setInterval(() => {
+                const diff = Math.floor((end - Date.now()) / 1000);
+                if (diff <= 0) {
+                    clearInterval(timer);
+                    Swal.fire("انتهى الوقت", "سيتم إنهاء الاختبار", "info")
+                        .then(() => forceSubmit());
+                    return;
+                }
+                el.innerText =
+                    `${Math.floor(diff/60).toString().padStart(2,'0')}:${(diff%60).toString().padStart(2,'0')}`;
+            }, 1000);
+        }
+
+        /* =====================================================
+           🔒 Fullscreen Lock (كما هو)
+        ===================================================== */
+        function initFullScreenLock() {
+            const overlay = document.getElementById("examLockOverlay");
+            const btn = document.getElementById("returnToExamBtn");
+
+            document.addEventListener("fullscreenchange", () => {
+                overlay.style.display = document.fullscreenElement ? "none" : "flex";
+            });
+
+            btn.onclick = async () => {
+                await document.documentElement.requestFullscreen();
+                overlay.style.display = "none";
+            };
+
+            document.addEventListener("click", function init() {
+                if (!document.fullscreenElement)
+                    document.documentElement.requestFullscreen();
+                document.removeEventListener("click", init);
+            });
+        }
+
+        /* =====================================================
+           🔄 تحميل السؤال التالي
+        ===================================================== */
+        async function loadNextQuestion(formData) {
+
+            if (isSubmitting) return;
+            isSubmitting = true;
+
+            $("#loadingOverlay").fadeIn(150);
+
+            const res = await fetch("/Students/Exams/SubmitExamAnswerFetch", {
+                method: "POST",
+                body: formData,
+                credentials: "include"
+            });
+
+            const html = await res.text();
+
+            $("#loadingOverlay").fadeOut(150);
+
+            if (html.trim().startsWith("<")) {
+                document.getElementById("question-container").innerHTML = html;
+                attachNavEvents();
+                attachSubmitExamEvent();
+
+                // ⭐ نفس الواجبات ⭐
+                resetQuestionTimer();
+
+                if (typeof window.syncOptionStyles === 'function') window.syncOptionStyles();
+                window.scrollTo({ top: 0, behavior: "smooth" });
+            }
+
+            isSubmitting = false;
+        }
+
+        /* =====================================================
+           🔘 أزرار التنقل والمراجعة
+        ===================================================== */
+        function attachNavEvents() {
+
+            document.querySelectorAll(".exam-nav-button, .review-jump")
+                .forEach(btn => {
+
+                    btn.onclick = async e => {
+                        e.preventDefault();
+
+                        const form = document.getElementById("exam-question-form");
+                        if (!form) return;
+
+                        const fd = new FormData(form);
+                        const nav = btn.dataset.nav || "goto";
+
+                        // ✅ الزمن يُحسب دائمًا عند الانتقال الحقيقي
+                        if (nav === "next" || nav === "prev") {
+                              fd.set("timeTakenSeconds", getTimeTaken());
+                                } else {
+                            fd.set("timeTakenSeconds", 0);
+
+                        }
+
+                        if (btn.classList.contains("review-jump")) {
+                            fd.append("nav", "goto");
+                            fd.append("target", btn.dataset.target);
+                        } else {
+                            fd.append("nav", nav);
+                        }
+
+                        await loadNextQuestion(fd);
+                    };
+                });
+        }
+
+        /* =====================================================
+           🏁 إنهاء الاختبار
+        ===================================================== */
+        async function forceSubmit() {
+            const id = @Model.ExamAssignmentId;
+            const res = await fetch(`/Students/Exams/SubmitFinalExam?id=${id}&forceSubmit=true`, { method: "POST" });
+            const result = await res.json();
+            if (result.success) location.href = result.redirectUrl;
+        }
+
+        /* =====================================================
+           🚀 تشغيل الصفحة
+        ===================================================== */
+        document.addEventListener("DOMContentLoaded", () => {
+            attachNavEvents();
+            initMainTimer();
+            initFullScreenLock();
+
+            // ⭐ بدء التوقيت لأول سؤال
+            resetQuestionTimer();
+        });
+    </script>
+
+
+    <script>
+        function attachSubmitExamEvent() {
+            const btn = document.getElementById("submitExam");
+            if (!btn) return;
+
+            btn.onclick = async function () {
+                const id = @Model.ExamAssignmentId;
+
+                const res = await fetch(`/Students/Exams/SubmitFinalExam?id=${id}`, {
+                    method: "POST",
+                    credentials: "include"
+                });
+
+                const result = await res.json();
+
+                if (!result.success && result.notAnswered) {
+                    const confirm = await Swal.fire({
+                        title: "تنبيه",
+                        text: result.message,
+                        icon: "warning",
+                        showCancelButton: true,
+                        confirmButtonText: "إنهاء",
+                        cancelButtonText: "العودة"
+                    });
+
+                    if (confirm.isConfirmed) {
+                        const forceRes = await fetch(
+                            `/Students/Exams/SubmitFinalExam?id=${id}&forceSubmit=true`,
+                            { method: "POST", credentials: "include" }
+                        );
+                        const forceResult = await forceRes.json();
+                        if (forceResult.success)
+                            location.href = forceResult.redirectUrl;
+                    }
+                }
+                else if (result.success) {
+                    location.href = result.redirectUrl;
+                }
+            };
+        }
+    </script>
+
+
+
+
+}

@@ -1,0 +1,188 @@
+﻿@model QdratNew.ViewModels.Curriculum.CurriculumAIDashboardViewModel
+
+@{
+    ViewData["Title"] = "لوحة تحليل المناهج التعليمية";
+}
+
+<h2 class="text-primary mb-4"><i class="fas fa-book-reader"></i> لوحة AI للمناهج التعليمية</h2>
+
+<!-- كروت الإحصائيات -->
+
+
+<form method="get" class="row mb-4 align-items-end text-center">
+
+    <div class="col-md-3">
+        <label>الدفعة:</label>
+        <select name="batchId" class="form-control">
+            <option value="">-- جميع الدفعات --</option>
+            @foreach (var b in Model.BatchList)
+            {
+                var selected = Model.SelectedBatchId?.ToString() == b.Value ? "selected" : null;
+                <option value="@b.Value" selected="@selected">@b.Text</option>
+            }
+        </select>
+    </div>
+
+    <div class="col-md-3">
+        <label>من تاريخ:</label>
+        <input type="date" name="fromDate" class="form-control"
+               value="@Model.FromDate?.ToString("yyyy-MM-dd")" />
+    </div>
+
+    <div class="col-md-3">
+        <label>إلى تاريخ:</label>
+        <input type="date" name="toDate" class="form-control"
+               value="@Model.ToDate?.ToString("yyyy-MM-dd")" />
+    </div>
+
+    <div class="col-md-1 d-flex justify-content-center mt-4">
+        <button type="submit" class="btn btn-dark rounded-circle" title="تطبيق الفلترة">
+            <i class="fas fa-filter"></i>
+        </button>
+    </div>
+    <div class="col-md-1 d-flex justify-content-center mt-4">
+        <a href="@Url.Action("Index", "CurriculumAIDashboard", new { area = "Admin" })"
+           class="btn btn-dark rounded-circle" title="إلغاء الفلترة">
+            <i class="fas fa-times"></i>
+        </a>
+    </div>
+</form>
+
+<hr />
+<div class="row mb-4 text-center">
+    <div class="col-md-3">
+        <div class="card text-white bg-dark dashboard-card shadow">
+            <div class="card-body text-center">
+                <h6 class="card-title">📘 المناهج التي تمت دراستها</h6>
+                <p class="card-text display-6">
+                    @Model.TotalCurriculumsWithPerformance من أصل @Model.TotalCurriculumsInSystem
+                </p>
+            </div>
+        </div>
+    </div>
+
+
+    <div class="col-md-3">
+        <div class="card text-white bg-primary dashboard-card shadow">
+            <div class="card-body">
+                <h6 class="card-title">📚 إجمالي المناهج</h6>
+                <p class="card-text display-6">@Model.CurriculumStats.Count</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-success dashboard-card shadow">
+            <div class="card-body">
+                <h6 class="card-title">📈 أعلى نسبة نجاح</h6>
+                <p class="card-text display-6">
+                    @(Model.CurriculumStats.Any() ? $"{Model.CurriculumStats.Max(c => c.SuccessRate)} %" : "0 %")
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card text-white bg-danger dashboard-card shadow">
+            <div class="card-body">
+                <h6 class="card-title">📉 أقل نسبة نجاح</h6>
+                <p class="card-text display-6">
+                    @(Model.CurriculumStats.Any() ? $"{Model.CurriculumStats.Min(c => c.SuccessRate)} %" : "0 %")
+                </p>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- الرسم البياني -->
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h5 class="text-center mb-3">نسبة النجاح حسب المناهج</h5>
+        <canvas id="curriculumBarChart"></canvas>
+    </div>
+</div>
+
+<hr />
+
+
+@if (!Model.CurriculumStats.Any())
+{
+    <div class="alert alert-warning text-center shadow-sm">
+        <i class="fas fa-exclamation-triangle me-2"></i>
+        لا توجد بيانات تحليل للمناهج في الدفعة أو الفترة المحددة.
+    </div>
+}
+else
+{
+<!-- جدول تفصيلي -->
+<table class="table table-bordered table-hover text-center" id="curriculumTable">
+    <thead class="table-dark">
+        <tr>
+            <th>📘 اسم المنهج</th>
+            <th>📌 عدد التقييمات</th>
+            <th>📈 متوسط الدرجات</th>
+            <th>✅ نسبة النجاح</th>
+            <th>❌ نسبة الرسوب</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var item in Model.CurriculumStats)
+        {
+            <tr>
+                <td>@item.CurriculumTitle</td>
+                <td>@item.TotalPerformances</td>
+                <td>@item.AverageScore</td>
+                <td>@item.SuccessRate %</td>
+                <td>@item.FailureRate %</td>
+            </tr>
+        }
+    </tbody>
+</table>
+}
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // رسم بياني: نسبة النجاح حسب المنهج
+        const ctx = document.getElementById('curriculumBarChart');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: @Html.Raw(Json.Serialize(Model.CurriculumStats.Select(c => c.CurriculumTitle))),
+                datasets: [{
+                    label: 'نسبة النجاح (%)',
+                    data: @Html.Raw(Json.Serialize(Model.CurriculumStats.Select(c => c.SuccessRate))),
+                    backgroundColor: '#0d6efd'
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100
+                    }
+                }
+            }
+        });
+
+        // جدول ديناميكي
+        $(document).ready(function () {
+            $('#curriculumTable').DataTable({
+                language: {
+                    search: "🔍 بحث:",
+                    lengthMenu: "عرض _MENU_ صفوف",
+                    zeroRecords: "لا توجد نتائج",
+                    info: "عرض _START_ إلى _END_ من أصل _TOTAL_",
+                    infoEmpty: "لا توجد بيانات",
+                    paginate: {
+                        first: "الأول",
+                        last: "الأخير",
+                        next: "التالي",
+                        previous: "السابق"
+                    }
+                },
+                responsive: true
+            });
+        });
+    </script>
+}

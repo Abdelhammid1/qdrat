@@ -1,0 +1,528 @@
+@model QdratNew.ViewModels.Homework.HomeworkSolveViewModel
+@{
+    ViewData["Title"] = "حل الواجب";
+    Layout = "~/Views/Shared/_QuestionStudentLayout.cshtml";
+}
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger text-center fw-bold">@TempData["ErrorMessage"]</div>
+}
+
+<div id="question-container">
+    @await Html.PartialAsync("_SolveHomeworkQuestionPartial", Model)
+</div>
+
+@await Html.PartialAsync("_HomeworkSecurityOverlays")
+
+@section Scripts {
+<style>
+/* ── Custom SweetAlert2 — RTL + نافذة إنهاء الواجب ────────────── */
+/* SweetAlert2 RTL global */
+.swal2-popup.hw-swal-rtl {
+    direction: rtl !important;
+    font-family: 'Cairo', 'Tajawal', sans-serif !important;
+}
+.swal2-popup.hw-swal-rtl .swal2-title,
+.swal2-popup.hw-swal-rtl .swal2-html-container { direction: rtl; text-align: right; }
+.swal2-popup.hw-swal-rtl .swal2-actions { flex-direction: row-reverse; }
+.swal2-popup.hw-swal-rtl .swal2-close { right: auto; left: .5rem; }
+
+.hw-confirm-body {
+    direction: rtl;
+    font-family: 'Cairo', 'Tajawal', sans-serif;
+    padding: .25rem 0 .5rem;
+}
+.hw-confirm-subtitle {
+    font-size: .88rem;
+    color: #64748b;
+    margin-bottom: 1.1rem;
+}
+.hw-stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .65rem;
+    margin-bottom: 1.1rem;
+}
+.hw-stat-card {
+    border-radius: .75rem;
+    padding: .75rem .9rem;
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    text-align: right;
+    border: 1.5px solid transparent;
+}
+.hw-stat-card.green  { background:#f0fdf4; border-color:#bbf7d0; }
+.hw-stat-card.red    { background:#fef2f2; border-color:#fecaca; }
+.hw-stat-card.amber  { background:#fffbeb; border-color:#fde68a; }
+.hw-stat-card.indigo { background:#eef2ff; border-color:#c7d2fe; }
+.hw-stat-icon {
+    width: 2.1rem;
+    height: 2.1rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+.green  .hw-stat-icon { background:#dcfce7; }
+.red    .hw-stat-icon { background:#fee2e2; }
+.amber  .hw-stat-icon { background:#fef3c7; }
+.indigo .hw-stat-icon { background:#e0e7ff; }
+.hw-stat-info { line-height: 1.2; }
+.hw-stat-val {
+    font-size: 1.3rem;
+    font-weight: 800;
+    display: block;
+}
+.green  .hw-stat-val { color:#15803d; }
+.red    .hw-stat-val { color:#dc2626; }
+.amber  .hw-stat-val { color:#b45309; }
+.indigo .hw-stat-val { color:#4338ca; }
+.hw-stat-lbl {
+    font-size: .72rem;
+    font-weight: 600;
+    color: #64748b;
+    display: block;
+}
+.hw-confirm-warn {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    background: #fff7ed;
+    border: 1.5px solid #fed7aa;
+    border-radius: .6rem;
+    padding: .55rem .8rem;
+    font-size: .8rem;
+    color: #9a3412;
+    margin-top: .25rem;
+}
+.hw-confirm-warn-icon { font-size: 1rem; flex-shrink: 0; }
+/* Override Swal button styles */
+.swal2-confirm.hw-btn-danger {
+    background: linear-gradient(135deg,#dc2626,#b91c1c) !important;
+    box-shadow: 0 4px 14px rgba(220,38,38,.35) !important;
+}
+.swal2-cancel.hw-btn-resume {
+    background: linear-gradient(135deg,#4f46e5,#4338ca) !important;
+    box-shadow: 0 4px 14px rgba(79,70,229,.3) !important;
+}
+/* Loading spinner inside confirm btn */
+.hw-submitting-toast .swal2-html-container {
+    font-family: 'Cairo','Tajawal',sans-serif;
+    direction: rtl;
+}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="~/js/homework-state.js" asp-append-version="true"></script>
+<script src="~/js/homework-security.js" asp-append-version="true"></script>
+<script src="~/js/homework-review.js" asp-append-version="true"></script>
+
+<script>
+/* =============================================================
+   تهيئة HWManager بالبيانات القادمة من الـ Model
+   (initialAnswers / initialMarks من آخر محاولات الـ Server)
+============================================================= */
+(async function () {
+
+    // ── بيانات أولية من الـ Server ──────────────────────────
+    const HOMEWORK_ID   = @Model.HomeworkSetId;
+    const ALL_IDS       = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+                              Model.AllQuestionIds.Select(id => id.ToString())));
+    const CURRENT_ID    = '@Model.CurrentQuestionId.ToString()';
+
+    // الإجابات المحفوظة مسبقاً (من قاعدة البيانات)
+    const INIT_ANSWERS  = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+                              Model.AnswersMap.ToDictionary(
+                                  kv => kv.Key.ToString(),
+                                  kv => kv.Value ?? "")));
+
+    // علامات المراجعة المحفوظة مسبقاً
+    const INIT_MARKS    = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+                              Model.ReviewMarkedIds.ToDictionary(
+                                  id => id.ToString(),
+                                  id => true)));
+
+    const CSRF_TOKEN    = document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+
+    // ── تهيئة HWManager ──────────────────────────────────────
+    await HWManager.init({
+        homeworkSetId:    HOMEWORK_ID,
+        allIds:           ALL_IDS,
+        currentId:        CURRENT_ID,
+        initialAnswers:   INIT_ANSWERS,
+        initialMarks:     INIT_MARKS,
+        antiForgeryToken: CSRF_TOKEN
+    });
+
+    // ── تهيئة ReviewMode ─────────────────────────────────────
+    ReviewMode.init();
+
+    // ── تهيئة HomeworkSecurity ────────────────────────────────
+    await HomeworkSecurity.init({
+        homeworkSetId:    HOMEWORK_ID,
+        antiForgeryToken: CSRF_TOKEN,
+        onSubmitted: () => {
+            document.getElementById('hw-submitted-warning')?.classList.remove('hw-hidden');
+        }
+    });
+
+    // ── الحاوية الرئيسية ──────────────────────────────────────
+    const container = document.getElementById('question-container');
+
+    // ── Swal مهيّأ للعربي RTL ──────────────────────────────────
+    const SwalAR = Swal.mixin({ customClass: { popup: 'hw-swal-rtl' } });
+
+    /* ==========================================================
+       Helpers — Loading state على أزرار التنقل
+    ========================================================== */
+    function _setNavBusy(busy) {
+        document.querySelectorAll('.homework-nav-button').forEach(b => {
+            b.disabled = busy;
+            b.style.opacity = busy ? '0.5' : '';
+        });
+    }
+
+    /* ==========================================================
+       دالة التنقل المشتركة (أزرار + لوحة المراجعة)
+    ========================================================== */
+    async function _doNavigate(fromId, targetId, nav) {
+        if (HWManager.isBusy()) return;
+
+        const form = document.getElementById('homework-question-form');
+        if (!form) return;
+
+        HWManager.beforeNavigate(fromId);
+        HWManager.setBusy(true);
+        _setNavBusy(true);
+
+        const fd = new FormData(form);
+        fd.append('timeTakenSeconds', HWManager.getTimeTaken(fromId));
+        fd.append('nav', nav);
+        fd.append('target', targetId);
+
+        try {
+            const res = await fetch(
+                `/Students/StudentHomeworkDashboard/SubmitAnswerFetch?id=${form.dataset.homeworkId}&q=${fromId}`,
+                { method: 'POST', body: fd, credentials: 'include' }
+            );
+
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+
+            const html    = await res.text();
+            const parser  = new DOMParser();
+            const doc     = parser.parseFromString(html, 'text/html');
+            const newForm = doc.getElementById('homework-question-form');
+            const newId   = newForm?.dataset.currentQuestionId ?? fromId;
+
+            const newCsrf = doc.querySelector('input[name="__RequestVerificationToken"]')?.value;
+            if (newCsrf) HWManager.updateCSRF(newCsrf);
+
+            container.innerHTML = html;
+            HWManager.afterNavigate(newId);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+
+        } catch {
+            SwalAR.fire({ icon: 'warning', title: '⚠️', text: 'فشل تحميل السؤال. تحقق من اتصالك.' });
+        } finally {
+            HWManager.setBusy(false);
+            _setNavBusy(false);
+        }
+    }
+
+    /* ==========================================================
+       (1) تحديث بصري للخيارات — delegation يعمل بعد AJAX أيضاً
+    ========================================================== */
+    document.body.addEventListener('click', e => {
+        const label = e.target.closest('#hw-options-list .hw-option');
+        if (!label) return;
+        document.querySelectorAll('#hw-options-list .hw-option').forEach(l => {
+            l.classList.remove('selected');
+            l.setAttribute('aria-checked', 'false');
+        });
+        label.classList.add('selected');
+        label.setAttribute('aria-checked', 'true');
+        // تأكد من تفعيل الـ radio (يساعد على إطلاق change event بشكل موثوق)
+        const radio = label.querySelector('input[type="radio"]');
+        if (radio && !radio.checked) { radio.checked = true; radio.dispatchEvent(new Event('change', { bubbles: true })); }
+    });
+
+    /* ==========================================================
+       (2) AUTO-SAVE عند تغيير الإجابة
+    ========================================================== */
+    document.body.addEventListener('change', e => {
+        if (!e.target.matches('input[name="SelectedOption"]')) return;
+        const form = document.getElementById('homework-question-form');
+        if (!form) return;
+        HWManager.onAnswerChange(form.dataset.currentQuestionId, e.target.value);
+    });
+
+    /* ==========================================================
+       (3) التنقل — السابق / التالي / مراجعة / قفز
+    ========================================================== */
+    document.body.addEventListener('click', async e => {
+        const btn = e.target.closest('.homework-nav-button, .review-jump');
+        if (!btn) return;
+
+        e.preventDefault();
+
+        if (HWManager.isBusy()) return;
+
+        const form = document.getElementById('homework-question-form');
+        if (!form) return;
+
+        const fromId = form.dataset.currentQuestionId;
+        const nav    = btn.classList.contains('review-jump') ? 'goto' : btn.dataset.nav;
+
+        // ── علامة المراجعة فقط — لا تحميل
+        if (nav === 'review') {
+            HWManager.onMarkReview(fromId);
+            return;
+        }
+
+        // ── فتح لوحة المراجعة — بدون جولة سيرفر
+        if (nav === 'showReview') {
+            ReviewMode.open({
+                onNavigate: (targetId) => _doNavigate(HWManager.currentId(), targetId, 'goto')
+            });
+            return;
+        }
+
+        // ── تنقل عادي (prev / next / goto)
+        const targetId = (nav === 'goto' || btn.classList.contains('review-jump'))
+            ? btn.dataset.target
+            : null;
+
+        HWManager.beforeNavigate(fromId);
+        HWManager.setBusy(true);
+        _setNavBusy(true);
+
+        const fd = new FormData(form);
+        fd.append('timeTakenSeconds', HWManager.getTimeTaken(fromId));
+        fd.append('nav', nav);
+        if (targetId) fd.append('target', targetId);
+
+        try {
+            const res = await fetch(
+                `/Students/StudentHomeworkDashboard/SubmitAnswerFetch?id=${form.dataset.homeworkId}&q=${fromId}`,
+                { method: 'POST', body: fd, credentials: 'include' }
+            );
+
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+
+            const html    = await res.text();
+            const parser  = new DOMParser();
+            const doc     = parser.parseFromString(html, 'text/html');
+            const newForm = doc.getElementById('homework-question-form');
+            const newId   = newForm?.dataset.currentQuestionId ?? fromId;
+
+            const newCsrf = doc.querySelector('input[name="__RequestVerificationToken"]')?.value;
+            if (newCsrf) HWManager.updateCSRF(newCsrf);
+
+            container.innerHTML = html;
+            HWManager.afterNavigate(newId);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+
+        } catch {
+            SwalAR.fire({ icon: 'warning', title: '⚠️', text: 'فشل تحميل السؤال. تحقق من اتصالك.' });
+        } finally {
+            HWManager.setBusy(false);
+            _setNavBusy(false);
+        }
+    });
+
+    /* ==========================================================
+       Helpers — تنسيق الوقت
+    ========================================================== */
+    function _fmtTime(totalSecs) {
+        const s = Math.floor(totalSecs);
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const sec = s % 60;
+        if (h > 0) return `${h}س ${m}د ${sec}ث`;
+        if (m > 0) return `${m}د ${sec}ث`;
+        return `${sec}ث`;
+    }
+
+    /* ==========================================================
+       (3) التسليم النهائي — من زر الصفحة أو من لوحة المراجعة
+    ========================================================== */
+    async function _runFinalSubmit() {
+        if (HWManager.isBusy()) return;
+
+        // ── احسب الإحصاء ────────────────────────────────────────
+        const state      = HWManager.getState();
+        const allIds     = HWManager.allIds();
+
+        const answeredIds   = allIds.filter(id => !!state.answers[id] && !state.marks[id]);
+        const markedIds     = allIds.filter(id => !!state.marks[id]);
+        const unansweredIds = allIds.filter(id => !state.answers[id]);
+
+        const totalSecs = Object.values(state.times).reduce((s, v) => s + v, 0)
+                          + HWManager.getTimeTaken();
+
+        // ── HTML مخصص للـ Swal ──────────────────────────────────
+        const warnHtml = unansweredIds.length > 0
+            ? `<div class="hw-confirm-warn">
+                <span class="hw-confirm-warn-icon">⚠️</span>
+                <span>لن تُحسب الأسئلة غير المُجابة (${unansweredIds.length} ${unansweredIds.length === 1 ? 'سؤال' : 'أسئلة'}) — ستُعدّ إجاباتها خاطئة.</span>
+               </div>`
+            : '';
+
+        const swalHtml = `
+<div class="hw-confirm-body">
+  <p class="hw-confirm-subtitle">مراجعة سريعة لوضعك قبل التسليم</p>
+  <div class="hw-stat-grid">
+    <div class="hw-stat-card green">
+      <div class="hw-stat-icon">✅</div>
+      <div class="hw-stat-info">
+        <span class="hw-stat-val">${answeredIds.length + markedIds.length}</span>
+        <span class="hw-stat-lbl">أُجيب عليها</span>
+      </div>
+    </div>
+    <div class="hw-stat-card red">
+      <div class="hw-stat-icon">❌</div>
+      <div class="hw-stat-info">
+        <span class="hw-stat-val">${unansweredIds.length}</span>
+        <span class="hw-stat-lbl">لم يُجب عليها</span>
+      </div>
+    </div>
+    <div class="hw-stat-card amber">
+      <div class="hw-stat-icon">🔖</div>
+      <div class="hw-stat-info">
+        <span class="hw-stat-val">${markedIds.length}</span>
+        <span class="hw-stat-lbl">للمراجعة</span>
+      </div>
+    </div>
+    <div class="hw-stat-card indigo">
+      <div class="hw-stat-icon">⏱️</div>
+      <div class="hw-stat-info">
+        <span class="hw-stat-val">${_fmtTime(totalSecs)}</span>
+        <span class="hw-stat-lbl">الوقت الكلي</span>
+      </div>
+    </div>
+  </div>
+  ${warnHtml}
+</div>`;
+
+        // ── عرض الـ Dialog ───────────────────────────────────────
+        const result = await SwalAR.fire({
+            title:             'هل أنت متأكد من إنهاء الواجب؟',
+            html:              swalHtml,
+            showCancelButton:  true,
+            confirmButtonText: '📤 إنهاء الواجب نهائياً',
+            cancelButtonText:  unansweredIds.length > 0 ? '↩ إكمال الواجب' : '↩ العودة',
+            reverseButtons:    true,
+            focusCancel:       true,
+            customClass: {
+                popup:         'hw-swal-rtl',
+                confirmButton: 'hw-btn-danger',
+                cancelButton:  'hw-btn-resume'
+            },
+            buttonsStyling:    true,
+            showCloseButton:   true,
+            width:             '24rem'
+        });
+
+        // ── إكمال الواجب: انتقل لأول سؤال غير مجاب
+        if (result.isDismissed) {
+            if (unansweredIds.length > 0 || markedIds.length > 0) {
+                const jumpTo  = unansweredIds[0] ?? markedIds[0];
+                const fromId  = HWManager.currentId();
+                if (jumpTo && jumpTo !== fromId) {
+                    await _doNavigate(fromId, jumpTo, 'goto');
+                }
+            }
+            return;
+        }
+
+        if (!result.isConfirmed) return;
+
+        // ── إنهاء الواجب نهائياً ─────────────────────────────────
+        HWManager.setBusy(true);
+
+        // Toast "جاري التسليم…"
+        SwalAR.fire({
+            title:             'جاري التسليم…',
+            html:              'يرجى الانتظار',
+            allowOutsideClick: false,
+            allowEscapeKey:    false,
+            showConfirmButton:  false,
+            didOpen:           () => Swal.showLoading()
+        });
+
+        try {
+            // بيانات جلسة المراجعة
+            if (HWManager.isReviewMode()) {
+                fetch('/Students/StudentHomeworkDashboard/SaveReviewSession', {
+                    method:    'POST',
+                    headers:   { 'Content-Type': 'application/json', 'RequestVerificationToken': HWManager.csrf() },
+                    body:      JSON.stringify(HWManager.getReviewSessionData()),
+                    keepalive: true
+                }).catch(() => {});
+            }
+
+            const res = await fetch('/Students/StudentHomeworkDashboard/FinalSubmitJson', {
+                method:  'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': HWManager.csrf()
+                },
+                body: JSON.stringify({
+                    homeworkSetId:    HOMEWORK_ID,
+                    totalTimeSeconds: totalSecs
+                })
+            });
+
+            const data = await res.json();
+
+            if (data.success) {
+                ReviewMode.destroy();
+                HWManager.destroy();
+                sessionStorage.removeItem(`hw_state_${HOMEWORK_ID}`);
+
+                await SwalAR.fire({
+                    icon:              'success',
+                    title:             'تم التسليم بنجاح! 🎉',
+                    html:              `<p>انتهيت من الواجب في <strong>${_fmtTime(totalSecs)}</strong></p>`,
+                    timer:             2000,
+                    timerProgressBar:  true,
+                    showConfirmButton: false
+                });
+
+                location.href = data.redirectUrl;
+            } else {
+                throw new Error(data.message ?? 'فشل التسليم');
+            }
+        } catch (err) {
+            await SwalAR.fire({
+                icon:              'error',
+                title:             'حدث خطأ',
+                html:              `<p>${err.message ?? 'تعذّر التسليم. يرجى المحاولة مجدداً.'}</p>`,
+                confirmButtonText: 'حسناً'
+            });
+        } finally {
+            HWManager.setBusy(false);
+        }
+    }
+
+    // زر التسليم في الصفحة الرئيسية
+    document.body.addEventListener('click', async e => {
+        const btn = e.target.closest('#submitHomework');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        await _runFinalSubmit();
+    });
+
+    // زر التسليم داخل لوحة المراجعة
+    document.addEventListener('hw:submitRequest', async () => {
+        ReviewMode.close();
+        await _runFinalSubmit();
+    });
+
+})();
+</script>
+}

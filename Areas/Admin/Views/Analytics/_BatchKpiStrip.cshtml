@@ -1,0 +1,270 @@
+@model QdratNew.ViewModels.Admin.Analytics.BatchPerformanceDetailsVM
+@* ═══════════════════════════════════════════════════════════════════
+   _BatchKpiStrip — 6 KPI cards + Doughnut chart for attempts ratio
+   Identity: Multi-color data cards · Chart: Attempts distribution donut
+   فلسفة: "الأرقام تقول كل شيء — دعها تتكلم بصريًا"
+═══════════════════════════════════════════════════════════════════ *@
+@{
+    var weakPct  = Model?.WeaknessPercentage ?? 0;
+    var avgScore = Model?.AvgScore ?? 0;
+
+    var (riskColor, riskBg, riskIcon) = (Model?.RiskLevel ?? "") switch
+    {
+        "خطر عالي جدًا" => ("var(--bpd-danger)",  "var(--bpd-danger-bg)",  "bi-exclamation-octagon-fill"),
+        "خطر عالي"      => ("var(--bpd-danger)",  "var(--bpd-danger-bg)",  "bi-exclamation-triangle-fill"),
+        "متوسط"         => ("var(--bpd-warning)", "var(--bpd-warning-bg)", "bi-exclamation-circle-fill"),
+        _               => ("var(--bpd-success)", "var(--bpd-success-bg)", "bi-check-circle-fill")
+    };
+
+    var scoreColor = avgScore >= 70 ? "var(--bpd-success)" : avgScore >= 50 ? "var(--bpd-warning)" : "var(--bpd-danger)";
+    var weakColor  = weakPct  >= 60 ? "var(--bpd-danger)"  : weakPct  >= 40 ? "var(--bpd-warning)" : "var(--bpd-success)";
+}
+<style>
+    .bks-wrap    { margin-bottom: 24px; }
+    .bks-card {
+        background:    var(--bpd-surface);
+        border:        1.5px solid var(--bpd-border);
+        border-radius: var(--bpd-radius);
+        padding:       20px;
+        height:        100%;
+        position:      relative;
+        overflow:      hidden;
+        transition:    transform .18s, box-shadow .18s;
+    }
+    .bks-card:hover { transform: translateY(-3px); box-shadow: var(--bpd-shadow); }
+    .bks-card::after {
+        content:       '';
+        position:      absolute;
+        top:           0; right: 0;
+        width:         4px;
+        height:        100%;
+        border-radius: 0 var(--bpd-radius) var(--bpd-radius) 0;
+    }
+    .bks-card.accent-d::after { background: var(--bpd-danger);  }
+    .bks-card.accent-w::after { background: var(--bpd-warning); }
+    .bks-card.accent-s::after { background: var(--bpd-success); }
+    .bks-card.accent-p::after { background: var(--bpd-primary); }
+    .bks-card.accent-t::after { background: var(--bpd-teal);    }
+    .bks-card.accent-v::after { background: var(--bpd-violet);  }
+    .bks-ico {
+        width:          44px;
+        height:         44px;
+        border-radius:  13px;
+        display:        flex;
+        align-items:    center;
+        justify-content:center;
+        font-size:      20px;
+        margin-bottom:  14px;
+    }
+    .bks-value { font-size: 26px; font-weight: 900; line-height: 1; margin-bottom: 4px; }
+    .bks-label { font-size: 14px; color: var(--bpd-muted); font-weight: 700; margin-bottom: 3px; }
+    .bks-sub   { font-size: 12px; color: var(--bpd-muted); }
+
+    /* Chart panel */
+    .bks-chart-card {
+        background:    var(--bpd-surface);
+        border:        1.5px solid var(--bpd-border);
+        border-radius: var(--bpd-radius);
+        padding:       22px 24px;
+        height:        100%;
+        display:       flex;
+        flex-direction:column;
+        gap:           12px;
+    }
+    .bks-chart-title {
+        font-size:   14px;
+        font-weight: 800;
+        color:       var(--bpd-text);
+        display:     flex;
+        align-items: center;
+        gap:         8px;
+    }
+    .bks-chart-title i { color: var(--bpd-primary); }
+    .bks-chart-body {
+        display:         flex;
+        align-items:     center;
+        gap:             20px;
+        flex:            1;
+    }
+    .bks-chart-canvas { flex-shrink: 0; }
+    .bks-legend {
+        display:       flex;
+        flex-direction:column;
+        gap:           10px;
+        flex:          1;
+    }
+    .bks-legend-row {
+        display:     flex;
+        align-items: center;
+        gap:         8px;
+        font-size:   13px;
+    }
+    .bks-legend-dot {
+        width:         10px;
+        height:        10px;
+        border-radius: 50%;
+        flex-shrink:   0;
+    }
+    .bks-legend-lbl { color: var(--bpd-muted); flex: 1; font-weight: 600; }
+    .bks-legend-val { font-weight: 900; color: var(--bpd-text); }
+
+    @@media (max-width: 991px) {
+        .bks-chart-body { flex-direction: column; text-align: center; }
+        .bks-legend     { align-items: flex-start; }
+    }
+</style>
+
+<div class="bks-wrap">
+    <div class="row g-3">
+
+        @* ── KPI 1: Risk Level ── *@
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="bks-card @(weakPct >= 60 ? "accent-d" : weakPct >= 40 ? "accent-w" : "accent-s")">
+                <div class="bks-ico" style="background:@riskBg;color:@riskColor;">
+                    <i class="bi @riskIcon"></i>
+                </div>
+                <div class="bks-value" style="color:@riskColor;">@(Model?.RiskLevel ?? "—")</div>
+                <div class="bks-label">مستوى الخطورة</div>
+                <div class="bks-sub">تقييم النظام الآلي</div>
+            </div>
+        </div>
+
+        @* ── KPI 2: Weakness % ── *@
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="bks-card @(weakPct >= 60 ? "accent-d" : weakPct >= 40 ? "accent-w" : "accent-s")">
+                <div class="bks-ico" style="background:var(--bpd-danger-bg);color:var(--bpd-danger);">
+                    <i class="bi bi-percent"></i>
+                </div>
+                <div class="bks-value" style="color:@weakColor;">@weakPct.ToString("0.#")%</div>
+                <div class="bks-label">متوسط الضعف</div>
+                <div class="bks-sub">من إجمالي المحاولات</div>
+            </div>
+        </div>
+
+        @* ── KPI 3: Avg Score ── *@
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="bks-card accent-p">
+                <div class="bks-ico" style="background:var(--bpd-primary-bg);color:var(--bpd-primary);">
+                    <i class="bi bi-bar-chart-fill"></i>
+                </div>
+                <div class="bks-value" style="color:@scoreColor;">@avgScore.ToString("0.#")%</div>
+                <div class="bks-label">متوسط الأداء</div>
+                <div class="bks-sub">نسبة الإجابات الصحيحة</div>
+            </div>
+        </div>
+
+        @* ── KPI 4: Students ── *@
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="bks-card accent-t">
+                <div class="bks-ico" style="background:var(--bpd-teal-bg);color:var(--bpd-teal);">
+                    <i class="bi bi-people-fill"></i>
+                </div>
+                <div class="bks-value" style="color:var(--bpd-teal);">@(Model?.StudentsCount ?? 0)</div>
+                <div class="bks-label">عدد الطلاب</div>
+                <div class="bks-sub">مسجلون في الدفعة</div>
+            </div>
+        </div>
+
+        @* ── KPI 5: Critical Lessons ── *@
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="bks-card accent-w">
+                <div class="bks-ico" style="background:var(--bpd-warning-bg);color:var(--bpd-warning);">
+                    <i class="bi bi-book-half"></i>
+                </div>
+                <div class="bks-value" style="color:var(--bpd-warning);">@(Model?.CriticalLessonsCount ?? 0)</div>
+                <div class="bks-label">الدروس الحرجة</div>
+                <div class="bks-sub">ضعف ≥ 50%</div>
+            </div>
+        </div>
+
+        @* ── KPI 6: High-Risk Questions ── *@
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="bks-card accent-d">
+                <div class="bks-ico" style="background:var(--bpd-danger-bg);color:var(--bpd-danger);">
+                    <i class="bi bi-question-diamond-fill"></i>
+                </div>
+                <div class="bks-value" style="color:var(--bpd-danger);">@(Model?.HighRiskQuestionsCount ?? 0)</div>
+                <div class="bks-label">أسئلة عالية الخطأ</div>
+                <div class="bks-sub">خطأ ≥ 60%</div>
+            </div>
+        </div>
+
+        @* ── Chart: Attempts Donut ── *@
+        <div class="col-12 col-xl-12">
+            <div class="bks-chart-card">
+                <div class="bks-chart-title">
+                    <i class="bi bi-pie-chart-fill"></i>
+                    توزيع المحاولات الكلية للدفعة
+                    <span class="ms-auto" style="font-size:12px;color:var(--bpd-muted);font-weight:600;">
+                        إجمالي: @(Model?.TotalAttempts ?? 0) محاولة
+                    </span>
+                </div>
+                <div class="bks-chart-body">
+                    <div class="bks-chart-canvas">
+                        <canvas id="attemptsDonut" width="160" height="160"></canvas>
+                    </div>
+                    <div class="bks-legend">
+                        <div class="bks-legend-row">
+                            <div class="bks-legend-dot" style="background:#22c55e;"></div>
+                            <div class="bks-legend-lbl">إجابات صحيحة</div>
+                            <div class="bks-legend-val" style="color:#16a34a;">@(Model?.CorrectAttempts ?? 0)</div>
+                        </div>
+                        <div class="bks-legend-row">
+                            <div class="bks-legend-dot" style="background:#ef4444;"></div>
+                            <div class="bks-legend-lbl">إجابات خاطئة</div>
+                            <div class="bks-legend-val" style="color:#dc2626;">@(Model?.WrongAttempts ?? 0)</div>
+                        </div>
+                        <div style="margin-top:4px;padding-top:10px;border-top:1px solid var(--bpd-border);">
+                            <div class="bks-legend-row">
+                                <div class="bks-legend-lbl" style="font-size:12px;">نسبة النجاح</div>
+                                <div class="bks-legend-val" style="color:@scoreColor;font-size:16px;">@avgScore.ToString("0.#")%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+(function () {
+    var correct = @(Model?.CorrectAttempts ?? 0);
+    var wrong   = @(Model?.WrongAttempts ?? 0);
+
+    var ctx = document.getElementById('attemptsDonut');
+    if (!ctx || typeof Chart === 'undefined') return;
+
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['صحيح', 'خطأ'],
+            datasets: [{
+                data:            [correct, wrong],
+                backgroundColor: ['#22c55e', '#ef4444'],
+                borderColor:     ['#ffffff', '#ffffff'],
+                borderWidth:     3,
+                hoverOffset:     6
+            }]
+        },
+        options: {
+            cutout:     '72%',
+            responsive: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    rtl:         true,
+                    textDirection:'rtl',
+                    callbacks: {
+                        label: function(ctx) {
+                            return ' ' + ctx.label + ': ' + ctx.parsed.toLocaleString('ar-SA');
+                        }
+                    }
+                }
+            },
+            animation: { animateRotate: true, duration: 900 }
+        }
+    });
+}());
+</script>

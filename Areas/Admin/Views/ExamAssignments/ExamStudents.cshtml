@@ -1,0 +1,1123 @@
+﻿@model QdratNew.ViewModels.Exam.ExamStudentsListViewModel
+@using Microsoft.AspNetCore.Authorization
+@using QdratNew.Security.AdminPermissions
+@inject IAuthorizationService AuthorizationService
+
+@{
+    ViewData["Title"] = "متابعة الطلاب في الاختبار";
+
+    var totalStudents = Model.Students?.Count() ?? 0;
+    var completedStudents = Model.Students?.Count(s => s.Status == "تم الإنهاء") ?? 0;
+    var inProgressStudents = Model.Students?.Count(s => s.Status == "قيد التنفيذ") ?? 0;
+    var absentStudents = Model.Students?.Count(s => s.Status == "لم يبدأ") ?? 0;
+    var incompleteStudents = Model.Students?.Count(s => s.Status == "غير مكتمل") ?? 0;
+
+    var passedStudents = Model.Students?.Count(s => s.Score >= 60) ?? 0;
+    var successRate = totalStudents > 0 ? Math.Round((double)passedStudents / totalStudents * 100, 1) : 0;
+
+    var averageScore = Model.Students != null && Model.Students.Any(s => s.Score.HasValue)
+        ? Math.Round(Model.Students.Where(s => s.Score.HasValue).Average(s => s.Score.Value), 1)
+        : 0;
+
+    var canViewResults  = (await AuthorizationService.AuthorizeAsync(User, AdminPermissionPolicies.Exams_Results)).Succeeded;
+    var canPublishExam  = (await AuthorizationService.AuthorizeAsync(User, AdminPermissionPolicies.Exams_Publish)).Succeeded;
+}
+
+@section Styles {
+    <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+    <link href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css" rel="stylesheet" />
+
+    <style>
+        :root {
+            --pr-bg: #f4f7fb;
+            --pr-surface: #111827;
+            --pr-card: #ffffff;
+            --pr-border: #dbe4ef;
+            --pr-accent: #2563eb;
+            --pr-success: #16a34a;
+            --pr-danger: #dc2626;
+            --pr-warning: #f59e0b;
+            --pr-info: #0284c7;
+            --pr-text: #0f172a;
+            --pr-muted: #64748b;
+            --pr-radius: 14px;
+            --pr-radius-sm: 9px;
+            --pr-transition: .2s cubic-bezier(.4,0,.2,1);
+        }
+
+        body {
+            background: var(--pr-bg) !important;
+        }
+
+        .pr-page {
+            direction: rtl;
+            min-height: 100vh;
+            padding: 28px 0 60px;
+            font-family: 'Cairo', Arial, sans-serif;
+        }
+
+        .pr-header {
+            background: #ffffff;
+            border: 1px solid var(--pr-border);
+            border-radius: var(--pr-radius);
+            padding: 18px 22px;
+            box-shadow: 0 8px 22px rgba(15, 23, 42, .06);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 24px;
+        }
+
+        .pr-header-title {
+            color: var(--pr-text);
+            font-size: 22px;
+            font-weight: 900;
+            margin: 0;
+            line-height: 1.2;
+        }
+
+            .pr-header-title i {
+                color: var(--pr-accent);
+            }
+
+        .pr-header-sub {
+            color: #475569;
+            font-size: 13px;
+            font-weight: 700;
+            margin-top: 6px;
+            line-height: 1.8;
+        }
+
+        .pr-header-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .btn-pr-primary,
+        .btn-pr-outline {
+            border-radius: var(--pr-radius-sm);
+            padding: 8px 18px;
+            font-size: 13px;
+            font-weight: 900;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            text-decoration: none;
+            border: 1px solid transparent;
+            transition: var(--pr-transition);
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .btn-pr-primary {
+            background: var(--pr-accent);
+            border-color: var(--pr-accent);
+            color: #fff;
+        }
+
+        .btn-pr-outline {
+            background: #fff;
+            border-color: #cbd5e1;
+            color: #334155;
+        }
+
+        .btn-pr-primary:hover {
+            background: #1d4ed8;
+            color: #fff;
+            transform: translateY(-1px);
+            text-decoration: none;
+        }
+
+        .btn-pr-outline:hover {
+            background: #f1f5f9;
+            color: #0f172a;
+            transform: translateY(-1px);
+            text-decoration: none;
+        }
+
+        .pr-hero {
+            background: linear-gradient(135deg, #1a2540 0%, #1c3052 60%, #162440 100%);
+            border: 1px solid rgba(255,255,255,.08);
+            border-radius: var(--pr-radius);
+            padding: 28px 32px;
+            margin-bottom: 24px;
+            color: #fff;
+            box-shadow: 0 14px 32px rgba(15, 23, 42, .18);
+            position: relative;
+            overflow: hidden;
+        }
+
+            .pr-hero::before {
+                content: "";
+                position: absolute;
+                top: -70px;
+                left: -70px;
+                width: 240px;
+                height: 240px;
+                background: radial-gradient(circle, rgba(59,130,246,.20) 0%, transparent 70%);
+                pointer-events: none;
+            }
+
+        .pr-hero-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            background: rgba(255,255,255,.10);
+            border: 1px solid rgba(255,255,255,.16);
+            border-radius: 999px;
+            padding: 5px 12px;
+            font-size: 12px;
+            font-weight: 900;
+            margin-bottom: 12px;
+        }
+
+        .pr-hero-title {
+            margin: 0;
+            font-size: 30px;
+            font-weight: 900;
+            line-height: 1.35;
+            color: #fff;
+        }
+
+        .pr-hero-sub {
+            color: #cbd5e1;
+            font-size: 13px;
+            font-weight: 700;
+            margin-top: 8px;
+            line-height: 1.8;
+        }
+
+        .pr-chips {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        .pr-chip {
+            background: rgba(255,255,255,.08);
+            border: 1px solid rgba(255,255,255,.10);
+            border-radius: 13px;
+            padding: 14px;
+            text-align: center;
+        }
+
+        .pr-chip-val {
+            font-size: 22px;
+            font-weight: 900;
+            line-height: 1;
+        }
+
+        .pr-chip-lbl {
+            margin-top: 7px;
+            color: #cbd5e1;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .pr-section-label {
+            font-size: 14px;
+            font-weight: 900;
+            color: #334155;
+            margin: 20px 0 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+            .pr-section-label::after {
+                content: "";
+                flex: 1;
+                height: 1px;
+                background: #dbe4ef;
+            }
+
+        .pr-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .pr-stat-card {
+            background: #fff;
+            border: 1px solid var(--pr-border);
+            border-radius: var(--pr-radius);
+            padding: 16px 14px;
+            box-shadow: 0 8px 22px rgba(15,23,42,.05);
+            display: flex;
+            align-items: center;
+            gap: 11px;
+            min-height: 92px;
+        }
+
+        .pr-stat-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 13px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 17px;
+        }
+
+            .pr-stat-icon.blue {
+                background: #dbeafe;
+                color: #1d4ed8;
+            }
+
+            .pr-stat-icon.green {
+                background: #dcfce7;
+                color: #15803d;
+            }
+
+            .pr-stat-icon.yellow {
+                background: #fef3c7;
+                color: #92400e;
+            }
+
+            .pr-stat-icon.red {
+                background: #fee2e2;
+                color: #b91c1c;
+            }
+
+            .pr-stat-icon.cyan {
+                background: #e0f2fe;
+                color: #0369a1;
+            }
+
+            .pr-stat-icon.violet {
+                background: #ede9fe;
+                color: #6d28d9;
+            }
+
+        .pr-stat-label {
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 900;
+            margin-bottom: 4px;
+        }
+
+        .pr-stat-value {
+            color: #0f172a;
+            font-size: 22px;
+            font-weight: 900;
+            line-height: 1;
+        }
+
+        .pr-toolbar {
+            background: #111827;
+            color: #e2e8f0;
+            border-radius: var(--pr-radius);
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 14px;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+        }
+
+        .pr-toolbar-title {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 15px;
+            font-weight: 900;
+        }
+
+        .pr-selected-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(37,99,235,.20);
+            color: #bfdbfe;
+            border: 1px solid rgba(37,99,235,.35);
+            border-radius: 999px;
+            padding: 5px 12px;
+            font-size: 12px;
+            font-weight: 900;
+        }
+
+        .pr-table-panel {
+            background: #ffffff;
+            border: 1px solid var(--pr-border);
+            border-radius: var(--pr-radius);
+            overflow: hidden;
+            box-shadow: 0 8px 22px rgba(15, 23, 42, .05);
+        }
+
+            .pr-table-panel .table {
+                margin: 0 !important;
+                vertical-align: middle;
+            }
+
+                .pr-table-panel .table thead th {
+                    background: #f1f5f9 !important;
+                    color: #0f172a !important;
+                    border-bottom: 1px solid #cbd5e1 !important;
+                    font-size: 12px !important;
+                    font-weight: 900 !important;
+                    padding: 12px 10px !important;
+                    white-space: nowrap;
+                    text-align: center;
+                    vertical-align: middle;
+                }
+
+                .pr-table-panel .table tbody td {
+                    color: #0f172a;
+                    border-bottom: 1px solid #edf2f7;
+                    padding: 11px 10px;
+                    font-size: 13px;
+                    font-weight: 700;
+                    vertical-align: middle;
+                    text-align: center;
+                }
+
+                .pr-table-panel .table tbody tr:hover td {
+                    background: #f8fafc;
+                }
+
+        .pr-student-cell {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            text-align: right;
+            min-width: 180px;
+        }
+
+        .pr-student-avatar {
+            width: 34px;
+            height: 34px;
+            border-radius: 12px;
+            background: #dbeafe;
+            color: #1d4ed8;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 13px;
+        }
+
+        .pr-student-name {
+            color: #0f172a;
+            font-weight: 900;
+            font-size: 13px;
+            line-height: 1.5;
+            max-width: 180px;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .pr-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            border-radius: 999px;
+            padding: 5px 10px;
+            font-size: 11px;
+            font-weight: 900;
+            white-space: nowrap;
+        }
+
+        .pr-badge-success {
+            background: #dcfce7;
+            color: #166534;
+            border: 1px solid #86efac;
+        }
+
+        .pr-badge-warning {
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fde68a;
+        }
+
+        .pr-badge-danger {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+
+        .pr-badge-secondary {
+            background: #f1f5f9;
+            color: #475569;
+            border: 1px solid #cbd5e1;
+        }
+
+        .pr-score-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 54px;
+            border-radius: 999px;
+            padding: 5px 10px;
+            font-size: 12px;
+            font-weight: 900;
+            background: #eff6ff;
+            color: #1d4ed8;
+            border: 1px solid #bfdbfe;
+        }
+
+        .pr-time-wrap {
+            min-width: 110px;
+        }
+
+        .pr-progress {
+            height: 18px;
+            background: #e2e8f0;
+            border-radius: 999px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .pr-progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #0284c7, #38bdf8);
+            color: #fff;
+            font-size: 10px;
+            font-weight: 900;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 28px;
+        }
+
+        .pr-rank {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 34px;
+            height: 28px;
+            border-radius: 999px;
+            background: #fef3c7;
+            color: #92400e;
+            font-size: 12px;
+            font-weight: 900;
+            border: 1px solid #fde68a;
+        }
+
+        .pr-action-group {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: nowrap;
+        }
+
+        .pr-action-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            border: 1px solid transparent;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            transition: var(--pr-transition);
+            padding: 0;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+            .pr-action-btn.report {
+                color: #166534;
+                background: #dcfce7;
+                border-color: #86efac;
+            }
+
+            .pr-action-btn.analytics {
+                color: #1d4ed8;
+                background: #dbeafe;
+                border-color: #bfdbfe;
+            }
+
+            .pr-action-btn.resend {
+                color: #92400e;
+                background: #fef3c7;
+                border-color: #fde68a;
+            }
+
+            .pr-action-btn.reminder {
+                color: #0369a1;
+                background: #e0f2fe;
+                border-color: #bae6fd;
+            }
+
+            .pr-action-btn:hover {
+                transform: translateY(-1px);
+                text-decoration: none;
+            }
+
+        .pr-action-form {
+            display: inline-flex;
+            margin: 0;
+        }
+
+        .dataTables_wrapper {
+            padding: 16px;
+        }
+
+            .dataTables_wrapper .dataTables_filter label,
+            .dataTables_wrapper .dataTables_length label,
+            .dataTables_wrapper .dataTables_info {
+                color: #334155 !important;
+                font-size: 13px !important;
+                font-weight: 800 !important;
+            }
+
+            .dataTables_wrapper .dataTables_filter input,
+            .dataTables_wrapper .dataTables_length select {
+                background: #ffffff !important;
+                border: 1px solid #94a3b8 !important;
+                color: #0f172a !important;
+                border-radius: 8px !important;
+                font-size: 13px !important;
+                font-weight: 700 !important;
+                padding: 5px 10px;
+            }
+
+        .dt-buttons {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+
+            .dt-buttons .btn {
+                border-radius: 9px !important;
+                font-size: 12px !important;
+                font-weight: 900 !important;
+                padding: 6px 10px !important;
+            }
+
+        .dataTables_wrapper .dataTables_paginate .paginate_button {
+            background: #ffffff !important;
+            border: 1px solid #cbd5e1 !important;
+            color: #334155 !important;
+            font-weight: 800 !important;
+            border-radius: 7px !important;
+            margin: 0 2px;
+            font-size: 12px;
+            padding: 4px 10px !important;
+        }
+
+            .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+            .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+                background: var(--pr-accent) !important;
+                border-color: var(--pr-accent) !important;
+                color: #ffffff !important;
+            }
+
+        table.dataTable thead .sorting:before,
+        table.dataTable thead .sorting:after,
+        table.dataTable thead .sorting_asc:before,
+        table.dataTable thead .sorting_asc:after,
+        table.dataTable thead .sorting_desc:before,
+        table.dataTable thead .sorting_desc:after {
+            color: #475569 !important;
+            opacity: 1 !important;
+        }
+
+        .pr-row-success td {
+            background: #f0fdf4 !important;
+        }
+
+        .pr-row-warning td {
+            background: #fffbeb !important;
+        }
+
+        .pr-row-danger td {
+            background: #fef2f2 !important;
+        }
+
+        .pr-row-secondary td {
+            background: #f8fafc !important;
+        }
+
+        @@media (max-width: 1200px) {
+            .pr-stats-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @@media (max-width: 992px) {
+            .pr-chips,
+            .pr-stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @@media (max-width: 768px) {
+            .pr-page {
+                padding: 18px 0 40px;
+            }
+
+            .pr-hero {
+                padding: 22px;
+            }
+
+            .pr-hero-title {
+                font-size: 24px;
+            }
+
+            .pr-chips,
+            .pr-stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .pr-header-actions {
+                width: 100%;
+            }
+
+            .btn-pr-outline,
+            .btn-pr-primary {
+                width: 100%;
+            }
+        }
+    </style>
+}
+
+<div class="pr-page container-fluid px-4">
+
+    <div class="pr-header no-print">
+        <div>
+            <h1 class="pr-header-title">
+                <i class="fas fa-chart-line me-2"></i>
+                متابعة الطلاب في الاختبار
+            </h1>
+
+            <div class="pr-header-sub">
+                متابعة حالة الطلاب داخل الاختبار، نسب الإنجاز، الدرجات، الوقت المستهلك، وإجراءات التقارير وإعادة الإرسال.
+            </div>
+        </div>
+
+        <div class="pr-header-actions">
+            <a asp-action="Details"
+               asp-route-id="@Model.AssignmentId"
+               class="btn-pr-outline">
+                <i class="fas fa-arrow-right"></i>
+                عودة لتفاصيل الاختبار
+            </a>
+        </div>
+    </div>
+
+    <div class="pr-hero">
+        <div class="row g-4 align-items-center">
+            <div class="col-lg-5">
+                <div class="pr-hero-label">
+                    <i class="fas fa-user-graduate"></i>
+                    تقرير طلاب الاختبار
+                </div>
+
+                <h2 class="pr-hero-title">
+                    @Model.ExamTitle
+                </h2>
+
+                <div class="pr-hero-sub">
+                    الدفعة: @Model.BatchName
+                </div>
+            </div>
+
+            <div class="col-lg-7">
+                <div class="pr-chips">
+                    <div class="pr-chip">
+                        <div class="pr-chip-val" style="color:#bfdbfe;">@totalStudents</div>
+                        <div class="pr-chip-lbl">إجمالي الطلاب</div>
+                    </div>
+
+                    <div class="pr-chip">
+                        <div class="pr-chip-val" style="color:#86efac;">@completedStudents</div>
+                        <div class="pr-chip-lbl">أنهوا الاختبار</div>
+                    </div>
+
+                    <div class="pr-chip">
+                        <div class="pr-chip-val" style="color:#fde68a;">@Model.ExamDuration</div>
+                        <div class="pr-chip-lbl">دقيقة</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="pr-section-label">إحصائيات متابعة الطلاب</div>
+
+    <div class="pr-stats-grid">
+        <div class="pr-stat-card">
+            <div class="pr-stat-icon blue">
+                <i class="fas fa-users"></i>
+            </div>
+            <div>
+                <div class="pr-stat-label">إجمالي الطلاب</div>
+                <div class="pr-stat-value">@totalStudents</div>
+            </div>
+        </div>
+
+        <div class="pr-stat-card">
+            <div class="pr-stat-icon green">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <div>
+                <div class="pr-stat-label">تم الإنهاء</div>
+                <div class="pr-stat-value">@completedStudents</div>
+            </div>
+        </div>
+
+        <div class="pr-stat-card">
+            <div class="pr-stat-icon yellow">
+                <i class="fas fa-hourglass-half"></i>
+            </div>
+            <div>
+                <div class="pr-stat-label">قيد التنفيذ</div>
+                <div class="pr-stat-value">@inProgressStudents</div>
+            </div>
+        </div>
+
+        <div class="pr-stat-card">
+            <div class="pr-stat-icon red">
+                <i class="fas fa-user-slash"></i>
+            </div>
+            <div>
+                <div class="pr-stat-label">لم يبدأ</div>
+                <div class="pr-stat-value">@absentStudents</div>
+            </div>
+        </div>
+
+        <div class="pr-stat-card">
+            <div class="pr-stat-icon cyan">
+                <i class="fas fa-percentage"></i>
+            </div>
+            <div>
+                <div class="pr-stat-label">نسبة النجاح</div>
+                <div class="pr-stat-value">@successRate%</div>
+            </div>
+        </div>
+
+        <div class="pr-stat-card">
+            <div class="pr-stat-icon violet">
+                <i class="fas fa-chart-simple"></i>
+            </div>
+            <div>
+                <div class="pr-stat-label">متوسط الدرجة</div>
+                <div class="pr-stat-value">@averageScore%</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="pr-section-label">تفاصيل الطلاب</div>
+
+    <div class="pr-toolbar">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <div class="pr-toolbar-title">
+                <i class="fas fa-table"></i>
+                جدول متابعة الطلاب
+            </div>
+
+            <span class="pr-selected-badge">
+                <i class="fas fa-users"></i>
+                @totalStudents طالب
+            </span>
+
+            <span class="pr-selected-badge">
+                <i class="fas fa-check-circle"></i>
+                @completedStudents مكتمل
+            </span>
+
+            @if (incompleteStudents > 0)
+            {
+                <span class="pr-selected-badge">
+                    <i class="fas fa-triangle-exclamation"></i>
+                    @incompleteStudents غير مكتمل
+                </span>
+            }
+        </div>
+
+        <a asp-action="Details"
+           asp-route-id="@Model.AssignmentId"
+           class="btn-pr-outline"
+           style="background:transparent;color:#e2e8f0;border-color:#334155;">
+            <i class="fas fa-arrow-right"></i>
+            رجوع
+        </a>
+    </div>
+
+    <div class="pr-table-panel">
+        <div class="table-responsive">
+            <table id="examStudentsTable" class="table table-hover align-middle text-center w-100">
+                <thead>
+                    <tr>
+                        <th style="min-width:210px;">الطالب</th>
+                        <th style="width:130px;">تاريخ الاختبار</th>
+                        <th style="width:115px;">الحالة</th>
+                        <th style="width:90px;">الدرجة</th>
+                        <th style="width:130px;">الوقت</th>
+                        <th style="width:80px;">الصحيحة</th>
+                        <th style="width:80px;">الخاطئة</th>
+                        <th style="width:80px;">المتخطاة</th>
+                        <th style="width:80px;">الترتيب</th>
+                        <th style="width:150px;">الإجراءات</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    @{
+                        var rank = 1;
+                    }
+
+                    @foreach (var student in Model.Students.OrderByDescending(s => s.Score))
+                    {
+                        string rowClass = student.Status switch
+                        {
+                            "تم الإنهاء" => "pr-row-success",
+                            "قيد التنفيذ" => "pr-row-warning",
+                            "غير مكتمل" => "pr-row-secondary",
+                            _ => "pr-row-danger"
+                        };
+
+                        string statusBadgeClass = student.Status switch
+                        {
+                            "تم الإنهاء" => "pr-badge-success",
+                            "قيد التنفيذ" => "pr-badge-warning",
+                            "غير مكتمل" => "pr-badge-secondary",
+                            _ => "pr-badge-danger"
+                        };
+
+                        string statusIcon = student.Status switch
+                        {
+                            "تم الإنهاء" => "fas fa-check-circle",
+                            "قيد التنفيذ" => "fas fa-hourglass-half",
+                            "غير مكتمل" => "fas fa-circle-minus",
+                            _ => "fas fa-user-slash"
+                        };
+
+                        string statusText = student.Status == "لم يبدأ" ? "غائب" : student.Status;
+
+                        string rankDisplay = student.Status == "تم الإنهاء" ? rank.ToString() : "-";
+                        if (student.Status == "تم الإنهاء") rank++;
+
+                        double timePercent = Model.ExamDuration > 0
+                        ? Math.Min(Math.Round((student.TimeSpentMinutes / Model.ExamDuration) * 100, 1), 100)
+                        : 0;
+
+                        <tr class="@rowClass">
+                            <td class="text-end">
+                                <div class="pr-student-cell">
+                                    <div class="pr-student-avatar">
+                                        <i class="fas fa-user-graduate"></i>
+                                    </div>
+
+                                    <div class="pr-student-name" title="@student.FullName">
+                                        @student.FullName
+                                    </div>
+                                </div>
+                            </td>
+
+                            <td>
+                                @(student.ExamDate.HasValue? student.ExamDate.Value.ToString("yyyy/MM/dd HH:mm") : "—")
+                            </td>
+
+                            <td>
+                                <span class="pr-badge @statusBadgeClass">
+                                    <i class="@statusIcon"></i>
+                                    @statusText
+                                </span>
+                            </td>
+
+                            <td>
+                                <span class="pr-score-pill">
+                                    @(student.Score.HasValue ? $"{student.Score}%" : "—")
+                                </span>
+                            </td>
+
+                            <td>
+                                <div class="pr-time-wrap">
+                                    <div class="pr-progress">
+                                        <div class="pr-progress-bar"
+                                             style="width:@timePercent%">
+                                            @timePercent%
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+
+                            <td>@student.CorrectAnswers</td>
+                            <td>@student.WrongAnswers</td>
+                            <td>@student.SkippedQuestions</td>
+
+                            <td>
+                                <span class="pr-rank">@rankDisplay</span>
+                            </td>
+
+                            <td>
+                                <div class="pr-action-group">
+                                    @if (student.Status == "تم الإنهاء")
+                                    {
+                                        @if (canViewResults)
+                                        {
+                                            <a asp-area="Admin"
+                                               asp-controller="ExamAssignments"
+                                               asp-action="StudentExamPerformanceReport"
+                                               asp-route-examAssignmentId="@Model.AssignmentId"
+                                               asp-route-studentId="@student.StudentId"
+                                               class="pr-action-btn report"
+                                               title="عرض تقرير الأداء">
+                                                <i class="fas fa-file-alt"></i>
+                                            </a>
+
+                                            <a asp-area="Admin"
+                                               asp-controller="ExamAssignments"
+                                               asp-action="StudentAnalyticsReport"
+                                               asp-route-studentId="@student.StudentId"
+                                               class="pr-action-btn analytics"
+                                               title="تقرير شامل للطالب">
+                                                <i class="fas fa-chart-pie"></i>
+                                            </a>
+                                        }
+
+                                        @if (canPublishExam)
+                                        {
+                                            <button type="button"
+                                                    class="pr-action-btn resend"
+                                                    title="إعادة إرسال الاختبار"
+                                                    onclick="confirmResend(@Model.AssignmentId, @student.StudentId)">
+                                                <i class="fas fa-rotate-right"></i>
+                                            </button>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        @if (canPublishExam)
+                                        {
+                                            <form asp-action="SendReminder" method="post" class="pr-action-form">
+                                                <input type="hidden" name="studentId" value="@student.StudentId" />
+                                                <input type="hidden" name="assignmentId" value="@Model.AssignmentId" />
+
+                                                <button type="submit"
+                                                        class="pr-action-btn reminder"
+                                                        title="إرسال تذكير للطالب">
+                                                    <i class="fas fa-bell"></i>
+                                                </button>
+                                            </form>
+                                        }
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+@section Scripts {
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.colVis.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script>
+        function confirmResend(assignmentId, studentId) {
+            $.get(`/Admin/ExamAssignments/CheckBeforeResend?assignmentId=${assignmentId}&studentId=${studentId}`,
+                function (result) {
+                    if (result.canResend === false) {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'لا يمكن إعادة الإرسال',
+                            html: `<b>${result.reason}</b>`,
+                            confirmButtonText: 'حسنًا',
+                            confirmButtonColor: '#dc2626'
+                        });
+
+                        return;
+                    }
+
+                    let text = result.reason
+                        ? `<span style='color:#b12704;font-weight:bold;'>${result.reason}</span><br><br>هل تريد بالتأكيد إعادة إرسال الاختبار؟`
+                        : "هل تريد بالتأكيد إعادة إرسال الاختبار لهذا الطالب؟";
+
+                    Swal.fire({
+                        title: 'تأكيد إعادة الإرسال',
+                        html: text,
+                        icon: 'warning',
+                        showCancelButton: true,
+                        cancelButtonText: 'إلغاء',
+                        confirmButtonText: 'نعم، إعادة الإرسال',
+                        confirmButtonColor: '#2563eb',
+                        cancelButtonColor: '#dc2626'
+                    }).then((res) => {
+                        if (!res.isConfirmed) {
+                            return;
+                        }
+
+                        $.post('/Admin/ExamAssignments/ResendExamToStudent',
+                            {
+                                assignmentId: assignmentId,
+                                studentId: studentId
+                            },
+                            function () {
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'تمت إعادة الإرسال',
+                                    text: 'تم إعادة إرسال الاختبار للطالب بنجاح',
+                                    confirmButtonText: 'حسنًا'
+                                }).then(() => location.reload());
+                            }
+                        ).fail(function () {
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'فشل الإرسال',
+                                text: 'حدث خطأ أثناء إعادة إرسال الاختبار.',
+                                confirmButtonText: 'حسنًا'
+                            });
+                        });
+                    });
+                }
+            ).fail(function () {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'فشل الفحص',
+                    text: 'تعذر فحص حالة الطالب قبل إعادة الإرسال.',
+                    confirmButtonText: 'حسنًا'
+                });
+            });
+        }
+
+        $(document).ready(function () {
+            $('#examStudentsTable').DataTable({
+                language: {
+                    url: "https://cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json"
+                },
+                dom: 'Bfrtip',
+                buttons: [
+                    { extend: 'copy', text: 'نسخ', className: 'btn btn-sm btn-outline-secondary' },
+                    { extend: 'excel', text: 'Excel', className: 'btn btn-sm btn-outline-success' },
+                    { extend: 'pdf', text: 'PDF', className: 'btn btn-sm btn-outline-danger' },
+                    { extend: 'print', text: 'طباعة', className: 'btn btn-sm btn-outline-primary' },
+                    { extend: 'colvis', text: 'الأعمدة', className: 'btn btn-sm btn-outline-dark' }
+                ],
+                order: [[3, 'desc']],
+                pageLength: 30,
+                lengthMenu: [[10, 30, 50, 100, -1], [10, 30, 50, 100, "الكل"]],
+                columnDefs: [
+                    { orderable: false, targets: [9] }
+                ]
+            });
+        });
+    </script>
+}

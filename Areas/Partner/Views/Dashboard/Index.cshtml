@@ -1,0 +1,384 @@
+﻿@using System.Text.Json
+@model QdratNew.ViewModels.Partner.Dashboard.PartnerDashboardAdvancedVM
+
+<div class="container-fluid py-4" dir="rtl">
+
+    <!-- ================= KPI ================= -->
+    <div class="row g-3 mb-4">
+
+        <div class="col-md-3">
+            <div class="top-card">
+                <span class="badge neutral">إجمالي</span>
+                <h2>@Model.TotalStudents</h2>
+                <small>عدد الطلاب</small>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="top-card success">
+                <span class="badge success">نشطين</span>
+                <h2>@Model.ActiveStudents</h2>
+                <small>طلاب نشطين</small>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="top-card danger">
+                <span class="badge danger">خطر</span>
+                <h2>@Model.AtRiskStudents</h2>
+                <small>طلاب خطر</small>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="top-card">
+                <span class="badge neutral">دفعات</span>
+                <h2>@Model.TotalBatches</h2>
+                <small>إجمالي الدفعات</small>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ================= GRID ================= -->
+    <div class="row g-4">
+
+        <!-- LEFT -->
+        <div class="col-lg-3">
+
+            <div class="sticky-top" style="top:20px">
+
+                <div class="card p-3 mb-3">
+                    <h6 class="fw-bold mb-3">⚡ إجراءات سريعة</h6>
+
+                    <a asp-controller="Students" asp-action="Create" class="btn btn-primary w-100 mb-2">➕ إضافة طالب</a>
+                    <a asp-controller="Students" asp-action="ImportExcel" class="btn btn-light border w-100 mb-2">📥 استيراد Excel</a>
+                    <a asp-controller="Batches" asp-action="Create" class="btn btn-dark w-100">➕ إنشاء دفعة</a>
+                </div>
+
+                <div class="card p-3 mb-3 alert-box">
+                    <h6 class="fw-bold text-danger">🚨 تنبيهات</h6>
+
+                    <div class="alert-line">
+                        <span>بدون دفعات</span>
+                        <strong>@Model.StudentsWithNoBatch</strong>
+                    </div>
+
+                    <div class="alert-line">
+                        <span>غير نشطين</span>
+                        <strong>@Model.InactiveStudents</strong>
+                    </div>
+                </div>
+
+                <div class="card p-3">
+                    <h6 class="fw-bold mb-2">🆕 أحدث الطلاب</h6>
+
+                    @if (Model?.LatestStudents != null && Model.LatestStudents.Any())
+                    {
+                        foreach (var s in Model.LatestStudents)
+                        {
+                            <div class="student-item">@s</div>
+                        }
+                    }
+                    else
+                    {
+                        <p class="text-muted">لا يوجد بيانات</p>
+                    }
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- RIGHT -->
+        <div class="col-lg-9">
+
+            <!-- ROW 1 -->
+            <div class="row g-4 mb-4">
+
+                <div class="col-md-6">
+                    <div class="card p-4 h-100">
+                        <h6 class="fw-bold mb-3">🧠 حالة الطلاب</h6>
+                        <canvas id="healthChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card p-4 h-100">
+                        <h6 class="fw-bold mb-3">📊 توزيع الطلاب</h6>
+                        <canvas id="studentsChart"></canvas>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- ROW 2 -->
+            <!-- ROW 2 -->
+            <div class="row g-4 mb-4">
+
+                <!-- Homework -->
+                <div class="col-md-4">
+                    <div class="card p-4 h-100">
+                        <h6 class="fw-bold mb-3">📘 الواجبات</h6>
+
+                        <canvas id="homeworkChart"></canvas>
+
+                        <div class="mt-3">
+                            <div class="stat-line">
+                                <span>تم الحل</span>
+                                <strong>@ViewBag.Homework.CompletedHomeworks</strong>
+                            </div>
+
+                            <div class="stat-line danger">
+                                <span>لم يتم</span>
+                                <strong>@ViewBag.Homework.PendingHomeworks</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Exams -->
+                <div class="col-md-4">
+                    <div class="card p-4 h-100">
+                        <h6 class="fw-bold mb-3">📝 الاختبارات</h6>
+
+                        <canvas id="examChart"></canvas>
+
+                        <div class="mt-3">
+                            <div class="stat-line">
+                                <span>المكتمل</span>
+                                <strong>@ViewBag.Exam.CompletedExams</strong>
+                            </div>
+
+                            <div class="stat-line danger">
+                                <span>غير مكتمل</span>
+                                <strong>@ViewBag.Exam.PendingExams</strong>
+                            </div>
+
+                            <div class="stat-line">
+                                <span>المتوسط</span>
+                                <strong>@ViewBag.Exam.AverageScore.ToString("0")</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI -->
+                <div class="col-md-4">
+                    <div class="card p-4 h-100 ai-box">
+                        <h6 class="fw-bold mb-3">🤖 تحليل ذكي</h6>
+
+                        <p>
+                            @if (ViewBag.RiskStats[2] > 0)
+                            {
+                                <text>⚠️ يوجد @ViewBag.RiskStats[2] طالب في حالة خطر</text>
+                            }
+                            else
+                            {
+                                <text>✅ الأداء مستقر حاليًا</text>
+                            }
+                        </p>
+                    </div>
+                </div>
+
+            </div>
+            <div class="card p-4 mb-4">
+                <h6 class="fw-bold mb-3">⚠️ توزيع المخاطر</h6>
+                <canvas id="riskChart"></canvas>
+            </div>
+            <!-- ROW 3 -->
+            <div class="card p-3">
+                <h6 class="fw-bold mb-3">📋 طلاب بحاجة تدخل</h6>
+
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>الاسم</th>
+                            <th>الحالة</th>
+                            <th>السبب</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var s in Model.RiskStudents)
+                        {
+                            <tr>
+                                <td>@s.Name</td>
+                                <td>
+                                    <span class="badge bg-danger">@s.RiskLevel (@s.RiskScore)</span>
+                                </td>
+                                <td>@s.Reason</td>
+                            </tr>
+                        }
+                </table>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<style>
+    body {
+        background: #f9fafb;
+    }
+
+    .top-card {
+        background: #fff;
+        padding: 20px;
+        border-radius: 18px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.06);
+        transition: .2s;
+    }
+
+    tr.risk-row {
+        background: #fee2e2;
+    }
+        .top-card:hover {
+            transform: translateY(-4px);
+        }
+
+    .badge {
+        padding: 6px 12px;
+        border-radius: 8px;
+        margin-bottom: 8px;
+    }
+
+        .badge.success {
+            background: #22c55e;
+            color: #fff;
+        }
+
+        .badge.danger {
+            background: #ef4444;
+            color: #fff;
+        }
+
+        .badge.neutral {
+            background: #e5e7eb;
+        }
+
+    .stat-line {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 10px;
+    }
+
+        .stat-line.danger {
+            color: #ef4444;
+        }
+
+    .ai-box {
+        background: #eef2ff;
+        border-radius: 14px;
+    }
+
+    .alert-box {
+        background: #fff7ed;
+    }
+
+    .student-item {
+        padding: 6px 0;
+        border-bottom: 1px solid #eee;
+    }
+
+    .card {
+        border-radius: 18px;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.05);
+    }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    // Health
+    new Chart(document.getElementById('healthChart'), {
+        type:'doughnut',
+        data:{
+            labels:['تحسن','مستقر','خطر'],
+            datasets:[{
+                data:[
+                    @Model.HighPerformingStudents,
+                    @Model.ActiveStudents,
+                    @Model.AtRiskStudents
+                ],
+                backgroundColor:['#22c55e','#6366f1','#ef4444']
+            }]
+        }
+    });
+
+    // Students (Orange Rounded)
+    const ctx = document.getElementById('studentsChart').getContext('2d');
+    const gradient = ctx.createLinearGradient(0,0,0,400);
+    gradient.addColorStop(0,"#ff9a3c");
+    gradient.addColorStop(1,"#ff5a00");
+
+    new Chart(ctx,{
+        type:'bar',
+        data:{
+            labels:@Html.Raw(JsonSerializer.Serialize(Model.CourseLabels)),
+            datasets:[{
+                data:@Html.Raw(JsonSerializer.Serialize(Model.CourseCounts)),
+                backgroundColor:gradient,
+                borderRadius:14,
+                borderSkipped:false
+            }]
+        },
+        options:{
+            plugins:{legend:{display:false}},
+            scales:{x:{grid:{display:false}},y:{beginAtZero:true}}
+        }
+    });
+
+    // Homework
+    new Chart(document.getElementById('homeworkChart'),{
+        type:'doughnut',
+        data:{
+            labels:@Html.Raw(JsonSerializer.Serialize(ViewBag.Homework.Labels)),
+            datasets:[{
+                data:@Html.Raw(JsonSerializer.Serialize(ViewBag.Homework.Data)),
+                backgroundColor:['#22c55e','#ef4444']
+            }]
+        },
+        options:{
+            plugins:{legend:{position:'bottom'}}
+        }
+    });
+</script>
+<script>
+    // Exams Chart
+    const examLabels = @Html.Raw(JsonSerializer.Serialize(ViewBag.Exam.Labels));
+    const examData = @Html.Raw(JsonSerializer.Serialize(ViewBag.Exam.Data));
+
+    new Chart(document.getElementById('examChart'), {
+        type: 'doughnut',
+        data: {
+            labels: examLabels,
+            datasets: [{
+                data: examData,
+                backgroundColor: ['#22c55e','#3b82f6','#ef4444']
+            }]
+        },
+        options: {
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+</script>
+
+<script>
+    const riskData = @Html.Raw(JsonSerializer.Serialize(ViewBag.RiskStats));
+
+    new Chart(document.getElementById('riskChart'), {
+        type: 'doughnut',
+        data: {
+            labels: ['آمن','تحذير','خطر'],
+            datasets: [{
+                data: riskData,
+                backgroundColor: ['#22c55e','#facc15','#ef4444']
+            }]
+        }
+    });</script>

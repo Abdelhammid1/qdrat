@@ -1,0 +1,282 @@
+﻿@model IEnumerable<QdratNew.ViewModels.Partner.StudentListViewModel>
+
+@{
+    ViewData["Title"] = "طلاب الفترة النشطة";
+}
+
+<div class="container mt-4" dir="rtl">
+
+    <!-- العنوان + أزرار التحكم -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3 class="fw-bold mb-0">👨‍🎓 طلاب الفترة النشطة</h3>
+
+        <div class="d-flex gap-2">
+            <a asp-action="Create" class="btn btn-primary">
+                ➕ إضافة طالب
+            </a>
+
+            <a asp-action="ImportExcel" class="btn btn-success">
+                📥 استيراد من Excel
+            </a>
+
+            <a asp-action="Archive" class="btn btn-outline-secondary">
+                🗂️ الأرشيف
+            </a>
+
+          
+        </div>
+    </div>
+
+    <!-- رسائل النظام -->
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger">
+            @TempData["Error"]
+        </div>
+    }
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success">
+            @TempData["Success"]
+        </div>
+    }
+
+    <!-- جدول الطلاب -->
+    <div class="card shadow-sm border-0 rounded-4">
+        <div class="card-body p-0">
+
+
+            <input type="text"
+                   id="studentSearch"
+                   class="form-control mb-3"
+                   placeholder="ابحث بالاسم أو رقم الهوية..." />
+
+            <div id="studentsTableContainer" style="padding-bottom: 90px;">
+                @await Html.PartialAsync("_StudentsTablePartial", Model)
+            </div>
+
+
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     شريط إجراءات الطالب المحدد (يظهر أسفل الشاشة عند التحديد)
+     ══════════════════════════════════════════════════════════ -->
+<div class="st-action-bar" id="stActionBar" role="toolbar" aria-label="إجراءات الطالب المحدد">
+    <div class="st-action-bar__inner">
+
+        <div class="st-sel">
+            <span class="st-sel__count" id="stCount">0</span>
+            <span class="st-sel__text">محدد</span>
+        </div>
+
+        <div class="st-sep"></div>
+
+        <button class="st-action st-action--primary" id="stDetails" onclick="stGoDetails()">
+            📄 تفاصيل
+        </button>
+        <button class="st-action" id="stEdit" onclick="stGoEdit()">
+            ✏️ تعديل
+        </button>
+        <button class="st-action" id="stReset" onclick="stGoReset()">
+            🔐 كلمة المرور
+        </button>
+        <button class="st-action" id="stBatch" onclick="stGoBatch()">
+            ➕ إلحاق بدفعة
+        </button>
+        <button class="st-action st-action--warn" id="stArchive" onclick="stGoArchive()">
+            🗂️ أرشفة
+        </button>
+
+        <div class="st-sep"></div>
+
+        <button class="st-action st-action--clear" onclick="stClearSelection()">
+            ✖ إلغاء
+        </button>
+
+    </div>
+</div>
+
+<style>
+    .st-action-bar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: -100px;
+        z-index: 1040;
+        display: flex;
+        justify-content: center;
+        transition: bottom .25s ease;
+        pointer-events: none;
+    }
+
+    .st-action-bar.is-visible {
+        bottom: 16px;
+        pointer-events: auto;
+    }
+
+    .st-action-bar__inner {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: #fff;
+        border: 1px solid rgba(0,0,0,.08);
+        box-shadow: 0 10px 30px rgba(0,0,0,.18);
+        border-radius: 999px;
+        padding: 10px 18px;
+        flex-wrap: wrap;
+        max-width: 95vw;
+    }
+
+    .st-sel { display: flex; align-items: center; gap: 6px; font-size: .85rem; color: #495057; }
+    .st-sel__count {
+        background: #0d6efd;
+        color: #fff;
+        font-weight: 700;
+        border-radius: 999px;
+        min-width: 22px;
+        height: 22px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 6px;
+        font-size: .75rem;
+    }
+
+    .st-sep { width: 1px; height: 24px; background: rgba(0,0,0,.08); }
+
+    .st-action {
+        border: none;
+        background: #f1f3f5;
+        color: #212529;
+        border-radius: 999px;
+        padding: 8px 16px;
+        font-size: .85rem;
+        font-weight: 600;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: background .15s ease, opacity .15s ease;
+    }
+    .st-action:hover { background: #e9ecef; }
+    .st-action:disabled { opacity: .4; cursor: not-allowed; }
+
+    .st-action--primary { background: #dbeafe; color: #1d4ed8; }
+    .st-action--primary:hover { background: #bfdbfe; }
+
+    .st-action--warn { background: #fff3cd; color: #856404; }
+    .st-action--warn:hover { background: #ffe69c; }
+
+    .st-action--clear { background: transparent; color: #6c757d; }
+    .st-action--clear:hover { background: #f1f3f5; }
+
+    tr.student-row { cursor: pointer; }
+    tr.student-row.is-selected td { background: #eef6ff !important; }
+
+    th.col-cb, td.col-cb { width: 42px; text-align: center !important; }
+    .row-cb { width: 16px; height: 16px; cursor: pointer; }
+</style>
+
+        @section Scripts {
+    <script>
+        let searchTimeout;
+
+        document.getElementById("studentSearch")
+            .addEventListener("input", function () {
+
+                clearTimeout(searchTimeout);
+                const term = this.value;
+
+                searchTimeout = setTimeout(() => {
+                    fetch(`/Partner/Students/Search?term=${encodeURIComponent(term)}`)
+                        .then(r => r.text())
+                        .then(html => {
+                            document.getElementById("studentsTableContainer").innerHTML = html;
+                            stClearSelection();
+                        });
+                }, 400); // ⬅️ debounce
+            });
+
+        // ══════════════════════════════════════════════════════
+        // شريط إجراءات الطالب المحدد
+        // ══════════════════════════════════════════════════════
+        const stSelected = new Map(); // id -> {name, active}
+        const stContainer = document.getElementById('studentsTableContainer');
+        const stBar = document.getElementById('stActionBar');
+
+        function stSyncBar() {
+            const count = stSelected.size;
+            document.getElementById('stCount').textContent = count;
+            stBar.classList.toggle('is-visible', count > 0);
+
+            const singleOnly = ['stDetails', 'stEdit', 'stReset', 'stBatch', 'stArchive'];
+            singleOnly.forEach(id => {
+                document.getElementById(id).disabled = (count !== 1);
+            });
+
+            if (count === 1) {
+                const only = [...stSelected.values()][0];
+                document.getElementById('stArchive').textContent = (only.active === 'true')
+                    ? '🗂️ أرشفة' : '✅ تفعيل';
+            }
+        }
+
+        function stSelectRow(cb) {
+            const tr = cb.closest('tr.student-row');
+            if (!tr) return;
+            const id = tr.dataset.id;
+            if (cb.checked) {
+                stSelected.set(id, { name: tr.dataset.name, active: tr.dataset.active });
+                tr.classList.add('is-selected');
+            } else {
+                stSelected.delete(id);
+                tr.classList.remove('is-selected');
+            }
+            stSyncBar();
+        }
+
+        function stClearSelection() {
+            stSelected.clear();
+            document.querySelectorAll('.student-row.is-selected').forEach(tr => tr.classList.remove('is-selected'));
+            document.querySelectorAll('.row-cb').forEach(cb => cb.checked = false);
+            stSyncBar();
+        }
+
+        // تفويض الأحداث حتى يعمل بعد استبدال الجدول بالبحث
+        stContainer.addEventListener('click', function (e) {
+            if (e.target.id === 'stSelectAllCb') return;
+            const tr = e.target.closest('tr.student-row');
+            if (!tr) return;
+            const cb = tr.querySelector('.row-cb');
+            if (e.target !== cb) cb.checked = !cb.checked;
+            stSelectRow(cb);
+        });
+
+        stContainer.addEventListener('change', function (e) {
+            if (e.target.id === 'stSelectAllCb') {
+                const checked = e.target.checked;
+                document.querySelectorAll('.student-row .row-cb').forEach(cb => {
+                    cb.checked = checked;
+                    stSelectRow(cb);
+                });
+            }
+        });
+
+        function stFirstId() { return [...stSelected.keys()][0]; }
+
+        function stGoDetails() { location.href = '@Url.Action("Details", "Students")?id=' + stFirstId(); }
+        function stGoEdit() { location.href = '@Url.Action("Edit", "Students")?id=' + stFirstId(); }
+        function stGoReset() { location.href = '@Url.Action("ResetPassword", "Students")?id=' + stFirstId(); }
+        function stGoBatch() { location.href = '@Url.Action("AddToBatch", "Students")?studentId=' + stFirstId(); }
+
+        function stGoArchive() {
+            const id = stFirstId();
+            const only = stSelected.get(id);
+            const url = (only.active === 'true')
+                ? '@Url.Action("ArchiveStudent", "Students")'
+                : '@Url.Action("ActivateStudent", "Students")';
+            location.href = url + '?id=' + id;
+        }
+    </script>
+}

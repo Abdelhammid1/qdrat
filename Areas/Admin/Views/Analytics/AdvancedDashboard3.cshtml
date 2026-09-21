@@ -1,0 +1,1577 @@
+@model QdratNew.ViewModels.Admin.Analytics.AdvancedAnalyticsDashboardVM
+@using QdratNew.Extensions
+@using QdratNew.ViewModels.Admin.Shared
+
+@{
+    ViewData["Title"] = "لوحة التحليلات الذكية";
+    var now = DateTime.Now.ToString("dd/MM/yyyy — HH:mm");
+
+    var riskHigh   = Model?.RiskHigh   ?? 0;
+    var riskMedium = Model?.RiskMedium ?? 0;
+    var riskLow    = Model?.RiskLow    ?? 0;
+
+    string decisionStatus, decisionIcon, decisionColor, decisionBg, decisionMsg, decisionAction;
+
+    if (riskHigh > 0 && (Model?.CriticalCases ?? 0) > 5) {
+        decisionStatus = "خطر حرج";
+        decisionIcon   = "bi-exclamation-octagon-fill";
+        decisionColor  = "#dc2626";
+        decisionBg     = "linear-gradient(135deg,#fff1f1,#fee2e2)";
+        decisionMsg    = "يوجد دفعات وطلاب في مستوى خطر عالي. التدخل الفوري مطلوب.";
+        decisionAction = "مراجعة الدفعات عالية الخطورة وإرسال توجيه للمدربين";
+    } else if (riskHigh > 0 || (Model?.CriticalCases ?? 0) > 0) {
+        decisionStatus = "تنبيه";
+        decisionIcon   = "bi-exclamation-triangle-fill";
+        decisionColor  = "#d97706";
+        decisionBg     = "linear-gradient(135deg,#fffbeb,#fef3c7)";
+        decisionMsg    = "بعض الدفعات والطلاب يحتاجون متابعة مركزة. الوضع العام قابل للضبط.";
+        decisionAction = "متابعة الطلاب ذوي الأولوية العالية وإعادة شرح الدروس الضعيفة";
+    } else if ((Model?.WeakStudents ?? 0) == 0 && (Model?.HighRiskCount ?? 0) == 0) {
+        decisionStatus = "مستقر";
+        decisionIcon   = "bi-check-circle-fill";
+        decisionColor  = "#16a34a";
+        decisionBg     = "linear-gradient(135deg,#f0fdf4,#dcfce7)";
+        decisionMsg    = "الوضع العام مستقر. لا توجد مؤشرات ضعف حرجة حاليًا.";
+        decisionAction = "الاستمرار في المتابعة الدورية";
+    } else {
+        decisionStatus = "متوسط";
+        decisionIcon   = "bi-info-circle-fill";
+        decisionColor  = "#2563eb";
+        decisionBg     = "linear-gradient(135deg,#eff6ff,#dbeafe)";
+        decisionMsg    = "يوجد مؤشرات ضعف في بعض الدروس أو الطلاب تستحق المتابعة.";
+        decisionAction = "مراجعة تفاصيل الدروس الضعيفة وتقييم أداء الدفعات";
+    }
+}
+
+@* ===================== GOOGLE FONT ===================== *@
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+@* ===================== STYLES ===================== *@
+<style>
+    /* ══════════════════════════════════════════════
+       Design Tokens
+    ══════════════════════════════════════════════ */
+    :root {
+        --q-bg:           #f0f4f8;
+        --q-surface:      #ffffff;
+        --q-border:       #e5e7eb;
+        --q-primary:      #1e40af;
+        --q-primary-l:    #dbeafe;
+        --q-success:      #16a34a;
+        --q-success-l:    #dcfce7;
+        --q-warning:      #d97706;
+        --q-warning-l:    #fef3c7;
+        --q-danger:       #dc2626;
+        --q-danger-l:     #fee2e2;
+        --q-info:         #0891b2;
+        --q-info-l:       #cffafe;
+        --q-violet:       #7c3aed;
+        --q-violet-l:     #ede9fe;
+        --q-text:         #111827;
+        --q-muted:        #6b7280;
+        --q-radius:       16px;
+        --q-radius-sm:    10px;
+        --q-shadow:       0 4px 24px rgba(0,0,0,.08);
+        --q-shadow-sm:    0 2px 10px rgba(0,0,0,.05);
+        --q-font:         'Tajawal', 'Cairo', Tahoma, sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body { background: var(--q-bg); font-family: var(--q-font); color: var(--q-text); }
+
+    .qd-page { direction: rtl; font-family: var(--q-font); }
+
+    /* ── Page Header ── */
+    .qd-header {
+        background: linear-gradient(135deg, #0a1628 0%, #0f2444 40%, #1e3a8a 80%, #1e40af 100%);
+        border-radius: 22px;
+        padding: 28px 32px;
+        color: #fff;
+        position: relative;
+        overflow: hidden;
+        box-shadow: 0 8px 32px rgba(30,64,175,.3);
+    }
+    .qd-header::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background:
+            radial-gradient(circle at 80% 20%, rgba(99,102,241,.18) 0%, transparent 50%),
+            radial-gradient(circle at 10% 80%, rgba(16,185,129,.12) 0%, transparent 40%),
+            url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none'%3E%3Cg fill='%23ffffff' fill-opacity='0.025'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+        pointer-events: none;
+    }
+    .qd-header-icon-wrap {
+        background: rgba(255,255,255,.12);
+        border-radius: 14px;
+        width: 54px; height: 54px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 26px; flex-shrink: 0;
+        border: 1px solid rgba(255,255,255,.18);
+        backdrop-filter: blur(6px);
+    }
+    .qd-header-title { font-size: 24px; font-weight: 900; margin: 0 0 4px; letter-spacing: -.3px; }
+    .qd-header-sub   { color: rgba(147,197,253,.9); font-size: 15px; margin: 0; }
+    .qd-header-meta  { color: rgba(148,163,184,.8); font-size: 13px; margin-top: 6px; display: flex; align-items: center; gap: 6px; }
+
+    /* ── Breadcrumb ── */
+    .qd-breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 13px; color: rgba(255,255,255,.5); margin-bottom: 12px; }
+    .qd-breadcrumb a { color: rgba(255,255,255,.6); text-decoration: none; transition: color .15s; }
+    .qd-breadcrumb a:hover { color: #fff; }
+    .qd-breadcrumb .sep { font-size: 10px; opacity: .4; }
+    .qd-breadcrumb .current { color: rgba(255,255,255,.9); font-weight: 700; }
+
+    /* ── Stat Pills ── */
+    .qd-stat-pill {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 8px 16px;
+        background: rgba(255,255,255,.1);
+        border-radius: 30px;
+        color: #fff;
+        font-size: 14px; font-weight: 700;
+        border: 1px solid rgba(255,255,255,.15);
+        backdrop-filter: blur(6px);
+        white-space: nowrap;
+        transition: background .18s;
+    }
+    .qd-stat-pill:hover { background: rgba(255,255,255,.18); }
+    .qd-stat-pill--danger  { background: rgba(220,38,38,.3);  border-color: rgba(252,165,165,.3); }
+    .qd-stat-pill--warning { background: rgba(217,119,6,.3);  border-color: rgba(253,211,77,.3); }
+
+    /* ── Pulse Dot ── */
+    .pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; display: inline-block; animation: pulse-anim 2s infinite; }
+    @@keyframes pulse-anim { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.5; transform:scale(1.4); } }
+
+    /* ── Lab Button ── */
+    .qd-lab-btn {
+        background: rgba(255,255,255,.14);
+        color: #fff !important;
+        border: 1px solid rgba(255,255,255,.22);
+        border-radius: var(--q-radius-sm);
+        font-weight: 700; font-size: 13px;
+        padding: 7px 16px;
+        text-decoration: none;
+        transition: background .18s;
+        backdrop-filter: blur(4px);
+        display: inline-flex; align-items: center; gap: 6px;
+    }
+    .qd-lab-btn:hover { background: rgba(255,255,255,.26); color: #fff !important; }
+
+    /* ── Filter Bar ── */
+    .qd-filter-bar {
+        background: var(--q-surface);
+        border-radius: var(--q-radius);
+        padding: 16px 22px;
+        border: 1px solid var(--q-border);
+        box-shadow: var(--q-shadow-sm);
+    }
+    .qd-filter-label { font-size: 12px; font-weight: 800; color: var(--q-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .4px; }
+    .qd-filter-bar .form-select {
+        border-radius: var(--q-radius-sm);
+        font-size: 14px;
+        border-color: var(--q-border);
+        font-family: var(--q-font);
+        height: 38px;
+    }
+    .qd-filter-bar .form-select:focus { box-shadow: 0 0 0 3px rgba(30,64,175,.15); border-color: var(--q-primary); }
+    .btn-filter-apply {
+        background: var(--q-primary); color: #fff; border: none;
+        font-weight: 700; padding: 0 22px; height: 38px;
+        border-radius: var(--q-radius-sm);
+        font-family: var(--q-font); font-size: 14px;
+        white-space: nowrap; cursor: pointer; transition: background .2s;
+        display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn-filter-apply:hover { background: #1d4ed8; }
+    .btn-filter-reset {
+        background: #f9fafb; color: var(--q-muted);
+        border: 1px solid var(--q-border);
+        font-weight: 600; padding: 0 16px; height: 38px;
+        border-radius: var(--q-radius-sm);
+        font-family: var(--q-font); font-size: 14px;
+        white-space: nowrap; cursor: pointer; transition: .2s;
+        display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn-filter-reset:hover { background: #f3f4f6; color: var(--q-text); }
+
+    /* ── Decision Panel ── */
+    .qd-decision-panel {
+        border-radius: var(--q-radius);
+        border: 1.5px solid;
+        overflow: hidden;
+        display: flex;
+        align-items: stretch;
+    }
+    .qd-dp-status {
+        padding: 20px 24px;
+        display: flex; align-items: center; gap: 16px;
+        flex-shrink: 0;
+    }
+    .qd-dp-icon {
+        width: 52px; height: 52px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 22px; color: #fff; flex-shrink: 0;
+    }
+    .qd-dp-label  { font-size: 11px; font-weight: 700; opacity: .65; text-transform: uppercase; letter-spacing: .5px; }
+    .qd-dp-title  { font-size: 22px; font-weight: 900; line-height: 1.1; }
+    .qd-dp-time   { font-size: 12px; opacity: .6; margin-top: 3px; }
+    .qd-dp-divider { width: 1px; background: rgba(0,0,0,.08); flex-shrink: 0; }
+    .qd-dp-body {
+        padding: 20px 24px; flex: 1;
+        display: flex; flex-direction: column; justify-content: center; gap: 10px;
+    }
+    .qd-dp-msg { font-size: 15px; opacity: .85; margin: 0; }
+    .qd-dp-action {
+        display: inline-flex; align-items: center; gap: 6px;
+        font-size: 13px; font-weight: 700;
+        border-radius: 8px; padding: 7px 14px;
+        align-self: flex-start; color: #fff;
+    }
+    .qd-dp-stats { padding: 20px 24px; display: flex; flex-direction: column; justify-content: center; gap: 10px; flex-shrink: 0; min-width: 140px; }
+    .qd-dp-stat .num { font-size: 22px; font-weight: 900; line-height: 1; }
+    .qd-dp-stat .lbl { font-size: 11px; font-weight: 600; opacity: .6; }
+    @@media (max-width: 768px) {
+        .qd-decision-panel { flex-direction: column; }
+        .qd-dp-divider { width: 100%; height: 1px; }
+        .qd-dp-stats   { flex-direction: row; gap: 20px; }
+    }
+
+    /* ══════════════════════════════════════════════
+       KPI Cards
+    ══════════════════════════════════════════════ */
+    .qd-kpi-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; }
+    @@media (max-width: 1199px) { .qd-kpi-grid { grid-template-columns: repeat(3, 1fr); } }
+    @@media (max-width: 767px)  { .qd-kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+
+    .qd-kpi {
+        background: var(--q-surface);
+        border-radius: var(--q-radius);
+        padding: 20px;
+        border: 1px solid var(--q-border);
+        box-shadow: var(--q-shadow-sm);
+        transition: transform .18s, box-shadow .18s, border-color .18s;
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+    .qd-kpi::before {
+        content: '';
+        position: absolute;
+        top: 0; right: 0;
+        width: 80px; height: 80px;
+        border-radius: 0 var(--q-radius) 0 80px;
+        opacity: .06;
+    }
+    .kpi-primary::before { background: var(--q-primary); }
+    .kpi-info::before    { background: var(--q-info); }
+    .kpi-warning::before { background: var(--q-warning); }
+    .kpi-danger::before  { background: var(--q-danger); }
+    .kpi-violet::before  { background: var(--q-violet); }
+    .kpi-success::before { background: var(--q-success); }
+
+    .qd-kpi-clickable { cursor: pointer; }
+    .qd-kpi-clickable:hover { transform: translateY(-4px); box-shadow: var(--q-shadow); }
+    .kpi-primary.qd-kpi-clickable:hover { border-color: #93c5fd; }
+    .kpi-info.qd-kpi-clickable:hover    { border-color: #67e8f9; }
+    .kpi-warning.qd-kpi-clickable:hover { border-color: #fcd34d; }
+    .kpi-danger.qd-kpi-clickable:hover  { border-color: #fca5a5; }
+    .kpi-violet.qd-kpi-clickable:hover  { border-color: #c4b5fd; }
+
+    .qd-kpi-icon-wrap { position: relative; display: inline-block; margin-bottom: 14px; }
+    .qd-kpi-icon {
+        width: 46px; height: 46px; border-radius: 13px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 20px;
+    }
+    .qd-kpi-mini-badge {
+        position: absolute; top: -5px; left: -5px;
+        width: 18px; height: 18px; border-radius: 50%;
+        background: var(--q-danger); color: #fff;
+        font-size: 10px; font-weight: 800;
+        display: flex; align-items: center; justify-content: center;
+        border: 2px solid var(--q-surface); z-index: 1;
+    }
+    .qd-kpi-pulse-wrap { position: absolute; top: 12px; left: 12px; }
+    .qd-kpi-pulse { width: 10px; height: 10px; border-radius: 50%; background: var(--q-danger); display: block; position: relative; }
+    .qd-kpi-pulse::before { content: ''; position: absolute; inset: -4px; border-radius: 50%; background: var(--q-danger); opacity: .3; animation: kpi-ring 1.8s ease-out infinite; }
+    @@keyframes kpi-ring { 0% { transform:scale(1); opacity:.3; } 100% { transform:scale(2.2); opacity:0; } }
+
+    .qd-kpi-value { font-size: 30px; font-weight: 900; line-height: 1; margin-bottom: 6px; }
+    .qd-kpi-label { font-size: 12px; font-weight: 800; color: var(--q-muted); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 4px; }
+    .qd-kpi-sub   { font-size: 12px; color: var(--q-muted); }
+    .qd-kpi-open  {
+        display: flex; align-items: center; gap: 5px;
+        font-size: 12px; font-weight: 700; color: var(--q-muted);
+        margin-top: auto; padding-top: 10px;
+        opacity: 0; transition: opacity .18s;
+    }
+    .qd-kpi:hover .qd-kpi-open { opacity: 1; }
+
+    /* ── Card Link ── */
+    .qd-card-link { text-decoration: none; color: inherit; display: block; }
+
+    /* ── Badges ── */
+    .qd-badge {
+        display: inline-flex; align-items: center; gap: 4px;
+        padding: 3px 9px; border-radius: 20px;
+        font-size: 11px; font-weight: 700; white-space: nowrap;
+    }
+    .badge-success { background: var(--q-success-l); color: var(--q-success); }
+    .badge-warning { background: var(--q-warning-l); color: var(--q-warning); }
+    .badge-danger  { background: var(--q-danger-l);  color: var(--q-danger);  }
+    .badge-info    { background: var(--q-info-l);    color: var(--q-info);    }
+    .badge-primary { background: var(--q-primary-l); color: var(--q-primary); }
+    .badge-violet  { background: var(--q-violet-l);  color: var(--q-violet);  }
+
+    /* ══════════════════════════════════════════════
+       Offcanvas (kept for backward compatibility)
+    ══════════════════════════════════════════════ */
+    .qd-offcanvas { width: 480px !important; }
+    .qd-offcanvas .offcanvas-body { padding:0; direction:rtl; display:flex; flex-direction:column; overflow:hidden; background:var(--q-bg); }
+    .qd-oc-header-v2 { padding:18px 20px; color:#fff; direction:rtl; border-bottom:0; }
+    .qd-oc-hdr-icon  { width:44px; height:44px; border-radius:12px; background:rgba(255,255,255,.18); display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; }
+    .qd-oc-hdr-title { font-size:17px; font-weight:800; margin:0; }
+    .qd-oc-hdr-sub   { font-size:13px; opacity:.8; margin-top:3px; }
+    .qd-oc-close     { width:36px; height:36px; border-radius:10px; border:none; background:rgba(255,255,255,.15); color:#fff; font-size:16px; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:.15s; flex-shrink:0; margin-right:auto; }
+    .qd-oc-close:hover { background:rgba(255,255,255,.28); }
+    .qd-oc-search       { padding:10px 14px; background:var(--q-surface); border-bottom:1px solid var(--q-border); }
+    .qd-oc-search-wrap  { position:relative; }
+    .qd-oc-search-icon  { position:absolute; right:12px; top:50%; transform:translateY(-50%); color:var(--q-muted); font-size:14px; pointer-events:none; }
+    .qd-oc-search-input { width:100%; padding:8px 36px 8px 12px; border:1px solid var(--q-border); border-radius:8px; font-family:var(--q-font); font-size:14px; background:var(--q-bg); outline:none; direction:rtl; }
+    .qd-oc-search-input:focus { border-color:var(--q-primary); box-shadow:0 0 0 3px rgba(30,64,175,.12); }
+    .qd-oc-summary { padding:12px 14px; background:var(--q-surface); border-bottom:1px solid var(--q-border); display:flex; gap:8px; flex-wrap:wrap; align-items:center; flex-shrink:0; }
+    .qd-oc-list    { padding:12px; overflow-y:auto; flex:1; }
+    .qd-oc-footer  { padding:12px 14px; background:var(--q-surface); border-top:1px solid var(--q-border); display:flex; gap:8px; flex-wrap:wrap; flex-shrink:0; align-items:center; }
+    .qd-oc-item-v2           { background:var(--q-surface); border:1px solid var(--q-border); border-radius:12px; padding:14px; margin-bottom:8px; transition:box-shadow .15s,border-color .15s; }
+    .qd-oc-item-v2:last-child { margin-bottom:0; }
+    .qd-oc-item-v2:hover     { box-shadow:var(--q-shadow-sm); border-color:#93c5fd; }
+    .qd-oc-item-header       { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+    .qd-oc-item-avatar       { width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:800; flex-shrink:0; }
+    .qd-oc-item-info         { flex:1; min-width:0; }
+    .qd-oc-item-name         { font-size:14px; font-weight:800; color:var(--q-text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .qd-oc-item-meta         { font-size:12px; color:var(--q-muted); margin-top:2px; }
+    .qd-oc-item-score        { font-size:20px; font-weight:900; flex-shrink:0; line-height:1; }
+    .qd-oc-item-progress     { height:6px; border-radius:20px; background:#edf0f3; overflow:hidden; margin-bottom:10px; }
+    .qd-oc-item-progress-bar { height:100%; border-radius:20px; transition:width .4s; }
+    .qd-oc-item-footer       { display:flex; gap:6px; flex-wrap:wrap; }
+    .qd-oc-item-v2[hidden]   { display:none !important; }
+    .qd-nav-btn { display:inline-flex; align-items:center; gap:6px; padding:9px 16px; border-radius:var(--q-radius-sm); font-size:13px; font-weight:700; text-decoration:none; transition:all .15s; border:1px solid var(--q-border); white-space:nowrap; font-family:var(--q-font); }
+    .qd-nav-btn-primary   { background:var(--q-primary); color:#fff !important; border-color:var(--q-primary); }
+    .qd-nav-btn-primary:hover { background:#1d4ed8; }
+    .qd-nav-btn-secondary { background:transparent; color:var(--q-muted); }
+    .qd-nav-btn-secondary:hover { background:var(--q-primary-l); color:var(--q-primary) !important; border-color:#93c5fd; }
+    .qd-nav-btn-ghost { background:#f3f4f6; color:var(--q-muted); border-color:var(--q-border); }
+    .qd-nav-btn-ghost:hover { background:#e5e7eb; color:var(--q-text); }
+    .qd-nav-ms-auto { margin-right: auto; }
+    .qd-empty { padding:40px 20px; text-align:center; color:var(--q-muted); background:#fafafa; border-radius:var(--q-radius-sm); }
+    .qd-empty i { font-size:36px; opacity:.35; display:block; margin-bottom:10px; }
+    .qd-empty-title { font-weight:700; font-size:16px; color:var(--q-text); margin-bottom:4px; }
+    .qd-empty-sub   { font-size:14px; }
+    html[dir="rtl"] .offcanvas-end { border-left:1px solid var(--q-border); border-right:none; }
+    @@media(max-width:576px) { .qd-offcanvas { width:100% !important; } }
+    @@media(min-width:1400px) { .qd-offcanvas { width:560px !important; } }
+
+    /* ── Skeleton ── */
+    .skeleton { background:linear-gradient(90deg,#f0f0f0 25%,#e0e0e0 50%,#f0f0f0 75%); background-size:200% 100%; animation:skeleton-shimmer 1.4s infinite; border-radius:6px; }
+    @@keyframes skeleton-shimmer { 0% { background-position:200% 0; } 100% { background-position:-200% 0; } }
+
+    /* ── Progress (for offcanvas items) ── */
+    .qd-progress       { height:6px; border-radius:20px; background:#edf0f3; overflow:hidden; }
+    .qd-progress-bar   { height:100%; border-radius:20px; transition:width .4s; }
+
+    /* ── Print ── */
+    @@media print {
+        .qd-filter-bar, .offcanvas, .btn, .qd-kpi-open { display:none !important; }
+        .qd-header { background:#1e40af !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+        .qd-kpi    { box-shadow:none; border:1px solid #ddd; }
+    }
+
+    /* ── Responsive ── */
+    @@media (max-width:991px) {
+        .qd-header { padding:20px; }
+        .qd-header-title { font-size:18px; }
+    }
+    @@media (max-width:767px) {
+        .qd-kpi-value { font-size:24px; }
+        .qd-dp-stats  { flex-direction:row; gap:20px; padding:16px; }
+    }
+    @@media (max-width:480px) {
+        .qd-header { padding:16px; border-radius:16px; }
+        .qd-header-title { font-size:16px; }
+    }
+</style>
+
+@* ===================== PAGE ===================== *@
+<div class="container-fluid qd-page py-4 px-3 px-lg-4">
+
+    @* ── 1. Page Header ── *@
+    <div class="qd-header mb-3">
+        <div class="row align-items-center g-3">
+
+            <div class="col-lg-8">
+                <nav class="qd-breadcrumb">
+                    <i class="bi bi-house-fill"></i>
+                    <a asp-area="Admin" asp-controller="Dashboard" asp-action="Index">الرئيسية</a>
+                    <span class="sep"><i class="bi bi-chevron-left"></i></span>
+                    <a asp-area="Admin" asp-controller="Analytics" asp-action="Index">التحليلات</a>
+                    <span class="sep"><i class="bi bi-chevron-left"></i></span>
+                    <span class="current">لوحة التحليلات الذكية</span>
+                </nav>
+
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <div class="qd-header-icon-wrap">
+                        <i class="bi bi-graph-up-arrow"></i>
+                    </div>
+                    <div>
+                        <h1 class="qd-header-title">لوحة التحليلات الذكية</h1>
+                        <p class="qd-header-sub">محرك القرارات — أداء الطلاب، الدفعات، المدربين، والدروس الضعيفة</p>
+                    </div>
+                </div>
+
+                <div class="d-flex align-items-center flex-wrap gap-3">
+                    <div class="qd-header-meta">
+                        <span class="pulse-dot"></span>
+                        <i class="bi bi-clock-fill" style="opacity:.7;"></i>
+                        آخر تحديث: @now
+                    </div>
+                    @if (User.IsInRole("Owner") || User.IsInRole("Developer")) {
+                        <a asp-area="Admin" asp-controller="DecisionLab" asp-action="Index"
+                           asp-route-batchId="@Model.SelectedBatchId"
+                           asp-route-curriculumId="@Model.SelectedCurriculumId"
+                           class="qd-lab-btn">
+                            <i class="bi bi-flask"></i> مختبر القرار
+                        </a>
+                    }
+                </div>
+            </div>
+
+            <div class="col-lg-4">
+                <div class="d-flex flex-wrap gap-2 justify-content-lg-end mt-2 mt-lg-0">
+                    <div class="qd-stat-pill">
+                        <i class="bi bi-layers-fill"></i>
+                        <span>@(Model?.TotalBatches ?? 0) دفعة</span>
+                    </div>
+                    <div class="qd-stat-pill qd-stat-pill--danger">
+                        <i class="bi bi-person-fill-exclamation"></i>
+                        <span>@(Model?.CriticalCases ?? 0) حالة حرجة</span>
+                    </div>
+                    <div class="qd-stat-pill qd-stat-pill--warning">
+                        <i class="bi bi-exclamation-diamond-fill"></i>
+                        <span>@(Model?.HighRiskCount ?? 0) درس ضعيف</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    @* ── 2. Filter Bar ── *@
+    <div class="qd-filter-bar mb-4">
+        <form id="advancedDashboardFilters" method="get"
+              asp-area="Admin" asp-controller="Analytics" asp-action="AdvancedDashboard">
+            <div class="row g-2 align-items-end">
+
+                <div class="col-12 col-sm-auto d-flex align-items-center">
+                    <span style="font-size:13px;font-weight:800;color:var(--q-muted);display:flex;align-items:center;gap:6px;">
+                        <i class="bi bi-funnel-fill"></i>تصفية النتائج
+                    </span>
+                </div>
+
+                <div class="col-12 col-sm col-lg-3">
+                    <div class="qd-filter-label"><i class="bi bi-book me-1"></i>المنهج</div>
+                    <select id="curriculumId" name="curriculumId" class="form-select form-select-sm">
+                        <option value="">كل المناهج</option>
+                        @foreach (var item in Model.CurriculumsFilter) {
+                            <option value="@item.Id" selected="@(Model.SelectedCurriculumId == item.Id)">@item.Name</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="col-12 col-sm col-lg-3">
+                    <div class="qd-filter-label"><i class="bi bi-people me-1"></i>الدفعة</div>
+                    <select id="batchId" name="batchId" class="form-select form-select-sm">
+                        <option value="">كل الدفعات</option>
+                        @foreach (var item in Model.BatchesFilter) {
+                            <option value="@item.Id" selected="@(Model.SelectedBatchId == item.Id)">@item.Name</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="col-12 col-sm col-lg-3">
+                    <div class="qd-filter-label"><i class="bi bi-person-badge me-1"></i>المدرب</div>
+                    <select id="instructorId" name="instructorId" class="form-select form-select-sm">
+                        <option value="">كل المدربين</option>
+                        @foreach (var item in Model.InstructorsFilter) {
+                            <option value="@item.Id" selected="@(Model.SelectedInstructorId == item.Id)">@item.Name</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="col-12 col-sm-auto">
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn-filter-reset" onclick="resetFilters()">
+                            <i class="bi bi-x-circle"></i> إعادة تعيين
+                        </button>
+                        <button type="submit" class="btn-filter-apply">
+                            <i class="bi bi-funnel-fill"></i> تطبيق
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </form>
+    </div>
+
+    @* ── 3. Decision Panel ── *@
+    <div class="qd-decision-panel mb-4"
+         style="background:@decisionBg; border-color:@decisionColor;">
+
+        <div class="qd-dp-status">
+            <div class="qd-dp-icon" style="background:@decisionColor;">
+                <i class="bi @decisionIcon"></i>
+            </div>
+            <div>
+                <div class="qd-dp-label" style="color:@decisionColor;">حالة النظام</div>
+                <div class="qd-dp-title" style="color:@decisionColor;">@decisionStatus</div>
+                <div class="qd-dp-time" style="color:@decisionColor;">
+                    <i class="bi bi-clock me-1"></i>@now
+                </div>
+            </div>
+        </div>
+
+        <div class="qd-dp-divider"></div>
+
+        <div class="qd-dp-body">
+            <p class="qd-dp-msg" style="color:@decisionColor;">@decisionMsg</p>
+            <div class="qd-dp-action" style="background:@decisionColor;">
+                <i class="bi bi-lightning-charge-fill"></i> @decisionAction
+            </div>
+        </div>
+
+        <div class="qd-dp-divider"></div>
+
+        <div class="qd-dp-stats">
+            <div class="qd-dp-stat">
+                <span class="num" style="color:#dc2626;">@riskHigh</span>
+                <span class="lbl" style="color:@decisionColor;">دفعات خطرة</span>
+            </div>
+            <div class="qd-dp-stat">
+                <span class="num" style="color:#d97706;">@(Model?.CriticalCases ?? 0)</span>
+                <span class="lbl" style="color:@decisionColor;">حالات حرجة</span>
+            </div>
+            <div class="qd-dp-stat">
+                <span class="num" style="color:#dc2626;">@(Model?.HighRiskCount ?? 0)</span>
+                <span class="lbl" style="color:@decisionColor;">دروس ضعيفة</span>
+            </div>
+        </div>
+
+    </div>
+
+    @* ── 4. KPI Cards ── *@
+    <div class="qd-kpi-grid mb-4">
+
+        @* إجمالي الدفعات *@
+        <div class="qd-kpi kpi-primary qd-kpi-clickable"
+             data-bs-toggle="offcanvas" data-bs-target="#batchesOffcanvas" role="button"
+             tabindex="0" aria-label="إجمالي الدفعات — اضغط لعرض التفاصيل"
+             onkeydown="if(event.key==='Enter'||event.key===' '){this.click();event.preventDefault();}">
+            <div class="qd-kpi-icon-wrap">
+                <div class="qd-kpi-icon" style="background:var(--q-primary-l);color:var(--q-primary);">
+                    <i class="bi bi-layers-fill"></i>
+                </div>
+            </div>
+            <div class="qd-kpi-value" style="color:var(--q-primary);">@(Model?.TotalBatches ?? 0)</div>
+            <div class="qd-kpi-label">إجمالي الدفعات</div>
+            <div class="qd-kpi-sub">الدفعات النشطة</div>
+            <div class="qd-kpi-open"><i class="bi bi-layout-sidebar"></i> عرض التفاصيل</div>
+        </div>
+
+        @* المدربون النشطون *@
+        <div class="qd-kpi kpi-info qd-kpi-clickable"
+             data-bs-toggle="offcanvas" data-bs-target="#instructorsOffcanvas" role="button"
+             tabindex="0" aria-label="المدربون النشطون — اضغط لعرض التفاصيل"
+             onkeydown="if(event.key==='Enter'||event.key===' '){this.click();event.preventDefault();}">
+            <div class="qd-kpi-icon-wrap">
+                <div class="qd-kpi-icon" style="background:var(--q-info-l);color:var(--q-info);">
+                    <i class="bi bi-person-badge-fill"></i>
+                </div>
+            </div>
+            <div class="qd-kpi-value" style="color:var(--q-info);">@(Model?.TotalInstructors ?? 0)</div>
+            <div class="qd-kpi-label">المدربون النشطون</div>
+            <div class="qd-kpi-sub">مرتبطون بدفعات</div>
+            <div class="qd-kpi-open"><i class="bi bi-layout-sidebar"></i> عرض التفاصيل</div>
+        </div>
+
+        @* الطلاب المحللون *@
+        <div class="qd-kpi kpi-warning qd-kpi-clickable"
+             data-bs-toggle="offcanvas" data-bs-target="#studentsAnalyticsOffcanvas" role="button"
+             tabindex="0" aria-label="الطلاب المحللون — اضغط لعرض التفاصيل"
+             onkeydown="if(event.key==='Enter'||event.key===' '){this.click();event.preventDefault();}">
+            <div class="qd-kpi-icon-wrap">
+                <div class="qd-kpi-icon" style="background:var(--q-warning-l);color:var(--q-warning);">
+                    <i class="bi bi-people-fill"></i>
+                </div>
+            </div>
+            <div class="qd-kpi-value" style="color:var(--q-warning);">@(Model?.WeakStudents ?? 0)</div>
+            <div class="qd-kpi-label">الطلاب المحللون</div>
+            <div class="qd-kpi-sub">لديهم مؤشر ضعف</div>
+            <div class="qd-kpi-open"><i class="bi bi-layout-sidebar"></i> عرض التفاصيل</div>
+        </div>
+
+        @* حالات أولوية عالية *@
+        <div class="qd-kpi kpi-danger qd-kpi-clickable"
+             data-bs-toggle="offcanvas" data-bs-target="#criticalOffcanvas" role="button"
+             tabindex="0" aria-label="حالات أولوية عالية — اضغط لعرض التفاصيل"
+             onkeydown="if(event.key==='Enter'||event.key===' '){this.click();event.preventDefault();}">
+            @if ((Model?.CriticalCases ?? 0) > 0) {
+                <div class="qd-kpi-pulse-wrap"><span class="qd-kpi-pulse"></span></div>
+            }
+            <div class="qd-kpi-icon-wrap">
+                <div class="qd-kpi-icon" style="background:var(--q-danger-l);color:var(--q-danger);">
+                    <i class="bi bi-person-fill-exclamation"></i>
+                </div>
+                @if ((Model?.CriticalCases ?? 0) > 0) {
+                    <span class="qd-kpi-mini-badge">@(Model!.CriticalCases > 9 ? "9+" : Model.CriticalCases.ToString())</span>
+                }
+            </div>
+            <div class="qd-kpi-value" style="color:var(--q-danger);">@(Model?.CriticalCases ?? 0)</div>
+            <div class="qd-kpi-label">أولوية عالية</div>
+            <div class="qd-kpi-sub">تحتاج تدخل فوري</div>
+            <div class="qd-kpi-open"><i class="bi bi-layout-sidebar"></i> عرض التفاصيل</div>
+        </div>
+
+        @* دروس عالية الخطورة *@
+        <div class="qd-kpi kpi-danger qd-kpi-clickable"
+             data-bs-toggle="offcanvas" data-bs-target="#highRiskOffcanvas" role="button"
+             tabindex="0" aria-label="دروس عالية الخطورة — اضغط لعرض التفاصيل"
+             onkeydown="if(event.key==='Enter'||event.key===' '){this.click();event.preventDefault();}">
+            @if ((Model?.HighRiskCount ?? 0) > 0) {
+                <div class="qd-kpi-pulse-wrap"><span class="qd-kpi-pulse"></span></div>
+            }
+            <div class="qd-kpi-icon-wrap">
+                <div class="qd-kpi-icon" style="background:var(--q-danger-l);color:var(--q-danger);">
+                    <i class="bi bi-exclamation-diamond-fill"></i>
+                </div>
+                @if ((Model?.HighRiskCount ?? 0) > 0) {
+                    <span class="qd-kpi-mini-badge">@(Model!.HighRiskCount > 9 ? "9+" : Model.HighRiskCount.ToString())</span>
+                }
+            </div>
+            <div class="qd-kpi-value" style="color:var(--q-danger);">@(Model?.HighRiskCount ?? 0)</div>
+            <div class="qd-kpi-label">دروس خطرة</div>
+            <div class="qd-kpi-sub">نسبة ضعف ≥ 70%</div>
+            <div class="qd-kpi-open"><i class="bi bi-layout-sidebar"></i> عرض التفاصيل</div>
+        </div>
+
+        @* متوسط نسبة الضعف *@
+        <a class="qd-card-link"
+           asp-area="Admin" asp-controller="Analytics" asp-action="MetricDecisionDetails"
+           asp-route-metric="avg-weakness"
+           asp-route-curriculumId="@Model.SelectedCurriculumId"
+           asp-route-batchId="@Model.SelectedBatchId"
+           asp-route-instructorId="@Model.SelectedInstructorId">
+            <div class="qd-kpi kpi-violet">
+                <div class="qd-kpi-icon-wrap">
+                    <div class="qd-kpi-icon" style="background:var(--q-violet-l);color:var(--q-violet);">
+                        <i class="bi bi-bar-chart-fill"></i>
+                    </div>
+                </div>
+                <div class="qd-kpi-value" style="color:var(--q-violet);">@(Model?.AvgWeakness ?? 0)%</div>
+                <div class="qd-kpi-label">متوسط الضعف</div>
+                <div class="qd-kpi-sub">عبر جميع الدروس</div>
+                <div class="qd-kpi-open"><i class="bi bi-box-arrow-up-left"></i> تحليل القرار</div>
+            </div>
+        </a>
+
+    </div>
+
+    @* ── 5. Main Content (Partial) ── *@
+    <div id="advancedDashboardContent">
+        @await Html.PartialAsync("_AdvancedDashboardContent", Model)
+    </div>
+
+</div>
+
+@* ═══════════════════════════════════════════════════════════════════
+   OFFCANVAS 1 — إجمالي الدفعات
+   ═══════════════════════════════════════════════════════════════════ *@
+<div class="offcanvas offcanvas-end qd-offcanvas" tabindex="-1" id="batchesOffcanvas" aria-labelledby="batchesOffcanvasLabel" aria-label="لوحة الدفعات النشطة" data-bs-scroll="true">
+
+    <div class="offcanvas-header qd-oc-header-v2" style="background:linear-gradient(135deg,#1e3a8a,#1e40af)">
+        <div class="d-flex align-items-center gap-3 flex-grow-1">
+            <div class="qd-oc-hdr-icon"><i class="bi bi-layers-fill"></i></div>
+            <div>
+                <h5 class="qd-oc-hdr-title" id="batchesOffcanvasLabel">إجمالي الدفعات</h5>
+                <div class="qd-oc-hdr-sub">@(Model?.TotalBatches ?? 0) دفعة نشطة في النظام</div>
+            </div>
+        </div>
+        <button type="button" class="qd-oc-close" data-bs-dismiss="offcanvas" aria-label="Close">
+            <i class="bi bi-x-lg"></i>
+        </button>
+    </div>
+
+    <div class="qd-oc-search">
+        <div class="qd-oc-search-wrap">
+            <i class="bi bi-search qd-oc-search-icon"></i>
+            <input type="text" class="qd-oc-search-input" placeholder="بحث عن دفعة..." oninput="filterOcList(this,'batchesList')">
+        </div>
+    </div>
+
+    <div class="offcanvas-body">
+        <div class="qd-oc-summary">
+            <span class="qd-badge badge-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>خطر عالي: @(Model?.RiskHigh ?? 0)</span>
+            <span class="qd-badge badge-warning"><i class="bi bi-dash-circle-fill me-1"></i>متوسط: @(Model?.RiskMedium ?? 0)</span>
+            <span class="qd-badge badge-success"><i class="bi bi-check-circle-fill me-1"></i>جيد: @(Model?.RiskLow ?? 0)</span>
+        </div>
+
+        <div class="qd-oc-list" id="batchesList" role="list" aria-live="polite">
+            @if (Model?.Batches == null || !Model.Batches.Any()) {
+                <div class="qd-empty">
+                    <i class="bi bi-layers"></i>
+                    <div class="qd-empty-title">لا توجد دفعات</div>
+                    <div class="qd-empty-sub">لم يتم إضافة دفعات بعد</div>
+                </div>
+            } else {
+                @foreach (var batch in Model.Batches) {
+                    var bRisk      = batch.RiskLevel == "High" ? "badge-danger"  : batch.RiskLevel == "Medium" ? "badge-warning"  : "badge-success";
+                    var bRiskLabel = batch.RiskLevel == "High" ? "خطر عالي"      : batch.RiskLevel == "Medium" ? "متوسط"          : "جيد";
+                    var bAvBg      = batch.RiskLevel == "High" ? "var(--q-danger-l)"  : batch.RiskLevel == "Medium" ? "var(--q-warning-l)" : "var(--q-success-l)";
+                    var bAvColor   = batch.RiskLevel == "High" ? "var(--q-danger)"    : batch.RiskLevel == "Medium" ? "var(--q-warning)"   : "var(--q-success)";
+                    var bScColor   = batch.AvgWeakness >= 70   ? "var(--q-danger)"    : batch.AvgWeakness >= 50   ? "var(--q-warning)"   : "var(--q-success)";
+                    var bInitial   = batch.BatchName.Length > 0 ? batch.BatchName[0].ToString() : "؟";
+                    Model.DecisionStatusMap.TryGetValue(batch.BatchId, out var batchDecision);
+
+                    <div class="qd-oc-item-v2" role="listitem" data-search-text="@batch.BatchName @batch.CourseName">
+
+                        <div class="qd-oc-item-header">
+                            <div class="qd-oc-item-avatar" style="background:@bAvBg;color:@bAvColor;">@bInitial</div>
+                            <div class="qd-oc-item-info">
+                                <div class="qd-oc-item-name">
+                                    @batch.BatchName
+                                    @if (batchDecision != null && batchDecision.StatusLabel != "لا قرار") {
+                                        <span class="badge bg-@batchDecision.StatusCssClass ms-1" style="font-size:10px;font-weight:700;">@batchDecision.StatusLabel</span>
+                                    }
+                                    @if (batchDecision?.HasActiveInterventionTask == true && batchDecision.LatestDecisionAt.HasValue) {
+                                        var daysSince = (int)(DateTime.Now - batchDecision.LatestDecisionAt.Value).TotalDays;
+                                        <span class="badge ms-1" style="background:#ede9fe;color:#5b21b6;font-size:10px;font-weight:700;"><i class="bi bi-lightning-charge-fill me-1"></i>تدخل منذ @daysSince يوم</span>
+                                    }
+                                </div>
+                                <div class="qd-oc-item-meta">
+                                    @if (!string.IsNullOrEmpty(batch.CourseName)) { <span><i class="bi bi-book me-1"></i>@batch.CourseName</span> }
+                                    <span class="ms-2"><i class="bi bi-people-fill me-1"></i>@batch.StudentsCount طالب</span>
+                                </div>
+                            </div>
+                            <div class="qd-oc-item-score" style="color:@bScColor;">@Math.Round(batch.AvgWeakness, 1)%</div>
+                        </div>
+
+                        <div class="qd-oc-item-progress">
+                            <div class="qd-oc-item-progress-bar" style="width:@batch.AvgWeakness%;background:@bScColor;"></div>
+                        </div>
+
+                        <div class="qd-oc-item-footer">
+                            <span class="qd-badge @bRisk">@bRiskLabel</span>
+                            @if (batch.WeakLessonsCount > 0) {
+                                <span class="qd-badge badge-warning"><i class="bi bi-exclamation-diamond me-1"></i>@batch.WeakLessonsCount درس ضعيف</span>
+                            }
+                            @if (batch.AffectedStudents > 0) {
+                                <span class="qd-badge badge-danger"><i class="bi bi-person-fill-exclamation me-1"></i>@batch.AffectedStudents متأثر</span>
+                            }
+                            @if (batch.RiskLevel == "High" && (User.IsInRole("Owner") || User.IsInRole("Developer"))) {
+                                var batchBridgeCtx = new AnalyticsDecisionBridgeContext {
+                                    BatchId      = batch.BatchId,
+                                    CurriculumId = Model.SelectedCurriculumId,
+                                    InstructorId = Model.SelectedInstructorId,
+                                    SourceMetric = "high-risk-batch",
+                                    SourcePage   = "AdvancedDashboard",
+                                    ReturnUrl    = Url.Action("AdvancedDashboard", "Analytics", new { area="Admin", curriculumId=Model.SelectedCurriculumId, batchId=Model.SelectedBatchId, instructorId=Model.SelectedInstructorId }) ?? ""
+                                };
+                                <a href="@Url.ToDecisionLabUrl(batchBridgeCtx)" class="qd-badge badge-danger" style="text-decoration:none;">
+                                    <i class="bi bi-arrow-left me-1"></i>اتخذ قراراً
+                                </a>
+                            }
+                        </div>
+
+                    </div>
+                }
+            }
+        </div>
+
+        <div class="qd-oc-footer">
+            <button type="button" class="qd-nav-btn qd-nav-btn-ghost" data-bs-dismiss="offcanvas">
+                <i class="bi bi-x-lg"></i> إغلاق
+            </button>
+            <a class="qd-nav-btn qd-nav-btn-secondary"
+               asp-area="Admin" asp-controller="Analytics" asp-action="MetricDecisionDetails" asp-route-metric="total-batches"
+               asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId">
+                <i class="bi bi-graph-up"></i> تحليل القرار
+            </a>
+            <a class="qd-nav-btn qd-nav-btn-primary"
+               asp-area="Admin" asp-controller="Analytics" asp-action="AdvancedDashboard"
+               asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId">
+                <i class="bi bi-bar-chart-fill"></i> لوحة التحليلات
+            </a>
+        </div>
+    </div>
+</div>
+
+@* ═══════════════════════════════════════════════════════════════════
+   OFFCANVAS 2 — المدربون النشطون
+   ═══════════════════════════════════════════════════════════════════ *@
+<div class="offcanvas offcanvas-end qd-offcanvas" tabindex="-1" id="instructorsOffcanvas" aria-labelledby="instructorsOffcanvasLabel" aria-label="لوحة المدربون النشطون" data-bs-scroll="true">
+
+    <div class="offcanvas-header qd-oc-header-v2" style="background:linear-gradient(135deg,#164e63,#0891b2)">
+        <div class="d-flex align-items-center gap-3 flex-grow-1">
+            <div class="qd-oc-hdr-icon"><i class="bi bi-person-badge-fill"></i></div>
+            <div>
+                <h5 class="qd-oc-hdr-title" id="instructorsOffcanvasLabel">المدربون النشطون</h5>
+                <div class="qd-oc-hdr-sub">@(Model?.TotalInstructors ?? 0) مدرب مرتبط بدفعات</div>
+            </div>
+        </div>
+        <button type="button" class="qd-oc-close" data-bs-dismiss="offcanvas" aria-label="Close"><i class="bi bi-x-lg"></i></button>
+    </div>
+
+    <div class="qd-oc-search">
+        <div class="qd-oc-search-wrap">
+            <i class="bi bi-search qd-oc-search-icon"></i>
+            <input type="text" class="qd-oc-search-input" placeholder="بحث عن مدرب..." oninput="filterOcList(this,'instructorsList')">
+        </div>
+    </div>
+
+    <div class="offcanvas-body">
+        <div class="qd-oc-summary">
+            <span style="font-size:13px;color:var(--q-muted);font-weight:700;"><i class="bi bi-info-circle me-1"></i>متوسط الأداء عبر جميع المدربين</span>
+        </div>
+        <div class="qd-oc-list" id="instructorsList" role="list" aria-live="polite">
+            @if (Model?.Instructors == null || !Model.Instructors.Any()) {
+                <div class="qd-empty"><i class="bi bi-person-badge"></i><div class="qd-empty-title">لا يوجد مدربون</div><div class="qd-empty-sub">لم يتم تعيين مدربين بعد</div></div>
+            } else {
+                @foreach (var instr in Model.Instructors) {
+                    var iRisk      = instr.RiskLevel == "High" ? "badge-danger" : instr.RiskLevel == "Medium" ? "badge-warning" : "badge-success";
+                    var iRiskLabel = instr.RiskLevel == "High" ? "خطر عالي"     : instr.RiskLevel == "Medium" ? "متوسط"        : "جيد";
+                    var iScColor   = instr.AvgScore >= 70 ? "var(--q-success)" : instr.AvgScore >= 50 ? "var(--q-warning)" : "var(--q-danger)";
+                    var iAvBg      = instr.AvgScore >= 70 ? "var(--q-success-l)" : instr.AvgScore >= 50 ? "var(--q-warning-l)" : "var(--q-danger-l)";
+                    var iInitial   = instr.InstructorName.Length > 0 ? instr.InstructorName[0].ToString() : "؟";
+                    <div class="qd-oc-item-v2" role="listitem" data-search-text="@instr.InstructorName">
+                        <div class="qd-oc-item-header">
+                            <div class="qd-oc-item-avatar" style="background:@iAvBg;color:@iScColor;">@iInitial</div>
+                            <div class="qd-oc-item-info">
+                                <div class="qd-oc-item-name">@instr.InstructorName</div>
+                                <div class="qd-oc-item-meta"><i class="bi bi-layers me-1"></i>@instr.BatchesCount دفعة</div>
+                            </div>
+                            <div class="qd-oc-item-score" style="color:@iScColor;">@Math.Round(instr.AvgScore)%</div>
+                        </div>
+                        <div class="qd-oc-item-progress"><div class="qd-oc-item-progress-bar" style="width:@instr.AvgScore%;background:@iScColor;"></div></div>
+                        <div class="qd-oc-item-footer">
+                            <span class="qd-badge @iRisk">@iRiskLabel</span>
+                            @if (instr.WeakLessonsCount > 0) { <span class="qd-badge badge-warning"><i class="bi bi-exclamation-diamond me-1"></i>@instr.WeakLessonsCount درس ضعيف</span> }
+                            else { <span class="qd-badge badge-success"><i class="bi bi-check2-circle me-1"></i>لا دروس ضعيفة</span> }
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+        <div class="qd-oc-footer">
+            <button type="button" class="qd-nav-btn qd-nav-btn-ghost" data-bs-dismiss="offcanvas"><i class="bi bi-x-lg"></i> إغلاق</button>
+            <a class="qd-nav-btn qd-nav-btn-secondary" asp-area="Admin" asp-controller="Analytics" asp-action="MetricDecisionDetails" asp-route-metric="total-instructors" asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId"><i class="bi bi-graph-up"></i> تحليل القرار</a>
+            <a class="qd-nav-btn qd-nav-btn-primary" asp-area="Admin" asp-controller="Analytics" asp-action="AdvancedDashboard" asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId"><i class="bi bi-bar-chart-fill"></i> لوحة التحليلات</a>
+        </div>
+    </div>
+</div>
+
+@* ═══════════════════════════════════════════════════════════════════
+   OFFCANVAS 3 — الطلاب المحللون
+   ═══════════════════════════════════════════════════════════════════ *@
+@{
+    var allStudents    = Model?.Students ?? new List<QdratNew.ViewModels.Admin.Analytics.StudentAnalyticsVM>();
+    var excellentCount = allStudents.Count(s => s.Priority == "Low" || (s.ExamScore >= 70 && s.HomeworkScore >= 70));
+    var mediumCount    = allStudents.Count(s => s.Priority == "Medium");
+    var weakCount      = allStudents.Count(s => s.Priority == "High");
+}
+<div class="offcanvas offcanvas-end qd-offcanvas" tabindex="-1" id="studentsAnalyticsOffcanvas" aria-labelledby="studentsAnalyticsOffcanvasLabel" aria-label="لوحة تحليل الطلاب" data-bs-scroll="true">
+
+    <div class="offcanvas-header qd-oc-header-v2" style="background:linear-gradient(135deg,#92400e,#d97706)">
+        <div class="d-flex align-items-center gap-3 flex-grow-1">
+            <div class="qd-oc-hdr-icon"><i class="bi bi-people-fill"></i></div>
+            <div>
+                <h5 class="qd-oc-hdr-title" id="studentsAnalyticsOffcanvasLabel">الطلاب المحللون</h5>
+                <div class="qd-oc-hdr-sub">@allStudents.Count طالب لديهم مؤشرات أداء</div>
+            </div>
+        </div>
+        <button type="button" class="qd-oc-close" data-bs-dismiss="offcanvas" aria-label="Close"><i class="bi bi-x-lg"></i></button>
+    </div>
+
+    <div class="qd-oc-search">
+        <div class="qd-oc-search-wrap">
+            <i class="bi bi-search qd-oc-search-icon"></i>
+            <input type="text" class="qd-oc-search-input" placeholder="بحث عن طالب..." oninput="filterOcList(this,'studentsList')">
+        </div>
+    </div>
+
+    <div class="offcanvas-body">
+        <div class="qd-oc-summary">
+            <span class="qd-badge badge-success"><i class="bi bi-star-fill me-1"></i>ممتاز: @excellentCount</span>
+            <span class="qd-badge badge-warning"><i class="bi bi-dash-circle me-1"></i>متوسط: @mediumCount</span>
+            <span class="qd-badge badge-danger"><i class="bi bi-arrow-down-circle-fill me-1"></i>ضعيف: @weakCount</span>
+        </div>
+        <div class="qd-oc-list" id="studentsList" role="list" aria-live="polite">
+            @if (!allStudents.Any()) {
+                <div class="qd-empty"><i class="bi bi-people"></i><div class="qd-empty-title">لا يوجد طلاب محللون</div><div class="qd-empty-sub">لم يتم تسجيل محاولات بعد</div></div>
+            } else {
+                @foreach (var st in allStudents.OrderBy(s => s.ExamScore)) {
+                    var stBadge   = st.Priority == "High" ? "badge-danger"  : st.Priority == "Medium" ? "badge-warning"  : "badge-success";
+                    var stLabel   = st.Priority == "High" ? "أولوية عالية" : st.Priority == "Medium" ? "متوسط"          : "جيد";
+                    var stScColor = st.ExamScore >= 70 ? "var(--q-success)" : st.ExamScore >= 50 ? "var(--q-warning)" : "var(--q-danger)";
+                    var stAvBg    = st.ExamScore >= 70 ? "var(--q-success-l)" : st.ExamScore >= 50 ? "var(--q-warning-l)" : "var(--q-danger-l)";
+                    var stInitial = st.StudentName.Length > 0 ? st.StudentName[0].ToString() : "؟";
+                    <div class="qd-oc-item-v2" role="listitem" data-search-text="@st.StudentName @st.WeakReason">
+                        <div class="qd-oc-item-header">
+                            <div class="qd-oc-item-avatar" style="background:@stAvBg;color:@stScColor;">@stInitial</div>
+                            <div class="qd-oc-item-info">
+                                <div class="qd-oc-item-name">@st.StudentName</div>
+                                @if (!string.IsNullOrEmpty(st.WeakReason)) { <div class="qd-oc-item-meta"><i class="bi bi-exclamation-circle me-1"></i>@st.WeakReason</div> }
+                            </div>
+                            <div class="qd-oc-item-score" style="color:@stScColor;">@Math.Round(st.ExamScore)%</div>
+                        </div>
+                        <div class="qd-oc-item-progress"><div class="qd-oc-item-progress-bar" style="width:@st.ExamScore%;background:@stScColor;"></div></div>
+                        <div class="qd-oc-item-footer">
+                            <span class="qd-badge @stBadge">@stLabel</span>
+                            <span class="qd-badge badge-primary"><i class="bi bi-journal-check me-1"></i>واجبات: @Math.Round(st.HomeworkScore)%</span>
+                            <span class="qd-badge badge-info"><i class="bi bi-calendar2-check me-1"></i>حضور: @Math.Round(st.Attendance)%</span>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+        <div class="qd-oc-footer">
+            <button type="button" class="qd-nav-btn qd-nav-btn-ghost" data-bs-dismiss="offcanvas"><i class="bi bi-x-lg"></i> إغلاق</button>
+            <a class="qd-nav-btn qd-nav-btn-secondary" asp-area="Admin" asp-controller="Analytics" asp-action="MetricDecisionDetails" asp-route-metric="analyzed-students" asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId"><i class="bi bi-graph-up"></i> تحليل القرار</a>
+            <a class="qd-nav-btn qd-nav-btn-primary" asp-area="Admin" asp-controller="Analytics" asp-action="AnalyzedStudentsDetails" asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId"><i class="bi bi-people-fill"></i> تفاصيل الطلاب</a>
+        </div>
+    </div>
+</div>
+
+@* ═══════════════════════════════════════════════════════════════════
+   OFFCANVAS 4 — حالات أولوية عالية
+   ═══════════════════════════════════════════════════════════════════ *@
+@{ var criticalStudents = allStudents.Where(s => s.Priority == "High").OrderBy(s => s.ExamScore).ToList(); }
+<div class="offcanvas offcanvas-end qd-offcanvas" tabindex="-1" id="criticalOffcanvas" aria-labelledby="criticalOffcanvasLabel" aria-label="لوحة الحالات الحرجة" data-bs-scroll="true">
+
+    <div class="offcanvas-header qd-oc-header-v2" style="background:linear-gradient(135deg,#7f1d1d,#dc2626)">
+        <div class="d-flex align-items-center gap-3 flex-grow-1">
+            <div class="qd-oc-hdr-icon"><i class="bi bi-person-fill-exclamation"></i></div>
+            <div>
+                <h5 class="qd-oc-hdr-title" id="criticalOffcanvasLabel">حالات أولوية عالية</h5>
+                <div class="qd-oc-hdr-sub">@(Model?.CriticalCases ?? 0) حالة تحتاج تدخل فوري</div>
+            </div>
+        </div>
+        <button type="button" class="qd-oc-close" data-bs-dismiss="offcanvas" aria-label="Close"><i class="bi bi-x-lg"></i></button>
+    </div>
+
+    <div class="qd-oc-search">
+        <div class="qd-oc-search-wrap">
+            <i class="bi bi-search qd-oc-search-icon"></i>
+            <input type="text" class="qd-oc-search-input" placeholder="بحث عن طالب..." oninput="filterOcList(this,'criticalList')">
+        </div>
+    </div>
+
+    <div class="offcanvas-body">
+        <div class="qd-oc-summary">
+            <div style="font-size:13px;color:var(--q-danger);font-weight:700;display:flex;align-items:center;gap:6px">
+                <i class="bi bi-lightning-charge-fill"></i> هؤلاء الطلاب يتطلبون متابعة فورية من المدرب
+            </div>
+        </div>
+        <div class="qd-oc-list" id="criticalList" role="list" aria-live="polite">
+            @if (!criticalStudents.Any()) {
+                <div class="qd-empty">
+                    <i class="bi bi-shield-check" style="color:var(--q-success);opacity:.6"></i>
+                    <div class="qd-empty-title" style="color:var(--q-success)">لا توجد حالات حرجة</div>
+                    <div class="qd-empty-sub">جميع الطلاب في وضع مقبول</div>
+                </div>
+            } else {
+                @foreach (var cs in criticalStudents) {
+                    var csScColor = cs.ExamScore >= 50 ? "var(--q-warning)" : "var(--q-danger)";
+                    var csAvBg    = cs.ExamScore >= 50 ? "var(--q-warning-l)" : "var(--q-danger-l)";
+                    var csInitial = cs.StudentName.Length > 0 ? cs.StudentName[0].ToString() : "؟";
+                    <div class="qd-oc-item-v2" role="listitem" data-search-text="@cs.StudentName @cs.WeakReason" style="border-right:3px solid var(--q-danger)">
+                        <div class="qd-oc-item-header">
+                            <div class="qd-oc-item-avatar" style="background:@csAvBg;color:@csScColor;">@csInitial</div>
+                            <div class="qd-oc-item-info">
+                                <div class="qd-oc-item-name">@cs.StudentName</div>
+                                @if (!string.IsNullOrEmpty(cs.WeakReason)) { <div class="qd-oc-item-meta"><i class="bi bi-exclamation-circle me-1" style="color:var(--q-danger)"></i>@cs.WeakReason</div> }
+                            </div>
+                            <div class="qd-oc-item-score" style="color:@csScColor;">@Math.Round(cs.ExamScore)%</div>
+                        </div>
+                        <div class="qd-oc-item-progress"><div class="qd-oc-item-progress-bar" style="width:@cs.ExamScore%;background:@csScColor;"></div></div>
+                        <div class="qd-oc-item-footer">
+                            <span class="qd-badge badge-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>أولوية عالية</span>
+                            <span class="qd-badge badge-warning"><i class="bi bi-journal-check me-1"></i>واجبات: @Math.Round(cs.HomeworkScore)%</span>
+                            <span class="qd-badge badge-info"><i class="bi bi-calendar2-check me-1"></i>حضور: @Math.Round(cs.Attendance)%</span>
+                            @if (!string.IsNullOrEmpty(cs.ActionRequired)) {
+                                <span class="qd-badge badge-danger" style="background:var(--q-danger-l);color:#991b1b;"><i class="bi bi-lightning-charge-fill me-1"></i>@cs.ActionRequired</span>
+                            }
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+        <div class="qd-oc-footer">
+            <button type="button" class="qd-nav-btn qd-nav-btn-ghost" data-bs-dismiss="offcanvas"><i class="bi bi-x-lg"></i> إغلاق</button>
+            <a class="qd-nav-btn qd-nav-btn-secondary" asp-area="Admin" asp-controller="Analytics" asp-action="MetricDecisionDetails" asp-route-metric="critical-cases" asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId"><i class="bi bi-graph-up"></i> تحليل القرار</a>
+            <a class="qd-nav-btn qd-nav-btn-primary" asp-area="Admin" asp-controller="Analytics" asp-action="CriticalStudentsDetails" asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId"><i class="bi bi-person-fill-exclamation"></i> تفاصيل الحالات</a>
+        </div>
+    </div>
+</div>
+
+@* ═══════════════════════════════════════════════════════════════════
+   OFFCANVAS 5 — دروس عالية الخطورة
+   ═══════════════════════════════════════════════════════════════════ *@
+@{
+    var highRiskLessons = (Model?.Lessons ?? new List<QdratNew.ViewModels.Admin.Analytics.LessonAnalyticsVM>())
+        .Where(l => l.WeakPercentage >= 70)
+        .OrderByDescending(l => l.WeakPercentage)
+        .ToList();
+}
+<div class="offcanvas offcanvas-end qd-offcanvas" tabindex="-1" id="highRiskOffcanvas" aria-labelledby="highRiskOffcanvasLabel" aria-label="لوحة الدروس عالية الخطورة" data-bs-scroll="true">
+
+    <div class="offcanvas-header qd-oc-header-v2" style="background:linear-gradient(135deg,#7f1d1d,#b91c1c)">
+        <div class="d-flex align-items-center gap-3 flex-grow-1">
+            <div class="qd-oc-hdr-icon"><i class="bi bi-exclamation-diamond-fill"></i></div>
+            <div>
+                <h5 class="qd-oc-hdr-title" id="highRiskOffcanvasLabel">دروس عالية الخطورة</h5>
+                <div class="qd-oc-hdr-sub">@(Model?.HighRiskCount ?? 0) درس بنسبة ضعف ≥ 70%</div>
+            </div>
+        </div>
+        <button type="button" class="qd-oc-close" data-bs-dismiss="offcanvas" aria-label="Close"><i class="bi bi-x-lg"></i></button>
+    </div>
+
+    <div class="qd-oc-search">
+        <div class="qd-oc-search-wrap">
+            <i class="bi bi-search qd-oc-search-icon"></i>
+            <input type="text" class="qd-oc-search-input" placeholder="بحث عن درس..." oninput="filterOcList(this,'highRiskList')">
+        </div>
+    </div>
+
+    <div class="offcanvas-body">
+        <div class="qd-oc-summary">
+            <span class="qd-badge badge-danger"><i class="bi bi-exclamation-diamond-fill me-1"></i>خطر عالي ≥ 70%: @highRiskLessons.Count(l => l.WeakPercentage >= 70)</span>
+            <span class="qd-badge badge-warning"><i class="bi bi-exclamation-triangle me-1"></i>متوسط 50–69%: @(Model?.Lessons?.Count(l => l.WeakPercentage >= 50 && l.WeakPercentage < 70) ?? 0)</span>
+        </div>
+        <div class="qd-oc-list" id="highRiskList" role="list" aria-live="polite">
+            @if (!highRiskLessons.Any()) {
+                <div class="qd-empty">
+                    <i class="bi bi-shield-check" style="color:var(--q-success);opacity:.6"></i>
+                    <div class="qd-empty-title" style="color:var(--q-success)">لا توجد دروس عالية الخطورة</div>
+                    <div class="qd-empty-sub">جميع الدروس ضمن النسب المقبولة</div>
+                </div>
+            } else {
+                @foreach (var lesson in highRiskLessons) {
+                    var lWkColor = lesson.WeakPercentage >= 85 ? "var(--q-danger)" : "var(--q-warning)";
+                    var lWkBadge = lesson.WeakPercentage >= 85 ? "badge-danger"    : "badge-warning";
+                    var lWkBg    = lesson.WeakPercentage >= 85 ? "var(--q-danger-l)" : "var(--q-warning-l)";
+                    <div class="qd-oc-item-v2" role="listitem" data-search-text="@lesson.LessonName @lesson.BatchName @lesson.InstructorName" style="border-right:3px solid @lWkColor">
+                        <div class="qd-oc-item-header">
+                            <div class="qd-oc-item-avatar" style="background:@lWkBg;color:@lWkColor;"><i class="bi bi-book-fill"></i></div>
+                            <div class="qd-oc-item-info">
+                                <div class="qd-oc-item-name">@lesson.LessonName</div>
+                                <div class="qd-oc-item-meta">
+                                    @if (!string.IsNullOrEmpty(lesson.BatchName)) { <span><i class="bi bi-layers me-1"></i>@lesson.BatchName</span> }
+                                    @if (!string.IsNullOrEmpty(lesson.InstructorName)) { <span class="ms-2"><i class="bi bi-person-badge me-1"></i>@lesson.InstructorName</span> }
+                                </div>
+                            </div>
+                            <div class="qd-oc-item-score" style="color:@lWkColor;">@Math.Round(lesson.WeakPercentage)%</div>
+                        </div>
+                        <div class="qd-oc-item-progress"><div class="qd-oc-item-progress-bar" style="width:@lesson.WeakPercentage%;background:@lWkColor;"></div></div>
+                        <div class="qd-oc-item-footer">
+                            <span class="qd-badge @lWkBadge"><i class="bi bi-arrow-down-circle-fill me-1"></i>ضعف: @Math.Round(lesson.WeakPercentage)%</span>
+                            @if (lesson.AffectedStudents > 0) { <span class="qd-badge badge-primary"><i class="bi bi-people-fill me-1"></i>@lesson.AffectedStudents متأثر</span> }
+                            @if (lesson.TotalAttempts > 0)    { <span class="qd-badge badge-info"><i class="bi bi-clipboard-data me-1"></i>@lesson.TotalAttempts محاولة</span> }
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+        <div class="qd-oc-footer">
+            <button type="button" class="qd-nav-btn qd-nav-btn-ghost" data-bs-dismiss="offcanvas"><i class="bi bi-x-lg"></i> إغلاق</button>
+            <a class="qd-nav-btn qd-nav-btn-secondary" asp-area="Admin" asp-controller="Analytics" asp-action="MetricDecisionDetails" asp-route-metric="high-risk-lessons" asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId"><i class="bi bi-graph-up"></i> تحليل القرار</a>
+            <a class="qd-nav-btn qd-nav-btn-primary" asp-area="Admin" asp-controller="Analytics" asp-action="AdvancedDashboard" asp-route-curriculumId="@Model?.SelectedCurriculumId" asp-route-batchId="@Model?.SelectedBatchId" asp-route-instructorId="@Model?.SelectedInstructorId"><i class="bi bi-bar-chart-fill"></i> لوحة التحليلات</a>
+        </div>
+    </div>
+</div>
+
+@* ===================== SCRIPTS ===================== *@
+<script>
+    /* ── Chart instances ── */
+    let riskChartInstance       = null;
+    let lessonChartInstance     = null;
+    let criticalChartInstance   = null;
+    let radarChartInstance      = null;
+    let instructorChartInstance = null;
+    let studentDistInstance     = null;
+    let batchRiskInstance       = null;
+
+    /* ── Boot ── */
+    document.addEventListener("DOMContentLoaded", function () {
+        /* lazy init when first chart canvas scrolls into view */
+        const firstChart = document.querySelector('.qdn-chart-body canvas, .chart-box canvas');
+        if (firstChart) {
+            const observer = new IntersectionObserver(entries => {
+                entries.forEach(e => { if (e.isIntersecting) { initializeAdvancedDashboardCharts(); observer.disconnect(); } });
+            }, { threshold: 0.1 });
+            observer.observe(firstChart);
+        } else {
+            initializeAdvancedDashboardCharts();
+        }
+
+        /* tooltips */
+        document.querySelectorAll('[data-bs-toggle-tooltip="tooltip"]').forEach(el => {
+            new bootstrap.Tooltip(el, { trigger: 'hover', placement: el.dataset.bsPlacement || 'top' });
+        });
+
+        /* offcanvas focus */
+        document.querySelectorAll('.offcanvas').forEach(oc => {
+            oc.addEventListener('shown.bs.offcanvas', () => {
+                const f = oc.querySelector('input, button, a, [tabindex="0"]');
+                if (f) f.focus();
+            });
+        });
+
+        /* pagination links */
+        document.addEventListener("click", function (e) {
+            const pageLink = e.target.closest("[data-dashboard-page]");
+            if (!pageLink) return;
+            e.preventDefault();
+            loadAdvancedDashboard(pageLink.getAttribute("data-dashboard-page"));
+        });
+    });
+
+    /* ── Offcanvas search ── */
+    function filterOcList(input, listId) {
+        const q = input.value.trim().toLowerCase();
+        document.querySelectorAll(`#${listId} .qd-oc-item-v2`).forEach(item => {
+            const text = (item.dataset.searchText || item.textContent).toLowerCase();
+            item.hidden = q.length > 0 && !text.includes(q);
+        });
+    }
+
+    /* ── Reset filters ── */
+    function resetFilters() {
+        ['curriculumId','batchId','instructorId'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = "";
+        });
+        window.location.href = new URL(window.location.origin + "/Admin/Analytics/AdvancedDashboard").toString();
+    }
+
+    /* ── AJAX load ── */
+    async function loadAdvancedDashboard(page) {
+        const content      = document.getElementById("advancedDashboardContent");
+        const curriculumId = document.getElementById("curriculumId")?.value  || "";
+        const batchId      = document.getElementById("batchId")?.value       || "";
+        const instructorId = document.getElementById("instructorId")?.value  || "";
+        const url = `/Admin/Analytics/AdvancedDashboardData?curriculumId=${encodeURIComponent(curriculumId)}&batchId=${encodeURIComponent(batchId)}&instructorId=${encodeURIComponent(instructorId)}&page=${encodeURIComponent(page)}`;
+
+        content.innerHTML = `
+            <div class="row g-3 p-2">
+                ${[1,2,3].map(() => `
+                    <div class="col-md-4">
+                        <div style="background:#fff;border-radius:16px;padding:20px;border:1px solid #e5e7eb;">
+                            <div class="skeleton" style="height:18px;width:55%;border-radius:6px;margin-bottom:12px;"></div>
+                            <div class="skeleton" style="height:36px;width:38%;border-radius:6px;margin-bottom:14px;"></div>
+                            <div class="skeleton" style="height:7px;border-radius:20px;"></div>
+                        </div>
+                    </div>`).join('')}
+            </div>`;
+
+        try {
+            const response = await fetch(url, { method:"GET", headers:{"X-Requested-With":"XMLHttpRequest"} });
+            if (!response.ok) {
+                content.innerHTML = `<div class="alert alert-danger border-0 rounded-3 m-2"><i class="bi bi-x-octagon-fill me-2"></i>فشل تحميل بيانات التحليل. يرجى المحاولة مرة أخرى.</div>`;
+                return;
+            }
+            content.innerHTML = await response.text();
+            initializeAdvancedDashboardCharts();
+        } catch (error) {
+            console.error(error);
+            content.innerHTML = `<div class="alert alert-danger border-0 rounded-3 m-2"><i class="bi bi-wifi-off me-2"></i>حدث خطأ أثناء الاتصال بالخادم.</div>`;
+        }
+    }
+
+    /* ── Helpers ── */
+    function parseJsonElement(id, fallback) {
+        const el = document.getElementById(id);
+        if (!el) return fallback;
+        try { return JSON.parse(el.textContent || ""); } catch { return fallback; }
+    }
+
+    function hasData(arr) { return Array.isArray(arr) && arr.reduce((a, b) => a + Number(b || 0), 0) > 0; }
+    function destroyChart(c) { if (c) c.destroy(); }
+
+    function emptyState(title, sub) {
+        return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:20px;text-align:center;color:#9ca3af;">
+                    <i class="bi bi-bar-chart-line" style="font-size:28px;opacity:.4;margin-bottom:8px;"></i>
+                    <div style="font-weight:800;color:#374151;font-size:14px;">${title}</div>
+                    <div style="font-size:12px;margin-top:3px;">${sub}</div>
+                </div>`;
+    }
+
+    /* ── Chart.js Defaults ── */
+    Chart.defaults.font.family                     = "'Tajawal','Cairo',Tahoma,Arial,sans-serif";
+    Chart.defaults.font.size                       = 12;
+    Chart.defaults.color                           = "#6b7280";
+    Chart.defaults.plugins.tooltip.padding         = 10;
+    Chart.defaults.plugins.tooltip.backgroundColor = "rgba(15,23,42,.92)";
+    Chart.defaults.plugins.tooltip.cornerRadius    = 8;
+    Chart.defaults.plugins.tooltip.titleFont       = { weight:"700", size:13 };
+    Chart.defaults.plugins.tooltip.bodyFont        = { size:12 };
+
+    /* ══════════════════════════════════════════════
+       initializeAdvancedDashboardCharts()
+       Called on load AND after every AJAX reload
+    ══════════════════════════════════════════════ */
+    function initializeAdvancedDashboardCharts() {
+        destroyChart(riskChartInstance);
+        destroyChart(lessonChartInstance);
+        destroyChart(criticalChartInstance);
+        destroyChart(radarChartInstance);
+        destroyChart(instructorChartInstance);
+        destroyChart(studentDistInstance);
+        destroyChart(batchRiskInstance);
+        riskChartInstance = lessonChartInstance = criticalChartInstance =
+        radarChartInstance = instructorChartInstance = studentDistInstance = batchRiskInstance = null;
+
+        /* ── Read all JSON data ── */
+        const riskData         = parseJsonElement("riskDataJson",          []);
+        const lessonNames      = parseJsonElement("lessonNamesJson",        []);
+        const lessonValues     = parseJsonElement("lessonValuesJson",       []);
+        const criticalLabels   = parseJsonElement("criticalLabelsJson",     []);
+        const criticalExams    = parseJsonElement("criticalExamsJson",      []);
+        const criticalHomework = parseJsonElement("criticalHomeworkJson",   []);
+        const criticalAttend   = parseJsonElement("criticalAttendanceJson", []);
+        const instrNames       = parseJsonElement("instructorNamesJson",    []);
+        const instrScores      = parseJsonElement("instructorScoresJson",   []);
+        const studentDist      = parseJsonElement("studentDistJson",        []);
+        const perfAvg          = parseJsonElement("performanceAvgJson",     []);
+
+        /* ─────────────────────────────────────────
+           1. Performance Radar Chart
+        ───────────────────────────────────────── */
+        const radarEl = document.getElementById("performanceRadarChart");
+        if (radarEl) {
+            if (hasData(perfAvg)) {
+                radarChartInstance = new Chart(radarEl, {
+                    type: "radar",
+                    data: {
+                        labels: ["الاختبارات", "الواجبات", "الحضور"],
+                        datasets: [{
+                            label: "الأداء الفعلي",
+                            data:  perfAvg,
+                            backgroundColor: "rgba(30,64,175,.15)",
+                            borderColor:     "#1e40af",
+                            borderWidth:     2.5,
+                            pointBackgroundColor: "#1e40af",
+                            pointBorderColor:     "#fff",
+                            pointBorderWidth:     2,
+                            pointRadius:          5,
+                            pointHoverRadius:     7,
+                            fill:             true
+                        }, {
+                            label: "حد القبول 70%",
+                            data:  [70, 70, 70],
+                            backgroundColor: "rgba(220,38,38,.06)",
+                            borderColor:     "rgba(220,38,38,.4)",
+                            borderWidth:     1.5,
+                            borderDash:      [5, 4],
+                            pointRadius:     0,
+                            fill:            true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: { duration: 800 },
+                        scales: {
+                            r: {
+                                min: 0, max: 100,
+                                ticks: { stepSize: 25, callback: v => v + "%", font: { size: 10 } },
+                                grid:  { color: "rgba(0,0,0,.07)" },
+                                angleLines: { color: "rgba(0,0,0,.07)" },
+                                pointLabels: { font: { size: 12, weight: "700" }, color: "#374151" }
+                            }
+                        },
+                        plugins: {
+                            legend: { position: "bottom", labels: { usePointStyle: true, pointStyle: "circle", padding: 16, font: { size: 12 } } },
+                            tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.raw}%` } }
+                        }
+                    }
+                });
+            } else {
+                radarEl.closest('.qdn-chart-body').innerHTML = emptyState("لا توجد بيانات كافية", "سيظهر المخطط بعد توفر بيانات الأداء");
+            }
+        }
+
+        /* ─────────────────────────────────────────
+           2. Risk Distribution Doughnut (riskChart)
+        ───────────────────────────────────────── */
+        const riskEl = document.getElementById("riskChart");
+        if (riskEl) {
+            if (hasData(riskData)) {
+                riskChartInstance = new Chart(riskEl, {
+                    type: "doughnut",
+                    data: {
+                        labels: ["خطر عالي", "متوسط", "جيد"],
+                        datasets: [{ data: riskData, backgroundColor: ["#dc2626","#d97706","#16a34a"], borderWidth: 0, hoverOffset: 8 }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        cutout: "70%",
+                        animation: { animateScale: true, animateRotate: true, duration: 900 },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw} دفعة` } }
+                        }
+                    },
+                    plugins: [{
+                        id: "centerText",
+                        afterDraw(chart) {
+                            const { ctx, chartArea: { width, height } } = chart;
+                            ctx.save();
+                            const total = chart.data.datasets[0].data.reduce((a,b) => a+b, 0);
+                            ctx.font = "bold 22px Tajawal, sans-serif";
+                            ctx.fillStyle = "#111827"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+                            ctx.fillText(total, width/2, height/2 - 10);
+                            ctx.font = "12px Tajawal, sans-serif"; ctx.fillStyle = "#6b7280";
+                            ctx.fillText("دفعة", width/2, height/2 + 12);
+                            ctx.restore();
+                        }
+                    }]
+                });
+            } else {
+                riskEl.closest('.qdn-chart-body').innerHTML = emptyState("لا توجد بيانات", "سيظهر المخطط بعد توفر بيانات الدفعات");
+            }
+        }
+
+        /* ─────────────────────────────────────────
+           3. Student Distribution Doughnut
+        ───────────────────────────────────────── */
+        const studEl = document.getElementById("studentDistChart");
+        if (studEl) {
+            if (hasData(studentDist)) {
+                studentDistInstance = new Chart(studEl, {
+                    type: "doughnut",
+                    data: {
+                        labels: ["ممتاز", "متوسط", "ضعيف"],
+                        datasets: [{ data: studentDist, backgroundColor: ["#16a34a","#d97706","#dc2626"], borderWidth: 0, hoverOffset: 8 }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        cutout: "70%",
+                        animation: { animateScale: true, animateRotate: true, duration: 900 },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw} طالب` } }
+                        }
+                    },
+                    plugins: [{
+                        id: "centerText2",
+                        afterDraw(chart) {
+                            const { ctx, chartArea: { width, height } } = chart;
+                            ctx.save();
+                            const total = chart.data.datasets[0].data.reduce((a,b) => a+b, 0);
+                            ctx.font = "bold 22px Tajawal, sans-serif";
+                            ctx.fillStyle = "#111827"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+                            ctx.fillText(total, width/2, height/2 - 10);
+                            ctx.font = "12px Tajawal, sans-serif"; ctx.fillStyle = "#6b7280";
+                            ctx.fillText("طالب", width/2, height/2 + 12);
+                            ctx.restore();
+                        }
+                    }]
+                });
+            } else {
+                studEl.closest('.qdn-chart-body').innerHTML = emptyState("لا توجد بيانات طلاب", "سيظهر المخطط بعد توفر بيانات الأداء");
+            }
+        }
+
+        /* ─────────────────────────────────────────
+           4. Batch Risk Doughnut (batchRiskChart) — copy of riskChart
+        ───────────────────────────────────────── */
+        const batchRiskEl = document.getElementById("batchRiskChart");
+        if (batchRiskEl) {
+            if (hasData(riskData)) {
+                batchRiskInstance = new Chart(batchRiskEl, {
+                    type: "doughnut",
+                    data: {
+                        labels: ["خطر عالي", "متوسط", "جيد"],
+                        datasets: [{ data: riskData, backgroundColor: ["#dc2626","#d97706","#16a34a"], borderWidth: 0, hoverOffset: 8 }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        cutout: "65%",
+                        animation: { animateScale: true, duration: 900 },
+                        plugins: {
+                            legend: { position: "bottom", labels: { usePointStyle: true, pointStyle: "circle", padding: 14 } },
+                            tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw} دفعة` } }
+                        }
+                    }
+                });
+            } else {
+                batchRiskEl.closest('.qdn-chart-body').innerHTML = emptyState("لا توجد بيانات", "سيظهر المخطط بعد توفر بيانات الدفعات");
+            }
+        }
+
+        /* ─────────────────────────────────────────
+           5. Instructor Horizontal Bar Chart
+        ───────────────────────────────────────── */
+        const instrEl = document.getElementById("instructorBarChart");
+        if (instrEl) {
+            if (instrNames.length > 0) {
+                const instrColors = instrScores.map(v => v >= 80 ? "#16a34a" : v >= 60 ? "#d97706" : "#dc2626");
+                instructorChartInstance = new Chart(instrEl, {
+                    type: "bar",
+                    data: {
+                        labels: instrNames,
+                        datasets: [{
+                            label: "متوسط الأداء %",
+                            data:  instrScores,
+                            backgroundColor: instrColors.map(c => c + "cc"),
+                            borderColor:     instrColors,
+                            borderWidth:     0,
+                            borderRadius:    6,
+                            borderSkipped:   false
+                        }]
+                    },
+                    options: {
+                        indexAxis: "y",
+                        responsive: true, maintainAspectRatio: false,
+                        animation: { duration: 700, delay: ctx => ctx.dataIndex * 60 },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.raw}%` } }
+                        },
+                        scales: {
+                            x: {
+                                beginAtZero: true, max: 100,
+                                grid: { color: "#f3f4f6" },
+                                ticks: { callback: v => v + "%" }
+                            },
+                            y: { grid: { display: false } }
+                        }
+                    },
+                    plugins: [{
+                        id: "thresholdLine70",
+                        afterDraw(chart) {
+                            const { ctx, chartArea, scales } = chart;
+                            if (!scales.x) return;
+                            const x = scales.x.getPixelForValue(70);
+                            ctx.save();
+                            ctx.beginPath(); ctx.setLineDash([5,4]);
+                            ctx.strokeStyle = "#dc262680"; ctx.lineWidth = 1.5;
+                            ctx.moveTo(x, chartArea.top); ctx.lineTo(x, chartArea.bottom); ctx.stroke();
+                            ctx.setLineDash([]);
+                            ctx.font = "10px Tajawal, sans-serif"; ctx.fillStyle = "#dc2626";
+                            ctx.textAlign = "center"; ctx.fillText("70%", x, chartArea.top - 5);
+                            ctx.restore();
+                        }
+                    }]
+                });
+            } else {
+                instrEl.closest('.qdn-chart-body').innerHTML = emptyState("لا توجد بيانات مدربين", "سيظهر المخطط بعد تعيين مدربين");
+            }
+        }
+
+        /* ─────────────────────────────────────────
+           6. Weak Lessons Bar Chart
+        ───────────────────────────────────────── */
+        const lessonEl = document.getElementById("lessonWeakChart");
+        if (lessonEl) {
+            if (lessonNames.length > 0) {
+                const colors = lessonValues.map(v => v >= 70 ? "#dc2626" : v >= 50 ? "#d97706" : "#16a34a");
+                lessonChartInstance = new Chart(lessonEl, {
+                    type: "bar",
+                    data: {
+                        labels: lessonNames,
+                        datasets: [{
+                            label: "نسبة الضعف %",
+                            data:  lessonValues,
+                            backgroundColor: colors.map(c => c + "cc"),
+                            borderColor:     colors,
+                            borderWidth:     0,
+                            borderRadius:    5,
+                            borderSkipped:   false
+                        }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        animation: { duration: 700, easing: "easeOutQuart" },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: { callbacks: { label: ctx => ` نسبة الضعف: ${ctx.raw}%` } }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true, max: 100,
+                                grid: { color: "#f3f4f6" },
+                                ticks: { callback: v => v + "%" }
+                            },
+                            x: { grid: { display: false }, ticks: { maxRotation: 30, font: { size: 10 } } }
+                        }
+                    },
+                    plugins: [{
+                        id: "dangerLine",
+                        afterDraw(chart) {
+                            const { ctx, chartArea, scales } = chart;
+                            if (!scales.y) return;
+                            const y = scales.y.getPixelForValue(70);
+                            ctx.save(); ctx.beginPath(); ctx.setLineDash([5,4]);
+                            ctx.strokeStyle = "#dc2626"; ctx.lineWidth = 1.5;
+                            ctx.moveTo(chartArea.left, y); ctx.lineTo(chartArea.right, y); ctx.stroke();
+                            ctx.setLineDash([]);
+                            ctx.font = "10px Tajawal, sans-serif"; ctx.fillStyle = "#dc2626";
+                            ctx.textAlign = "right"; ctx.fillText("حد الخطر 70%", chartArea.right, y - 4);
+                            ctx.restore();
+                        }
+                    }]
+                });
+            } else {
+                lessonEl.closest('.qdn-chart-body').innerHTML = emptyState("لا توجد دروس ضعيفة", "سيظهر التحليل بعد توفر بيانات المحاولات");
+            }
+        }
+
+        /* ─────────────────────────────────────────
+           7. Critical Students Horizontal Bar
+        ───────────────────────────────────────── */
+        const critEl = document.getElementById("criticalChart");
+        if (critEl) {
+            if (criticalLabels.length > 0) {
+                criticalChartInstance = new Chart(critEl, {
+                    type: "bar",
+                    data: {
+                        labels: criticalLabels,
+                        datasets: [
+                            { label: "الحضور",     data: criticalAttend,   backgroundColor: "rgba(30,64,175,.7)",  borderRadius: 4, borderSkipped: false },
+                            { label: "الواجبات",   data: criticalHomework, backgroundColor: "rgba(8,145,178,.7)",  borderRadius: 4, borderSkipped: false },
+                            { label: "الاختبارات", data: criticalExams,    backgroundColor: "rgba(220,38,38,.7)",  borderRadius: 4, borderSkipped: false }
+                        ]
+                    },
+                    options: {
+                        indexAxis: "y",
+                        responsive: true, maintainAspectRatio: false,
+                        animation: { duration: 700, delay: ctx => ctx.dataIndex * 80 },
+                        plugins: {
+                            legend: { position: "top", labels: { usePointStyle: true, pointStyle: "circle", padding: 14 } },
+                            tooltip: { rtl: true, textDirection: "rtl", callbacks: { label: item => ` ${item.dataset.label}: ${item.raw}%` } }
+                        },
+                        scales: {
+                            x: { beginAtZero: true, max: 100, grid: { color: "#f3f4f6" }, ticks: { callback: v => v + "%" } },
+                            y: { grid: { display: false } }
+                        }
+                    }
+                });
+            } else {
+                critEl.closest('.qdn-chart-body').innerHTML = emptyState("لا توجد بيانات طلاب حرجين", "سيظهر التحليل بعد تسجيل محاولات الطلاب");
+            }
+        }
+    }
+</script>

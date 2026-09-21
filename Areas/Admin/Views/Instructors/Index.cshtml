@@ -1,0 +1,1278 @@
+@using QdratNew.ViewModels.Instructor
+@model IEnumerable<InstructorViewModel>
+
+@{
+    ViewData["Title"] = "إدارة المدربين";
+
+    var instructors = Model != null ? Model.ToList() : new List<InstructorViewModel>();
+
+    var totalInstructors    = instructors.Count;
+    var activeInstructors   = instructors.Count(i => i.IsActive);
+    var inactiveInstructors = totalInstructors - activeInstructors;
+
+    var maleInstructors   = instructors.Count(i => i.Gender.HasValue && i.Gender.Value == QdratNew.Enums.GenderType.Male);
+    var femaleInstructors = instructors.Count(i => i.Gender.HasValue && i.Gender.Value == QdratNew.Enums.GenderType.Female);
+
+    var instructorsWithEmail    = instructors.Count(i => !string.IsNullOrWhiteSpace(i.Email));
+    var instructorsWithWhatsApp = instructors.Count(i => !string.IsNullOrWhiteSpace(i.WhatsAppNumber));
+
+    var specializations = instructors
+        .Where(i => !string.IsNullOrWhiteSpace(i.Specialization))
+        .Select(i => i.Specialization)
+        .Distinct()
+        .OrderBy(x => x)
+        .ToList();
+
+    double activeRatio = totalInstructors > 0 ? Math.Round((activeInstructors / (double)totalInstructors) * 100, 1) : 0;
+    double waRatio     = totalInstructors > 0 ? Math.Round((instructorsWithWhatsApp / (double)totalInstructors) * 100, 1) : 0;
+    double emRatio     = totalInstructors > 0 ? Math.Round((instructorsWithEmail / (double)totalInstructors) * 100, 1) : 0;
+
+    string SafeText(string? v, string fb = "غير محدد") => string.IsNullOrWhiteSpace(v) ? fb : v;
+
+    string BuildAvatar(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "مد";
+        var parts = name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2
+            ? (parts[0][0].ToString() + parts[1][0].ToString()).ToUpper()
+            : name.Trim().Substring(0, Math.Min(2, name.Trim().Length)).ToUpper();
+    }
+
+    string GenderText(QdratNew.Enums.GenderType? g) =>
+        g == null ? "غير محدد" :
+        g.Value == QdratNew.Enums.GenderType.Male ? "ذكر" :
+        g.Value == QdratNew.Enums.GenderType.Female ? "أنثى" : g.Value.ToString();
+
+    string GenderData(QdratNew.Enums.GenderType? g) =>
+        g == null ? "" :
+        g.Value == QdratNew.Enums.GenderType.Male ? "ذكر" :
+        g.Value == QdratNew.Enums.GenderType.Female ? "أنثى" : g.Value.ToString();
+}
+
+<div class="ii-page" dir="rtl">
+
+    @* ══ TOPBAR ══ *@
+    <div class="ii-topbar">
+        <div class="ii-brand">
+            <div class="ii-brand-icon">
+                <i class="fas fa-chalkboard-teacher"></i>
+            </div>
+            <div>
+                <div class="ii-brand-title">إدارة المدربين</div>
+                <div class="ii-brand-sub">عرض ومتابعة بيانات المدربين المسجلين في المنصة</div>
+            </div>
+        </div>
+        <div class="ii-top-actions">
+            <a asp-area="Admin" asp-controller="Instructors" asp-action="Create" class="ii-btn ii-btn-primary">
+                <i class="fas fa-plus-circle"></i>
+                إضافة مدرب
+            </a>
+        </div>
+    </div>
+
+    @* ══ KPI CARDS ══ *@
+    <div class="ii-kpis">
+
+        <div class="ii-kpi ii-kpi--blue">
+            <div class="ii-kpi-icon"><i class="fas fa-chalkboard-teacher"></i></div>
+            <div class="ii-kpi-body">
+                <div class="ii-kpi-label">إجمالي المدربين</div>
+                <div class="ii-kpi-val" data-target="@totalInstructors">0</div>
+                <div class="ii-kpi-bar-wrap"><div class="ii-kpi-bar" style="width:100%"></div></div>
+                <div class="ii-kpi-hint">جميع المدربين المسجلين</div>
+            </div>
+            <div class="ii-kpi-bg-icon"><i class="fas fa-chalkboard-teacher"></i></div>
+        </div>
+
+        <div class="ii-kpi ii-kpi--green">
+            <div class="ii-kpi-icon"><i class="fas fa-check-circle"></i></div>
+            <div class="ii-kpi-body">
+                <div class="ii-kpi-label">مدربون نشطون</div>
+                <div class="ii-kpi-val" data-target="@activeInstructors">0</div>
+                <div class="ii-kpi-bar-wrap"><div class="ii-kpi-bar" style="width:@(activeRatio)%"></div></div>
+                <div class="ii-kpi-hint">@activeRatio% من الإجمالي</div>
+            </div>
+            <div class="ii-kpi-bg-icon"><i class="fas fa-check-circle"></i></div>
+        </div>
+
+        <div class="ii-kpi ii-kpi--amber">
+            <div class="ii-kpi-icon"><i class="fas fa-user-slash"></i></div>
+            <div class="ii-kpi-body">
+                <div class="ii-kpi-label">غير نشطين</div>
+                <div class="ii-kpi-val" data-target="@inactiveInstructors">0</div>
+                <div class="ii-kpi-bar-wrap"><div class="ii-kpi-bar" style="width:@(totalInstructors > 0 ? Math.Round((inactiveInstructors/(double)totalInstructors)*100,1) : 0)%"></div></div>
+                <div class="ii-kpi-hint">يحتاجون مراجعة التفعيل</div>
+            </div>
+            <div class="ii-kpi-bg-icon"><i class="fas fa-user-slash"></i></div>
+        </div>
+
+        <div class="ii-kpi ii-kpi--violet">
+            <div class="ii-kpi-icon"><i class="fas fa-book-open"></i></div>
+            <div class="ii-kpi-body">
+                <div class="ii-kpi-label">التخصصات</div>
+                <div class="ii-kpi-val" data-target="@specializations.Count">0</div>
+                <div class="ii-kpi-bar-wrap"><div class="ii-kpi-bar" style="width:100%"></div></div>
+                <div class="ii-kpi-hint">@(specializations.Count > 0 ? string.Join(" · ", specializations.Take(2)) + (specializations.Count > 2 ? "..." : "") : "لا توجد تخصصات")</div>
+            </div>
+            <div class="ii-kpi-bg-icon"><i class="fas fa-book-open"></i></div>
+        </div>
+
+        <div class="ii-kpi ii-kpi--teal">
+            <div class="ii-kpi-icon"><i class="fab fa-whatsapp"></i></div>
+            <div class="ii-kpi-body">
+                <div class="ii-kpi-label">واتساب متاح</div>
+                <div class="ii-kpi-val" data-target="@instructorsWithWhatsApp">0</div>
+                <div class="ii-kpi-bar-wrap"><div class="ii-kpi-bar" style="width:@waRatio%"></div></div>
+                <div class="ii-kpi-hint">@waRatio% جاهزون للتواصل</div>
+            </div>
+            <div class="ii-kpi-bg-icon"><i class="fab fa-whatsapp"></i></div>
+        </div>
+
+        <div class="ii-kpi ii-kpi--slate">
+            <div class="ii-kpi-icon"><i class="fas fa-envelope"></i></div>
+            <div class="ii-kpi-body">
+                <div class="ii-kpi-label">بريد مسجل</div>
+                <div class="ii-kpi-val" data-target="@instructorsWithEmail">0</div>
+                <div class="ii-kpi-bar-wrap"><div class="ii-kpi-bar" style="width:@emRatio%"></div></div>
+                <div class="ii-kpi-hint">لإرسال التقارير والتنبيهات</div>
+            </div>
+            <div class="ii-kpi-bg-icon"><i class="fas fa-envelope"></i></div>
+        </div>
+
+    </div>
+
+    @* ══ FILTER BAR ══ *@
+    <div class="ii-filter">
+        <div class="ii-filter-head">
+            <span><i class="fas fa-sliders-h"></i> تصفية المدربين</span>
+            <span class="ii-count-badge">المعروض: <strong id="iiVisibleCount">@totalInstructors</strong> من <strong>@totalInstructors</strong></span>
+        </div>
+        <div class="ii-filter-grid">
+            <div class="ii-field ii-field--wide">
+                <label><i class="fas fa-search"></i> بحث سريع</label>
+                <input type="text" id="iiSearch" class="ii-input" placeholder="ابحث بالاسم أو الجوال أو التخصص أو البريد..." />
+            </div>
+            <div class="ii-field">
+                <label><i class="fas fa-book-open"></i> التخصص</label>
+                <select id="iiSpec" class="ii-select">
+                    <option value="">كل التخصصات</option>
+                    @foreach (var spec in specializations)
+                    {
+                        <option value="@spec">@spec</option>
+                    }
+                </select>
+            </div>
+            <div class="ii-field">
+                <label><i class="fas fa-toggle-on"></i> الحالة</label>
+                <select id="iiStatus" class="ii-select">
+                    <option value="">كل الحالات</option>
+                    <option value="نشط">نشط</option>
+                    <option value="غير نشط">غير نشط</option>
+                </select>
+            </div>
+            <div class="ii-field">
+                <label><i class="fas fa-venus-mars"></i> النوع</label>
+                <select id="iiGender" class="ii-select">
+                    <option value="">الكل</option>
+                    <option value="ذكر">ذكر</option>
+                    <option value="أنثى">أنثى</option>
+                </select>
+            </div>
+            <div class="ii-field ii-field--action">
+                <button type="button" id="iiReset" class="ii-btn ii-btn-reset">
+                    <i class="fas fa-undo-alt"></i> إعادة ضبط
+                </button>
+            </div>
+        </div>
+    </div>
+
+    @* ══ TABLE CARD ══ *@
+    <div class="ii-table-card">
+
+        <div class="ii-table-head">
+            <div>
+                <div class="ii-table-title">قائمة المدربين</div>
+                <div class="ii-table-sub">انقر على صف لتظهر الإجراءات في الشريط السفلي</div>
+            </div>
+            <div class="ii-gender-split">
+                <span class="ii-tag ii-tag--male"><i class="fas fa-mars"></i> ذكور: <strong>@maleInstructors</strong></span>
+                <span class="ii-tag ii-tag--female"><i class="fas fa-venus"></i> إناث: <strong>@femaleInstructors</strong></span>
+            </div>
+        </div>
+
+        <div class="ii-table-wrap">
+            <table id="iiTable" class="ii-table">
+                <thead>
+                    <tr>
+                        <th class="col-instructor">المدرب</th>
+                        <th class="col-spec">التخصص</th>
+                        <th class="col-phone">الجوال</th>
+                        <th class="col-whatsapp">واتساب</th>
+                        <th class="col-gender">النوع</th>
+                        <th class="col-status">الحالة</th>
+                        <th class="col-links">المناهج والدفعات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var inst in instructors)
+                    {
+                        var gText   = GenderText(inst.Gender);
+                        var gData   = GenderData(inst.Gender);
+                        var statusT = inst.IsActive ? "نشط" : "غير نشط";
+                        var searchable = $"{inst.FullName} {inst.Email} {inst.PhoneNumber} {inst.WhatsAppNumber} {inst.Specialization} {gText} {statusT}".ToLower();
+
+                        <tr class="ii-row"
+                            data-id="@inst.Id"
+                            data-name="@SafeText(inst.FullName, "بدون اسم")"
+                            data-search="@searchable"
+                            data-spec="@SafeText(inst.Specialization, "")"
+                            data-status="@statusT"
+                            data-gender="@gData"
+                            data-detail-url="@Url.Action("Details", "Instructors", new { area = "Admin", id = inst.Id })"
+                            data-edit-url="@Url.Action("Edit", "Instructors", new { area = "Admin", id = inst.Id })"
+                            data-delete-url="@Url.Action("Delete", "Instructors", new { area = "Admin", id = inst.Id })"
+                            data-instructor-gender="@(inst.Gender.HasValue ? inst.Gender.Value.ToString() : "")"
+                            data-linked-curriculum-ids="@string.Join(",", inst.LinkedCurriculums.Select(c => c.CurriculumId))">
+
+                            <td class="col-instructor">
+                                <div class="ii-inst-cell">
+                                    <div class="ii-avatar">@BuildAvatar(inst.FullName)</div>
+                                    <div class="ii-inst-info">
+                                        <div class="ii-inst-name">@SafeText(inst.FullName, "بدون اسم")</div>
+                                        <div class="ii-inst-meta">
+                                            @if (!string.IsNullOrWhiteSpace(inst.Email))
+                                            {
+                                                <span><i class="fas fa-envelope"></i> @inst.Email</span>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(inst.Specialization))
+                                            {
+                                                <span><i class="fas fa-book-open"></i> @inst.Specialization</span>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+
+                            <td class="col-spec">
+                                <span class="ii-pill ii-pill--spec @(string.IsNullOrWhiteSpace(inst.Specialization) ? "ii-pill--empty" : "")">
+                                    <i class="fas fa-book-open"></i>
+                                    @SafeText(inst.Specialization, "غير محدد")
+                                </span>
+                            </td>
+
+                            <td class="col-phone">
+                                <span class="ii-pill ii-pill--phone @(string.IsNullOrWhiteSpace(inst.PhoneNumber) ? "ii-pill--empty" : "")">
+                                    <i class="fas fa-phone-alt"></i>
+                                    @SafeText(inst.PhoneNumber, "غير متاح")
+                                </span>
+                            </td>
+
+                            <td class="col-whatsapp">
+                                <span class="ii-pill ii-pill--wa @(string.IsNullOrWhiteSpace(inst.WhatsAppNumber) ? "ii-pill--empty" : "")">
+                                    <i class="fab fa-whatsapp"></i>
+                                    @SafeText(inst.WhatsAppNumber, "غير متاح")
+                                </span>
+                            </td>
+
+                            <td class="col-gender">
+                                <span class="ii-pill ii-pill--gender">
+                                    <i class="fas fa-venus-mars"></i>
+                                    @gText
+                                </span>
+                            </td>
+
+                            <td class="col-status">
+                                <span class="ii-status ii-status--@(inst.IsActive ? "active" : "danger")">
+                                    <i class="fas fa-circle"></i>
+                                    @statusT
+                                </span>
+                            </td>
+
+                            <td class="col-links">
+                                <div class="ii-links-cell">
+                                    <span class="ii-count-chip ii-count-chip--curriculum @(inst.LinkedCurriculums.Any() ? "" : "ii-count-chip--empty")"
+                                          title="@(inst.LinkedCurriculums.Any() ? string.Join("، ", inst.LinkedCurriculums.Select(c => c.CurriculumTitle)) : "لا يوجد منهج مؤهَّل له")">
+                                        <i class="fas fa-book-open"></i> @inst.LinkedCurriculums.Count مناهج
+                                    </span>
+                                    <span class="ii-count-chip ii-count-chip--batch @(inst.LinkedBatches.Any() ? "" : "ii-count-chip--empty")"
+                                          title="@(inst.LinkedBatches.Any() ? string.Join("، ", inst.LinkedBatches.Select(b => b.BatchName)) : "لا توجد دفعة مرتبطة")">
+                                        <i class="fas fa-users"></i> @inst.LinkedBatches.Count دفعات
+                                    </span>
+                                </div>
+                            </td>
+
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (!instructors.Any())
+        {
+            <div class="ii-empty">
+                <div class="ii-empty-icon"><i class="fas fa-chalkboard-teacher"></i></div>
+                <div class="ii-empty-title">لا يوجد مدربون مسجلون</div>
+                <div class="ii-empty-sub">ابدأ بإضافة مدرب جديد</div>
+                <a asp-area="Admin" asp-controller="Instructors" asp-action="Create" class="ii-btn ii-btn-primary">
+                    <i class="fas fa-plus-circle"></i> إضافة مدرب
+                </a>
+            </div>
+        }
+        else
+        {
+            <div id="iiNoResults" class="ii-empty ii-hidden">
+                <div class="ii-empty-icon"><i class="fas fa-search"></i></div>
+                <div class="ii-empty-title">لا توجد نتائج مطابقة</div>
+                <div class="ii-empty-sub">غيّر نص البحث أو أعد ضبط الفلاتر</div>
+            </div>
+        }
+
+    </div>
+
+</div>
+
+@Html.AntiForgeryToken()
+
+@* ══ MODAL: ربط مدرب بمنهج ══ *@
+<div class="modal fade" id="linkCurriculumModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" dir="rtl">
+        <div class="modal-content ii-modal-content">
+            <div class="modal-header ii-modal-header">
+                <h5 class="modal-title"><i class="fas fa-link"></i> ربط <span id="lcInstructorName">المدرب</span> بمنهج</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+            </div>
+            <div class="modal-body">
+                <div id="lcAlert" class="ii-modal-alert ii-hidden"></div>
+                <div class="ii-modal-field">
+                    <label>اختر المنهج</label>
+                    <select id="lcCurriculumSelect" class="ii-select">
+                        <option value="">اختر المنهج...</option>
+                    </select>
+                </div>
+                <div class="ii-modal-field">
+                    <label>ملاحظات (اختياري)</label>
+                    <textarea id="lcNotes" class="ii-input" rows="2"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="ii-btn ii-btn-reset" data-bs-dismiss="modal">إلغاء</button>
+                <button type="button" id="lcSaveBtn" class="ii-btn ii-btn-primary"><i class="fas fa-save"></i> حفظ الربط</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* ══ MODAL: ربط مدرب بدفعة ══ *@
+<div class="modal fade" id="linkBatchModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" dir="rtl">
+        <div class="modal-content ii-modal-content">
+            <div class="modal-header ii-modal-header">
+                <h5 class="modal-title"><i class="fas fa-users"></i> ربط <span id="lbInstructorName">المدرب</span> بدفعة</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+            </div>
+            <div class="modal-body">
+                <div id="lbAlert" class="ii-modal-alert ii-hidden"></div>
+                <div class="ii-modal-field">
+                    <label>اختر المنهج (من المناهج المؤهَّل لها المدرب)</label>
+                    <select id="lbCurriculumSelect" class="ii-select">
+                        <option value="">اختر المنهج...</option>
+                    </select>
+                </div>
+                <div class="ii-modal-field">
+                    <label>اختر الدفعة</label>
+                    <select id="lbBatchSelect" class="ii-select" disabled>
+                        <option value="">اختر المنهج أولاً...</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="ii-btn ii-btn-reset" data-bs-dismiss="modal">إلغاء</button>
+                <button type="button" id="lbSaveBtn" class="ii-btn ii-btn-primary" disabled><i class="fas fa-save"></i> حفظ الربط</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* ══ ACTION FOOTER ══ *@
+<div id="iiFooter" class="ii-footer ii-footer--hidden" dir="rtl">
+    <div class="ii-footer-inner">
+        <div class="ii-footer-instructor">
+            <div class="ii-footer-avatar" id="iiFooterAvatar">مد</div>
+            <div>
+                <div class="ii-footer-label">المدرب المحدد</div>
+                <div class="ii-footer-name" id="iiFooterName">—</div>
+            </div>
+        </div>
+        <div class="ii-footer-actions">
+            <button type="button" id="iiActLinkCurriculum" class="ii-footer-btn ii-footer-btn--curriculum">
+                <i class="fas fa-book-open"></i>
+                <span>ربط بمنهج</span>
+            </button>
+            <button type="button" id="iiActLinkBatch" class="ii-footer-btn ii-footer-btn--batch">
+                <i class="fas fa-users"></i>
+                <span>ربط بدفعة</span>
+            </button>
+            <span class="ii-footer-sep"></span>
+            <a id="iiActView" href="#" class="ii-footer-btn ii-footer-btn--view">
+                <i class="fas fa-eye"></i>
+                <span>عرض الملف التفصيلي</span>
+            </a>
+            <a id="iiActEdit" href="#" class="ii-footer-btn ii-footer-btn--edit">
+                <i class="fas fa-edit"></i>
+                <span>تعديل البيانات</span>
+            </a>
+            <a id="iiActDelete" href="#" class="ii-footer-btn ii-footer-btn--delete">
+                <i class="fas fa-trash-alt"></i>
+                <span>حذف المدرب</span>
+            </a>
+            <button type="button" id="iiFooterClose" class="ii-footer-btn ii-footer-btn--close">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* ═══════════════════════════════════════
+       DESIGN TOKENS — قدرات نيو
+    ═══════════════════════════════════════ */
+    .ii-page {
+        --font: 'Cairo', 'Tahoma', sans-serif;
+        --ink: #0a0e17;
+        --ink2: #1c2434;
+        --ink3: #333d52;
+        --mute: #667085;
+        --mute2: #98a2b3;
+        --bg: #eef1f8;
+        --surface: #ffffff;
+        --border: #e2e6f0;
+        --blue: #2563eb;
+        --blue-lt: #dbeafe;
+        --blue-dk: #1e3a8a;
+        --green: #059669;
+        --green-lt: #d1fae5;
+        --green-dk: #064e3b;
+        --amber: #d97706;
+        --amber-lt: #fef3c7;
+        --amber-dk: #78350f;
+        --red: #dc2626;
+        --red-lt: #fee2e2;
+        --red-dk: #7f1d1d;
+        --violet: #7c3aed;
+        --violet-lt: #ede9fe;
+        --violet-dk: #3b0764;
+        --teal: #0d9488;
+        --teal-lt: #ccfbf1;
+        --teal-dk: #134e4a;
+        --slate: #475569;
+        --slate-lt: #e2e8f0;
+        --r: 16px;
+        --r-lg: 22px;
+        --sh: 0 12px 34px rgba(15,23,42,.10);
+        --sh-lg: 0 24px 60px rgba(15,23,42,.14);
+        --sh-sm: 0 2px 10px rgba(15,23,42,.05);
+        min-height: 100vh;
+        background:
+            radial-gradient(1100px 480px at 100% -10%, rgba(59,130,246,.07), transparent 60%),
+            radial-gradient(900px 420px at -10% 0%, rgba(124,58,237,.06), transparent 55%),
+            var(--bg);
+        color: var(--ink);
+        font-family: var(--font);
+        padding: 26px 26px 112px;
+        animation: iiFadeIn .35s ease both;
+    }
+
+    @@keyframes iiFadeIn {
+        from { opacity: 0; transform: translateY(6px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .ii-page *, .ii-page *::before, .ii-page *::after { box-sizing: border-box; }
+    .ii-page a { text-decoration: none; }
+    .ii-hidden { display: none !important; }
+
+    /* ══ TOPBAR ══ */
+    .ii-topbar {
+        background: linear-gradient(135deg, #0a0e17 0%, #16233f 55%, #1d2f52 100%);
+        border-radius: var(--r-lg);
+        padding: 24px 28px;
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 16px; margin-bottom: 22px;
+        box-shadow: var(--sh-lg);
+        position: relative; overflow: hidden;
+    }
+    .ii-topbar::after {
+        content: '';
+        position: absolute; inset: 0;
+        background: radial-gradient(520px 220px at 100% 0%, rgba(59,130,246,.28), transparent 60%);
+        pointer-events: none;
+    }
+
+    .ii-brand { display: flex; align-items: center; gap: 16px; position: relative; z-index: 1; }
+
+    .ii-brand-icon {
+        width: 56px; height: 56px; border-radius: 18px;
+        background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+        color: #fff;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 23px; flex-shrink: 0;
+        box-shadow: 0 10px 28px rgba(59,130,246,.45);
+    }
+
+    .ii-brand-title { color: #fff; font-size: 21px; font-weight: 900; line-height: 1.2; letter-spacing: -.01em; }
+    .ii-brand-sub { color: rgba(255,255,255,.55); font-size: 12.5px; margin-top: 4px; font-weight: 600; }
+
+    .ii-top-actions { display: flex; align-items: center; gap: 10px; position: relative; z-index: 1; }
+
+    /* ══ BUTTONS ══ */
+    .ii-btn {
+        border: 0; border-radius: 13px;
+        padding: 12px 20px; font-size: 13px; font-weight: 800;
+        display: inline-flex; align-items: center; gap: 8px;
+        cursor: pointer; transition: .18s;
+        font-family: var(--font); white-space: nowrap;
+    }
+    .ii-btn-primary { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff; box-shadow: 0 10px 24px rgba(37,99,235,.38); }
+    .ii-btn-primary:hover { color: #fff; transform: translateY(-2px); box-shadow: 0 14px 30px rgba(37,99,235,.44); }
+    .ii-btn-reset {
+        background: rgba(255,255,255,.06); color: var(--mute);
+        border: 1.5px solid var(--border); min-height: 44px;
+    }
+    .ii-btn-reset:hover { background: var(--red-lt); color: var(--red-dk); border-color: rgba(220,38,38,.25); }
+
+    /* ══ KPI CARDS ══ */
+    .ii-kpis {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0,1fr));
+        gap: 16px; margin-bottom: 22px;
+    }
+
+    .ii-kpi {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--r-lg);
+        padding: 20px 18px 16px;
+        position: relative; overflow: hidden;
+        box-shadow: var(--sh-sm);
+        transition: .22s cubic-bezier(.4,0,.2,1); cursor: default;
+    }
+    .ii-kpi::before {
+        content: '';
+        position: absolute; inset: 0 0 auto 0; height: 3px;
+        background: var(--kpi-accent, var(--blue));
+    }
+    .ii-kpi:hover { transform: translateY(-4px); box-shadow: var(--sh); border-color: transparent; }
+
+    .ii-kpi-icon {
+        width: 46px; height: 46px; border-radius: 14px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 18px; margin-bottom: 14px;
+    }
+
+    .ii-kpi-label { font-size: 11.5px; font-weight: 800; color: var(--mute); margin-bottom: 5px; }
+
+    .ii-kpi-val { font-size: 36px; font-weight: 900; line-height: 1; color: var(--ink); letter-spacing: -.02em; }
+
+    .ii-kpi-bar-wrap {
+        height: 4px; background: var(--border);
+        border-radius: 999px; margin: 12px 0 7px; overflow: hidden;
+    }
+    .ii-kpi-bar { height: 100%; border-radius: 999px; transition: width 1.2s cubic-bezier(.4,0,.2,1); }
+    .ii-kpi-hint { font-size: 11px; color: var(--mute2); font-weight: 700; }
+
+    .ii-kpi-bg-icon {
+        position: absolute; bottom: -10px; left: -10px;
+        font-size: 76px; opacity: .05; line-height: 1; pointer-events: none;
+    }
+
+    .ii-kpi--blue   { --kpi-accent: var(--blue); }
+    .ii-kpi--blue  .ii-kpi-icon { background: var(--blue-lt);   color: var(--blue-dk); }
+    .ii-kpi--blue  .ii-kpi-bar  { background: var(--blue); }
+    .ii-kpi--green  { --kpi-accent: var(--green); }
+    .ii-kpi--green .ii-kpi-icon { background: var(--green-lt);  color: var(--green-dk); }
+    .ii-kpi--green .ii-kpi-bar  { background: var(--green); }
+    .ii-kpi--amber  { --kpi-accent: var(--amber); }
+    .ii-kpi--amber .ii-kpi-icon { background: var(--amber-lt);  color: var(--amber-dk); }
+    .ii-kpi--amber .ii-kpi-bar  { background: var(--amber); }
+    .ii-kpi--violet { --kpi-accent: var(--violet); }
+    .ii-kpi--violet .ii-kpi-icon { background: var(--violet-lt); color: var(--violet-dk); }
+    .ii-kpi--violet .ii-kpi-bar  { background: var(--violet); }
+    .ii-kpi--teal   { --kpi-accent: var(--teal); }
+    .ii-kpi--teal  .ii-kpi-icon { background: var(--teal-lt);   color: var(--teal-dk); }
+    .ii-kpi--teal  .ii-kpi-bar  { background: var(--teal); }
+    .ii-kpi--slate  { --kpi-accent: var(--slate); }
+    .ii-kpi--slate .ii-kpi-icon { background: var(--slate-lt);  color: #334155; }
+    .ii-kpi--slate .ii-kpi-bar  { background: var(--slate); }
+
+    /* ══ FILTER BAR ══ */
+    .ii-filter {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--r-lg);
+        padding: 20px 22px 22px;
+        margin-bottom: 22px;
+        box-shadow: var(--sh-sm);
+    }
+
+    .ii-filter-head {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 16px;
+        font-size: 14px; font-weight: 900; color: var(--ink);
+    }
+    .ii-filter-head i { color: var(--blue); margin-left: 6px; }
+
+    .ii-count-badge {
+        background: var(--blue-lt); color: var(--blue-dk);
+        border-radius: 999px; padding: 5px 14px;
+        font-size: 12px; font-weight: 800;
+    }
+    .ii-count-badge strong { color: var(--blue); }
+
+    .ii-filter-grid {
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr 1fr auto;
+        gap: 14px; align-items: end;
+    }
+
+    .ii-field label {
+        display: flex; align-items: center; gap: 6px;
+        color: var(--ink3); font-size: 12px; font-weight: 800;
+        margin-bottom: 7px;
+    }
+    .ii-field label i { color: var(--blue); }
+
+    .ii-input, .ii-select {
+        width: 100%; min-height: 44px;
+        border: 1.5px solid var(--border);
+        border-radius: 13px; background: #fff;
+        padding: 10px 14px; color: var(--ink);
+        font-size: 13px; font-family: var(--font);
+        outline: none; transition: .15s;
+    }
+    .ii-input:focus, .ii-select:focus {
+        border-color: var(--blue);
+        box-shadow: 0 0 0 4px rgba(37,99,235,.12);
+    }
+    .ii-field--action { display: flex; align-items: flex-end; }
+
+    /* ══ TABLE CARD ══ */
+    .ii-table-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--r-lg);
+        box-shadow: var(--sh); overflow: hidden;
+    }
+
+    .ii-table-head {
+        padding: 20px 24px;
+        border-bottom: 1px solid var(--border);
+        display: flex; align-items: center; justify-content: space-between; gap: 14px;
+        background: linear-gradient(180deg, #fff 0%, #f7f9fd 100%);
+    }
+
+    .ii-table-title { font-size: 16.5px; font-weight: 900; color: var(--ink); letter-spacing: -.01em; }
+    .ii-table-sub { font-size: 12px; color: var(--mute); margin-top: 3px; font-weight: 600; }
+
+    .ii-gender-split { display: flex; align-items: center; gap: 8px; }
+    .ii-tag {
+        display: inline-flex; align-items: center; gap: 6px;
+        border-radius: 999px; padding: 6px 14px;
+        font-size: 12px; font-weight: 800; border: 1px solid transparent;
+    }
+    .ii-tag--male   { background: var(--blue-lt); color: var(--blue-dk); border-color: rgba(37,99,235,.16); }
+    .ii-tag--female { background: var(--violet-lt); color: var(--violet-dk); border-color: rgba(124,58,237,.16); }
+
+    .ii-table-wrap { width: 100%; overflow-x: auto; }
+
+    .ii-table { width: 100%; border-collapse: collapse; min-width: 960px; }
+
+    .ii-table thead th {
+        position: sticky; top: 0; z-index: 2;
+        background: #f4f6fb;
+        color: var(--mute);
+        font-size: 11px; font-weight: 900;
+        padding: 15px 18px;
+        border-bottom: 2px solid var(--border);
+        text-align: center; white-space: nowrap;
+        letter-spacing: .03em; text-transform: uppercase;
+    }
+
+    .col-instructor { text-align: right !important; width: 30%; }
+
+    .ii-table td {
+        padding: 11px 16px;
+        border-bottom: 1px solid var(--border);
+        font-size: 13px; color: var(--ink3);
+        text-align: center; vertical-align: middle;
+        line-height: 1.3;
+    }
+
+    .ii-row { cursor: pointer; transition: background .15s, box-shadow .15s; }
+    .ii-row:hover td { background: #f7f9ff; }
+    .ii-row.ii-row--selected td { background: #eaf1ff !important; }
+    .ii-row.ii-row--selected td:first-child { border-right: 4px solid var(--blue); box-shadow: inset 0 0 0 9999px rgba(37,99,235,.02); }
+    .ii-row.ii-row--selected .ii-inst-name { color: var(--blue); }
+
+    /* Instructor cell */
+    .ii-inst-cell { display: flex; align-items: center; gap: 11px; }
+
+    .ii-avatar {
+        width: 38px; height: 38px; flex-shrink: 0;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+        color: #fff;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 12.5px; font-weight: 900;
+        box-shadow: 0 6px 16px rgba(37,99,235,.26);
+        transition: .2s;
+    }
+    .ii-row:hover .ii-avatar { transform: scale(1.07); }
+
+    .ii-inst-name {
+        font-size: 13.5px; font-weight: 900; color: var(--ink);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        max-width: 240px; line-height: 1.3; transition: color .15s;
+    }
+
+    .ii-inst-meta {
+        display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+        color: var(--mute); font-size: 10.5px; margin-top: 2px; font-weight: 600;
+    }
+    .ii-inst-meta span { display: inline-flex; align-items: center; gap: 4px; }
+    .ii-inst-meta i { color: var(--mute2); font-size: 10px; }
+
+    /* Pills */
+    .ii-pill {
+        display: inline-flex; align-items: center; gap: 5px;
+        border-radius: 999px; padding: 5px 10px;
+        font-size: 11px; font-weight: 800; white-space: nowrap;
+        border: 1px solid transparent;
+    }
+    .ii-pill--spec   { background: var(--violet-lt); color: var(--violet-dk); border-color: rgba(124,58,237,.16); }
+    .ii-pill--phone  { background: var(--blue-lt);   color: var(--blue-dk);   border-color: rgba(37,99,235,.16); }
+    .ii-pill--wa     { background: var(--green-lt);  color: var(--green-dk);  border-color: rgba(5,150,105,.16); }
+    .ii-pill--gender { background: var(--teal-lt);   color: var(--teal-dk);   border-color: rgba(13,148,136,.16); }
+    .ii-pill--empty  { background: #f1f5f9; color: var(--mute); border-color: var(--border); }
+
+    /* Status */
+    .ii-status {
+        display: inline-flex; align-items: center; gap: 7px;
+        border-radius: 999px; padding: 6px 12px;
+        font-size: 11.5px; font-weight: 800; white-space: nowrap;
+        border: 1px solid transparent;
+    }
+    .ii-status i { font-size: 7px; }
+    .ii-status--active { background: var(--green-lt); color: var(--green-dk); border-color: rgba(5,150,105,.2); }
+    .ii-status--danger { background: var(--red-lt);   color: var(--red-dk);   border-color: rgba(220,38,38,.2); }
+
+    /* Empty state */
+    .ii-empty {
+        padding: 64px 24px; text-align: center;
+        display: flex; flex-direction: column; align-items: center; gap: 12px;
+    }
+    .ii-empty-icon {
+        width: 80px; height: 80px; border-radius: 24px;
+        background: var(--blue-lt); color: var(--blue);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 30px; margin-bottom: 4px;
+    }
+    .ii-empty-title { font-size: 17px; font-weight: 900; color: var(--ink); }
+    .ii-empty-sub   { font-size: 13px; color: var(--mute); }
+
+    /* ══ ACTION FOOTER — كل إجراءات المدرب مجمّعة هنا ══ */
+    .ii-footer {
+        position: fixed;
+        bottom: 0; left: 0; right: 0;
+        z-index: 999;
+        transform: translateY(100%);
+        transition: transform .34s cubic-bezier(.4,0,.2,1);
+        will-change: transform;
+    }
+    .ii-footer:not(.ii-footer--hidden) { transform: translateY(0); }
+
+    .ii-footer-inner {
+        background: linear-gradient(135deg, #0a0e17 0%, #16233f 55%, #1d2f52 100%);
+        border-top: 1px solid rgba(255,255,255,.1);
+        border-radius: 24px 24px 0 0;
+        padding: 18px 28px;
+        display: flex; align-items: center; justify-content: space-between; gap: 22px;
+        box-shadow: 0 -14px 48px rgba(10,14,23,.32);
+        max-width: 1680px; margin: 0 auto;
+    }
+
+    .ii-footer-instructor { display: flex; align-items: center; gap: 15px; flex-shrink: 0; }
+
+    .ii-footer-avatar {
+        width: 48px; height: 48px; border-radius: 15px;
+        background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+        color: #fff;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 15px; font-weight: 900;
+        box-shadow: 0 8px 22px rgba(59,130,246,.35); flex-shrink: 0;
+    }
+
+    .ii-footer-label { font-size: 11px; color: rgba(255,255,255,.5); font-weight: 700; }
+
+    .ii-footer-name {
+        font-size: 16px; font-weight: 900; color: #fff;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        max-width: 260px;
+    }
+
+    .ii-footer-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+    .ii-footer-sep {
+        width: 1px; height: 28px;
+        background: rgba(255,255,255,.14);
+        margin: 0 4px; flex-shrink: 0;
+    }
+
+    /* أزرار الفوتر — نمط زجاجي موحّد يناسب الخلفية الداكنة، بلون مميّز لكل إجراء */
+    .ii-footer-btn {
+        --accent: #ffffff;
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 11px 18px; border-radius: 13px;
+        font-size: 12.5px; font-weight: 800; font-family: var(--font);
+        cursor: pointer;
+        background: rgba(255,255,255,.07);
+        border: 1.5px solid rgba(255,255,255,.14);
+        color: rgba(255,255,255,.92);
+        transition: .18s; white-space: nowrap; text-decoration: none;
+    }
+    .ii-footer-btn i { color: var(--accent); transition: color .18s; }
+    .ii-footer-btn:hover {
+        background: var(--accent); border-color: var(--accent);
+        color: #0a0e17; transform: translateY(-2px);
+    }
+    .ii-footer-btn:hover i { color: #0a0e17; }
+
+    .ii-footer-btn--view       { --accent: #3b82f6; }
+    .ii-footer-btn--view:hover       { box-shadow: 0 10px 22px rgba(59,130,246,.4); }
+    .ii-footer-btn--edit       { --accent: #f59e0b; }
+    .ii-footer-btn--edit:hover       { box-shadow: 0 10px 22px rgba(245,158,11,.4); }
+    .ii-footer-btn--delete     { --accent: #f87171; }
+    .ii-footer-btn--delete:hover     { box-shadow: 0 10px 22px rgba(248,113,113,.4); }
+    .ii-footer-btn--curriculum { --accent: #a78bfa; }
+    .ii-footer-btn--curriculum:hover { box-shadow: 0 10px 22px rgba(167,139,250,.4); }
+    .ii-footer-btn--batch      { --accent: #22d3ee; }
+    .ii-footer-btn--batch:hover      { box-shadow: 0 10px 22px rgba(34,211,238,.4); }
+
+    .ii-footer-btn--close {
+        width: 40px; height: 40px; padding: 0;
+        background: rgba(255,255,255,.09); color: rgba(255,255,255,.65);
+        border-color: rgba(255,255,255,.12); border-radius: 11px; justify-content: center;
+        --accent: rgba(255,255,255,.65);
+    }
+    .ii-footer-btn--close:hover {
+        background: rgba(255,255,255,.16); border-color: rgba(255,255,255,.16);
+        color: #fff; box-shadow: none;
+    }
+    .ii-footer-btn--close:hover i { color: #fff; }
+
+    /* ══ RESPONSIVE ══ */
+    @@media (max-width: 1300px) {
+        .ii-kpis { grid-template-columns: repeat(3, minmax(0,1fr)); }
+        .ii-filter-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+        .ii-field--action { grid-column: 1 / -1; }
+    }
+    @@media (max-width: 900px) {
+        .ii-footer-inner { flex-direction: column; align-items: flex-start; padding: 16px 18px; }
+        .ii-footer-actions { width: 100%; }
+        .ii-footer-btn { flex: 1; justify-content: center; }
+        .ii-footer-btn--close { flex: none; width: 40px; }
+    }
+    @@media (max-width: 768px) {
+        .ii-page { padding: 16px 16px 118px; }
+        .ii-topbar { flex-direction: column; align-items: flex-start; }
+        .ii-top-actions { width: 100%; }
+        .ii-btn-primary { flex: 1; justify-content: center; }
+        .ii-kpis { grid-template-columns: repeat(2, minmax(0,1fr)); }
+        .ii-filter-grid { grid-template-columns: 1fr; }
+        .ii-table-head { flex-direction: column; align-items: flex-start; }
+    }
+    @@media (max-width: 520px) {
+        .ii-kpis { grid-template-columns: 1fr; }
+    }
+
+    /* ══ DARK MODE ══ */
+    @@media (prefers-color-scheme: dark) {
+        .ii-page {
+            --bg: #0a0e17;
+            --surface: #131a29;
+            --border: #202b40;
+            --ink: #f2f5fd;
+            --ink2: #ccd6f0;
+            --ink3: #a3aecb;
+            --mute: #74809e;
+            --mute2: #4e5a78;
+            --blue-lt:   rgba(37,99,235,.2);
+            --green-lt:  rgba(5,150,105,.2);
+            --amber-lt:  rgba(217,119,6,.2);
+            --red-lt:    rgba(220,38,38,.2);
+            --violet-lt: rgba(124,58,237,.2);
+            --teal-lt:   rgba(13,148,136,.2);
+            --slate-lt:  rgba(71,85,105,.22);
+        }
+        .ii-page { background: radial-gradient(1100px 480px at 100% -10%, rgba(59,130,246,.12), transparent 60%), var(--bg); }
+        .ii-table thead th { background: #16203380; backdrop-filter: blur(6px); }
+        .ii-row:hover td { background: #182238 !important; }
+        .ii-row.ii-row--selected td { background: rgba(37,99,235,.14) !important; }
+        .ii-table-head { background: linear-gradient(180deg, #131a29 0%, #101623 100%); }
+    }
+
+    /* ══ LINKS COLUMN (منهج/دفعة) — ملخّص مضغوط، والإجراءات بالفوتر ══ */
+    .col-links { text-align: center !important; width: 16%; }
+
+    .ii-links-cell { display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: nowrap; }
+
+    .ii-count-chip {
+        display: inline-flex; align-items: center; gap: 5px;
+        border-radius: 999px; padding: 5px 10px;
+        font-size: 11px; font-weight: 800; white-space: nowrap;
+        border: 1px solid transparent; cursor: default;
+    }
+    .ii-count-chip--curriculum { background: var(--violet-lt); color: var(--violet-dk); border-color: rgba(124,58,237,.16); }
+    .ii-count-chip--batch      { background: var(--blue-lt);   color: var(--blue-dk);   border-color: rgba(37,99,235,.16); }
+    .ii-count-chip--empty      { background: #f1f5f9; color: var(--mute); border-color: var(--border); }
+
+    /* ══ MODALS ══ */
+    .ii-modal-content { border-radius: 20px; border: none; font-family: var(--font); box-shadow: var(--sh-lg); }
+    .ii-modal-header { border-bottom: 1px solid var(--border); padding: 20px 24px; }
+    .ii-modal-header .modal-title { font-weight: 900; font-size: 16px; display: flex; align-items: center; gap: 9px; }
+    .ii-modal-field { margin-bottom: 16px; }
+    .ii-modal-field label { display: block; font-size: 12.5px; font-weight: 800; color: var(--ink3); margin-bottom: 7px; }
+    .ii-modal-alert {
+        border-radius: 12px; padding: 12px 16px; font-size: 13px; font-weight: 800;
+        margin-bottom: 16px;
+    }
+    .ii-modal-alert--error   { background: var(--red-lt);   color: var(--red-dk); }
+    .ii-modal-alert--success { background: var(--green-lt); color: var(--green-dk); }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+
+        /* ── Animated KPI counters ── */
+        document.querySelectorAll('.ii-kpi-val[data-target]').forEach(function (el) {
+            var target = parseInt(el.getAttribute('data-target'), 10) || 0;
+            if (target === 0) { el.textContent = '0'; return; }
+            var startTime = null;
+            var duration  = 900;
+            function step(ts) {
+                if (!startTime) startTime = ts;
+                var p = Math.min((ts - startTime) / duration, 1);
+                el.textContent = Math.round((1 - Math.pow(1 - p, 3)) * target).toLocaleString('ar-SA');
+                if (p < 1) requestAnimationFrame(step);
+            }
+            requestAnimationFrame(step);
+        });
+
+        /* ── Filter logic ── */
+        var rows        = Array.from(document.querySelectorAll('#iiTable tbody .ii-row'));
+        var visibleEl   = document.getElementById('iiVisibleCount');
+        var noResultsEl = document.getElementById('iiNoResults');
+
+        function norm(v) { return (v || '').toString().trim().toLowerCase(); }
+
+        function applyFilters() {
+            var q  = norm(document.getElementById('iiSearch').value);
+            var sp = norm(document.getElementById('iiSpec').value);
+            var st = norm(document.getElementById('iiStatus').value);
+            var gd = norm(document.getElementById('iiGender').value);
+            var shown = 0;
+
+            rows.forEach(function (row) {
+                var ok = (q  === '' || norm(row.dataset.search).indexOf(q) !== -1)
+                      && (sp === '' || norm(row.dataset.spec)   === sp)
+                      && (st === '' || norm(row.dataset.status) === st)
+                      && (gd === '' || norm(row.dataset.gender) === gd);
+                row.style.display = ok ? '' : 'none';
+                if (ok) shown++;
+            });
+
+            if (visibleEl)   visibleEl.textContent = shown;
+            if (noResultsEl) noResultsEl.classList.toggle('ii-hidden', shown !== 0);
+        }
+
+        document.getElementById('iiSearch').addEventListener('input',  applyFilters);
+        document.getElementById('iiSpec').addEventListener('change',   applyFilters);
+        document.getElementById('iiStatus').addEventListener('change', applyFilters);
+        document.getElementById('iiGender').addEventListener('change', applyFilters);
+
+        document.getElementById('iiReset').addEventListener('click', function () {
+            document.getElementById('iiSearch').value = '';
+            document.getElementById('iiSpec').value   = '';
+            document.getElementById('iiStatus').value = '';
+            document.getElementById('iiGender').value = '';
+            applyFilters();
+        });
+
+        /* ── Row selection + footer ── */
+        var footer      = document.getElementById('iiFooter');
+        var fAvatar     = document.getElementById('iiFooterAvatar');
+        var fName       = document.getElementById('iiFooterName');
+        var actView     = document.getElementById('iiActView');
+        var actEdit     = document.getElementById('iiActEdit');
+        var actDelete   = document.getElementById('iiActDelete');
+        var actLinkCurriculum = document.getElementById('iiActLinkCurriculum');
+        var actLinkBatch      = document.getElementById('iiActLinkBatch');
+        var btnClose    = document.getElementById('iiFooterClose');
+        var selectedRow = null;
+
+        function initials(name) {
+            var parts = (name || '').trim().split(/\s+/);
+            return parts.length >= 2
+                ? parts[0][0] + parts[1][0]
+                : (name || 'مد').substring(0, 2);
+        }
+
+        function selectRow(row) {
+            if (selectedRow && selectedRow !== row)
+                selectedRow.classList.remove('ii-row--selected');
+
+            if (selectedRow === row) {
+                row.classList.remove('ii-row--selected');
+                footer.classList.add('ii-footer--hidden');
+                selectedRow = null;
+                return;
+            }
+
+            row.classList.add('ii-row--selected');
+            selectedRow = row;
+
+            var name = row.dataset.name || '—';
+            fName.textContent   = name;
+            fAvatar.textContent = initials(name);
+            actView.href   = row.dataset.detailUrl  || '#';
+            actEdit.href   = row.dataset.editUrl    || '#';
+            actDelete.href = row.dataset.deleteUrl  || '#';
+
+            actLinkCurriculum.dataset.instructorId   = row.dataset.id;
+            actLinkCurriculum.dataset.instructorName = name;
+            actLinkBatch.dataset.instructorId        = row.dataset.id;
+            actLinkBatch.dataset.instructorName      = name;
+
+            footer.classList.remove('ii-footer--hidden');
+        }
+
+        rows.forEach(function (row) {
+            row.addEventListener('click', function () { selectRow(row); });
+        });
+
+        btnClose.addEventListener('click', function () {
+            if (selectedRow) { selectedRow.classList.remove('ii-row--selected'); selectedRow = null; }
+            footer.classList.add('ii-footer--hidden');
+        });
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && selectedRow) {
+                selectedRow.classList.remove('ii-row--selected');
+                selectedRow = null;
+                footer.classList.add('ii-footer--hidden');
+            }
+        });
+
+        /* ── ربط مدرب بمنهج / بدفعة (Modals) ── */
+        var allCurriculums = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(ViewBag.AllCurriculums));
+
+        function getAntiForgeryToken() {
+            var el = document.querySelector('input[name="__RequestVerificationToken"]');
+            return el ? el.value : '';
+        }
+
+        function showModalAlert(el, message, kind) {
+            el.textContent = message;
+            el.className = 'ii-modal-alert ii-modal-alert--' + kind;
+            el.classList.remove('ii-hidden');
+        }
+
+        function hideModalAlert(el) {
+            el.classList.add('ii-hidden');
+        }
+
+        function fillSelect(select, items, placeholder) {
+            select.innerHTML = '<option value="">' + placeholder + '</option>';
+            items.forEach(function (item) {
+                var opt = document.createElement('option');
+                opt.value = item.id;
+                opt.text = item.name;
+                select.appendChild(opt);
+            });
+        }
+
+        /* — ربط بمنهج — */
+        var lcModalEl   = document.getElementById('linkCurriculumModal');
+        var lcModal     = lcModalEl ? new bootstrap.Modal(lcModalEl) : null;
+        var lcName      = document.getElementById('lcInstructorName');
+        var lcSelect    = document.getElementById('lcCurriculumSelect');
+        var lcNotes     = document.getElementById('lcNotes');
+        var lcAlert     = document.getElementById('lcAlert');
+        var lcSaveBtn   = document.getElementById('lcSaveBtn');
+        var lcInstructorId = null;
+
+        if (actLinkCurriculum) {
+            actLinkCurriculum.addEventListener('click', function () {
+                lcInstructorId = actLinkCurriculum.dataset.instructorId;
+                lcName.textContent = actLinkCurriculum.dataset.instructorName || 'المدرب';
+                lcNotes.value = '';
+                hideModalAlert(lcAlert);
+
+                var row = document.querySelector('.ii-row[data-id="' + lcInstructorId + '"]');
+                var linkedIds = (row && row.dataset.linkedCurriculumIds)
+                    ? row.dataset.linkedCurriculumIds.split(',').filter(Boolean).map(Number)
+                    : [];
+
+                var available = allCurriculums.filter(function (c) { return linkedIds.indexOf(c.Id) === -1; });
+                fillSelect(lcSelect, available.map(function (c) { return { id: c.Id, name: c.Title }; }), 'اختر المنهج...');
+
+                if (lcModal) lcModal.show();
+            });
+        }
+
+        if (lcSaveBtn) {
+            lcSaveBtn.addEventListener('click', function () {
+                hideModalAlert(lcAlert);
+
+                if (!lcSelect.value) {
+                    showModalAlert(lcAlert, 'الرجاء اختيار المنهج.', 'error');
+                    return;
+                }
+
+                var formData = new FormData();
+                formData.append('instructorId', lcInstructorId);
+                formData.append('curriculumId', lcSelect.value);
+                formData.append('notes', lcNotes.value || '');
+                formData.append('__RequestVerificationToken', getAntiForgeryToken());
+
+                var lcSaveBtnOriginalHtml = lcSaveBtn.innerHTML;
+                lcSaveBtn.disabled = true;
+                lcSaveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جارِ الحفظ...';
+
+                fetch('@Url.Action("CreateAjax", "CurriculumInstructors", new { area = "Admin" })', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    lcSaveBtn.disabled = false;
+                    lcSaveBtn.innerHTML = lcSaveBtnOriginalHtml;
+                    if (data.success) {
+                        showModalAlert(lcAlert, data.message, 'success');
+                        setTimeout(function () { window.location.reload(); }, 700);
+                    } else {
+                        showModalAlert(lcAlert, data.message || 'حدث خطأ أثناء الحفظ.', 'error');
+                    }
+                })
+                .catch(function () {
+                    lcSaveBtn.disabled = false;
+                    lcSaveBtn.innerHTML = lcSaveBtnOriginalHtml;
+                    showModalAlert(lcAlert, 'تعذر الاتصال بالخادم.', 'error');
+                });
+            });
+        }
+
+        /* — ربط بدفعة — */
+        var lbModalEl   = document.getElementById('linkBatchModal');
+        var lbModal     = lbModalEl ? new bootstrap.Modal(lbModalEl) : null;
+        var lbName      = document.getElementById('lbInstructorName');
+        var lbCurriculumSelect = document.getElementById('lbCurriculumSelect');
+        var lbBatchSelect      = document.getElementById('lbBatchSelect');
+        var lbAlert     = document.getElementById('lbAlert');
+        var lbSaveBtn   = document.getElementById('lbSaveBtn');
+        var lbInstructorId = null;
+
+        if (actLinkBatch) {
+            actLinkBatch.addEventListener('click', function () {
+                lbInstructorId = actLinkBatch.dataset.instructorId;
+                lbName.textContent = actLinkBatch.dataset.instructorName || 'المدرب';
+                hideModalAlert(lbAlert);
+
+                lbBatchSelect.innerHTML = '<option value="">اختر المنهج أولاً...</option>';
+                lbBatchSelect.disabled = true;
+                lbSaveBtn.disabled = true;
+
+                fetch('@Url.Action("GetCurriculumsForInstructor", "InstructorCurriculumBatches", new { area = "Admin" })?instructorId=' + lbInstructorId)
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (data.success && data.data.length > 0) {
+                            fillSelect(lbCurriculumSelect, data.data, 'اختر المنهج...');
+                        } else {
+                            lbCurriculumSelect.innerHTML = '<option value="">لا توجد مناهج مؤهَّل لها هذا المدرب</option>';
+                            showModalAlert(lbAlert, 'يجب تأهيل هذا المدرب لمنهج أولاً قبل ربطه بدفعة (من زر "ربط بمنهج").', 'error');
+                        }
+                        if (lbModal) lbModal.show();
+                    });
+            });
+        }
+
+        lbCurriculumSelect.addEventListener('change', function () {
+            lbBatchSelect.innerHTML = '<option value="">جارِ التحميل...</option>';
+            lbBatchSelect.disabled = true;
+            lbSaveBtn.disabled = true;
+            hideModalAlert(lbAlert);
+
+            if (!lbCurriculumSelect.value) {
+                lbBatchSelect.innerHTML = '<option value="">اختر المنهج أولاً...</option>';
+                return;
+            }
+
+            fetch('@Url.Action("GetBatchesForInstructor", "InstructorCurriculumBatches", new { area = "Admin" })?instructorId=' + lbInstructorId + '&curriculumId=' + lbCurriculumSelect.value)
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data.success && data.data.length > 0) {
+                        fillSelect(lbBatchSelect, data.data, 'اختر الدفعة...');
+                        lbBatchSelect.disabled = false;
+                        lbSaveBtn.disabled = false;
+                    } else {
+                        lbBatchSelect.innerHTML = '<option value="">لا توجد دفعات متاحة</option>';
+                        showModalAlert(lbAlert, 'لا توجد دفعات متاحة لهذا المنهج (ربما تم ربط كل الدفعات المتوافقة بالفعل).', 'error');
+                    }
+                });
+        });
+
+        if (lbSaveBtn) {
+            lbSaveBtn.addEventListener('click', function () {
+                hideModalAlert(lbAlert);
+
+                if (!lbCurriculumSelect.value || !lbBatchSelect.value) {
+                    showModalAlert(lbAlert, 'الرجاء اختيار المنهج والدفعة.', 'error');
+                    return;
+                }
+
+                var formData = new FormData();
+                formData.append('instructorId', lbInstructorId);
+                formData.append('curriculumId', lbCurriculumSelect.value);
+                formData.append('batchId', lbBatchSelect.value);
+                formData.append('__RequestVerificationToken', getAntiForgeryToken());
+
+                var lbSaveBtnOriginalHtml = lbSaveBtn.innerHTML;
+                lbSaveBtn.disabled = true;
+                lbSaveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جارِ الحفظ...';
+
+                fetch('@Url.Action("CreateAjax", "InstructorCurriculumBatches", new { area = "Admin" })', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    lbSaveBtn.disabled = false;
+                    lbSaveBtn.innerHTML = lbSaveBtnOriginalHtml;
+                    if (data.success) {
+                        showModalAlert(lbAlert, data.message, 'success');
+                        setTimeout(function () { window.location.reload(); }, 700);
+                    } else {
+                        showModalAlert(lbAlert, data.message || 'حدث خطأ أثناء الحفظ.', 'error');
+                        lbSaveBtn.disabled = false;
+                    }
+                })
+                .catch(function () {
+                    lbSaveBtn.disabled = false;
+                    lbSaveBtn.innerHTML = lbSaveBtnOriginalHtml;
+                    showModalAlert(lbAlert, 'تعذر الاتصال بالخادم.', 'error');
+                });
+            });
+        }
+
+        applyFilters();
+    });
+</script>

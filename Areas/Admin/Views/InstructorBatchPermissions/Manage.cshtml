@@ -1,0 +1,483 @@
+@model QdratNew.ViewModels.InstructorPermissions.ManageInstructorPermissionsVM
+
+@{
+    ViewData["Title"] = $"صلاحيات {Model.FullName}";
+}
+
+<div class="manage-perm-page" dir="rtl">
+
+    <section class="page-hero">
+        <div class="hero-main">
+            <div class="hero-icon"><i class="fas fa-user-cog"></i></div>
+            <div>
+                <div class="hero-eyebrow">
+                    <a asp-area="Admin" asp-controller="InstructorBatchPermissions" asp-action="Index" class="back-link">
+                        <i class="fas fa-arrow-right"></i> المدربون
+                    </a>
+                    <span class="sep">/</span>
+                    إدارة الصلاحيات
+                </div>
+                <h1>@Model.FullName</h1>
+                <p>@Model.Email &nbsp;|&nbsp; <span class="status-dot @(Model.IsActive ? "active" : "inactive")"></span> @(Model.IsActive ? "نشط" : "غير نشط")</p>
+            </div>
+        </div>
+        <div class="hero-stats">
+            <div class="hstat">
+                <strong>@Model.BatchRows.Count(b => b.HasAnyPermission)</strong>
+                <span>دفعة ممنوحة</span>
+            </div>
+            <div class="hstat">
+                <strong>@Model.BatchRows.Sum(b => b.FeaturePermissions.Count(f => f.IsGranted))</strong>
+                <span>صلاحية إجمالية</span>
+            </div>
+        </div>
+    </section>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert-bar success"><i class="fas fa-check-circle"></i> @TempData["SuccessMessage"]</div>
+    }
+
+    <div id="toastContainer"></div>
+
+    <section class="legend-card">
+        <div class="legend-title"><i class="fas fa-info-circle"></i> الميزات المتاحة للمنح</div>
+        <div class="legend-grid">
+            <div class="legend-item">
+                <span class="feat-icon view"><i class="fas fa-eye"></i></span>
+                <div>
+                    <strong>عرض الدفعة</strong>
+                    <span>الاطلاع على بيانات الدفعة وطلابها</span>
+                </div>
+            </div>
+            <div class="legend-item">
+                <span class="feat-icon attend"><i class="fas fa-clipboard-check"></i></span>
+                <div>
+                    <strong>الحضور والانصراف</strong>
+                    <span>رؤية وتسجيل حضور الطلاب في هذه الدفعة</span>
+                </div>
+            </div>
+            <div class="legend-item">
+                <span class="feat-icon hw"><i class="fas fa-tasks"></i></span>
+                <div>
+                    <strong>الواجبات</strong>
+                    <span>الاطلاع على واجبات الدفعة وتصحيحها</span>
+                </div>
+            </div>
+            <div class="legend-item">
+                <span class="feat-icon exam"><i class="fas fa-file-alt"></i></span>
+                <div>
+                    <strong>الاختبارات</strong>
+                    <span>الاطلاع على اختبارات الدفعة ونتائجها</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="filter-bar">
+        <input id="batchSearch" type="text" class="form-ctrl" placeholder="ابحث باسم الدفعة أو الدورة..." />
+        <label class="toggle-label">
+            <input type="checkbox" id="showGrantedOnly" />
+            <span>عرض الممنوحة فقط</span>
+        </label>
+    </section>
+
+    <div id="noBatchResults" class="empty-box d-none">
+        <i class="fas fa-filter"></i>
+        <strong>لا توجد دفعات مطابقة</strong>
+    </div>
+
+    @foreach (var batch in Model.BatchRows)
+    {
+        <section class="batch-perm-card @(batch.IsArchived ? "archived" : "") @(batch.HasAnyPermission ? "has-perms" : "")"
+                 data-search="@($"{batch.BatchName} {batch.CourseName}".ToLower())"
+                 data-has-perm="@batch.HasAnyPermission.ToString().ToLower()">
+
+            <div class="batch-perm-header">
+                <div class="batch-perm-info">
+                    <div class="batch-avatar-sm">@BuildAvatar(batch.BatchName)</div>
+                    <div>
+                        <strong>@batch.BatchName</strong>
+                        <span>
+                            <i class="fas fa-book"></i> @batch.CourseName
+                            @if (batch.IsArchived)
+                            {
+                                <span class="archived-tag"><i class="fas fa-archive"></i> مؤرشفة</span>
+                            }
+                        </span>
+                    </div>
+                </div>
+                <div class="batch-perm-actions">
+                    @if (batch.HasAllPermissions)
+                    {
+                        <form asp-action="RevokeAll" method="post" class="inline-form">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="instructorId" value="@Model.InstructorId" />
+                            <input type="hidden" name="batchId" value="@batch.BatchId" />
+                            <button type="submit" class="bulk-btn revoke"
+                                    onclick="return confirm('سيتم سحب جميع الصلاحيات من هذه الدفعة. هل تريد المتابعة؟')">
+                                <i class="fas fa-ban"></i> سحب الكل
+                            </button>
+                        </form>
+                    }
+                    else
+                    {
+                        <form asp-action="GrantAll" method="post" class="inline-form">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="instructorId" value="@Model.InstructorId" />
+                            <input type="hidden" name="batchId" value="@batch.BatchId" />
+                            <button type="submit" class="bulk-btn grant"
+                                    onclick="return confirm('سيتم منح جميع الصلاحيات لهذه الدفعة. هل تريد المتابعة؟')">
+                                <i class="fas fa-check-double"></i> منح الكل
+                            </button>
+                        </form>
+                    }
+                </div>
+            </div>
+
+            <div class="features-grid">
+                @foreach (var feat in batch.FeaturePermissions)
+                {
+                    var featClass = feat.Feature switch
+                    {
+                        QdratNew.Entities.InstructorBatchFeature.ViewBatch => "view",
+                        QdratNew.Entities.InstructorBatchFeature.Attendance => "attend",
+                        QdratNew.Entities.InstructorBatchFeature.Homework => "hw",
+                        QdratNew.Entities.InstructorBatchFeature.Exams => "exam",
+                        _ => "view"
+                    };
+
+                    <div class="feature-toggle @(feat.IsGranted ? "granted" : "")">
+                        <div class="feat-left">
+                            <span class="feat-icon @featClass">
+                                @if (feat.Feature == QdratNew.Entities.InstructorBatchFeature.ViewBatch)
+                                { <i class="fas fa-eye"></i> }
+                                else if (feat.Feature == QdratNew.Entities.InstructorBatchFeature.Attendance)
+                                { <i class="fas fa-clipboard-check"></i> }
+                                else if (feat.Feature == QdratNew.Entities.InstructorBatchFeature.Homework)
+                                { <i class="fas fa-tasks"></i> }
+                                else
+                                { <i class="fas fa-file-alt"></i> }
+                            </span>
+                            <div>
+                                <strong>@feat.FeatureNameAr</strong>
+                                @if (feat.IsGranted && feat.GrantedAt.HasValue)
+                                {
+                                    <span class="granted-at">مُنحت @feat.GrantedAt.Value.ToString("yyyy/MM/dd HH:mm")</span>
+                                }
+                                else if (!feat.IsGranted)
+                                {
+                                    <span class="no-perm-text">لا توجد صلاحية</span>
+                                }
+                            </div>
+                        </div>
+                        <label class="toggle-switch"
+                               title="@(feat.IsGranted ? "اضغط لسحب الصلاحية" : "اضغط لمنح الصلاحية")">
+                            <input type="checkbox"
+                                   class="perm-toggle"
+                                   @(feat.IsGranted ? "checked" : "")
+                                   data-instructor-id="@Model.InstructorId"
+                                   data-batch-id="@batch.BatchId"
+                                   data-feature="@((int)feat.Feature)" />
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                }
+            </div>
+        </section>
+    }
+
+    @if (!Model.BatchRows.Any())
+    {
+        <div class="empty-box">
+            <i class="fas fa-layer-group"></i>
+            <strong>لا توجد دفعات</strong>
+            <span>لم يتم إضافة أي دفعة في النظام بعد.</span>
+        </div>
+    }
+</div>
+
+@functions {
+    string BuildAvatar(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "د";
+        var parts = name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2) return (parts[0][0].ToString() + parts[1][0].ToString()).ToUpper();
+        return name.Trim().Substring(0, Math.Min(2, name.Trim().Length)).ToUpper();
+    }
+}
+
+<style>
+    .manage-perm-page {
+        --font: 'Cairo','Tahoma',sans-serif;
+        --ink: #0d1117; --ink-3: #374151; --mute: #6b7280; --mute-2: #9ca3af;
+        --bg: #f4f6fb; --surface: #fff; --border: #e5e8f0; --bg-2: #eef1f8;
+        --blue: #2563eb; --blue-lt: #dbeafe; --blue-dk: #1e3a8a;
+        --green: #059669; --green-lt: #d1fae5; --green-dk: #064e3b;
+        --red: #dc2626; --red-lt: #fee2e2; --red-dk: #7f1d1d;
+        --purple: #7c3aed; --purple-lt: #ede9fe; --purple-dk: #3b0764;
+        --amber: #d97706; --amber-lt: #fef3c7; --amber-dk: #78350f;
+        --cyan: #0891b2; --cyan-lt: #cffafe;
+        --radius: 14px; --radius-lg: 22px;
+        --shadow: 0 2px 16px rgba(13,17,23,.07); --shadow-sm: 0 1px 6px rgba(13,17,23,.05);
+        background: var(--bg); min-height: 100vh; padding: 24px;
+        color: var(--ink); font-family: var(--font);
+    }
+    .manage-perm-page * { box-sizing: border-box; }
+    .manage-perm-page a { text-decoration: none; }
+
+    .page-hero {
+        background: linear-gradient(135deg, #0d1117, #1e3a5f);
+        color: #fff; border-radius: var(--radius-lg); padding: 24px;
+        display: flex; justify-content: space-between; align-items: center;
+        gap: 18px; margin-bottom: 14px; box-shadow: var(--shadow);
+    }
+    .hero-main { display: flex; align-items: center; gap: 16px; }
+    .hero-icon {
+        width: 58px; height: 58px; border-radius: 18px;
+        background: rgba(255,255,255,.10); border: 1px solid rgba(255,255,255,.12);
+        display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0;
+    }
+    .hero-eyebrow { color: #93c5fd; font-size: 12px; font-weight: 900; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+    .back-link { color: #93c5fd; font-size: 12px; font-weight: 900; }
+    .back-link:hover { color: #fff; }
+    .sep { color: rgba(255,255,255,.4); }
+    .page-hero h1 { margin: 0; font-size: 22px; font-weight: 900; }
+    .page-hero p { margin: 6px 0 0; color: rgba(255,255,255,.70); font-size: 12.5px; display: flex; align-items: center; gap: 6px; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .status-dot.active { background: #4ade80; }
+    .status-dot.inactive { background: #f87171; }
+
+    .hero-stats { display: flex; gap: 18px; flex-shrink: 0; }
+    .hstat { text-align: center; background: rgba(255,255,255,.10); border: 1px solid rgba(255,255,255,.15); border-radius: 14px; padding: 12px 18px; }
+    .hstat strong { display: block; font-size: 24px; font-weight: 900; }
+    .hstat span { display: block; font-size: 11px; color: rgba(255,255,255,.70); margin-top: 3px; font-weight: 700; }
+
+    .alert-bar { border-radius: var(--radius); padding: 12px 16px; margin-bottom: 14px; display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 800; }
+    .alert-bar.success { background: var(--green-lt); color: var(--green-dk); border: 1px solid rgba(5,150,105,.20); }
+
+    /* Legend */
+    .legend-card {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius-lg); padding: 16px 18px; margin-bottom: 14px; box-shadow: var(--shadow-sm);
+    }
+    .legend-title { font-size: 13px; font-weight: 900; color: var(--ink-3); margin-bottom: 12px; display: flex; align-items: center; gap: 7px; }
+    .legend-title i { color: var(--blue); }
+    .legend-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; }
+    .legend-item { display: flex; align-items: flex-start; gap: 10px; }
+    .legend-item strong { display: block; font-size: 12px; font-weight: 900; color: var(--ink); }
+    .legend-item span { display: block; font-size: 10.5px; color: var(--mute); margin-top: 2px; }
+
+    /* Feature icons */
+    .feat-icon {
+        width: 36px; height: 36px; border-radius: 12px; flex-shrink: 0;
+        display: inline-flex; align-items: center; justify-content: center; font-size: 15px;
+    }
+    .feat-icon.view { background: var(--blue-lt); color: var(--blue-dk); }
+    .feat-icon.attend { background: var(--green-lt); color: var(--green-dk); }
+    .feat-icon.hw { background: var(--amber-lt); color: var(--amber-dk); }
+    .feat-icon.exam { background: var(--purple-lt); color: var(--purple-dk); }
+
+    /* Filter */
+    .filter-bar {
+        display: flex; align-items: center; gap: 12px; margin-bottom: 14px;
+    }
+    .form-ctrl {
+        flex: 1; min-height: 42px; border: 1px solid var(--border); border-radius: 12px;
+        background: #fff; padding: 9px 12px; color: var(--ink); font-size: 12.5px;
+        font-family: var(--font); outline: none;
+    }
+    .form-ctrl:focus { border-color: var(--blue); }
+    .toggle-label { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 800; color: var(--ink-3); white-space: nowrap; cursor: pointer; }
+
+    /* Batch Permission Card */
+    .batch-perm-card {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius-lg); margin-bottom: 12px; box-shadow: var(--shadow-sm);
+        overflow: hidden; transition: .15s;
+    }
+    .batch-perm-card.has-perms { border-color: rgba(37,99,235,.22); }
+    .batch-perm-card.archived { opacity: .80; }
+
+    .batch-perm-header {
+        padding: 14px 18px; border-bottom: 1px solid var(--border);
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        background: linear-gradient(180deg,#fff,#f8fafc);
+    }
+    .batch-perm-info { display: flex; align-items: center; gap: 12px; }
+    .batch-avatar-sm {
+        width: 40px; height: 40px; border-radius: 13px; flex-shrink: 0;
+        background: linear-gradient(135deg,var(--blue-dk),var(--blue));
+        color: #fff; display: flex; align-items: center; justify-content: center;
+        font-size: 13px; font-weight: 900;
+    }
+    .batch-perm-info strong { display: block; color: var(--ink); font-size: 13.5px; font-weight: 900; }
+    .batch-perm-info span { display: flex; align-items: center; gap: 6px; color: var(--mute); font-size: 11.5px; margin-top: 3px; }
+    .archived-tag {
+        background: var(--amber-lt); color: var(--amber-dk); border: 1px solid rgba(217,119,6,.16);
+        border-radius: 999px; padding: 2px 7px; font-size: 10px; font-weight: 900;
+    }
+    .batch-perm-actions { display: flex; gap: 8px; }
+    .bulk-btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        border: none; border-radius: 10px; padding: 8px 12px;
+        font-family: var(--font); font-size: 12px; font-weight: 900; cursor: pointer; transition: .15s;
+    }
+    .bulk-btn.grant { background: var(--green); color: #fff; }
+    .bulk-btn.grant:hover { background: var(--green-dk); }
+    .bulk-btn.revoke { background: var(--red-lt); color: var(--red-dk); border: 1px solid rgba(220,38,38,.20); }
+    .bulk-btn.revoke:hover { background: var(--red); color: #fff; }
+    .inline-form { display: inline-flex; margin: 0; }
+
+    /* Features Grid */
+    .features-grid {
+        display: grid; grid-template-columns: repeat(4,1fr);
+        gap: 0; padding: 0;
+    }
+
+    .feature-toggle {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 10px; padding: 14px 16px;
+        border-left: 1px solid var(--border);
+        background: #fff; transition: background .15s;
+    }
+    .feature-toggle:last-child { border-left: none; }
+    .feature-toggle.granted { background: #f0fdf4; }
+    .feat-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .feat-left strong { display: block; color: var(--ink); font-size: 12px; font-weight: 900; }
+    .granted-at { display: block; color: var(--green-dk); font-size: 10px; font-weight: 700; margin-top: 2px; }
+    .no-perm-text { display: block; color: var(--mute-2); font-size: 10px; font-weight: 700; margin-top: 2px; }
+
+    /* Toggle Switch */
+    .toggle-switch { position: relative; flex-shrink: 0; cursor: pointer; }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+        display: block; width: 44px; height: 24px; border-radius: 999px;
+        background: var(--border); transition: .25s; position: relative;
+    }
+    .toggle-slider::before {
+        content: ''; position: absolute; left: 3px; top: 3px;
+        width: 18px; height: 18px; border-radius: 50%; background: #fff;
+        transition: .25s; box-shadow: 0 1px 4px rgba(0,0,0,.20);
+    }
+    .toggle-switch input:checked + .toggle-slider { background: var(--green); }
+    .toggle-switch input:checked + .toggle-slider::before { left: 23px; }
+
+    /* Toast */
+    #toastContainer { position: fixed; bottom: 20px; left: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
+    .toast {
+        background: var(--ink); color: #fff; border-radius: 12px;
+        padding: 10px 16px; font-size: 13px; font-weight: 800;
+        display: flex; align-items: center; gap: 8px;
+        animation: slideIn .25s ease; box-shadow: var(--shadow);
+    }
+    .toast.success { background: var(--green-dk); }
+    .toast.error { background: var(--red-dk); }
+    @@keyframes slideIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+
+    .empty-box { padding: 46px 20px; text-align: center; color: var(--mute); margin: 14px 0; }
+    .empty-box i { display: block; font-size: 34px; color: var(--mute-2); margin-bottom: 10px; }
+    .empty-box strong { display: block; color: var(--ink); font-size: 16px; font-weight: 900; margin-bottom: 4px; }
+    .empty-box span { display: block; font-size: 12px; }
+    .d-none { display: none !important; }
+
+    @@media (max-width: 1000px) {
+        .legend-grid { grid-template-columns: repeat(2,1fr); }
+        .features-grid { grid-template-columns: repeat(2,1fr); }
+        .feature-toggle { border-bottom: 1px solid var(--border); border-left: none; }
+        .hero-stats { display: none; }
+    }
+    @@media (max-width: 600px) {
+        .features-grid { grid-template-columns: 1fr; }
+        .legend-grid { grid-template-columns: 1fr; }
+    }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const searchInput = document.getElementById('batchSearch');
+        const showGrantedOnly = document.getElementById('showGrantedOnly');
+        const cards = Array.from(document.querySelectorAll('.batch-perm-card'));
+        const noResults = document.getElementById('noBatchResults');
+        const toastContainer = document.getElementById('toastContainer');
+
+        function showToast(message, type) {
+            const toast = document.createElement('div');
+            toast.className = 'toast ' + (type || '');
+            toast.innerHTML = '<i class="fas ' + (type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle') + '"></i> ' + message;
+            toastContainer.appendChild(toast);
+            setTimeout(function () { toast.remove(); }, 3000);
+        }
+
+        function applyFilter() {
+            const q = (searchInput?.value || '').trim().toLowerCase();
+            const grantedOnly = showGrantedOnly?.checked || false;
+            let shown = 0;
+
+            cards.forEach(function (card) {
+                const matchSearch = q === '' || (card.getAttribute('data-search') || '').includes(q);
+                const hasPerm = card.getAttribute('data-has-perm') === 'true';
+                const matchGranted = !grantedOnly || hasPerm;
+                const visible = matchSearch && matchGranted;
+                card.style.display = visible ? '' : 'none';
+                if (visible) shown++;
+            });
+
+            if (noResults) noResults.classList.toggle('d-none', shown !== 0);
+        }
+
+        if (searchInput) searchInput.addEventListener('input', applyFilter);
+        if (showGrantedOnly) showGrantedOnly.addEventListener('change', applyFilter);
+
+        document.querySelectorAll('.perm-toggle').forEach(function (toggle) {
+            toggle.addEventListener('change', function () {
+                const instructorId = this.getAttribute('data-instructor-id');
+                const batchId = this.getAttribute('data-batch-id');
+                const feature = this.getAttribute('data-feature');
+                const isGranted = this.checked;
+                const card = this.closest('.batch-perm-card');
+                const featureToggle = this.closest('.feature-toggle');
+
+                const token = document.querySelector('input[name="__RequestVerificationToken"]');
+
+                fetch('/Admin/InstructorBatchPermissions/UpdatePermission', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'RequestVerificationToken': token ? token.value : ''
+                    },
+                    body: new URLSearchParams({
+                        instructorId: instructorId,
+                        batchId: batchId,
+                        feature: feature,
+                        isGranted: isGranted,
+                        __RequestVerificationToken: token ? token.value : ''
+                    })
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data.success) {
+                        showToast(data.message, 'success');
+                        if (featureToggle) featureToggle.classList.toggle('granted', isGranted);
+                        if (card) {
+                            const anyChecked = Array.from(card.querySelectorAll('.perm-toggle')).some(t => t.checked);
+                            card.classList.toggle('has-perms', anyChecked);
+                            card.setAttribute('data-has-perm', anyChecked.toString());
+                        }
+                    } else {
+                        showToast(data.message, 'error');
+                        toggle.checked = !isGranted;
+                    }
+                })
+                .catch(function () {
+                    showToast('حدث خطأ في الاتصال. حاول مرة أخرى.', 'error');
+                    toggle.checked = !isGranted;
+                });
+            });
+        });
+
+        applyFilter();
+    });
+</script>
+
+@Html.AntiForgeryToken()

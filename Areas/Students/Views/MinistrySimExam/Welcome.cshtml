@@ -1,0 +1,480 @@
+@model QdratNew.ViewModels.Exam.MinistrySimExamStageWelcomeVm
+@{
+    ViewData["Title"] = "الترحيب بالمرحلة - اختبار معمل القياس";
+
+    var totalQ = Model.TotalQuestionCount;
+    var quantPct = totalQ > 0 ? (int)Math.Round(Model.QuantQuestionCount * 100.0 / totalQ) : 50;
+    var verbalPct = totalQ > 0 ? 100 - quantPct : 50;
+
+    // متوسط الزمن المتاح للسؤال الواحد (بالثواني) — مؤشر إيقاع يساعد الطالب على إدارة وقته
+    var secPerQuestion = totalQ > 0 ? (int)Math.Round(Model.DurationMinutes * 60.0 / totalQ) : 0;
+
+    var stagesDone = Math.Max(0, Model.StageNumber - 1);
+    var stagePct = Model.TotalStages > 0 ? stagesDone * 100.0 / Model.TotalStages : 0;
+
+    // محيط دائرة نصف قطرها 52 — يُستخدم لحساب stroke-dashoffset لحلقة التقدّم
+    const double ringCircumference = 326.7;
+    var ringOffset = Math.Round(ringCircumference * (1 - stagePct / 100.0), 1);
+}
+
+<div class="mse-welcome">
+
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="mse-alert mse-alert--error" role="alert">
+            <svg class="mse-alert__icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+            </svg>
+            <span>@TempData["ErrorMessage"]</span>
+        </div>
+    }
+
+    @if (Model.IsExamFinished)
+    {
+        <section class="mse-card mse-card--done">
+            <div class="mse-done__ring" aria-hidden="true">
+                <svg viewBox="0 0 120 120">
+                    <circle class="mse-ring__track" cx="60" cy="60" r="52" />
+                    <circle class="mse-ring__value mse-ring__value--done" cx="60" cy="60" r="52" />
+                </svg>
+                <svg class="mse-done__check" viewBox="0 0 24 24">
+                    <path d="m4.5 12.5 5 5 10-11" />
+                </svg>
+            </div>
+
+            <h1 class="mse-done__title">أتممت كل مراحل الاختبار</h1>
+            <p class="mse-done__subtitle">@Model.ExamTitle</p>
+            <p class="mse-done__note">
+                أنهيت @Model.TotalStages مراحل بالكامل. نتيجتك التفصيلية جاهزة للاطّلاع الآن.
+            </p>
+
+            <a asp-action="Result" asp-route-examId="@Model.MinistrySimExamId" class="mse-btn mse-btn--primary">
+                <svg class="mse-btn__icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M3 3v18h18M7 15l4-5 3 3 5-7" />
+                </svg>
+                عرض النتيجة
+            </a>
+        </section>
+    }
+    else
+    {
+        <section class="mse-card">
+
+            <header class="mse-hero">
+                <span class="mse-hero__chip">اختبار معمل القياس</span>
+                <h1 class="mse-hero__title">@Model.ExamTitle</h1>
+
+                <div class="mse-rail" role="img"
+                     aria-label="المرحلة @Model.StageNumber من @Model.TotalStages، أكملت @stagesDone مرحلة">
+                    @for (var i = 1; i <= Model.TotalStages; i++)
+                    {
+                        var state = i < Model.StageNumber ? "is-done" : (i == Model.StageNumber ? "is-current" : "is-next");
+                        <span class="mse-rail__seg @state"></span>
+                    }
+                </div>
+                <p class="mse-hero__progress">أكملت @stagesDone من @Model.TotalStages مراحل</p>
+            </header>
+
+            <div class="mse-body">
+
+                <div class="mse-stagehead">
+                    <div class="mse-stagehead__ring" aria-hidden="true">
+                        <svg viewBox="0 0 120 120">
+                            <circle class="mse-ring__track" cx="60" cy="60" r="52" />
+                            <circle class="mse-ring__value" cx="60" cy="60" r="52"
+                                    style="stroke-dasharray:@ringCircumference; stroke-dashoffset:@ringOffset;" />
+                        </svg>
+                        <div class="mse-stagehead__ringtext">
+                            <strong>@Model.StageNumber</strong>
+                            <span>/ @Model.TotalStages</span>
+                        </div>
+                    </div>
+
+                    <div class="mse-stagehead__text">
+                        <h2 class="mse-stagehead__title">المرحلة @Model.StageNumber</h2>
+                        @if (Model.IsResuming)
+                        {
+                            <span class="mse-badge mse-badge--resume">
+                                <svg class="mse-badge__icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <circle cx="12" cy="12" r="9" />
+                                    <path d="M12 8v4l3 2" />
+                                </svg>
+                                أنت داخل هذه المرحلة بالفعل — تابع من حيث توقفت
+                            </span>
+                        }
+                        else
+                        {
+                            <p class="mse-stagehead__hint">راجع تفاصيل المرحلة بالأسفل، ثم ابدأ عندما تكون مستعدًا.</p>
+                        }
+                    </div>
+                </div>
+
+                <div class="mse-stats">
+                    <div class="mse-stat">
+                        <svg class="mse-stat__icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M8 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-2" />
+                            <rect x="8" y="2" width="8" height="4" rx="1" />
+                            <path d="M8 11h8M8 15h5" />
+                        </svg>
+                        <div class="mse-stat__value">@totalQ</div>
+                        <div class="mse-stat__label">إجمالي الأسئلة</div>
+                    </div>
+
+                    <div class="mse-stat">
+                        <svg class="mse-stat__icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <circle cx="12" cy="13" r="8" />
+                            <path d="M12 9v4l2.5 2M9 2h6" />
+                        </svg>
+                        <div class="mse-stat__value">@Model.DurationMinutes</div>
+                        <div class="mse-stat__label">دقيقة لهذه المرحلة</div>
+                    </div>
+
+                    <div class="mse-stat">
+                        <svg class="mse-stat__icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M13 2 4.5 13H11l-1 9 8.5-11H12l1-9Z" />
+                        </svg>
+                        <div class="mse-stat__value">@secPerQuestion<span class="mse-stat__unit">ث</span></div>
+                        <div class="mse-stat__label">متوسط زمن السؤال</div>
+                    </div>
+                </div>
+
+                <div class="mse-split">
+                    <div class="mse-split__head">
+                        <h3 class="mse-split__title">توزيع أسئلة المرحلة</h3>
+                        <span class="mse-split__total">@totalQ سؤال</span>
+                    </div>
+
+                    <div class="mse-bar" role="img"
+                         aria-label="كمي @Model.QuantQuestionCount سؤال، لفظي @Model.VerbalQuestionCount سؤال">
+                        <span class="mse-bar__part mse-bar__part--quant" style="width:@(quantPct)%;"></span>
+                        <span class="mse-bar__part mse-bar__part--verbal" style="width:@(verbalPct)%;"></span>
+                    </div>
+
+                    <ul class="mse-legend">
+                        <li class="mse-legend__item">
+                            <span class="mse-legend__dot mse-legend__dot--quant" aria-hidden="true"></span>
+                            <div>
+                                <div class="mse-legend__name">@Model.QuantSectionTitle</div>
+                                <div class="mse-legend__meta">كمي — @Model.QuantQuestionCount سؤال (@quantPct%)</div>
+                            </div>
+                        </li>
+                        <li class="mse-legend__item">
+                            <span class="mse-legend__dot mse-legend__dot--verbal" aria-hidden="true"></span>
+                            <div>
+                                <div class="mse-legend__name">@Model.VerbalSectionTitle</div>
+                                <div class="mse-legend__meta">لفظي — @Model.VerbalQuestionCount سؤال (@verbalPct%)</div>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="mse-rules">
+                    <h3 class="mse-rules__title">قبل أن تبدأ</h3>
+                    <ul class="mse-rules__list">
+                        <li class="mse-rule">
+                            <svg class="mse-rule__icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <circle cx="12" cy="12" r="9" />
+                                <path d="m8.5 12.5 2.5 2.5 4.5-5" />
+                            </svg>
+                            <span>اختر إجابة واحدة فقط لكل سؤال.</span>
+                        </li>
+                        <li class="mse-rule">
+                            <svg class="mse-rule__icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M7 11V8a5 5 0 0 1 10 0v3" />
+                                <rect x="5" y="11" width="14" height="10" rx="2" />
+                            </svg>
+                            <span>بمجرد إنهاء المرحلة تُقفل نهائيًا، ولن تتمكن من الرجوع إليها أو تعديل إجاباتك فيها.</span>
+                        </li>
+                        <li class="mse-rule">
+                            <svg class="mse-rule__icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1Z" />
+                            </svg>
+                            <span>يمكنك وضع علامة «مراجعة» على أي سؤال والعودة إليه قبل إنهاء المرحلة.</span>
+                        </li>
+                        <li class="mse-rule">
+                            <svg class="mse-rule__icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <circle cx="12" cy="13" r="8" />
+                                <path d="M12 9v4l2.5 2M9 2h6" />
+                            </svg>
+                            <span>المؤقّت يبدأ فور ضغطك على زر البدء، ويستمر حتى لو أغلقت الصفحة.</span>
+                        </li>
+                    </ul>
+                </div>
+
+            </div>
+
+            <footer class="mse-footer">
+                <p class="mse-footer__note">خذ نفسًا عميقًا وركّز جيدًا — أنت جاهز لهذه المرحلة.</p>
+                <form method="post" asp-action="StartStage" id="mse-start-form">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="examId" value="@Model.MinistrySimExamId" />
+                    <input type="hidden" name="stageNumber" value="@Model.StageNumber" />
+                    <button type="submit" class="mse-btn mse-btn--primary mse-btn--lg" id="mse-start-btn">
+                        <span class="mse-btn__label">@(Model.IsResuming ? "متابعة المرحلة" : "ابدأ المرحلة")</span>
+                        <svg class="mse-btn__icon mse-btn__icon--arrow" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M19 12H5m7-7-7 7 7 7" />
+                        </svg>
+                    </button>
+                </form>
+            </footer>
+
+        </section>
+    }
+
+</div>
+
+<style>
+    .mse-welcome {
+        --mse-accent:        #4f46e5;
+        --mse-accent-dark:   #4338ca;
+        --mse-accent-soft:   #eef2ff;
+        --mse-quant:         #6366f1;
+        --mse-verbal:        #0f9b8e;
+        --mse-success:       #16a34a;
+        --mse-warn:          #b45309;
+        --mse-warn-soft:     #fef3c7;
+        --mse-ink:           #1e293b;
+        --mse-muted:         #64748b;
+        --mse-line:          #e2e8f0;
+        --mse-surface:       #ffffff;
+        --mse-surface-soft:  #f8fafc;
+
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 1.5rem 1rem 3rem;
+        direction: rtl;
+        font-family: 'Cairo', sans-serif;
+        color: var(--mse-ink);
+    }
+
+    /* ===== تنبيه ===== */
+    .mse-alert {
+        display: flex; align-items: flex-start; gap: .6rem;
+        padding: .85rem 1rem; margin-bottom: 1rem;
+        border-radius: 12px; font-weight: 600; font-size: .92rem;
+    }
+    .mse-alert--error { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+    .mse-alert__icon { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* ===== البطاقة ===== */
+    .mse-card {
+        background: var(--mse-surface);
+        border: 1px solid var(--mse-line);
+        border-radius: 20px;
+        overflow: hidden;
+        box-shadow: 0 10px 30px -18px rgba(15, 23, 42, .35);
+    }
+
+    /* ===== الهيرو ===== */
+    .mse-hero {
+        position: relative;
+        padding: 1.75rem 1.5rem 1.4rem;
+        background: linear-gradient(135deg, #4f46e5 0%, #6366f1 55%, #7c73f0 100%);
+        color: #fff;
+        text-align: center;
+    }
+    .mse-hero::after {
+        content: ""; position: absolute; inset: 0;
+        background: radial-gradient(circle at 15% 0%, rgba(255,255,255,.18), transparent 55%);
+        pointer-events: none;
+    }
+    .mse-hero > * { position: relative; z-index: 1; }
+
+    .mse-hero__chip {
+        display: inline-block;
+        padding: .28rem .85rem;
+        background: rgba(255,255,255,.16);
+        border: 1px solid rgba(255,255,255,.3);
+        border-radius: 50px;
+        font-size: .76rem; font-weight: 700;
+    }
+    .mse-hero__title {
+        margin: .7rem 0 0;
+        font-size: 1.32rem; font-weight: 800; line-height: 1.6;
+    }
+    .mse-hero__progress {
+        margin: .55rem 0 0;
+        font-size: .8rem; font-weight: 600; color: rgba(255,255,255,.9);
+    }
+
+    /* ===== شريط المراحل ===== */
+    .mse-rail { display: flex; gap: 5px; margin-top: 1.1rem; }
+    .mse-rail__seg {
+        flex: 1; height: 7px; border-radius: 50px;
+        background: rgba(255,255,255,.28);
+        transition: background .3s ease;
+    }
+    .mse-rail__seg.is-done { background: rgba(255,255,255,.95); }
+    .mse-rail__seg.is-current {
+        background: #fff;
+        box-shadow: 0 0 0 3px rgba(255,255,255,.3);
+    }
+
+    /* ===== جسم البطاقة ===== */
+    .mse-body { padding: 1.6rem 1.5rem; display: grid; gap: 1.5rem; }
+
+    /* ===== رأس المرحلة + حلقة التقدّم ===== */
+    .mse-stagehead { display: flex; align-items: center; gap: 1.1rem; }
+
+    .mse-stagehead__ring, .mse-done__ring { position: relative; width: 86px; height: 86px; flex: none; }
+    .mse-stagehead__ring svg, .mse-done__ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+    .mse-ring__track { fill: none; stroke: var(--mse-line); stroke-width: 9; }
+    .mse-ring__value {
+        fill: none; stroke: var(--mse-accent); stroke-width: 9; stroke-linecap: round;
+        transition: stroke-dashoffset .7s cubic-bezier(.4, 0, .2, 1);
+    }
+    .mse-ring__value--done { stroke: var(--mse-success); stroke-dasharray: 326.7; stroke-dashoffset: 0; }
+
+    .mse-stagehead__ringtext {
+        position: absolute; inset: 0;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        line-height: 1;
+    }
+    .mse-stagehead__ringtext strong { font-size: 1.5rem; font-weight: 800; color: var(--mse-accent); }
+    .mse-stagehead__ringtext span { font-size: .7rem; font-weight: 700; color: var(--mse-muted); margin-top: 3px; }
+
+    .mse-stagehead__title { margin: 0 0 .35rem; font-size: 1.2rem; font-weight: 800; }
+    .mse-stagehead__hint { margin: 0; font-size: .87rem; color: var(--mse-muted); line-height: 1.7; }
+
+    .mse-badge {
+        display: inline-flex; align-items: center; gap: .4rem;
+        padding: .35rem .8rem; border-radius: 50px;
+        font-size: .78rem; font-weight: 700;
+    }
+    .mse-badge--resume { background: var(--mse-warn-soft); color: var(--mse-warn); }
+    .mse-badge__icon { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* ===== الإحصاءات ===== */
+    .mse-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: .75rem; }
+    .mse-stat {
+        background: var(--mse-surface-soft);
+        border: 1px solid var(--mse-line);
+        border-radius: 14px;
+        padding: 1rem .6rem;
+        text-align: center;
+    }
+    .mse-stat__icon {
+        width: 22px; height: 22px; margin-bottom: .45rem;
+        fill: none; stroke: var(--mse-accent); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+    }
+    .mse-stat__value { font-size: 1.55rem; font-weight: 800; line-height: 1.1; }
+    .mse-stat__unit { font-size: .8rem; font-weight: 700; color: var(--mse-muted); margin-inline-start: 2px; }
+    .mse-stat__label { margin-top: .25rem; font-size: .76rem; font-weight: 600; color: var(--mse-muted); }
+
+    /* ===== توزيع الأسئلة ===== */
+    .mse-split {
+        border: 1px solid var(--mse-line);
+        border-radius: 14px;
+        padding: 1.05rem 1.1rem;
+    }
+    .mse-split__head { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; margin-bottom: .8rem; }
+    .mse-split__title { margin: 0; font-size: .95rem; font-weight: 800; }
+    .mse-split__total { font-size: .78rem; font-weight: 700; color: var(--mse-muted); }
+
+    .mse-bar { display: flex; height: 12px; border-radius: 50px; overflow: hidden; background: var(--mse-line); }
+    .mse-bar__part { display: block; height: 100%; }
+    .mse-bar__part--quant  { background: var(--mse-quant); }
+    .mse-bar__part--verbal { background: var(--mse-verbal); }
+
+    .mse-legend { list-style: none; margin: .9rem 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+    .mse-legend__item { display: flex; align-items: flex-start; gap: .5rem; min-width: 0; }
+    .mse-legend__dot { width: 10px; height: 10px; border-radius: 50%; flex: none; margin-top: .38rem; }
+    .mse-legend__dot--quant  { background: var(--mse-quant); }
+    .mse-legend__dot--verbal { background: var(--mse-verbal); }
+    .mse-legend__name { font-size: .87rem; font-weight: 700; line-height: 1.5; overflow-wrap: anywhere; }
+    .mse-legend__meta { font-size: .76rem; font-weight: 600; color: var(--mse-muted); margin-top: 1px; }
+
+    /* ===== التعليمات ===== */
+    .mse-rules {
+        background: var(--mse-accent-soft);
+        border: 1px solid #ddd9fb;
+        border-radius: 14px;
+        padding: 1.05rem 1.1rem;
+    }
+    .mse-rules__title { margin: 0 0 .7rem; font-size: .95rem; font-weight: 800; color: var(--mse-accent-dark); }
+    .mse-rules__list { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; }
+    .mse-rule { display: flex; align-items: flex-start; gap: .55rem; font-size: .88rem; font-weight: 600; line-height: 1.75; }
+    .mse-rule__icon {
+        width: 18px; height: 18px; flex: none; margin-top: .3rem;
+        fill: none; stroke: var(--mse-accent); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+    }
+
+    /* ===== التذييل والزر ===== */
+    .mse-footer {
+        padding: 1.25rem 1.5rem 1.6rem;
+        border-top: 1px solid var(--mse-line);
+        background: var(--mse-surface-soft);
+        text-align: center;
+    }
+    .mse-footer__note { margin: 0 0 .9rem; font-size: .85rem; font-weight: 600; color: var(--mse-muted); }
+
+    .mse-btn {
+        display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+        min-height: 48px; padding: .7rem 2rem;
+        border: none; border-radius: 50px;
+        font-family: inherit; font-size: .98rem; font-weight: 800;
+        cursor: pointer; text-decoration: none;
+        transition: background .2s ease, box-shadow .2s ease, transform .2s ease;
+    }
+    .mse-btn--primary {
+        background: var(--mse-accent); color: #fff;
+        box-shadow: 0 8px 20px -10px rgba(79, 70, 229, .9);
+    }
+    .mse-btn--primary:hover { background: var(--mse-accent-dark); color: #fff; transform: translateY(-1px); }
+    .mse-btn--lg { width: 100%; max-width: 340px; font-size: 1.05rem; min-height: 54px; }
+    .mse-btn:focus-visible { outline: 3px solid var(--mse-accent); outline-offset: 3px; }
+    .mse-btn[disabled] { opacity: .65; cursor: progress; transform: none; }
+    .mse-btn__icon { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .mse-btn__icon--arrow { transition: transform .2s ease; }
+    .mse-btn--lg:hover .mse-btn__icon--arrow { transform: translateX(-3px); }
+
+    /* ===== حالة إتمام الاختبار ===== */
+    .mse-card--done { padding: 2.5rem 1.5rem; text-align: center; }
+    .mse-done__ring { margin: 0 auto 1.25rem; }
+    .mse-done__check {
+        position: absolute; inset: 0; margin: auto; width: 38px; height: 38px;
+        fill: none; stroke: var(--mse-success); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round;
+    }
+    .mse-done__title { margin: 0 0 .4rem; font-size: 1.3rem; font-weight: 800; color: var(--mse-success); }
+    .mse-done__subtitle { margin: 0 0 .6rem; font-size: .95rem; font-weight: 700; color: var(--mse-ink); }
+    .mse-done__note { margin: 0 auto 1.5rem; max-width: 420px; font-size: .87rem; font-weight: 600; color: var(--mse-muted); line-height: 1.8; }
+
+    /* ===== الاستجابة ===== */
+    @@media (max-width: 575.98px) {
+        .mse-welcome { padding: 1rem .75rem 2.5rem; }
+        .mse-hero { padding: 1.4rem 1.1rem 1.15rem; }
+        .mse-hero__title { font-size: 1.12rem; }
+        .mse-body { padding: 1.25rem 1.1rem; gap: 1.25rem; }
+        .mse-footer { padding: 1.1rem 1.1rem 1.4rem; }
+        .mse-stats { grid-template-columns: 1fr 1fr; }
+        .mse-stats .mse-stat:last-child { grid-column: 1 / -1; }
+        .mse-legend { grid-template-columns: 1fr; }
+        .mse-stagehead { gap: .85rem; }
+        .mse-stagehead__ring { width: 70px; height: 70px; }
+        .mse-stagehead__ringtext strong { font-size: 1.25rem; }
+        .mse-btn--lg { max-width: none; }
+    }
+
+    @@media (prefers-reduced-motion: reduce) {
+        .mse-welcome *, .mse-welcome *::before, .mse-welcome *::after {
+            transition-duration: .01ms !important;
+            animation-duration: .01ms !important;
+        }
+    }
+</style>
+
+<script>
+    (function () {
+        // منع الإرسال المزدوج — نقرة ثانية على «ابدأ» قد تُرسل طلب بدء مرحلة مكرر للخادم
+        var form = document.getElementById('mse-start-form');
+        var btn = document.getElementById('mse-start-btn');
+        if (!form || !btn) return;
+
+        form.addEventListener('submit', function () {
+            if (btn.disabled) return;
+            btn.disabled = true;
+            var label = btn.querySelector('.mse-btn__label');
+            if (label) label.textContent = 'جارٍ التحضير...';
+        });
+    })();
+</script>

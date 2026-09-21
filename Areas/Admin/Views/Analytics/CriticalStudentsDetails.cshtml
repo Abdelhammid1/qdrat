@@ -1,0 +1,608 @@
+@model QdratNew.ViewModels.Admin.Analytics.AdvancedAnalyticsDashboardVM
+@using System.Text.Json
+@{
+    Layout = "~/Areas/Admin/Views/Shared/_AdminLayout.cshtml";
+    ViewData["Title"] = "الحالات الحرجة — طلاب بأولوية عالية";
+
+    var criticalStudents = Model?.Students
+        ?.Where(x => x.Priority == "High")
+        .OrderBy(x => x.ExamScore)
+        .ToList()
+        ?? new List<QdratNew.ViewModels.Admin.Analytics.StudentAnalyticsVM>();
+
+    var totalCritical = criticalStudents.Count;
+    var avgExam = Math.Round(criticalStudents.Any() ? criticalStudents.Average(x => x.ExamScore) : 0, 1);
+    var avgHw   = Math.Round(criticalStudents.Any() ? criticalStudents.Average(x => x.HomeworkScore) : 0, 1);
+    var avgAtt  = Math.Round(criticalStudents.Any() ? criticalStudents.Average(x => x.Attendance) : 0, 1);
+
+    var generalWeak = criticalStudents.Count(x => x.WeakReason == "ضعف عام في الفهم");
+    var examWeak    = criticalStudents.Count(x => x.WeakReason == "ضعف في الاختبارات");
+    var hwWeak      = criticalStudents.Count(x => x.WeakReason == "عدم التزام بالواجبات");
+    var absWeak     = criticalStudents.Count(x => x.WeakReason == "غياب متكرر");
+    var avgPerf     = criticalStudents.Count(x => x.WeakReason == "أداء متوسط");
+
+    var top10    = criticalStudents.Take(10).ToList();
+    var stuNames = JsonSerializer.Serialize(top10.Select(s => s.StudentName.Length > 14 ? s.StudentName[..14] + "…" : s.StudentName).ToList());
+    var stuExams = JsonSerializer.Serialize(top10.Select(s => Math.Round(s.ExamScore, 1)).ToList());
+    var stuHws   = JsonSerializer.Serialize(top10.Select(s => Math.Round(s.HomeworkScore, 1)).ToList());
+    var stuAtts  = JsonSerializer.Serialize(top10.Select(s => Math.Round(s.Attendance, 1)).ToList());
+
+    var instructorOptions = JsonSerializer.Serialize(
+    Model?.InstructorsFilter?
+        .Select(i => new
+        {
+            id = i.Id,
+            name = i.Name
+        })
+        .Cast<object>()
+        .ToList()
+    ?? new List<object>());
+}
+
+<style>
+    :root {
+        --qc-bg:        #F1F5F9;
+        --qc-surface:   #FFFFFF;
+        --qc-border:    #E2E8F0;
+        --qc-danger:    #DC2626;
+        --qc-danger-l:  #FEE2E2;
+        --qc-danger-d:  #991B1B;
+        --qc-warning:   #D97706;
+        --qc-warning-l: #FEF3C7;
+        --qc-success:   #059669;
+        --qc-success-l: #D1FAE5;
+        --qc-indigo:    #4F46E5;
+        --qc-indigo-l:  #EEF2FF;
+        --qc-violet:    #7C3AED;
+        --qc-violet-l:  #EDE9FE;
+        --qc-text:      #0F172A;
+        --qc-muted:     #64748B;
+        --qc-r:         14px;
+        --qc-shadow:    0 4px 24px rgba(15,23,42,.08);
+        --qc-shadow-sm: 0 2px 12px rgba(15,23,42,.05);
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    .qcsd-page { direction:rtl; font-family:'Cairo',sans-serif; background:var(--qc-bg); padding:28px 24px; color:var(--qc-text); }
+
+    .qcsd-breadcrumb { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--qc-muted); margin-bottom:18px; flex-wrap:wrap; }
+    .qcsd-breadcrumb a { color:var(--qc-muted); text-decoration:none; }
+    .qcsd-breadcrumb a:hover { color:var(--qc-danger); }
+    .qcsd-breadcrumb .sep { opacity:.4; }
+    .qcsd-breadcrumb .current { color:var(--qc-text); font-weight:700; }
+
+    .qcsd-header { background:linear-gradient(135deg,#7F1D1D 0%,#DC2626 55%,#EF4444 100%); border-radius:20px; padding:28px 30px; color:#fff; position:relative; overflow:hidden; margin-bottom:22px; }
+    .qcsd-header::before { content:''; position:absolute; inset:0; background:radial-gradient(circle at 10% 50%,rgba(255,255,255,.07) 0%,transparent 60%); pointer-events:none; }
+    .qcsd-header::after  { content:''; position:absolute; top:-40px; left:-40px; width:200px; height:200px; border-radius:50%; border:40px solid rgba(255,255,255,.06); pointer-events:none; }
+    .qcsd-ph-row { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; position:relative; z-index:1; }
+    .qcsd-ph-icon { width:52px; height:52px; border-radius:16px; background:rgba(255,255,255,.15); backdrop-filter:blur(6px); display:flex; align-items:center; justify-content:center; font-size:26px; flex-shrink:0; }
+    .qcsd-ph-title { font-size:24px; font-weight:900; margin-bottom:4px; }
+    .qcsd-ph-sub   { font-size:14px; color:rgba(255,255,255,.72); }
+    .qcsd-ph-badge { background:rgba(255,255,255,.15); border-radius:20px; padding:2px 10px; font-size:13px; font-weight:700; display:inline-block; margin-right:8px; }
+    .qcsd-btn-back { display:inline-flex; align-items:center; gap:6px; background:rgba(255,255,255,.15); color:#fff; border:1px solid rgba(255,255,255,.25); border-radius:10px; padding:9px 20px; font-size:14px; font-weight:700; text-decoration:none; }
+    .qcsd-btn-back:hover { background:rgba(255,255,255,.26); color:#fff; }
+
+    .qcsd-filter-bar { background:var(--qc-surface); border-radius:var(--qc-r); border:1px solid var(--qc-border); box-shadow:var(--qc-shadow-sm); padding:16px 22px; margin-bottom:22px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+    .qcsd-filter-label { font-size:13px; font-weight:700; color:var(--qc-muted); white-space:nowrap; display:flex; align-items:center; gap:6px; }
+    .qcsd-filter-bar select { border:1px solid var(--qc-border); border-radius:8px; padding:8px 12px; font-size:14px; font-family:'Cairo',sans-serif; color:var(--qc-text); background:#FAFBFC; min-width:150px; outline:none; }
+    .qcsd-filter-bar select:focus { border-color:var(--qc-danger); box-shadow:0 0 0 3px rgba(220,38,38,.12); }
+    .qcsd-btn-filter { background:var(--qc-danger); color:#fff; border:none; border-radius:8px; padding:9px 20px; font-size:14px; font-weight:700; font-family:'Cairo',sans-serif; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+    .qcsd-btn-filter:hover { background:#B91C1C; }
+    .qcsd-btn-clear { color:var(--qc-muted); font-size:14px; font-weight:600; text-decoration:none; padding:9px 14px; border-radius:8px; }
+    .qcsd-btn-clear:hover { background:#F1F5F9; color:var(--qc-danger); }
+
+    .qcsd-kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:22px; }
+    @@media(max-width:1199px){ .qcsd-kpi-grid{ grid-template-columns:repeat(2,1fr); } }
+    @@media(max-width:575px)  { .qcsd-kpi-grid{ grid-template-columns:1fr 1fr; } }
+    .qcsd-kpi { background:var(--qc-surface); border-radius:var(--qc-r); border:1px solid var(--qc-border); box-shadow:var(--qc-shadow-sm); padding:22px 20px; position:relative; overflow:hidden; transition:transform .18s,box-shadow .18s; }
+    .qcsd-kpi:hover { transform:translateY(-3px); box-shadow:var(--qc-shadow); }
+    .qcsd-kpi::before { content:''; position:absolute; bottom:0; right:0; left:0; height:3px; border-radius:0 0 var(--qc-r) var(--qc-r); }
+    .qcsd-kpi.k-red::before    { background:var(--qc-danger); }
+    .qcsd-kpi.k-amber::before  { background:var(--qc-warning); }
+    .qcsd-kpi.k-indigo::before { background:var(--qc-indigo); }
+    .qcsd-kpi.k-violet::before { background:var(--qc-violet); }
+    .qcsd-kpi-icon  { width:42px; height:42px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:21px; margin-bottom:14px; }
+    .qcsd-kpi-value { font-size:32px; font-weight:900; line-height:1; margin-bottom:5px; }
+    .qcsd-kpi-label { font-size:13px; font-weight:700; color:var(--qc-muted); }
+    .qcsd-kpi-sub   { font-size:11px; color:var(--qc-muted); margin-top:3px; }
+
+    .qcsd-reason-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:22px; }
+    @@media(max-width:991px){ .qcsd-reason-grid{ grid-template-columns:repeat(2,1fr); } }
+    .qcsd-reason-card { background:var(--qc-surface); border-radius:12px; border:1px solid var(--qc-border); padding:16px 18px; display:flex; align-items:center; gap:14px; box-shadow:var(--qc-shadow-sm); }
+    .qcsd-reason-icon  { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:19px; flex-shrink:0; }
+    .qcsd-reason-count { font-size:26px; font-weight:900; line-height:1; }
+    .qcsd-reason-label { font-size:12px; color:var(--qc-muted); font-weight:600; margin-top:2px; }
+
+    .qcsd-charts-row { display:grid; grid-template-columns:280px 1fr 1fr; gap:18px; margin-bottom:22px; align-items:start; }
+    @@media(max-width:1199px){ .qcsd-charts-row{ grid-template-columns:1fr 1fr; } }
+    @@media(max-width:767px) { .qcsd-charts-row{ grid-template-columns:1fr; } }
+    .qcsd-card { background:var(--qc-surface); border-radius:var(--qc-r); border:1px solid var(--qc-border); box-shadow:var(--qc-shadow-sm); padding:22px; }
+    .qcsd-card-title { font-size:15px; font-weight:800; display:flex; align-items:center; gap:8px; margin-bottom:4px; }
+    .qcsd-ct-icon { width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+    .qcsd-card-sub { font-size:12px; color:var(--qc-muted); margin-bottom:14px; padding-right:38px; }
+
+    .qcsd-section { background:var(--qc-surface); border-radius:var(--qc-r); border:1px solid var(--qc-border); box-shadow:var(--qc-shadow-sm); overflow:hidden; margin-bottom:100px; }
+    .qcsd-toolbar { padding:18px 22px; border-bottom:1px solid var(--qc-border); display:flex; align-items:center; gap:12px; flex-wrap:wrap; background:#FAFBFC; }
+    .qcsd-sec-title { font-size:16px; font-weight:800; display:flex; align-items:center; gap:8px; margin-left:auto; }
+    .qcsd-sec-title .st-icon { width:32px; height:32px; border-radius:8px; background:var(--qc-danger-l); color:var(--qc-danger); display:flex; align-items:center; justify-content:center; font-size:16px; }
+    .qcsd-search { border:1px solid var(--qc-border); border-radius:8px; padding:8px 14px; font-size:14px; font-family:'Cairo',sans-serif; width:220px; outline:none; background:#fff; }
+    .qcsd-search:focus { border-color:var(--qc-danger); box-shadow:0 0 0 3px rgba(220,38,38,.12); }
+
+    .qcsd-table { width:100%; border-collapse:collapse; font-size:14px; }
+    .qcsd-table thead th { background:#F8FAFC; color:var(--qc-muted); font-weight:700; font-size:12px; text-transform:uppercase; letter-spacing:.4px; padding:12px 14px; border-bottom:2px solid var(--qc-border); white-space:nowrap; }
+    .qcsd-table tbody td { padding:13px 14px; border-bottom:1px solid #F1F5F9; vertical-align:middle; }
+    .qcsd-table tbody tr:last-child td { border-bottom:none; }
+    .qcsd-table tbody tr { transition:background .12s; }
+    .qcsd-table tbody tr:hover { background:#FFF8F8; }
+    .qcsd-table tbody tr.row-selected { background:#FEF2F2; }
+    .qcsd-cb { width:17px; height:17px; accent-color:var(--qc-danger); cursor:pointer; }
+    .qcsd-avatar { width:36px; height:36px; border-radius:50%; background:var(--qc-danger-l); color:var(--qc-danger); display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; flex-shrink:0; }
+    .qcsd-score-num { font-size:15px; font-weight:800; line-height:1; }
+    .qcsd-prog { height:5px; border-radius:20px; background:#EEF2F6; overflow:hidden; margin-top:5px; }
+    .qcsd-prog-bar { height:100%; border-radius:20px; transition:width .4s; }
+    .qcsd-badge { display:inline-flex; align-items:center; gap:4px; padding:4px 11px; border-radius:20px; font-size:12px; font-weight:700; white-space:nowrap; }
+    .b-red   { background:var(--qc-danger-l);  color:var(--qc-danger-d); }
+    .b-amber { background:var(--qc-warning-l); color:#92400E; }
+    .b-green { background:var(--qc-success-l); color:#065F46; }
+    .qcsd-chip { display:inline-block; background:#F8FAFC; border:1px solid var(--qc-border); border-radius:7px; padding:5px 10px; font-size:12px; font-weight:600; line-height:1.4; max-width:190px; white-space:normal; }
+    .qcsd-table-footer { padding:14px 22px; border-top:1px solid var(--qc-border); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; background:#FAFBFC; }
+    .qcsd-footer-text { font-size:13px; color:var(--qc-muted); font-weight:600; }
+    .qcsd-footer-text strong { color:var(--qc-text); }
+    .qcsd-empty { padding:60px 20px; text-align:center; color:var(--qc-muted); }
+    .qcsd-empty i { font-size:48px; display:block; margin-bottom:14px; }
+
+    .qcsd-fab { position:fixed; bottom:28px; right:50%; transform:translateX(50%); z-index:1000; background:#0F172A; border-radius:16px; padding:14px 22px; display:flex; align-items:center; gap:14px; box-shadow:0 8px 40px rgba(15,23,42,.35); flex-wrap:wrap; transition:opacity .25s,transform .25s; max-width:90vw; }
+    .qcsd-fab.fab-hidden { opacity:0; pointer-events:none; transform:translate(50%,20px); }
+    .qcsd-fab-info { color:rgba(255,255,255,.7); font-size:14px; font-weight:600; white-space:nowrap; }
+    .qcsd-fab-info strong { color:#fff; font-size:16px; }
+    .qcsd-fab-divider { width:1px; height:30px; background:rgba(255,255,255,.15); flex-shrink:0; }
+    .qcsd-fab-btn { display:inline-flex; align-items:center; gap:6px; padding:9px 18px; border-radius:10px; border:none; font-size:13px; font-weight:700; font-family:'Cairo',sans-serif; cursor:pointer; transition:background .18s,transform .15s; white-space:nowrap; }
+    .qcsd-fab-btn:hover { transform:translateY(-1px); }
+    .fb-danger { background:var(--qc-danger); color:#fff; }
+    .fb-amber  { background:#B45309; color:#fff; }
+    .fb-green  { background:var(--qc-success); color:#fff; }
+    .fb-ghost  { background:rgba(255,255,255,.1); color:rgba(255,255,255,.85); }
+    .fb-ghost:hover { background:rgba(255,255,255,.18); }
+    .qcsd-fab-close { background:rgba(255,255,255,.08); border:none; color:rgba(255,255,255,.6); border-radius:8px; width:30px; height:30px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px; }
+    .qcsd-fab-close:hover { background:rgba(255,255,255,.18); color:#fff; }
+
+    .qcsd-modal-overlay { position:fixed; inset:0; background:rgba(15,23,42,.5); z-index:1050; display:flex; align-items:center; justify-content:center; padding:20px; opacity:0; pointer-events:none; transition:opacity .22s; backdrop-filter:blur(3px); }
+    .qcsd-modal-overlay.open { opacity:1; pointer-events:all; }
+    .qcsd-modal { background:#fff; border-radius:20px; width:100%; max-width:560px; box-shadow:0 24px 80px rgba(15,23,42,.22); overflow:hidden; transform:translateY(20px); transition:transform .22s; }
+    .qcsd-modal-overlay.open .qcsd-modal { transform:translateY(0); }
+    .qcsd-modal-header { padding:22px 26px 18px; border-bottom:1px solid var(--qc-border); display:flex; align-items:center; gap:12px; }
+    .qcsd-modal-icon  { width:46px; height:46px; border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:22px; flex-shrink:0; }
+    .qcsd-modal-title { font-size:18px; font-weight:800; }
+    .qcsd-modal-sub   { font-size:13px; color:var(--qc-muted); margin:2px 0 0; }
+    .qcsd-modal-close { margin-right:auto; background:#F1F5F9; border:none; border-radius:8px; width:32px; height:32px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:16px; color:var(--qc-muted); }
+    .qcsd-modal-close:hover { background:#E2E8F0; }
+    .qcsd-modal-body   { padding:22px 26px; }
+    .qcsd-modal-footer { padding:16px 26px 22px; display:flex; gap:10px; justify-content:flex-end; }
+    .qcsd-sel-list { background:#F8FAFC; border:1px solid var(--qc-border); border-radius:10px; padding:12px 14px; max-height:150px; overflow-y:auto; margin-bottom:16px; }
+    .qcsd-sel-item { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid #EEF2F6; font-size:13px; font-weight:600; }
+    .qcsd-sel-item:last-child { border-bottom:none; }
+    .qcsd-sel-dot { width:8px; height:8px; border-radius:50%; background:var(--qc-danger); flex-shrink:0; }
+    .qcsd-form-group { margin-bottom:14px; }
+    .qcsd-form-label { font-size:13px; font-weight:700; margin-bottom:6px; display:block; }
+    .qcsd-form-ctrl { width:100%; border:1px solid var(--qc-border); border-radius:8px; padding:9px 13px; font-size:14px; font-family:'Cairo',sans-serif; color:var(--qc-text); background:#FAFBFC; outline:none; }
+    .qcsd-form-ctrl:focus { border-color:var(--qc-danger); box-shadow:0 0 0 3px rgba(220,38,38,.12); }
+    textarea.qcsd-form-ctrl { resize:vertical; min-height:90px; }
+    .qcsd-btn-submit { background:var(--qc-danger); color:#fff; border:none; border-radius:10px; padding:10px 26px; font-size:14px; font-weight:700; font-family:'Cairo',sans-serif; cursor:pointer; }
+    .qcsd-btn-submit:hover { background:#B91C1C; }
+    .qcsd-btn-cancel { background:#F1F5F9; color:var(--qc-muted); border:none; border-radius:10px; padding:10px 22px; font-size:14px; font-weight:700; font-family:'Cairo',sans-serif; cursor:pointer; }
+    .qcsd-btn-cancel:hover { background:#E2E8F0; }
+</style>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+
+<div class="qcsd-page">
+
+    <nav class="qcsd-breadcrumb">
+        <i class="bi bi-house-fill"></i>
+        <a asp-area="Admin" asp-controller="Home" asp-action="Index">لوحة التحكم</a>
+        <span class="sep">‹</span>
+        <a asp-area="Admin" asp-controller="Analytics" asp-action="AdvancedDashboard">التحليلات المتقدمة</a>
+        <span class="sep">‹</span>
+        <span class="current">الحالات الحرجة</span>
+    </nav>
+
+    <div class="qcsd-header">
+        <div class="qcsd-ph-row">
+            <div style="display:flex;align-items:center;gap:16px;">
+                <div class="qcsd-ph-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+                <div>
+                    <h1 class="qcsd-ph-title">الحالات الحرجة — أولوية عالية</h1>
+                    <p class="qcsd-ph-sub">
+                        طلاب يحتاجون تدخلاً فورياً بناءً على تحليل الأداء الشامل
+                        @if (totalCritical > 0) { <span class="qcsd-ph-badge">@totalCritical حالة حرجة</span> }
+                    </p>
+                </div>
+            </div>
+            <a asp-area="Admin" asp-controller="Analytics" asp-action="AdvancedDashboard" class="qcsd-btn-back">
+                <i class="bi bi-arrow-right"></i> رجوع للتحليلات
+            </a>
+        </div>
+    </div>
+
+    <form method="get" asp-area="Admin" asp-controller="Analytics" asp-action="CriticalStudentsDetails">
+        <div class="qcsd-filter-bar">
+            <span class="qcsd-filter-label"><i class="bi bi-funnel-fill"></i> تصفية:</span>
+            <select name="curriculumId">
+                <option value="">كل المناهج</option>
+                @foreach (var c in Model?.CurriculumsFilter ?? new()) { <option value="@c.Id" selected="@(Model?.SelectedCurriculumId == c.Id)">@c.Name</option> }
+            </select>
+            <select name="batchId">
+                <option value="">كل الدفعات</option>
+                @foreach (var b in Model?.BatchesFilter ?? new()) { <option value="@b.Id" selected="@(Model?.SelectedBatchId == b.Id)">@b.Name</option> }
+            </select>
+            <select name="instructorId">
+                <option value="">كل المدرسين</option>
+                @foreach (var i in Model?.InstructorsFilter ?? new()) { <option value="@i.Id" selected="@(Model?.SelectedInstructorId == i.Id)">@i.Name</option> }
+            </select>
+            <button type="submit" class="qcsd-btn-filter"><i class="bi bi-search"></i> تطبيق</button>
+            @if (Model?.SelectedCurriculumId.HasValue == true || Model?.SelectedBatchId.HasValue == true || Model?.SelectedInstructorId.HasValue == true)
+            {
+                <a asp-area="Admin" asp-controller="Analytics" asp-action="CriticalStudentsDetails" class="qcsd-btn-clear"><i class="bi bi-x-circle"></i> مسح</a>
+            }
+        </div>
+    </form>
+
+    <div class="qcsd-kpi-grid">
+        <div class="qcsd-kpi k-red">
+            <div class="qcsd-kpi-icon" style="background:var(--qc-danger-l);color:var(--qc-danger);"><i class="bi bi-person-fill-exclamation"></i></div>
+            <div class="qcsd-kpi-value" style="color:var(--qc-danger);">@totalCritical</div>
+            <div class="qcsd-kpi-label">إجمالي الحالات الحرجة</div>
+            <div class="qcsd-kpi-sub">تدخل فوري مطلوب</div>
+        </div>
+        <div class="qcsd-kpi k-amber">
+            <div class="qcsd-kpi-icon" style="background:var(--qc-warning-l);color:var(--qc-warning);"><i class="bi bi-pencil-square"></i></div>
+            <div class="qcsd-kpi-value" style="color:var(--qc-warning);">@avgExam<small style="font-size:18px;">%</small></div>
+            <div class="qcsd-kpi-label">متوسط الاختبارات</div>
+            <div class="qcsd-kpi-sub">أدنى من الحد المقبول</div>
+        </div>
+        <div class="qcsd-kpi k-indigo">
+            <div class="qcsd-kpi-icon" style="background:var(--qc-indigo-l);color:var(--qc-indigo);"><i class="bi bi-journal-check"></i></div>
+            <div class="qcsd-kpi-value" style="color:var(--qc-indigo);">@avgHw<small style="font-size:18px;">%</small></div>
+            <div class="qcsd-kpi-label">متوسط الواجبات</div>
+            <div class="qcsd-kpi-sub">معدل التزام الحالات الحرجة</div>
+        </div>
+        <div class="qcsd-kpi k-violet">
+            <div class="qcsd-kpi-icon" style="background:var(--qc-violet-l);color:var(--qc-violet);"><i class="bi bi-calendar-x-fill"></i></div>
+            <div class="qcsd-kpi-value" style="color:var(--qc-violet);">@avgAtt<small style="font-size:18px;">%</small></div>
+            <div class="qcsd-kpi-label">متوسط الحضور</div>
+            <div class="qcsd-kpi-sub">نسبة حضور الحالات الحرجة</div>
+        </div>
+    </div>
+
+    @if (totalCritical > 0)
+    {
+        <div class="qcsd-reason-grid">
+            <div class="qcsd-reason-card">
+                <div class="qcsd-reason-icon" style="background:#FEF2F2;color:#DC2626;"><i class="bi bi-brain"></i></div>
+                <div><div class="qcsd-reason-count" style="color:#DC2626;">@generalWeak</div><div class="qcsd-reason-label">ضعف عام في الفهم</div></div>
+            </div>
+            <div class="qcsd-reason-card">
+                <div class="qcsd-reason-icon" style="background:#FEF3C7;color:#D97706;"><i class="bi bi-pencil-fill"></i></div>
+                <div><div class="qcsd-reason-count" style="color:#D97706;">@examWeak</div><div class="qcsd-reason-label">ضعف في الاختبارات</div></div>
+            </div>
+            <div class="qcsd-reason-card">
+                <div class="qcsd-reason-icon" style="background:#EDE9FE;color:#7C3AED;"><i class="bi bi-journal-x"></i></div>
+                <div><div class="qcsd-reason-count" style="color:#7C3AED;">@hwWeak</div><div class="qcsd-reason-label">إهمال الواجبات</div></div>
+            </div>
+            <div class="qcsd-reason-card">
+                <div class="qcsd-reason-icon" style="background:#EEF2FF;color:#4F46E5;"><i class="bi bi-calendar-x-fill"></i></div>
+                <div><div class="qcsd-reason-count" style="color:#4F46E5;">@absWeak</div><div class="qcsd-reason-label">غياب متكرر</div></div>
+            </div>
+        </div>
+    }
+
+    <div class="qcsd-charts-row">
+        <div class="qcsd-card">
+            <div class="qcsd-card-title"><div class="qcsd-ct-icon" style="background:var(--qc-danger-l);color:var(--qc-danger);"><i class="bi bi-pie-chart-fill"></i></div>توزيع أسباب الضعف</div>
+            <p class="qcsd-card-sub">تصنيف الحالات الحرجة حسب السبب</p>
+            <div id="chartReasonDist" style="min-height:240px;"></div>
+        </div>
+        <div class="qcsd-card">
+            <div class="qcsd-card-title"><div class="qcsd-ct-icon" style="background:var(--qc-warning-l);color:var(--qc-warning);"><i class="bi bi-bar-chart-steps"></i></div>مقارنة الأداء — أضعف 10 طلاب</div>
+            <p class="qcsd-card-sub">مقارنة بين الاختبارات والواجبات والحضور</p>
+            <div id="chartStudentProfile" style="min-height:240px;"></div>
+        </div>
+        <div class="qcsd-card">
+            <div class="qcsd-card-title"><div class="qcsd-ct-icon" style="background:var(--qc-indigo-l);color:var(--qc-indigo);"><i class="bi bi-speedometer2"></i></div>متوسطات الأداء العامة</div>
+            <p class="qcsd-card-sub">مقارنة بالحد الأدنى المقبول (60%)</p>
+            <div id="chartAvgScores" style="min-height:240px;"></div>
+        </div>
+    </div>
+
+    <div class="qcsd-section">
+        <div class="qcsd-toolbar">
+            <div class="qcsd-sec-title">
+                <div class="st-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+                قائمة الحالات الحرجة
+                @if (totalCritical > 0) { <span class="qcsd-badge b-red" style="font-size:11px;">@totalCritical حالة</span> }
+            </div>
+            <input type="text" class="qcsd-search" id="critSearch"
+                   placeholder="🔍 ابحث باسم الطالب..." oninput="onSearch(this.value)">
+        </div>
+
+        @if (!criticalStudents.Any())
+        {
+            <div class="qcsd-empty">
+                <i class="bi bi-check-circle-fill" style="color:#059669;"></i>
+                <div style="font-size:16px;font-weight:700;color:var(--qc-text);margin-bottom:6px;">لا توجد حالات حرجة حالياً</div>
+                <div style="font-size:14px;">لا يوجد طلاب بأولوية عالية في البيانات الحالية</div>
+            </div>
+        }
+        else
+        {
+            <div style="overflow-x:auto;">
+                <table class="qcsd-table">
+                    <thead>
+                        <tr>
+                            <th style="width:44px;"><input type="checkbox" class="qcsd-cb" id="selectAll" onchange="toggleAll(this)"></th>
+                            <th style="min-width:180px;">الطالب</th>
+                            <th style="min-width:120px;">الاختبارات</th>
+                            <th style="min-width:120px;">الواجبات</th>
+                            <th style="min-width:120px;">الحضور</th>
+                            <th style="min-width:160px;">سبب الضعف</th>
+                            <th style="min-width:210px;">الإجراء المطلوب</th>
+                        </tr>
+                    </thead>
+                    <tbody id="critBody">
+                        @foreach (var s in criticalStudents)
+                        {
+                            var examColor = s.ExamScore >= 60 ? "var(--qc-success)" : s.ExamScore >= 40 ? "var(--qc-warning)" : "var(--qc-danger)";
+                            var hwColor   = s.HomeworkScore >= 60 ? "var(--qc-success)" : s.HomeworkScore >= 40 ? "var(--qc-warning)" : "var(--qc-danger)";
+                            var attColor  = s.Attendance >= 60 ? "var(--qc-success)" : s.Attendance >= 40 ? "var(--qc-warning)" : "var(--qc-danger)";
+                            var initial   = string.IsNullOrWhiteSpace(s.StudentName) ? "؟" : s.StudentName.Trim().Substring(0, 1);
+                            <tr class="crit-row" data-name="@s.StudentName.ToLower()">
+                                <td><input type="checkbox" class="qcsd-cb crit-cb" data-id="@s.StudentId" data-name="@s.StudentName" onchange="onCheckboxChange()"></td>
+                                <td>
+                                    <div style="display:flex;align-items:center;gap:10px;">
+                                        <div class="qcsd-avatar">@initial</div>
+                                        <div class="crit-name" style="font-weight:700;font-size:14px;">@s.StudentName</div>
+                                    </div>
+                                </td>
+                                <td><div class="qcsd-score-num" style="color:@examColor;">@s.ExamScore%</div><div class="qcsd-prog"><div class="qcsd-prog-bar" style="width:@s.ExamScore%;background:@examColor;"></div></div></td>
+                                <td><div class="qcsd-score-num" style="color:@hwColor;">@s.HomeworkScore%</div><div class="qcsd-prog"><div class="qcsd-prog-bar" style="width:@s.HomeworkScore%;background:@hwColor;"></div></div></td>
+                                <td><div class="qcsd-score-num" style="color:@attColor;">@s.Attendance%</div><div class="qcsd-prog"><div class="qcsd-prog-bar" style="width:@s.Attendance%;background:@attColor;"></div></div></td>
+                                <td><span style="font-size:13px;font-weight:600;">@s.WeakReason</span></td>
+                                <td><span class="qcsd-chip">@s.ActionRequired</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="qcsd-table-footer">
+                <span class="qcsd-footer-text">إجمالي: <strong>@totalCritical</strong> حالة حرجة</span>
+                <span class="qcsd-footer-text" id="filteredInfo"></span>
+            </div>
+        }
+    </div>
+
+</div>
+
+<div class="qcsd-fab fab-hidden" id="fabBar">
+    <div class="qcsd-fab-info"><strong id="fabCount">0</strong> طالب محدد</div>
+    <div class="qcsd-fab-divider"></div>
+    <button class="qcsd-fab-btn fb-danger" onclick="openModal('notify')"><i class="bi bi-bell-fill"></i> إرسال تنبيه</button>
+    <button class="qcsd-fab-btn fb-amber"  onclick="openModal('session')"><i class="bi bi-calendar-plus-fill"></i> جلسة تدارك</button>
+    <button class="qcsd-fab-btn fb-green"  onclick="openModal('teacher')"><i class="bi bi-person-plus-fill"></i> تعيين مدرس</button>
+    <button class="qcsd-fab-btn fb-ghost"  onclick="openModal('export')"><i class="bi bi-download"></i> تصدير</button>
+    <button class="qcsd-fab-close" onclick="clearSel()"><i class="bi bi-x"></i></button>
+</div>
+
+<div class="qcsd-modal-overlay" id="modalOverlay">
+    <div class="qcsd-modal">
+        <div class="qcsd-modal-header">
+            <div class="qcsd-modal-icon" id="modalIcon"></div>
+            <div><div class="qcsd-modal-title" id="modalTitle"></div><div class="qcsd-modal-sub" id="modalSub"></div></div>
+            <button class="qcsd-modal-close" onclick="closeModal()"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <div class="qcsd-modal-body">
+            <div style="font-size:12px;font-weight:700;color:var(--qc-muted);margin-bottom:8px;">الطلاب المحددون</div>
+            <div class="qcsd-sel-list" id="modalList"></div>
+            <div id="modalForm"></div>
+        </div>
+        <div class="qcsd-modal-footer">
+            <button class="qcsd-btn-cancel" onclick="closeModal()">إلغاء</button>
+            <button class="qcsd-btn-submit" id="modalSubmitBtn"></button>
+        </div>
+    </div>
+</div>
+
+@Html.AntiForgeryToken()
+
+<script>
+var _instructorOptions = @Html.Raw(instructorOptions);
+function _buildInstrOptions(){
+    if(!_instructorOptions||_instructorOptions.length===0) return '<option value="0">-- لا يوجد مدرسون --</option>';
+    return '<option value="0">-- اختر مدرساً --</option>'+_instructorOptions.map(function(i){return '<option value="'+i.id+'">'+i.name+'</option>';}).join('');
+}
+
+(function(){
+    var gW=@generalWeak,eW=@examWeak,hW=@hwWeak,aW=@absWeak,aP=@avgPerf;
+    if(gW+eW+hW+aW+aP===0){document.getElementById('chartReasonDist').innerHTML='<div style="padding:60px;text-align:center;color:#94A3B8;">لا توجد بيانات</div>';return;}
+    new ApexCharts(document.getElementById('chartReasonDist'),{
+        chart:{type:'donut',height:240,fontFamily:'Cairo,sans-serif',toolbar:{show:false}},
+        series:[gW,eW,hW,aW,aP],labels:['ضعف عام','ضعف اختبارات','إهمال واجبات','غياب متكرر','أداء متوسط'],
+        colors:['#DC2626','#D97706','#7C3AED','#4F46E5','#64748B'],
+        legend:{position:'bottom',fontSize:'12px',fontWeight:600},
+        dataLabels:{style:{fontSize:'12px',fontFamily:'Cairo,sans-serif',fontWeight:'700'}},
+        plotOptions:{pie:{donut:{size:'60%',labels:{show:true,total:{show:true,label:'الإجمالي',fontSize:'12px',fontWeight:'700',color:'#64748B',formatter:function(w){return w.globals.seriesTotals.reduce(function(a,b){return a+b;},0)+' حالة';}}}}}},
+        tooltip:{style:{fontFamily:'Cairo,sans-serif'}}
+    }).render();
+})();
+(function(){
+    var names=@Html.Raw(stuNames),exams=@Html.Raw(stuExams),hws=@Html.Raw(stuHws),atts=@Html.Raw(stuAtts);
+    if(!names||!names.length){document.getElementById('chartStudentProfile').innerHTML='<div style="padding:60px;text-align:center;color:#94A3B8;">لا توجد بيانات</div>';return;}
+    new ApexCharts(document.getElementById('chartStudentProfile'),{
+        chart:{type:'bar',height:240,fontFamily:'Cairo,sans-serif',toolbar:{show:false}},
+        plotOptions:{bar:{borderRadius:4,columnWidth:'65%'}},
+        series:[{name:'الاختبارات %',data:exams},{name:'الواجبات %',data:hws},{name:'الحضور %',data:atts}],
+        xaxis:{categories:names,labels:{style:{fontSize:'10px',fontFamily:'Cairo,sans-serif'},rotate:-35}},
+        yaxis:{max:100,labels:{style:{fontSize:'11px',fontFamily:'Cairo,sans-serif'},formatter:function(v){return v+'%';}}},
+        colors:['#DC2626','#7C3AED','#4F46E5'],legend:{fontSize:'12px',fontFamily:'Cairo,sans-serif'},
+        dataLabels:{enabled:false},tooltip:{style:{fontFamily:'Cairo,sans-serif'},y:{formatter:function(v){return v+'%';}}},
+        grid:{borderColor:'#E2E8F0'},
+        annotations:{yaxis:[{y:60,borderColor:'#94A3B8',borderWidth:1,strokeDashArray:4,label:{text:'الحد المقبول 60%',style:{fontFamily:'Cairo,sans-serif',fontSize:'11px'}}}]}
+    }).render();
+})();
+(function(){
+    var avgE=@avgExam,avgH=@avgHw,avgA=@avgAtt;
+    new ApexCharts(document.getElementById('chartAvgScores'),{
+        chart:{type:'radialBar',height:240,fontFamily:'Cairo,sans-serif',toolbar:{show:false}},
+        series:[avgE,avgH,avgA],labels:['الاختبارات','الواجبات','الحضور'],
+        colors:['#DC2626','#7C3AED','#4F46E5'],
+        plotOptions:{radialBar:{hollow:{size:'30%'},dataLabels:{name:{fontSize:'12px',fontFamily:'Cairo,sans-serif'},value:{fontSize:'14px',fontWeight:'700',fontFamily:'Cairo,sans-serif',formatter:function(v){return v+'%';}},
+            total:{show:true,label:'المتوسط',fontSize:'11px',fontFamily:'Cairo,sans-serif',color:'#64748B',formatter:function(w){return Math.round(w.globals.seriesTotals.reduce(function(a,b){return a+b;},0)/3)+'%';}}}}},
+        legend:{show:true,position:'bottom',fontSize:'12px',fontFamily:'Cairo,sans-serif'}
+    }).render();
+})();
+
+var currentSearch='';
+function onSearch(v){currentSearch=v.trim().toLowerCase();applyFilters();}
+function applyFilters(){
+    var rows=document.querySelectorAll('.crit-row'),visible=0;
+    rows.forEach(function(r){var show=!currentSearch||r.dataset.name.includes(currentSearch);r.style.display=show?'':'none';if(show)visible++;});
+    var fi=document.getElementById('filteredInfo');if(fi)fi.textContent=currentSearch?('النتائج: '+visible+' طالب'):'';
+}
+function getSel(){return Array.from(document.querySelectorAll('.crit-cb:checked'));}
+function onCheckboxChange(){
+    var sel=getSel();document.getElementById('fabCount').textContent=sel.length;
+    document.getElementById('fabBar').classList.toggle('fab-hidden',sel.length===0);
+    document.querySelectorAll('.crit-row').forEach(function(r){var cb=r.querySelector('.crit-cb');r.classList.toggle('row-selected',cb&&cb.checked);});
+    var all=document.querySelectorAll('.crit-cb').length,sa=document.getElementById('selectAll');
+    if(sa){sa.indeterminate=sel.length>0&&sel.length<all;sa.checked=sel.length===all&&all>0;}
+}
+function toggleAll(m){document.querySelectorAll('.crit-cb').forEach(function(cb){var r=cb.closest('.crit-row');if(r&&r.style.display!=='none'){cb.checked=m.checked;r.classList.toggle('row-selected',m.checked);}});onCheckboxChange();}
+function clearSel(){document.querySelectorAll('.crit-cb').forEach(function(cb){cb.checked=false;});var sa=document.getElementById('selectAll');if(sa){sa.checked=false;sa.indeterminate=false;}document.querySelectorAll('.crit-row').forEach(function(r){r.classList.remove('row-selected');});document.getElementById('fabBar').classList.add('fab-hidden');}
+
+var currentActionType = null;
+
+function _getCfgs(){
+    var io = _buildInstrOptions();
+    return {
+        notify:{icon:'<i class="bi bi-bell-fill" style="color:#DC2626;font-size:22px;"></i>',bg:'#FEE2E2',title:'إرسال تنبيه للطلاب',sub:'إشعار فوري للطلاب المحددين',btn:'إرسال التنبيه',
+            form:'<div class="qcsd-form-group"><label class="qcsd-form-label">نوع التنبيه</label><select class="qcsd-form-ctrl" name="notificationType"><option value="تحذير أداء">إنذار أداء</option><option value="طلب مراجعة">طلب مراجعة</option><option value="دعوة لحضور جلسة">تحذير الغياب</option></select></div><div class="qcsd-form-group"><label class="qcsd-form-label">نص الرسالة <span style="color:#DC2626">*</span></label><textarea class="qcsd-form-ctrl" name="message" placeholder="أكتب رسالتك هنا..." required></textarea></div>'},
+        session:{icon:'<i class="bi bi-calendar-plus-fill" style="color:#B45309;font-size:22px;"></i>',bg:'#FEF3C7',title:'جدولة جلسة تدارك',sub:'حجز جلسة مراجعة طارئة مع الطلاب المحددين',btn:'تأكيد الجدولة',
+            form:'<div class="qcsd-form-group"><label class="qcsd-form-label">تاريخ الجلسة <span style="color:#DC2626">*</span></label><input type="date" class="qcsd-form-ctrl" name="sessionDate" required></div><div class="qcsd-form-group"><label class="qcsd-form-label">الوقت</label><input type="time" class="qcsd-form-ctrl" name="sessionTime"></div><div class="qcsd-form-group"><label class="qcsd-form-label">المدرس المسؤول</label><select class="qcsd-form-ctrl" name="instructorId">'+io+'</select></div><div class="qcsd-form-group"><label class="qcsd-form-label">ملاحظات</label><textarea class="qcsd-form-ctrl" name="notes" placeholder="تفاصيل الجلسة..."></textarea></div>'},
+        teacher:{icon:'<i class="bi bi-person-plus-fill" style="color:#059669;font-size:22px;"></i>',bg:'#D1FAE5',title:'تعيين مدرس مساعد',sub:'ربط الطلاب الحرجين بمدرس للمتابعة المكثفة',btn:'تعيين المدرس',
+            form:'<div class="qcsd-form-group"><label class="qcsd-form-label">المدرس المساعد <span style="color:#DC2626">*</span></label><select class="qcsd-form-ctrl" name="instructorId">'+io+'</select></div><div class="qcsd-form-group"><label class="qcsd-form-label">نوع المتابعة</label><select class="qcsd-form-ctrl" name="followupType"><option value="متابعة يومية مكثفة">متابعة يومية مكثفة</option><option value="متابعة أسبوعية">متابعة أسبوعية</option></select></div>'},
+        export:{icon:'<i class="bi bi-file-earmark-arrow-down-fill" style="color:#4F46E5;font-size:22px;"></i>',bg:'#EEF2FF',title:'تصدير تقرير الحالات الحرجة',sub:'تصدير ملف CSV بالطلاب المحددين',btn:'تصدير الآن',
+            form:'<div class="qcsd-form-group"><p style="font-size:13px;color:#64748B;">سيتم تصدير بيانات الطلاب المحددين (الاسم، الدرجات، سبب الحالة الحرجة) بصيغة CSV.</p></div>'}
+    };
+}
+
+function openModal(type){
+    var cfgs=_getCfgs(),cfg=cfgs[type],sel=getSel();
+    if(!sel.length) return;
+    currentActionType = type;
+    document.getElementById('modalIcon').innerHTML=cfg.icon;
+    document.getElementById('modalIcon').style.background=cfg.bg;
+    document.getElementById('modalTitle').textContent=cfg.title;
+    document.getElementById('modalSub').textContent=cfg.sub;
+    var sb=document.getElementById('modalSubmitBtn');
+    sb.textContent=cfg.btn;sb.disabled=false;sb.style.opacity='1';sb.style.display='';
+    document.getElementById('modalForm').innerHTML=cfg.form;
+    document.getElementById('modalList').innerHTML=sel.map(function(cb){
+        return '<div class="qcsd-sel-item"><div class="qcsd-sel-dot"></div>'+cb.dataset.name+'</div>';
+    }).join('');
+    var ex=document.getElementById('qcModalResult');if(ex)ex.remove();
+    document.getElementById('modalOverlay').classList.add('open');
+    document.body.style.overflow='hidden';
+}
+
+function closeModal(){
+    document.getElementById('modalOverlay').classList.remove('open');
+    document.body.style.overflow='';
+}
+
+document.getElementById('modalSubmitBtn').addEventListener('click', function(){
+    var sel=getSel();
+    if(!sel.length||!currentActionType) return;
+    var sb=this;
+
+    if(currentActionType==='export'){
+        _exportCsv(sel);closeModal();return;
+    }
+
+    var ids=sel.map(function(cb){return cb.dataset.id;}).filter(function(id){return id&&parseInt(id)>0;});
+    if(!ids.length){_showMsg('error','لم يتم تحديد طلاب صالحين');return;}
+
+    var fd=new FormData();
+    ids.forEach(function(id){fd.append('studentIds',id);});
+    var token=document.querySelector('input[name="__RequestVerificationToken"]');
+    if(token) fd.append('__RequestVerificationToken',token.value);
+
+    var url='';
+    if(currentActionType==='notify'){
+        url='/Admin/Analytics/SendBulkNotification';
+        var msg=document.querySelector('#modalForm [name="message"]');
+        var tp=document.querySelector('#modalForm [name="notificationType"]');
+        if(!msg||!msg.value.trim()){_showMsg('error','يرجى كتابة نص الرسالة');return;}
+        fd.append('message',msg.value.trim());
+        fd.append('notificationType',tp?tp.value:'تحذير أداء');
+    } else if(currentActionType==='session'){
+        url='/Admin/Analytics/ScheduleAnalyticsSession';
+        var dt=document.querySelector('#modalForm [name="sessionDate"]');
+        var tm=document.querySelector('#modalForm [name="sessionTime"]');
+        var ins=document.querySelector('#modalForm [name="instructorId"]');
+        var nt=document.querySelector('#modalForm [name="notes"]');
+        if(!dt||!dt.value){_showMsg('error','يرجى تحديد تاريخ الجلسة');return;}
+        fd.append('sessionDate',dt.value);
+        fd.append('sessionTime',tm?tm.value:'');
+        fd.append('instructorId',ins?ins.value:'0');
+        fd.append('notes',nt?nt.value:'');
+    } else if(currentActionType==='teacher'){
+        url='/Admin/Analytics/AssignAnalyticsInstructor';
+        var ins2=document.querySelector('#modalForm [name="instructorId"]');
+        var fol=document.querySelector('#modalForm [name="followupType"]');
+        if(!ins2||!ins2.value||ins2.value==='0'){_showMsg('error','يرجى اختيار مدرس');return;}
+        fd.append('instructorId',ins2.value);
+        fd.append('followupType',fol?fol.value:'متابعة أسبوعية');
+    }
+
+    sb.disabled=true;sb.style.opacity='0.6';sb.textContent='جارٍ التنفيذ...';
+
+    fetch(url,{method:'POST',body:fd})
+        .then(function(r){return r.json();})
+        .then(function(d){
+            if(d.success){_showMsg('success',d.message||'تمت العملية بنجاح');sb.disabled=true;sb.style.opacity='0.4';setTimeout(function(){closeModal();},2200);}
+            else{_showMsg('error',d.error||'حدث خطأ');sb.disabled=false;sb.style.opacity='1';var cfgs2=_getCfgs();sb.textContent=cfgs2[currentActionType].btn;}
+        })
+        .catch(function(){_showMsg('error','خطأ في الاتصال بالخادم');sb.disabled=false;sb.style.opacity='1';var cfgs2=_getCfgs();sb.textContent=cfgs2[currentActionType].btn;});
+});
+
+function _showMsg(type,text){
+    var ex=document.getElementById('qcModalResult');if(ex)ex.remove();
+    var el=document.createElement('div');el.id='qcModalResult';
+    var ok=type==='success';
+    el.style.cssText='margin-top:12px;padding:11px 14px;border-radius:10px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px;'+(ok?'background:#D1FAE5;color:#065F46;':'background:#FEE2E2;color:#991B1B;');
+    el.innerHTML='<i class="bi '+(ok?'bi-check-circle-fill':'bi-exclamation-triangle-fill')+'"></i>'+text;
+    document.getElementById('modalForm').appendChild(el);
+}
+
+function _exportCsv(sel){
+    var rows=[['الاسم','الاختبارات%','الواجبات%','الحضور%','سبب الحالة']];
+    sel.forEach(function(cb){
+        var row=cb.closest('.crit-row');
+        var cells=row?row.querySelectorAll('td'):[];
+        var exam=cells[2]?cells[2].querySelector('.qcsd-score-num, [class*="score"]')?.textContent.replace('%','').trim():'';
+        var hw=cells[3]?cells[3].querySelector('.qcsd-score-num, [class*="score"]')?.textContent.replace('%','').trim():'';
+        var att=cells[4]?cells[4].querySelector('.qcsd-score-num, [class*="score"]')?.textContent.replace('%','').trim():'';
+        var reason=cells[5]?cells[5].textContent.trim():'';
+        rows.push([cb.dataset.name||'',exam,hw,att,reason]);
+    });
+    var csv='﻿'+rows.map(function(r){return r.map(function(c){return '"'+(c||'').replace(/"/g,'""')+'"';}).join(',');}).join('\r\n');
+    var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');a.href=url;a.download='critical_students.csv';a.click();
+    URL.revokeObjectURL(url);
+}
+
+document.getElementById('modalOverlay').addEventListener('click',function(e){if(e.target===this)closeModal();});
+document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModal();});
+</script>

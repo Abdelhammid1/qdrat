@@ -1,0 +1,190 @@
+﻿@model QdratNew.ViewModels.EnhancementSkills.EnhancementSolveViewModel
+@using QdratNew.Helpers
+
+@{
+    var q = Model.Question;
+    var selectedAnswer = Model.SelectedAnswer ?? "";
+    Func<string, string> convert = s => q?.IsQuantitative == true ? NumberHelper.ToIndicNumbersSafe(s) : s;
+}
+
+@if (q == null)
+{
+    <div class="alert alert-danger text-center">⚠️ لم يتم تحميل السؤال بشكل صحيح.</div>
+    return;
+}
+
+<form method="post"
+      data-set-id="@Model.SetId"
+      data-current-question-id="@Model.CurrentQuestionId">
+
+    @Html.AntiForgeryToken()
+
+    <input type="hidden" name="id" value="@Model.SetId" />
+    <input type="hidden" name="q" value="@Model.CurrentQuestionId" />
+    <input type="hidden" name="AllIds" value="@string.Join(",", Model.AllQuestionIds)" />
+
+    <div class="mb-4 text-center">
+        <h5 class="fw-bold text-dark">
+            السؤال @convert((Model.AllQuestionIds.IndexOf(Model.CurrentQuestionId) + 1).ToString())
+            من @convert(Model.AllQuestionIds.Count.ToString())
+        </h5>
+    </div>
+
+    <div class="card border-info shadow-sm mb-4">
+        <div class="card-header bg-qdrat text-white fw-bold p-2" style="line-height:1.7;">
+            @{
+                // 🔸 تنظيف عنوان السؤال من الأكواد والوسوم الخطرة
+                var safeTitle = q.Title ?? "";
+                safeTitle = q.IsQuantitative ? NumberHelper.ToIndicNumbersSafe(safeTitle) : safeTitle;
+                safeTitle = safeTitle
+                .Replace("<style", "&lt;style")
+                .Replace("</style>", "&lt;/style&gt;")
+                .Replace("<script", "&lt;script")
+                .Replace("</script>", "&lt;/script&gt;");
+                safeTitle = System.Net.WebUtility.HtmlDecode(safeTitle);
+            }
+            <h5 class="fw-bold mb-0">@Html.Raw(safeTitle)</h5>
+        </div>
+        <div class="card-body">
+
+            @* ✅ عرض القطعة المرتبطة *@
+            @if (!string.IsNullOrWhiteSpace(q.VerbalPassageContent))
+            {
+                <div class="alert alert-light border mb-3">
+                    <strong>📘 القطعة المرتبطة:</strong><br />
+                    <div class="mt-2">@Html.Raw(q.VerbalPassageContent)</div>
+                </div>
+            }
+
+            @* ✅ حالة: مقارنة نصية *@
+            @if (q.DisplayType == QdratNew.Enums.QuestionDisplayType.ComparisonText)
+            {
+                <div class="row mb-3 text-center">
+                    <div class="col-md-6 border-end">
+                        <strong>القيمة الأولى:</strong>
+                        <div>@Html.Raw(convert(q.ComparisonValue1))</div>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>القيمة الثانية:</strong>
+                        <div>@Html.Raw(convert(q.ComparisonValue2))</div>
+                    </div>
+                </div>
+            }
+            @* ✅ مقارنة + صورة *@
+            else if (q.DisplayType == QdratNew.Enums.QuestionDisplayType.ComparisonWithImage)
+            {
+                <div class="row mb-3 text-center align-items-center">
+                    <div class="col-md-4">
+                        <img src="@Url.Content(q.ImageUrl)" class="img-fluid" style="max-height: 150px;" />
+                    </div>
+                    <div class="col-md-4 border-end">
+                        <strong>القيمة الأولى:</strong>
+                        <div>@Html.Raw(convert(q.ComparisonValue1))</div>
+                    </div>
+                    <div class="col-md-4">
+                        <strong>القيمة الثانية:</strong>
+                        <div>@Html.Raw(convert(q.ComparisonValue2))</div>
+                    </div>
+                </div>
+            }
+            @* ✅ صورة فقط *@
+            else if (!string.IsNullOrWhiteSpace(q.ImageUrl))
+            {
+                <div class="text-center mb-3">
+                    <img src="@Url.Content(q.ImageUrl)" class="img-fluid" style="max-height:200px;" />
+                </div>
+            }
+
+            @* ✅ الاختيارات *@
+            @if (q.Options != null && q.Options.Count > 0)
+            {
+                <div class="list-group">
+                    @foreach (var option in q.Options)
+                    {
+                        var isSelected = selectedAnswer == option.Text;
+                        <label class="list-group-item d-flex align-items-center gap-3">
+                            <input type="radio"
+                                   name="SelectedOption"
+                                   value="@option.Text"
+                                   class="form-check-input me-2"
+                                   @(isSelected ? "checked" : "") />
+
+                            @if (!string.IsNullOrWhiteSpace(option.ImageUrl))
+                            {
+                                <img src="@Url.Content(option.ImageUrl)" class="img-fluid" style="max-height:80px;" />
+                            }
+                            else
+                            {
+                                <span class="fw-bold">@Html.Raw(convert(option.Text))</span>
+                            }
+                        </label>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-danger text-center mt-3">
+                    ⚠️ لا توجد اختيارات متاحة لهذا السؤال.
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-between mt-4 mb-3">
+        <button type="button"
+                class="btn btn-outline-secondary enhancement-nav-button"
+                data-nav="prev"
+                @(Model.AllQuestionIds.IndexOf(Model.CurrentQuestionId) == 0 ? "disabled" : "")>
+            ◀️ السابق
+        </button>
+
+        <button type="button"
+                class="btn btn-warning enhancement-nav-button"
+                data-nav="review">
+            🔖 ضع علامة للمراجعة
+        </button>
+
+        <button type="button"
+                class="btn btn-primary enhancement-nav-button"
+                data-nav="next">
+            التالي ▶️
+        </button>
+    </div>
+</form>
+
+@if (Model.AllQuestionIds.IndexOf(Model.CurrentQuestionId) == Model.AllQuestionIds.Count - 1 && !Model.IsSubmitted)
+{
+    <div class="mt-4 text-center">
+        <h5>📋 مراجعة سريعة للأسئلة</h5>
+        <div class="d-flex flex-wrap justify-content-center mt-3 gap-2">
+            @for (int i = 0; i < Model.AllQuestionIds.Count; i++)
+            {
+                var qid = Model.AllQuestionIds[i];
+                string colorClass;
+
+                var isAnswered = Model.AnswersMap.ContainsKey(qid) && !string.IsNullOrWhiteSpace(Model.AnswersMap[qid]);
+                var isMarked = Model.ReviewMarkedIds.Contains(qid);
+
+                if (isAnswered && isMarked)
+                    colorClass = "btn-warning";  // 🟧 أجاب + مراجعة
+                else if (isAnswered)
+                    colorClass = "btn-success";  // ✅ أجاب فقط
+                else if (isMarked)
+                    colorClass = "btn-outline-warning"; // 🟡 مراجعة فقط
+                else
+                    colorClass = "btn-outline-secondary"; // ⬜ لا إجابة
+
+                <a class="btn @colorClass btn-sm fw-bold"
+                   href="@Url.Action("Start", "StudentEnhancementSkills", new { area = "Students", setId = Model.SetId, q = qid })">
+                    @convert((i + 1).ToString())
+                </a>
+            }
+        </div>
+
+        <form asp-action="SubmitFinal" asp-route-id="@Model.SetId" method="post" class="mt-4">
+            <button type="submit" class="btn btn-success btn-lg">
+                ✅ تأكيد إنهاء وتسليم المهارة
+            </button>
+        </form>
+    </div>
+}

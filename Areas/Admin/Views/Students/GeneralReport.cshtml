@@ -1,0 +1,477 @@
+@{
+    ViewData["Title"] = $"التقرير الشامل: {ViewBag.StudentName}";
+    Layout = "~/Areas/Admin/Views/Shared/_AdminLayout.cshtml";
+
+    string name      = ViewBag.StudentName ?? "—";
+    int    studentId = ViewBag.StudentId;
+    string branch    = ViewBag.BranchName ?? "—";
+    string status    = ViewBag.EnrollmentStatus ?? "—";
+    var    regDate   = (DateTime)ViewBag.RegistrationDate;
+    var    lastLogin = ViewBag.LastLoginAt as DateTime?;
+
+    int    totalLec  = ViewBag.TotalLectures;
+    int    present   = ViewBag.PresentCount;
+    double attPct    = ViewBag.AttendPct;
+    double hwPct     = ViewBag.HwPct;
+    double exPct     = ViewBag.ExPct;
+
+    int    totalHw   = ViewBag.TotalHw;
+    int    subHw     = ViewBag.SubmittedHw;
+    double avgHw     = ViewBag.AvgHwScore;
+
+    int    totalEx   = ViewBag.TotalExams;
+    int    subEx     = ViewBag.SubmittedExams;
+    double avgEx     = ViewBag.AvgExamScore;
+
+    int    batches   = ViewBag.BatchCount;
+    int    courses   = ViewBag.CourseCount;
+    double health    = (double)ViewBag.HealthScore;
+
+    string aiRec     = ViewBag.AIRecommendation ?? "";
+
+    var monthLabels   = (List<string>)(ViewBag.MonthLabels ?? new List<string>());
+    var monthlyAttend = (List<int>)(ViewBag.MonthlyAttend ?? new List<int>());
+    var monthlyExam   = (List<int>)(ViewBag.MonthlyExam ?? new List<int>());
+
+    var batchBreakdown = ViewBag.BatchBreakdown as List<QdratNew.ViewModels.Students.BatchBreakdownRowVm>
+                         ?? new List<QdratNew.ViewModels.Students.BatchBreakdownRowVm>();
+
+    string healthLabel  = health >= 80 ? "ممتاز" : health >= 65 ? "جيد جداً" : health >= 50 ? "جيد" : health >= 35 ? "متوسط" : "يحتاج متابعة";
+    string healthColor  = health >= 80 ? "#059669" : health >= 65 ? "#2563eb" : health >= 50 ? "#d97706" : "#dc2626";
+    string healthColor20 = health >= 80 ? "rgba(5,150,105,.12)" : health >= 65 ? "rgba(37,99,235,.12)" : health >= 50 ? "rgba(217,119,6,.12)" : "rgba(220,38,38,.12)";
+    double ringOffset   = 251.2 * (1 - health / 100.0);
+
+    string initials = "";
+    var parts2 = name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+    if (parts2.Length >= 2) initials = parts2[0].Substring(0,1) + parts2[1].Substring(0,1);
+    else if (name.Length >= 2) initials = name.Substring(0,2);
+    else initials = "ط";
+}
+
+<link rel="stylesheet" href="~/css/admin-general-report.css" asp-append-version="true" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<div class="gr-page" dir="rtl">
+
+    @* ══ NAV ══ *@
+    <nav class="gr-nav">
+        <div class="gr-nav-inner">
+            <a class="gr-back" href="javascript:history.back()"><i class="fas fa-arrow-right"></i> رجوع</a>
+            <div class="gr-sep"></div>
+            <div class="gr-crumb">
+                <a asp-area="Admin" asp-controller="Students" asp-action="Index">الطلاب</a>
+                <span>›</span>
+                <a asp-area="Admin" asp-controller="Students" asp-action="Details" asp-route-id="@studentId">@name</a>
+                <span>›</span>
+                <span>التقرير الشامل</span>
+            </div>
+        </div>
+    </nav>
+
+    <div class="gr-body">
+
+        @* ══ HERO ══ *@
+        <section class="gr-hero">
+            <div class="gr-hero-left">
+                <div class="gr-av">@initials</div>
+                <div class="gr-hero-info">
+                    <h1 class="gr-name">@name</h1>
+                    <div class="gr-tags">
+                        <span class="gr-tag"><i class="fas fa-building"></i> @branch</span>
+                        <span class="gr-tag gr-tag--status"><i class="fas fa-circle" style="font-size:8px"></i> @status</span>
+                        <span class="gr-tag"><i class="fas fa-calendar-plus"></i> تسجيل: @regDate.ToString("yyyy/MM/dd")</span>
+                        @if (lastLogin.HasValue)
+                        {
+                            <span class="gr-tag"><i class="fas fa-clock"></i> آخر دخول: @lastLogin.Value.ToString("yyyy/MM/dd HH:mm")</span>
+                        }
+                    </div>
+                    <div class="gr-hero-kpis">
+                        <div class="gr-hkpi">
+                            <div class="gr-hkpi-val">@batches</div>
+                            <div class="gr-hkpi-lbl">دفعة</div>
+                        </div>
+                        <div class="gr-hkpi-sep"></div>
+                        <div class="gr-hkpi">
+                            <div class="gr-hkpi-val">@courses</div>
+                            <div class="gr-hkpi-lbl">دورة</div>
+                        </div>
+                        <div class="gr-hkpi-sep"></div>
+                        <div class="gr-hkpi">
+                            <div class="gr-hkpi-val">@totalLec</div>
+                            <div class="gr-hkpi-lbl">محاضرة</div>
+                        </div>
+                        <div class="gr-hkpi-sep"></div>
+                        <div class="gr-hkpi">
+                            <div class="gr-hkpi-val">@totalHw</div>
+                            <div class="gr-hkpi-lbl">واجب</div>
+                        </div>
+                        <div class="gr-hkpi-sep"></div>
+                        <div class="gr-hkpi">
+                            <div class="gr-hkpi-val">@totalEx</div>
+                            <div class="gr-hkpi-lbl">اختبار</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="gr-ring-wrap">
+                <div class="gr-ring">
+                    <svg viewBox="0 0 100 100">
+                        <circle class="gr-ring-bg" cx="50" cy="50" r="40"/>
+                        <circle class="gr-ring-fill" cx="50" cy="50" r="40"
+                                stroke="@healthColor"
+                                stroke-dasharray="251.2"
+                                stroke-dashoffset="@ringOffset.ToString("0.##")"/>
+                    </svg>
+                    <div class="gr-ring-val">@health.ToString("0")<small>%</small></div>
+                </div>
+                <div class="gr-ring-lbl">مؤشر الصحة العام<span style="color:@healthColor;display:block;font-weight:700">@healthLabel</span></div>
+            </div>
+        </section>
+
+        @* ══ 5 KPI STAT CARDS ══ *@
+        <div class="gr-stats-grid">
+            @{
+                double absentPct = Math.Round(100 - attPct, 1);
+                double missHwPct = Math.Round(100 - hwPct, 1);
+                double missExPct = Math.Round(100 - exPct, 1);
+            }
+            <div class="gr-stat-card gr-sc--blue">
+                <div class="gr-sc-icon"><i class="fas fa-calendar-check"></i></div>
+                <div class="gr-sc-body">
+                    <div class="gr-sc-label">الحضور</div>
+                    <div class="gr-sc-val">@attPct.ToString("0.#")%</div>
+                    <div class="gr-sc-bar"><div class="gr-sc-fill" style="width:@(Math.Min(100,attPct))%"></div></div>
+                    <div class="gr-sc-detail">@present حاضر · @(totalLec - present) غائب · @totalLec إجمالي</div>
+                </div>
+            </div>
+            <div class="gr-stat-card gr-sc--amber">
+                <div class="gr-sc-icon"><i class="fas fa-file-alt"></i></div>
+                <div class="gr-sc-body">
+                    <div class="gr-sc-label">تسليم الواجبات</div>
+                    <div class="gr-sc-val">@hwPct.ToString("0.#")%</div>
+                    <div class="gr-sc-bar"><div class="gr-sc-fill" style="width:@(Math.Min(100,hwPct))%"></div></div>
+                    <div class="gr-sc-detail">@subHw مُسلَّم · @(totalHw - subHw) غير مُسلَّم · متوسط: @avgHw.ToString("0.#")</div>
+                </div>
+            </div>
+            <div class="gr-stat-card gr-sc--green">
+                <div class="gr-sc-icon"><i class="fas fa-pencil-ruler"></i></div>
+                <div class="gr-sc-body">
+                    <div class="gr-sc-label">الاختبارات</div>
+                    <div class="gr-sc-val">@exPct.ToString("0.#")%</div>
+                    <div class="gr-sc-bar"><div class="gr-sc-fill" style="width:@(Math.Min(100,exPct))%"></div></div>
+                    <div class="gr-sc-detail">@subEx مُقدَّم · @(totalEx - subEx) لم يخضه · متوسط: @avgEx.ToString("0.#")</div>
+                </div>
+            </div>
+            <div class="gr-stat-card gr-sc--violet">
+                <div class="gr-sc-icon"><i class="fas fa-brain"></i></div>
+                <div class="gr-sc-body">
+                    <div class="gr-sc-label">معدل الدرجات</div>
+                    <div class="gr-sc-val">@(avgEx > 0 ? avgEx.ToString("0.#") : avgHw.ToString("0.#"))</div>
+                    <div class="gr-sc-bar"><div class="gr-sc-fill" style="width:@(Math.Min(100, avgEx > 0 ? avgEx : avgHw))%"></div></div>
+                    <div class="gr-sc-detail">اختبارات: @avgEx.ToString("0.#") · واجبات: @avgHw.ToString("0.#")</div>
+                </div>
+            </div>
+            <div class="gr-stat-card gr-sc--teal">
+                <div class="gr-sc-icon"><i class="fas fa-heartbeat"></i></div>
+                <div class="gr-sc-body">
+                    <div class="gr-sc-label">الصحة التعليمية</div>
+                    <div class="gr-sc-val">@health.ToString("0")%</div>
+                    <div class="gr-sc-bar"><div class="gr-sc-fill" style="width:@health%"></div></div>
+                    <div class="gr-sc-detail">مؤشر مركب: حضور + واجبات + اختبارات</div>
+                </div>
+            </div>
+        </div>
+
+        @* ══ CHARTS ROW ══ *@
+        <div class="gr-charts-row">
+            <div class="gr-chart-card">
+                <div class="gr-chart-title"><i class="fas fa-chart-bar"></i> الحضور الشهري (آخر 6 أشهر)</div>
+                <canvas id="chartAttend" height="200"></canvas>
+            </div>
+            <div class="gr-chart-card">
+                <div class="gr-chart-title"><i class="fas fa-chart-pie"></i> توزيع الأداء العام</div>
+                <canvas id="chartDoughnut" height="200"></canvas>
+            </div>
+            <div class="gr-chart-card">
+                <div class="gr-chart-title"><i class="fas fa-chart-line"></i> نشاط الاختبارات الشهري</div>
+                <canvas id="chartExam" height="200"></canvas>
+            </div>
+        </div>
+
+        @* ══ BATCH BREAKDOWN TABLE ══ *@
+        @if (batchBreakdown.Any())
+        {
+            <div class="gr-section-card">
+                <div class="gr-section-title"><i class="fas fa-layer-group"></i> تفصيل الأداء لكل دفعة / دورة</div>
+                <div class="gr-bt-wrap">
+                    <table class="gr-bt">
+                        <thead>
+                            <tr>
+                                <th>الدفعة</th>
+                                <th>الدورة</th>
+                                <th>الحضور</th>
+                                <th>الواجبات</th>
+                                <th>الاختبارات</th>
+                                <th>الصحة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var b in batchBreakdown)
+                            {
+                                double bh   = b.Health;
+                                string bhCss = bh >= 75 ? "good" : bh >= 50 ? "warn" : "risk";
+                                <tr>
+                                    <td><strong>@b.BatchName</strong></td>
+                                    <td>@b.CourseName</td>
+                                    <td>
+                                        <div class="gr-mini-bar">
+                                            <div class="gr-mini-fill gr-mini--@(b.AttPct >= 75 ? "blue" : "amber")" style="width:@(Math.Min(100, b.AttPct))%"></div>
+                                        </div>
+                                        <span class="gr-mini-pct">@b.AttPct.ToString("0")% (@b.Present / @b.TotalLec)</span>
+                                    </td>
+                                    <td>
+                                        <div class="gr-mini-bar">
+                                            <div class="gr-mini-fill gr-mini--@(b.HwPct >= 75 ? "green" : "red")" style="width:@(Math.Min(100, b.HwPct))%"></div>
+                                        </div>
+                                        <span class="gr-mini-pct">@b.HwPct.ToString("0")% (@b.SubmittedHw / @b.TotalHw)</span>
+                                    </td>
+                                    <td>
+                                        <div class="gr-mini-bar">
+                                            <div class="gr-mini-fill gr-mini--@(b.ExPct >= 75 ? "green" : "red")" style="width:@(Math.Min(100, b.ExPct))%"></div>
+                                        </div>
+                                        <span class="gr-mini-pct">@b.ExPct.ToString("0")% (@b.SubmittedEx / @b.TotalEx)</span>
+                                    </td>
+                                    <td>
+                                        <span class="gr-health-pill gr-health--@bhCss">@bh.ToString("0")%</span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+
+        @* ══ RADAR CHART ══ *@
+        <div class="gr-section-card">
+            <div class="gr-section-title"><i class="fas fa-radar-alt"></i> مقارنة مؤشرات الأداء (رادار)</div>
+            <div style="max-width:420px;margin:0 auto">
+                <canvas id="chartRadar" height="300"></canvas>
+            </div>
+        </div>
+
+        @* ══ DETAILED TABLES ROW ══ *@
+        <div class="gr-tables-row">
+            <a class="gr-detail-link"
+               asp-area="Admin" asp-controller="Students"
+               asp-action="StudentAttendanceReport" asp-route-id="@studentId">
+                <div class="gr-dl-icon" style="background:#eff6ff;color:#2563eb"><i class="fas fa-calendar-check"></i></div>
+                <div class="gr-dl-body">
+                    <div class="gr-dl-title">تفاصيل الحضور والغياب</div>
+                    <div class="gr-dl-sub">@totalLec محاضرة · @present حاضر · @(totalLec - present) غائب</div>
+                </div>
+                <span class="gr-dl-arrow"><i class="fas fa-arrow-left"></i></span>
+            </a>
+            <a class="gr-detail-link"
+               asp-area="Admin" asp-controller="Students"
+               asp-action="StudentHomeworksReport" asp-route-id="@studentId">
+                <div class="gr-dl-icon" style="background:#fffbeb;color:#d97706"><i class="fas fa-file-alt"></i></div>
+                <div class="gr-dl-body">
+                    <div class="gr-dl-title">تفاصيل الواجبات</div>
+                    <div class="gr-dl-sub">@totalHw واجب · @subHw مُسلَّم · @(totalHw - subHw) غير مُسلَّم</div>
+                </div>
+                <span class="gr-dl-arrow"><i class="fas fa-arrow-left"></i></span>
+            </a>
+            <a class="gr-detail-link"
+               asp-area="Admin" asp-controller="Students"
+               asp-action="StudentExamsReport" asp-route-id="@studentId">
+                <div class="gr-dl-icon" style="background:#ecfdf5;color:#059669"><i class="fas fa-trophy"></i></div>
+                <div class="gr-dl-body">
+                    <div class="gr-dl-title">تفاصيل الاختبارات</div>
+                    <div class="gr-dl-sub">@totalEx اختبار · @subEx مُقدَّم · @(totalEx - subEx) لم يخضه</div>
+                </div>
+                <span class="gr-dl-arrow"><i class="fas fa-arrow-left"></i></span>
+            </a>
+            <a class="gr-detail-link"
+               asp-area="Admin" asp-controller="Students"
+               asp-action="StudentBatches" asp-route-id="@studentId">
+                <div class="gr-dl-icon" style="background:#ede9fe;color:#7c3aed"><i class="fas fa-layer-group"></i></div>
+                <div class="gr-dl-body">
+                    <div class="gr-dl-title">الدفعات المسجّلة</div>
+                    <div class="gr-dl-sub">@batches دفعة · @courses دورة</div>
+                </div>
+                <span class="gr-dl-arrow"><i class="fas fa-arrow-left"></i></span>
+            </a>
+        </div>
+
+        @* ══ AI RECOMMENDATION ══ *@
+        <div class="gr-ai-card">
+            <div class="gr-ai-header">
+                <div class="gr-ai-icon"><i class="fas fa-robot"></i></div>
+                <div>
+                    <div class="gr-ai-title">توصية الذكاء الاصطناعي</div>
+                    <div class="gr-ai-sub">تحليل آلي شامل بناءً على جميع مؤشرات أداء الطالب</div>
+                </div>
+                <div class="gr-ai-health" style="background:@healthColor20;color:@healthColor">
+                    <i class="fas fa-heart-pulse"></i> @healthLabel
+                </div>
+            </div>
+            <div class="gr-ai-body">
+                <p class="gr-ai-text">@aiRec</p>
+            </div>
+            <div class="gr-ai-indicators">
+                <div class="gr-ai-ind @(attPct >= 75 ? "gr-ai-ind--ok" : attPct >= 55 ? "gr-ai-ind--warn" : "gr-ai-ind--risk")">
+                    <i class="fas fa-@(attPct >= 75 ? "check-circle" : attPct >= 55 ? "exclamation-circle" : "times-circle")"></i>
+                    <span>حضور @attPct.ToString("0.#")%</span>
+                </div>
+                <div class="gr-ai-ind @(hwPct >= 75 ? "gr-ai-ind--ok" : hwPct >= 55 ? "gr-ai-ind--warn" : "gr-ai-ind--risk")">
+                    <i class="fas fa-@(hwPct >= 75 ? "check-circle" : hwPct >= 55 ? "exclamation-circle" : "times-circle")"></i>
+                    <span>واجبات @hwPct.ToString("0.#")%</span>
+                </div>
+                <div class="gr-ai-ind @(exPct >= 75 ? "gr-ai-ind--ok" : exPct >= 55 ? "gr-ai-ind--warn" : "gr-ai-ind--risk")">
+                    <i class="fas fa-@(exPct >= 75 ? "check-circle" : exPct >= 55 ? "exclamation-circle" : "times-circle")"></i>
+                    <span>اختبارات @exPct.ToString("0.#")%</span>
+                </div>
+                <div class="gr-ai-ind @(avgEx >= 70 ? "gr-ai-ind--ok" : avgEx >= 50 ? "gr-ai-ind--warn" : "gr-ai-ind--risk")">
+                    <i class="fas fa-@(avgEx >= 70 ? "check-circle" : avgEx >= 50 ? "exclamation-circle" : "times-circle")"></i>
+                    <span>متوسط @avgEx.ToString("0.#")</span>
+                </div>
+            </div>
+            <div class="gr-ai-footer">
+                <i class="fas fa-info-circle"></i>
+                تُحسب التوصية بناءً على بيانات فعلية مسجّلة في المنصة حتى تاريخ @DateTime.Today.ToString("yyyy/MM/dd")
+            </div>
+        </div>
+
+        @* ══ BACK LINKS ══ *@
+        <div class="gr-links">
+            <a class="gr-link-btn" asp-area="Admin" asp-controller="Students" asp-action="Index">
+                <i class="fas fa-layer-group"></i> الدفعات
+            </a>
+            <a class="gr-link-btn" asp-area="Admin" asp-controller="Students" asp-action="Details" asp-route-id="@studentId">
+                <i class="fas fa-user-graduate"></i> ملف الطالب الكامل
+            </a>
+            <a class="gr-link-btn" asp-area="Admin" asp-controller="Students" asp-action="ActivityLog" asp-route-id="@studentId">
+                <i class="fas fa-history"></i> سجل النشاط
+            </a>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Animate ring
+        var ring = document.querySelector('.gr-ring-fill');
+        if (ring) {
+            var orig = ring.getAttribute('stroke-dashoffset');
+            ring.setAttribute('stroke-dashoffset', '251.2');
+            setTimeout(function () {
+                ring.style.transition = 'stroke-dashoffset 1s ease';
+                ring.setAttribute('stroke-dashoffset', orig);
+            }, 300);
+        }
+
+        // Animate stat bars
+        document.querySelectorAll('.gr-sc-fill').forEach(function (el) {
+            var w = el.style.width; el.style.width = '0';
+            setTimeout(function () { el.style.width = w; }, 400);
+        });
+
+        var months = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(monthLabels));
+        var attend  = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(monthlyAttend));
+        var exams   = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(monthlyExam));
+
+        // Chart: Monthly Attendance
+        var ctxA = document.getElementById('chartAttend').getContext('2d');
+        new Chart(ctxA, {
+            type: 'bar',
+            data: {
+                labels: months,
+                datasets: [{
+                    label: 'محاضرات حضرها',
+                    data: attend,
+                    backgroundColor: 'rgba(37,99,235,.65)',
+                    borderRadius: 6, borderSkipped: false
+                }]
+            },
+            options: {
+                responsive: true, plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true, ticks: { font: { family: 'Cairo' } } },
+                          x: { ticks: { font: { family: 'Cairo', size: 10 } } } }
+            }
+        });
+
+        // Chart: Doughnut
+        var ctxD = document.getElementById('chartDoughnut').getContext('2d');
+        new Chart(ctxD, {
+            type: 'doughnut',
+            data: {
+                labels: ['حضور', 'واجبات', 'اختبارات'],
+                datasets: [{
+                    data: [@attPct.ToString("0.#"), @hwPct.ToString("0.#"), @exPct.ToString("0.#")],
+                    backgroundColor: ['rgba(37,99,235,.8)', 'rgba(217,119,6,.8)', 'rgba(5,150,105,.8)'],
+                    borderWidth: 0, hoverOffset: 6
+                }]
+            },
+            options: {
+                responsive: true, cutout: '65%',
+                plugins: { legend: { position: 'bottom', labels: { font: { family: 'Cairo', size: 11 } } } }
+            }
+        });
+
+        // Chart: Monthly Exams
+        var ctxE = document.getElementById('chartExam').getContext('2d');
+        new Chart(ctxE, {
+            type: 'line',
+            data: {
+                labels: months,
+                datasets: [{
+                    label: 'اختبارات خيضت',
+                    data: exams,
+                    borderColor: '#059669', backgroundColor: 'rgba(5,150,105,.1)',
+                    borderWidth: 2.5, pointRadius: 4, pointBackgroundColor: '#059669',
+                    fill: true, tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true, plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true, ticks: { font: { family: 'Cairo' } } },
+                          x: { ticks: { font: { family: 'Cairo', size: 10 } } } }
+            }
+        });
+
+        // Radar Chart
+        var ctxR = document.getElementById('chartRadar').getContext('2d');
+        new Chart(ctxR, {
+            type: 'radar',
+            data: {
+                labels: ['الحضور', 'الواجبات', 'الاختبارات', 'متوسط الدرجات', 'الصحة التعليمية'],
+                datasets: [{
+                    label: 'مؤشرات الأداء',
+                    data: [
+                        @attPct.ToString("0.#"),
+                        @hwPct.ToString("0.#"),
+                        @exPct.ToString("0.#"),
+                        @(avgEx > 0 ? avgEx.ToString("0.#") : avgHw.ToString("0.#")),
+                        @health.ToString("0")
+                    ],
+                    backgroundColor: 'rgba(37,99,235,.15)',
+                    borderColor: '#2563eb',
+                    borderWidth: 2.5, pointBackgroundColor: '#2563eb', pointRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    r: {
+                        min: 0, max: 100, ticks: { stepSize: 25, font: { family: 'Cairo', size: 10 } },
+                        pointLabels: { font: { family: 'Cairo', size: 12 } }
+                    }
+                },
+                plugins: { legend: { display: false } }
+            }
+        });
+    });
+</script>

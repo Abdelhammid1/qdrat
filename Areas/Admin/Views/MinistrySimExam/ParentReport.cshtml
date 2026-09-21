@@ -1,0 +1,472 @@
+@model QdratNew.ViewModels.Exam.MinistrySimExamParentReportVm
+@{
+    Layout = "~/Areas/Admin/Views/Shared/_ReportLayout.cshtml";
+    ViewData["Title"] = "تقرير أداء الطالب — اختبار محاكاة اختبار الوزارة";
+
+    var trendLabelsJs = string.Join(",", Model.PreviousAttemptsTrend
+        .Select(p => "'" + p.CompletedAt.ToString("yyyy/MM/dd") + "'"));
+    var trendDataJs = string.Join(",", Model.PreviousAttemptsTrend
+        .Select(p => p.TotalScorePercent.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+
+    // بيانات شارتس المراحل الخمس (Chart.js — نفس المحرك المعتمد بكل تقارير المنصة، لا مكتبة جديدة).
+    // كل مرحلة تُرسم بشكل مختلف (Doughnut/Bar/Radar/PolarArea/Pie) لتنويع العرض البصري بين المراحل،
+    // بنفس البيانات المتاحة فعليًا للمرحلة (الدرجة%/المتبقي%/إدارة الوقت) بلا أي استعلام إضافي.
+    var stageChartTypes = new[] { "doughnut", "bar", "radar", "polarArea", "pie" };
+    var stageChartDataJs = string.Join(",", Model.Stages.Select(s =>
+        "{score:" + Math.Round(s.StagePercentScore, 1).ToString(System.Globalization.CultureInfo.InvariantCulture) +
+        ",remaining:" + Math.Round(100 - s.StagePercentScore, 1).ToString(System.Globalization.CultureInfo.InvariantCulture) +
+        ",timeManagement:" + (s.TimeExpired ? 60 : 100) + "}"));
+}
+
+<style>
+    .pr-hero {
+        background: linear-gradient(135deg, #087F73, #0B1F33);
+        color: #fff;
+        border-radius: 20px;
+        padding: 24px 26px;
+        margin-bottom: 18px;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 16px;
+    }
+
+    .pr-hero h2 { font-size: 20px; font-weight: 800; margin: 0 0 6px; }
+    .pr-hero .pr-hero-sub { opacity: .92; font-size: 13.5px; }
+
+    .pr-info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px 24px;
+        font-size: 14px;
+    }
+
+    .pr-info-grid .pr-info-item .lbl { display: block; color: #667085; font-size: 12px; margin-bottom: 2px; }
+    .pr-info-grid .pr-info-item .val { font-weight: 700; color: #0B1F33; }
+
+    .pr-stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 18px; }
+
+    .pr-stat {
+        border-radius: 16px;
+        padding: 18px 16px;
+        text-align: center;
+        color: #fff;
+        background: linear-gradient(135deg, #087F73, #05564E);
+    }
+
+    .pr-stat .num { font-size: 30px; font-weight: 800; font-family: 'Cairo', sans-serif; }
+    .pr-stat .lbl { font-size: 13px; opacity: .95; margin-top: 2px; }
+    .pr-stat.amber { background: linear-gradient(135deg, #F59E0B, #B45309); }
+    .pr-stat.ink { background: linear-gradient(135deg, #1B3A5C, #0B1F33); }
+
+    .pr-stage-card {
+        border: 1px solid #E4EAEE;
+        border-radius: 14px;
+        padding: 14px 16px;
+        margin-bottom: 10px;
+        background: #fff;
+    }
+
+    .pr-stage-card .progress { height: 8px; border-radius: 6px; background: #EEF2F5; }
+    .pr-stage-card .progress-bar { background: #087F73; border-radius: 6px; }
+
+    .pr-note-box textarea {
+        border-radius: 12px;
+        border: 1px solid #E4EAEE;
+        min-height: 110px;
+        font-family: 'Cairo', sans-serif;
+        font-size: 14px;
+        padding: 12px;
+        width: 100%;
+        resize: vertical;
+    }
+
+    .pr-note-display {
+        background: #F7FAFC;
+        border-inline-start: 4px solid #F59E0B;
+        border-radius: 10px;
+        padding: 14px 16px;
+        font-size: 14px;
+        line-height: 1.8;
+        white-space: pre-wrap;
+    }
+
+    .pr-save-status { font-size: 12.5px; color: #087F73; min-height: 18px; }
+
+    .pr-motivation {
+        background: linear-gradient(135deg, #FEF3E2, #FFF8EE);
+        border: 1px solid #F5D7A3;
+        border-inline-start: 5px solid #F59E0B;
+        border-radius: 14px;
+        padding: 16px 18px;
+        margin-bottom: 18px;
+    }
+
+    .pr-motivation .pr-mot-heading { font-weight: 800; color: #0B1F33; font-size: 15px; margin-bottom: 4px; }
+    .pr-motivation .pr-mot-msg { font-size: 13.5px; color: #4B5563; line-height: 1.7; }
+
+    .pr-stage-charts-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        gap: 14px;
+    }
+
+    .pr-stage-chart-card {
+        border: 1px solid #E4EAEE;
+        border-radius: 14px;
+        padding: 12px;
+        text-align: center;
+        background: #fff;
+    }
+
+    .pr-stage-chart-card .pr-sc-title { font-weight: 700; font-size: 13px; color: #0B1F33; margin-bottom: 6px; }
+    .pr-stage-chart-card canvas { max-height: 150px; }
+    .pr-stage-chart-card .pr-sc-msg { font-size: 11.5px; color: #667085; margin-top: 8px; line-height: 1.6; }
+
+    .pr-stage-motivation {
+        font-size: 12.5px;
+        color: #087F73;
+        margin-top: 6px;
+        background: #F0FDFA;
+        border-radius: 8px;
+        padding: 6px 10px;
+    }
+</style>
+
+<div class="pr-hero">
+    <div>
+        <h2>@Model.ExamTitle</h2>
+        <div class="pr-hero-sub">تقرير أداء موجَّه لولي الأمر — تاريخ الإصدار: @Model.ReportGeneratedAt.ToString("yyyy/MM/dd")</div>
+    </div>
+    @if (Model.AttemptCompletedAt.HasValue)
+    {
+        <div class="pr-hero-sub text-end">تاريخ إنهاء الاختبار<br /><strong>@Model.AttemptCompletedAt.Value.ToString("yyyy/MM/dd hh:mm tt")</strong></div>
+    }
+</div>
+
+<div class="card-box">
+    <div class="pr-info-grid">
+        <div class="pr-info-item"><span class="lbl">الطالب</span><span class="val">@Model.StudentFullName</span></div>
+        <div class="pr-info-item"><span class="lbl">الدورة</span><span class="val">@Model.CourseName</span></div>
+        <div class="pr-info-item"><span class="lbl">الدفعة</span><span class="val">@(Model.BatchName ?? "—")</span></div>
+        <div class="pr-info-item"><span class="lbl">ولي الأمر</span><span class="val">@(Model.ParentFullName ?? "غير مسجَّل")</span></div>
+        @if (!string.IsNullOrWhiteSpace(Model.ParentRelationToStudent))
+        {
+            <div class="pr-info-item"><span class="lbl">الصلة</span><span class="val">@Model.ParentRelationToStudent</span></div>
+        }
+        @if (!string.IsNullOrWhiteSpace(Model.ParentPhoneNumber))
+        {
+            <div class="pr-info-item"><span class="lbl">هاتف التواصل</span><span class="val">@Model.ParentPhoneNumber</span></div>
+        }
+    </div>
+</div>
+
+<div class="pr-stat-row">
+    <div class="pr-stat">
+        <div class="num">@Math.Round(Model.TotalScorePercent, 1)%</div>
+        <div class="lbl">الدرجة الكلية</div>
+    </div>
+    <div class="pr-stat ink">
+        <div class="num">@Math.Round(Model.QuantScorePercent, 1)%</div>
+        <div class="lbl">المحور الكمي</div>
+    </div>
+    <div class="pr-stat amber">
+        <div class="num">@Math.Round(Model.VerbalScorePercent, 1)%</div>
+        <div class="lbl">المحور اللفظي</div>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(Model.OverallMotivationMessage))
+{
+    <div class="pr-motivation">
+        <div class="pr-mot-heading">@Model.OverallMotivationHeading</div>
+        <div class="pr-mot-msg">@Model.OverallMotivationMessage</div>
+    </div>
+}
+
+<div class="card-box">
+    <h5 class="report-title mb-3">أداء كل مرحلة بصريًا</h5>
+    <div class="pr-stage-charts-grid">
+        @for (var i = 0; i < Model.Stages.Count; i++)
+        {
+            var stage = Model.Stages[i];
+            <div class="pr-stage-chart-card">
+                <div class="pr-sc-title">المرحلة @stage.StageNumber</div>
+                <canvas id="stageChart@(i)"></canvas>
+                <div class="pr-sc-msg">@Math.Round(stage.StagePercentScore, 1)%</div>
+            </div>
+        }
+    </div>
+</div>
+
+<div class="card-box">
+    <h5 class="report-title mb-3">أداء الطالب عبر المراحل الخمس</h5>
+    @foreach (var stage in Model.Stages)
+    {
+        <div class="pr-stage-card">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <strong>المرحلة @stage.StageNumber</strong>
+                <span class="fw-bold" style="color:#087F73;">@Math.Round(stage.StagePercentScore, 1)%</span>
+            </div>
+            <div class="progress mt-2">
+                <div class="progress-bar" role="progressbar" style="width:@(stage.StagePercentScore)%;"
+                     aria-valuenow="@stage.StagePercentScore" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            <div class="small text-muted mt-2">
+                مدة المرحلة: @stage.DurationMinutes دقيقة —
+                @if (stage.TimeExpired)
+                {
+                    <span class="text-danger">تجاوز الزمن المحدد</span>
+                }
+                else
+                {
+                    <span class="text-success">تم الحل ضمن الزمن المحدد</span>
+                }
+            </div>
+            @if (!string.IsNullOrWhiteSpace(stage.MotivationMessage))
+            {
+                <div class="pr-stage-motivation">@stage.MotivationMessage</div>
+            }
+        </div>
+    }
+</div>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card-box h-100">
+            <h5 class="report-title mb-3">مقارنة بمتوسط دفعة الطالب</h5>
+            @if (Model.BatchTotalStudents > 0)
+            {
+                <canvas id="batchCompareChart" style="max-height:260px;"></canvas>
+            }
+            else
+            {
+                <div class="text-muted">لا تتوفر بيانات دفعة كافية لمقارنة نتيجة هذا الطالب حاليًا.</div>
+            }
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card-box h-100">
+            <h5 class="report-title mb-3">اتجاه الأداء عبر اختبارات المحاكاة السابقة</h5>
+            @if (Model.PreviousAttemptsTrend.Count >= 2)
+            {
+                <canvas id="trendChart" style="max-height:260px;"></canvas>
+            }
+            else
+            {
+                <div class="text-muted">هذه هي أول محاولة مسجَّلة لهذا الطالب في اختبار محاكاة الوزارة — لا يتوفر اتجاه أداء بعد.</div>
+            }
+        </div>
+    </div>
+</div>
+
+<div class="card-box pr-note-box">
+    <h5 class="report-title mb-3">ملاحظات وتوصيات المدرّس</h5>
+
+    @if (Model.IsPrintMode)
+    {
+        @if (!string.IsNullOrWhiteSpace(Model.RecommendationsNote))
+        {
+            <div class="pr-note-display">@Model.RecommendationsNote</div>
+        }
+        else
+        {
+            <div class="text-muted">لا توجد ملاحظات مسجَّلة لهذه المحاولة.</div>
+        }
+    }
+    else
+    {
+        <form id="antiForgeryForm">@Html.AntiForgeryToken()</form>
+        <textarea id="recommendationsNote" placeholder="اكتب ملاحظاتك وتوصياتك لولي الأمر هنا قبل الطباعة (اختياري)...">@Model.RecommendationsNote</textarea>
+        <div class="d-flex align-items-center gap-2 mt-2 no-print">
+            <button type="button" id="saveNoteBtn" class="btn btn-report btn-sm">
+                <i class="fas fa-save ms-1"></i> حفظ الملاحظات
+            </button>
+            <span class="pr-save-status" id="saveNoteStatus"></span>
+        </div>
+    }
+</div>
+
+@if (!Model.IsPrintMode)
+{
+    @* أزرار تفاعلية فقط — مخفاة صراحةً بالعرض الشرطي (Model.IsPrintMode) وليس بـCSS، لأن Puppeteer يُصدِّر
+       الـPDF بوسيط "screen" الآن (راجع ParentReportPdf) فلن تنطبق قاعدة @@media print { .no-print } هنا *@
+    <div class="text-center d-flex justify-content-center gap-2 flex-wrap" style="margin: 10px 0 24px;">
+        <a class="btn btn-outline-secondary px-4"
+           href="@Url.Action("StudentResult", "MinistrySimExam", new { area = "Admin", id = Model.MinistrySimExamId, studentId = Model.StudentId })">
+            العودة لنتيجة الطالب
+        </a>
+        <a class="btn btn-report px-4"
+           href="@Url.Action("ParentReportPdf", "MinistrySimExam", new { area = "Admin", examId = Model.MinistrySimExamId, studentId = Model.StudentId })">
+            <i class="fas fa-file-pdf ms-1"></i> تنزيل PDF لولي الأمر
+        </a>
+    </div>
+}
+
+@section Scripts {
+    <script>
+        (function () {
+            // تعطيل الـAnimation عالميًا: مطلوب حتى يرسم Chart.js كل Canvas فورًا بلا اعتماد على
+            // requestAnimationFrame المتكرر — بدونه قد يلتقط Puppeteer الصفحة أثناء الرسم فتظهر
+            // الشارتس فارغة في ملف الـPDF المُصدَّر (K5).
+            Chart.defaults.animation = false;
+            Chart.defaults.responsiveAnimationDuration = 0;
+
+            // شارتس المراحل الخمس — نوع مختلف لكل مرحلة (تنويع بصري) بنفس بيانات الدرجة/الوقت المتاحة أصلاً
+            var stageChartTypes = ['@Html.Raw(string.Join("','", stageChartTypes))'];
+            var stageChartData = [@Html.Raw(stageChartDataJs)];
+            var stageColors = ['#087F73', '#F59E0B', '#1B3A5C', '#0EA5A0', '#B45309'];
+
+            stageChartData.forEach(function (s, idx) {
+                var type = stageChartTypes[idx % stageChartTypes.length];
+                var color = stageColors[idx % stageColors.length];
+                var canvas = document.getElementById('stageChart' + idx);
+                if (!canvas) return;
+
+                var config;
+                if (type === 'radar') {
+                    config = {
+                        type: 'radar',
+                        data: {
+                            labels: ['الدرجة', 'إدارة الوقت'],
+                            datasets: [{
+                                data: [s.score, s.timeManagement],
+                                backgroundColor: color + '33',
+                                borderColor: color,
+                                pointBackgroundColor: color
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            scales: { r: { min: 0, max: 100, ticks: { display: false } } },
+                            plugins: { legend: { display: false } }
+                        }
+                    };
+                } else if (type === 'bar') {
+                    config = {
+                        type: 'bar',
+                        data: {
+                            labels: ['الدرجة'],
+                            datasets: [{ data: [s.score], backgroundColor: color, borderRadius: 6 }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            indexAxis: 'y',
+                            scales: { x: { min: 0, max: 100, ticks: { stepSize: 25 } } },
+                            plugins: { legend: { display: false } }
+                        }
+                    };
+                } else {
+                    // doughnut / polarArea / pie: نفس بيانات [الدرجة٪, المتبقي٪] بأشكال هندسية مختلفة
+                    config = {
+                        type: type,
+                        data: {
+                            labels: ['الدرجة', 'المتبقي'],
+                            datasets: [{ data: [s.score, s.remaining], backgroundColor: [color, '#E4EAEE'] }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            plugins: { legend: { display: false } }
+                        }
+                    };
+                }
+
+                new Chart(canvas, config);
+            });
+
+            @if (Model.BatchTotalStudents > 0)
+            {
+                <text>
+                new Chart(document.getElementById('batchCompareChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: ['الدرجة الكلية', 'المحور الكمي', 'المحور اللفظي'],
+                        datasets: [
+                            {
+                                label: 'الطالب',
+                                data: [
+                                    @Model.TotalScorePercent.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                                    @Model.QuantScorePercent.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                                    @Model.VerbalScorePercent.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                                ],
+                                backgroundColor: '#087F73'
+                            },
+                            {
+                                label: 'متوسط الدفعة',
+                                data: [
+                                    @Model.BatchAvgScorePercent.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                                    @Model.BatchAvgQuantPercent.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                                    @Model.BatchAvgVerbalPercent.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                                ],
+                                backgroundColor: '#94a3b8'
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        scales: { y: { beginAtZero: true, max: 100, ticks: { stepSize: 20 } } }
+                    }
+                });
+                </text>
+            }
+
+            @if (Model.PreviousAttemptsTrend.Count >= 2)
+            {
+                <text>
+                new Chart(document.getElementById('trendChart'), {
+                    type: 'line',
+                    data: {
+                        labels: [@Html.Raw(trendLabelsJs)],
+                        datasets: [{
+                            label: 'الدرجة الكلية %',
+                            data: [@Html.Raw(trendDataJs)],
+                            borderColor: '#087F73',
+                            backgroundColor: 'rgba(8,127,115,.15)',
+                            fill: true,
+                            tension: .3,
+                            pointBackgroundColor: '#087F73'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        scales: { y: { beginAtZero: true, max: 100, ticks: { stepSize: 20 } } }
+                    }
+                });
+                </text>
+            }
+
+            var saveBtn = document.getElementById('saveNoteBtn');
+            if (saveBtn) {
+                saveBtn.addEventListener('click', function () {
+                    var status = document.getElementById('saveNoteStatus');
+                    var note = document.getElementById('recommendationsNote').value;
+                    var token = document.querySelector('#antiForgeryForm input[name="__RequestVerificationToken"]').value;
+                    status.textContent = 'جارٍ الحفظ...';
+                    fetch('@Url.Action("SaveParentReportNote", "MinistrySimExam", new { area = "Admin" })', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: 'attemptId=@Model.AttemptId&note=' + encodeURIComponent(note) + '&__RequestVerificationToken=' + encodeURIComponent(token)
+                    })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        status.textContent = data && data.success ? '✔ تم الحفظ' : 'تعذّر الحفظ';
+                    })
+                    .catch(function () { status.textContent = 'تعذّر الحفظ'; });
+                });
+            }
+
+            // إشارة جاهزية للـPuppeteer (K5): تُضبط بعد إنشاء كل الشارتس فعليًا — راجع ParentReportPdf
+            requestAnimationFrame(function () {
+                requestAnimationFrame(function () {
+                    window.__mseReportChartsReady = true;
+                });
+            });
+        })();
+    </script>
+}

@@ -1,0 +1,1288 @@
+﻿@model QdratNew.ViewModels.Homework.HomeworkReviewViewModel
+@using QdratNew.Helpers
+
+@{
+    var isRTL = Model.Questions.FirstOrDefault()?.IsRTL ?? true;
+
+    Func<string, string> ConvertNumber = s =>
+    {
+        return Model.Questions.Any(q => q.IsQuantitative)
+            ? NumberHelper.ToIndicNumbersSafe(s)
+            : s;
+    };
+
+    Func<string, string> T = key =>
+    {
+        if (isRTL) return key;
+
+        return key switch
+        {
+            "مراجعة أسئلة الواجب" => "Homework Questions Review",
+            "مراجعة إجاباتك داخل الواجب مع عرض الإجابة الصحيحة وشرح السؤال عند توفره." => "Review your homework answers with the correct answer and explanation when available.",
+            "إجمالي الأسئلة" => "Total Questions",
+            "إجابات صحيحة" => "Correct Answers",
+            "إجابات خاطئة" => "Wrong Answers",
+            "الوقت المستغرق" => "Time Spent",
+            "نسبة النجاح" => "Success Rate",
+            "أسئلة الواجب" => "Homework Questions",
+            "سؤال" => "Question",
+            "القيمة الأولى" => "Value A",
+            "القيمة الثانية" => "Value B",
+            "مقارنة" => "Comparison",
+            "إجابتك" => "Your Answer",
+            "الإجابة الصحيحة" => "Correct Answer",
+            "النتيجة" => "Result",
+            "صحيح" => "Correct",
+            "خطأ" => "Wrong",
+            "الوقت" => "Time",
+            "دقيقة" => "min",
+            "ثانية" => "sec",
+            "قطعة صوتية" => "Audio Passage",
+            "قطعة مرئية" => "Video Passage",
+            "قطعة نصية" => "Text Passage",
+            "لا توجد أسئلة لعرضها." => "No questions to display.",
+            _ => key
+        };
+    };
+
+    var totalQuestions = Model.TotalQuestions;
+    var correctAnswers = Model.CorrectAnswers;
+    var wrongAnswers = Model.WrongAnswers;
+    var successPercent = totalQuestions > 0 ? Math.Round(correctAnswers * 100.0 / totalQuestions, 1) : 0;
+    var wrongPercent = totalQuestions > 0 ? Math.Round(wrongAnswers * 100.0 / totalQuestions, 1) : 0;
+
+    string FormatQuestionTime(double seconds)
+    {
+        if (seconds <= 0)
+        {
+            return "—";
+        }
+
+        var minutes = (int)(seconds / 60);
+        var remainSeconds = (int)(seconds % 60);
+
+        if (minutes > 0 && remainSeconds > 0)
+        {
+            return $"{NumberHelper.ToIndicNumbersSafe(minutes.ToString())} {T("دقيقة")} {NumberHelper.ToIndicNumbersSafe(remainSeconds.ToString())} {T("ثانية")}";
+        }
+
+        if (minutes > 0)
+        {
+            return $"{NumberHelper.ToIndicNumbersSafe(minutes.ToString())} {T("دقيقة")}";
+        }
+
+        return $"{NumberHelper.ToIndicNumbersSafe(remainSeconds.ToString())} {T("ثانية")}";
+    }
+}
+
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+
+<style>
+    :root {
+        --q-primary: #4f46e5;
+        --q-primary-lt: #ede9fe;
+        --q-success: #16a34a;
+        --q-success-lt: #dcfce7;
+        --q-danger: #dc2626;
+        --q-danger-lt: #fee2e2;
+        --q-warning: #d97706;
+        --q-warning-lt: #fef3c7;
+        --q-info: #0891b2;
+        --q-info-lt: #cffafe;
+        --q-skip: #6b7280;
+        --q-skip-lt: #f3f4f6;
+        --q-surface: #ffffff;
+        --q-bg: #f5f3ff;
+        --q-border: #e5e7eb;
+        --q-text: #1e1b4b;
+        --q-muted: #6b7280;
+        --q-radius: 16px;
+        --q-shadow: 0 2px 12px rgba(79,70,229,.08);
+        --q-shadow-lg: 0 6px 32px rgba(79,70,229,.13);
+    }
+
+    body {
+        background: var(--q-bg) !important;
+    }
+
+    .rtl-mode {
+        direction: rtl;
+        text-align: right;
+    }
+
+    .ltr-mode {
+        direction: ltr;
+        text-align: left;
+    }
+
+    .qlb-page {
+        font-family: 'Cairo', 'Tajawal', 'Segoe UI', sans-serif;
+        background: var(--q-bg);
+        padding: 2rem 1rem 4rem;
+        min-height: 100vh;
+    }
+
+    .qlb-shell {
+        max-width: 1320px;
+        margin: 0 auto;
+    }
+
+    .qlb-hero {
+        background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 55%, #a855f7 100%);
+        border-radius: var(--q-radius);
+        padding: 2.2rem 2rem;
+        color: #fff;
+        margin-bottom: 2rem;
+        box-shadow: var(--q-shadow-lg);
+        position: relative;
+        overflow: hidden;
+    }
+
+        .qlb-hero::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at 85% 50%, rgba(255,255,255,.10) 0%, transparent 60%);
+            pointer-events: none;
+        }
+
+    .qlb-hero-content {
+        position: relative;
+        z-index: 1;
+    }
+
+    .qlb-hero-icon {
+        width: 56px;
+        height: 56px;
+        background: rgba(255,255,255,.18);
+        border: 1px solid rgba(255,255,255,.25);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.6rem;
+        margin-bottom: .8rem;
+    }
+
+    .qlb-hero h1 {
+        font-size: clamp(1.25rem, 2.8vw, 1.85rem);
+        font-weight: 900;
+        margin: 0 0 .45rem;
+        line-height: 1.4;
+    }
+
+    .qlb-hero-subtitle {
+        font-size: .96rem;
+        opacity: .92;
+        margin: 0;
+        line-height: 1.8;
+    }
+
+    .qlb-hero-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .6rem;
+        margin-top: .95rem;
+    }
+
+    .qlb-hero-pill {
+        background: rgba(255,255,255,.15);
+        border: 1px solid rgba(255,255,255,.22);
+        border-radius: 8px;
+        padding: .32rem .85rem;
+        font-size: .82rem;
+        font-weight: 800;
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        white-space: nowrap;
+    }
+
+    .qlb-stats {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .qlb-stat {
+        background: var(--q-surface);
+        border-radius: var(--q-radius);
+        padding: 1.2rem 1rem;
+        box-shadow: var(--q-shadow);
+        border: 1px solid var(--q-border);
+        display: flex;
+        align-items: center;
+        gap: .9rem;
+        transition: transform .2s, box-shadow .2s;
+        min-height: 102px;
+    }
+
+        .qlb-stat:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--q-shadow-lg);
+        }
+
+    .qlb-stat-ico {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.3rem;
+    }
+
+    .ico-blue {
+        background: var(--q-primary-lt);
+        color: var(--q-primary);
+    }
+
+    .ico-green {
+        background: var(--q-success-lt);
+        color: var(--q-success);
+    }
+
+    .ico-red {
+        background: var(--q-danger-lt);
+        color: var(--q-danger);
+    }
+
+    .ico-amber {
+        background: var(--q-warning-lt);
+        color: var(--q-warning);
+    }
+
+    .qlb-stat-content {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .qlb-stat-lbl {
+        font-size: .75rem;
+        color: var(--q-muted);
+        font-weight: 800;
+        margin-bottom: .28rem;
+    }
+
+    .qlb-stat-val {
+        font-size: 1.55rem;
+        font-weight: 900;
+        color: var(--q-text);
+        line-height: 1.25;
+        word-break: break-word;
+    }
+
+    .qlb-stat-bar {
+        height: 4px;
+        background: var(--q-border);
+        border-radius: 99px;
+        margin-top: .55rem;
+        overflow: hidden;
+    }
+
+    .qlb-stat-fill {
+        height: 100%;
+        border-radius: 99px;
+        transition: width .8s ease;
+    }
+
+    .fill-g {
+        background: var(--q-success);
+    }
+
+    .fill-r {
+        background: var(--q-danger);
+    }
+
+    .fill-a {
+        background: var(--q-warning);
+    }
+
+    .qlb-section-head {
+        background: linear-gradient(90deg, var(--q-primary-lt), #ffffff);
+        border: 1px solid var(--q-border);
+        border-right: 5px solid var(--q-primary);
+        border-radius: var(--q-radius);
+        padding: 1rem 1.15rem;
+        margin-bottom: 1rem;
+        box-shadow: var(--q-shadow);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .85rem;
+        flex-wrap: wrap;
+    }
+
+    .ltr-mode .qlb-section-head {
+        border-right: 1px solid var(--q-border);
+        border-left: 5px solid var(--q-primary);
+    }
+
+    .qlb-section-title {
+        margin: 0;
+        color: var(--q-text);
+        font-size: 1.02rem;
+        font-weight: 900;
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+    }
+
+    .qlb-section-count {
+        background: var(--q-primary);
+        color: #fff;
+        border-radius: 99px;
+        padding: .25rem .75rem;
+        font-size: .78rem;
+        font-weight: 900;
+        display: inline-flex;
+        align-items: center;
+        gap: .32rem;
+    }
+
+    .qlb-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1.25rem;
+    }
+
+    .qlb-card {
+        background: var(--q-surface);
+        border-radius: var(--q-radius);
+        box-shadow: var(--q-shadow);
+        border: 1px solid var(--q-border);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        transition: box-shadow .2s, transform .2s;
+        min-height: 100%;
+    }
+
+        .qlb-card:hover {
+            box-shadow: var(--q-shadow-lg);
+            transform: translateY(-2px);
+        }
+
+    .qlb-card-head {
+        background: linear-gradient(90deg, var(--q-primary-lt), #f5f3ff);
+        border-bottom: 1px solid var(--q-border);
+        padding: .85rem 1.1rem;
+        display: flex;
+        align-items: center;
+        gap: .6rem;
+        flex-wrap: wrap;
+    }
+
+    .qlb-qnum {
+        min-width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        background: var(--q-primary);
+        color: #fff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: .85rem;
+        font-weight: 900;
+        flex-shrink: 0;
+        padding: 0 .45rem;
+    }
+
+    .qlb-result-badge {
+        font-size: .78rem;
+        font-weight: 900;
+        padding: .24rem .7rem;
+        border-radius: 99px;
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+    }
+
+    .result-correct {
+        background: var(--q-success-lt);
+        color: var(--q-success);
+        border: 1px solid #86efac;
+    }
+
+    .result-wrong {
+        background: var(--q-danger-lt);
+        color: var(--q-danger);
+        border: 1px solid #fecaca;
+    }
+
+    .qlb-time-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        font-size: .75rem;
+        color: var(--q-muted);
+        font-weight: 900;
+        margin-right: auto;
+    }
+
+    .ltr-mode .qlb-time-chip {
+        margin-right: 0;
+        margin-left: auto;
+    }
+
+    .qlb-card-body {
+        padding: 1.1rem;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: .9rem;
+    }
+
+    .qlb-passage {
+        background: #fafaf5;
+        border: 1px solid #e8e4cf;
+        border-radius: 10px;
+        padding: .85rem 1rem;
+        border-right: 4px solid var(--q-warning);
+    }
+
+    .ltr-mode .qlb-passage {
+        border-right: 1px solid #e8e4cf;
+        border-left: 4px solid var(--q-warning);
+    }
+
+    .qlb-passage-title {
+        font-size: .78rem;
+        font-weight: 900;
+        color: var(--q-warning);
+        margin-bottom: .5rem;
+        display: flex;
+        align-items: center;
+        gap: .4rem;
+    }
+
+    .qlb-passage-text {
+        font-size: .88rem;
+        color: #374151;
+        line-height: 1.85;
+        max-height: 160px;
+        overflow-y: auto;
+        font-weight: 700;
+    }
+
+        .qlb-passage-text::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .qlb-passage-text::-webkit-scrollbar-thumb {
+            background: #d1c89a;
+            border-radius: 99px;
+        }
+
+    .qlb-media-wrap {
+        background: #f0f9ff;
+        border: 1px solid #bae6fd;
+        border-radius: 10px;
+        padding: .85rem 1rem;
+        border-right: 4px solid var(--q-info);
+    }
+
+    .ltr-mode .qlb-media-wrap {
+        border-right: 1px solid #bae6fd;
+        border-left: 4px solid var(--q-info);
+    }
+
+    .qlb-media-label {
+        font-size: .78rem;
+        font-weight: 900;
+        color: var(--q-info);
+        margin-bottom: .55rem;
+        display: flex;
+        align-items: center;
+        gap: .4rem;
+    }
+
+    .qlb-media-wrap audio,
+    .qlb-media-wrap video {
+        width: 100%;
+        border-radius: 10px;
+        outline: none;
+    }
+
+    .qlb-media-wrap video {
+        max-height: 260px;
+        background: #000;
+    }
+
+    .qlb-compare {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        gap: .5rem;
+        align-items: center;
+    }
+
+    .qlb-cmp-box {
+        background: var(--q-primary-lt);
+        border: 1px solid #c4b5fd;
+        border-radius: 10px;
+        padding: .75rem .85rem;
+        text-align: center;
+        font-size: .9rem;
+        font-weight: 900;
+        color: var(--q-primary);
+        min-height: 56px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1.7;
+    }
+
+    .qlb-cmp-vs {
+        font-size: .72rem;
+        font-weight: 900;
+        color: var(--q-muted);
+        background: var(--q-border);
+        border-radius: 99px;
+        padding: .18rem .55rem;
+        white-space: nowrap;
+    }
+
+    .qlb-qimg {
+        border-radius: 10px;
+        overflow: hidden;
+        border: 1px solid var(--q-border);
+        text-align: center;
+        background: #fff;
+        padding: .5rem;
+    }
+
+        .qlb-qimg img {
+            max-width: 100%;
+            max-height: 220px;
+            object-fit: contain;
+            display: block;
+            margin: 0 auto;
+            border-radius: 8px;
+        }
+
+    .qlb-qtitle {
+        font-size: .98rem;
+        color: var(--q-text);
+        line-height: 1.9;
+        font-weight: 900;
+        background: #ffffff;
+        border: 1px solid var(--q-border);
+        border-right: 4px solid var(--q-primary);
+        border-radius: 10px;
+        padding: .9rem 1rem;
+        min-height: 92px;
+    }
+
+    .ltr-mode .qlb-qtitle {
+        border-right: 1px solid var(--q-border);
+        border-left: 4px solid var(--q-primary);
+    }
+
+    .qlb-qtitle strong,
+    .qlb-qtitle p,
+    .qlb-qtitle span,
+    .qlb-qtitle div {
+        font-weight: 900 !important;
+    }
+
+    .qlb-qtitle img {
+        max-height: 85px;
+        max-width: 100%;
+        border-radius: 6px;
+        vertical-align: middle;
+    }
+
+    .qlb-qtitle p {
+        margin: 0;
+    }
+
+    .qlb-options {
+        display: flex;
+        flex-direction: column;
+        gap: .55rem;
+    }
+
+    .qlb-opt {
+        border-radius: 10px;
+        border: 1.5px solid var(--q-border);
+        padding: .7rem .85rem;
+        display: flex;
+        align-items: center;
+        gap: .65rem;
+        font-size: .86rem;
+        background: #fff;
+        min-height: 54px;
+        transition: border-color .15s, background .15s;
+    }
+
+        .qlb-opt.opt-correct {
+            border-color: var(--q-success);
+            background: var(--q-success-lt);
+        }
+
+        .qlb-opt.opt-wrong {
+            border-color: var(--q-danger);
+            background: var(--q-danger-lt);
+        }
+
+        .qlb-opt.opt-normal {
+            border-color: var(--q-border);
+            background: #fff;
+        }
+
+    .qlb-opt-label {
+        width: 28px;
+        height: 28px;
+        border-radius: 7px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: .78rem;
+        font-weight: 900;
+        background: #d1d5db;
+        color: #fff;
+    }
+
+    .opt-correct .qlb-opt-label {
+        background: var(--q-success);
+        color: #fff;
+    }
+
+    .opt-wrong .qlb-opt-label {
+        background: var(--q-danger);
+        color: #fff;
+    }
+
+    .qlb-opt-content {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .qlb-opt-text {
+        line-height: 1.55;
+        color: var(--q-text);
+        font-weight: 800;
+    }
+
+        .qlb-opt-text img {
+            max-height: 58px;
+            max-width: 100%;
+            border-radius: 6px;
+            vertical-align: middle;
+        }
+
+        .qlb-opt-text p {
+            margin: 0;
+        }
+
+    .qlb-opt-img {
+        max-height: 64px;
+        max-width: 180px;
+        object-fit: contain;
+        border-radius: 7px;
+        border: 1px solid var(--q-border);
+        background: #fff;
+        padding: .15rem;
+        margin-bottom: .35rem;
+        display: block;
+    }
+
+    .qlb-opt-tags {
+        display: flex;
+        align-items: center;
+        gap: .35rem;
+        flex-wrap: wrap;
+        margin-top: .35rem;
+    }
+
+    .qlb-mini-badge {
+        border-radius: 99px;
+        padding: .16rem .55rem;
+        font-size: .7rem;
+        font-weight: 900;
+        display: inline-flex;
+        align-items: center;
+        gap: .25rem;
+    }
+
+    .badge-student {
+        background: var(--q-info-lt);
+        color: var(--q-info);
+        border: 1px solid #67e8f9;
+    }
+
+    .badge-correct {
+        background: var(--q-success);
+        color: #fff;
+        border: 1px solid #15803d;
+    }
+
+    .qlb-opt-icon {
+        font-size: .9rem;
+        flex-shrink: 0;
+        margin-right: auto;
+    }
+
+    .ltr-mode .qlb-opt-icon {
+        margin-right: 0;
+        margin-left: auto;
+    }
+
+    .opt-correct .qlb-opt-icon {
+        color: var(--q-success);
+    }
+
+    .opt-wrong .qlb-opt-icon {
+        color: var(--q-danger);
+    }
+
+    .opt-normal .qlb-opt-icon {
+        color: #9ca3af;
+    }
+
+    .qlb-result-box {
+        border-radius: 10px;
+        padding: .85rem 1rem;
+        border: 1px solid var(--q-border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .75rem;
+        flex-wrap: wrap;
+    }
+
+        .qlb-result-box.is-correct {
+            background: var(--q-success-lt);
+            border-color: #86efac;
+            border-right: 4px solid var(--q-success);
+        }
+
+        .qlb-result-box.is-wrong {
+            background: var(--q-danger-lt);
+            border-color: #fecaca;
+            border-right: 4px solid var(--q-danger);
+        }
+
+    .ltr-mode .qlb-result-box.is-correct,
+    .ltr-mode .qlb-result-box.is-wrong {
+        border-right-width: 1px;
+        border-left-width: 4px;
+    }
+
+    .qlb-result-title {
+        font-size: .82rem;
+        font-weight: 900;
+        color: var(--q-text);
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+    }
+
+    .qlb-result-value {
+        font-size: .86rem;
+        font-weight: 900;
+    }
+
+        .qlb-result-value.text-ok {
+            color: var(--q-success);
+        }
+
+        .qlb-result-value.text-bad {
+            color: var(--q-danger);
+        }
+
+    .qlb-explanation-wrap {
+        background: #fafafa;
+        border: 1px solid var(--q-border);
+        border-radius: 12px;
+        padding: .75rem;
+    }
+
+    .qlb-card-foot {
+        background: #fafafa;
+        border-top: 1px solid var(--q-border);
+        padding: .72rem 1.1rem;
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        flex-wrap: wrap;
+    }
+
+    .qlb-foot-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: .32rem;
+        font-size: .76rem;
+        font-weight: 900;
+        padding: .22rem .65rem;
+        border-radius: 99px;
+    }
+
+    .fc-primary {
+        background: var(--q-primary-lt);
+        color: var(--q-primary);
+    }
+
+    .fc-success {
+        background: var(--q-success-lt);
+        color: var(--q-success);
+    }
+
+    .fc-danger {
+        background: var(--q-danger-lt);
+        color: var(--q-danger);
+    }
+
+    .fc-time {
+        background: var(--q-warning-lt);
+        color: var(--q-warning);
+        margin-right: auto;
+    }
+
+    .ltr-mode .fc-time {
+        margin-right: 0;
+        margin-left: auto;
+    }
+
+    .qlb-empty {
+        border: 1px dashed var(--q-border);
+        background: var(--q-skip-lt);
+        color: var(--q-muted);
+        border-radius: 14px;
+        padding: 1.5rem;
+        text-align: center;
+        font-size: .9rem;
+        font-weight: 900;
+    }
+
+    @@media (max-width: 992px) {
+        .qlb-stats {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .qlb-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @@media (max-width: 576px) {
+        .qlb-page {
+            padding: 1rem .7rem 3rem;
+        }
+
+        .qlb-hero {
+            padding: 1.5rem 1.1rem;
+        }
+
+        .qlb-stats {
+            grid-template-columns: 1fr;
+        }
+
+        .qlb-card-foot {
+            align-items: stretch;
+        }
+
+        .qlb-foot-chip {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .qlb-time-chip {
+            width: 100%;
+            margin-right: 0;
+            margin-left: 0;
+        }
+
+        .fc-time {
+            margin-right: 0;
+            margin-left: 0;
+        }
+
+        .qlb-compare {
+            grid-template-columns: 1fr;
+        }
+
+        .qlb-cmp-vs {
+            display: none;
+        }
+    }
+</style>
+
+<div class="@(isRTL ? "rtl-mode" : "ltr-mode")">
+    <div class="qlb-page">
+        <div class="qlb-shell">
+
+            <!-- Hero -->
+            <div class="qlb-hero">
+                <div class="qlb-hero-content">
+                    <div class="qlb-hero-icon">
+                        <i class="fas fa-clipboard-check"></i>
+                    </div>
+
+                    <h1>@T("مراجعة أسئلة الواجب")</h1>
+
+                    <p class="qlb-hero-subtitle">
+                        @T("مراجعة إجاباتك داخل الواجب مع عرض الإجابة الصحيحة وشرح السؤال عند توفره.")
+                    </p>
+
+                    <div class="qlb-hero-meta">
+                        <span class="qlb-hero-pill">
+                            <i class="fas fa-question-circle"></i>
+                            @T("إجمالي الأسئلة"): @ConvertNumber(totalQuestions.ToString())
+                        </span>
+
+                        <span class="qlb-hero-pill">
+                            <i class="fas fa-check-circle"></i>
+                            @T("إجابات صحيحة"): @ConvertNumber(correctAnswers.ToString())
+                        </span>
+
+                        <span class="qlb-hero-pill">
+                            <i class="fas fa-clock"></i>
+                            @T("الوقت المستغرق"): @Model.TimeSpentFormatted
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KPI Cards -->
+            <div class="qlb-stats">
+                <div class="qlb-stat">
+                    <div class="qlb-stat-ico ico-blue">
+                        <i class="fas fa-question-circle"></i>
+                    </div>
+                    <div class="qlb-stat-content">
+                        <div class="qlb-stat-lbl">@T("إجمالي الأسئلة")</div>
+                        <div class="qlb-stat-val">@ConvertNumber(totalQuestions.ToString())</div>
+                    </div>
+                </div>
+
+                <div class="qlb-stat">
+                    <div class="qlb-stat-ico ico-green">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="qlb-stat-content">
+                        <div class="qlb-stat-lbl">@T("إجابات صحيحة")</div>
+                        <div class="qlb-stat-val" style="color:var(--q-success)">
+                            @ConvertNumber(correctAnswers.ToString())
+                        </div>
+                        <div class="qlb-stat-bar">
+                            <div class="qlb-stat-fill fill-g" style="width:@successPercent%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="qlb-stat">
+                    <div class="qlb-stat-ico ico-red">
+                        <i class="fas fa-times-circle"></i>
+                    </div>
+                    <div class="qlb-stat-content">
+                        <div class="qlb-stat-lbl">@T("إجابات خاطئة")</div>
+                        <div class="qlb-stat-val" style="color:var(--q-danger)">
+                            @ConvertNumber(wrongAnswers.ToString())
+                        </div>
+                        <div class="qlb-stat-bar">
+                            <div class="qlb-stat-fill fill-r" style="width:@wrongPercent%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="qlb-stat">
+                    <div class="qlb-stat-ico ico-amber">
+                        <i class="fas fa-stopwatch"></i>
+                    </div>
+                    <div class="qlb-stat-content">
+                        <div class="qlb-stat-lbl">@T("الوقت المستغرق")</div>
+                        <div class="qlb-stat-val" style="color:var(--q-warning)">
+                            @Model.TimeSpentFormatted
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section Header -->
+            <div class="qlb-section-head">
+                <h2 class="qlb-section-title">
+                    <i class="fas fa-table-list"></i>
+                    @T("أسئلة الواجب")
+                </h2>
+
+                <span class="qlb-section-count">
+                    <i class="fas fa-question-circle"></i>
+                    @ConvertNumber(totalQuestions.ToString()) @T("سؤال")
+                </span>
+            </div>
+
+            <!-- Questions -->
+            @if (Model.Questions != null && Model.Questions.Any())
+            {
+                <div class="qlb-grid">
+                    @foreach (var item in Model.Questions.Select((q, index) => new { q, index }))
+                    {
+                        var q = item.q;
+                        var questionIndex = item.index + 1;
+
+                        Func<string?, string> convert = s =>
+                        {
+                            var value = s ?? string.Empty;
+                            return q.IsQuantitative ? NumberHelper.ToIndicNumbersSafe(value) : value;
+                        };
+
+                        var resultClass = q.IsCorrect ? "result-correct" : "result-wrong";
+                        var resultIcon = q.IsCorrect ? "fa-check-circle" : "fa-times-circle";
+                        var resultText = q.IsCorrect ? T("صحيح") : T("خطأ");
+
+                        <div class="qlb-card">
+
+                            <!-- Card Header -->
+                            <div class="qlb-card-head">
+                                <div class="qlb-qnum">
+                                    @ConvertNumber(questionIndex.ToString())
+                                </div>
+
+                                <span class="qlb-result-badge @resultClass">
+                                    <i class="fas @resultIcon"></i>
+                                    @resultText
+                                </span>
+
+                                <span class="qlb-time-chip">
+                                    <i class="fas fa-clock"></i>
+                                    @T("الوقت"): @FormatQuestionTime(q.TimeTakenSeconds)
+                                </span>
+                            </div>
+
+                            <!-- Card Body -->
+                            <div class="qlb-card-body">
+
+                                <!-- Verbal Passage -->
+                                @if (q.VerbalPassageType == QdratNew.Enums.PassageType.Audio)
+                                {
+                                    <div class="qlb-media-wrap">
+                                        <div class="qlb-media-label">
+                                            <i class="fas fa-headphones"></i>
+                                            @(string.IsNullOrWhiteSpace(q.VerbalPassageTitle) ? T("قطعة صوتية") : q.VerbalPassageTitle)
+                                        </div>
+
+                                        <audio controls preload="none">
+                                            <source src="@q.VerbalPassageMediaUrl" />
+                                        </audio>
+                                    </div>
+                                }
+                                else if (q.VerbalPassageType == QdratNew.Enums.PassageType.Video)
+                                {
+                                    <div class="qlb-media-wrap">
+                                        <div class="qlb-media-label">
+                                            <i class="fas fa-video"></i>
+                                            @(string.IsNullOrWhiteSpace(q.VerbalPassageTitle) ? T("قطعة مرئية") : q.VerbalPassageTitle)
+                                        </div>
+
+                                        <video controls preload="metadata">
+                                            <source src="@q.VerbalPassageMediaUrl" />
+                                        </video>
+                                    </div>
+                                }
+                                else if (!string.IsNullOrWhiteSpace(q.VerbalPassageContent))
+                                {
+                                    <div class="qlb-passage">
+                                        <div class="qlb-passage-title">
+                                            <i class="fas fa-book-open"></i>
+                                            @(string.IsNullOrWhiteSpace(q.VerbalPassageTitle) ? T("قطعة نصية") : q.VerbalPassageTitle)
+                                        </div>
+
+                                        <div class="qlb-passage-text">
+                                            @Html.Raw(convert(q.VerbalPassageContent))
+                                        </div>
+                                    </div>
+                                }
+
+                                <!-- Question Image -->
+                                @if (!string.IsNullOrWhiteSpace(q.ImageUrl))
+                                {
+                                    <div class="qlb-qimg">
+                                        <img src="@Url.Content(q.ImageUrl)" alt="صورة السؤال" loading="lazy" />
+                                    </div>
+                                }
+
+                                <!-- Comparison Values -->
+                                @if (q.DisplayType == QdratNew.Enums.QuestionDisplayType.ComparisonText)
+                                {
+                                    <div class="qlb-compare">
+                                        <div class="qlb-cmp-box">
+                                            <div>
+                                                <div style="font-size:.72rem;color:var(--q-muted);margin-bottom:.25rem;">
+                                                    @T("القيمة الأولى")
+                                                </div>
+                                                @Html.Raw(convert(q.ComparisonValue1))
+                                            </div>
+                                        </div>
+
+                                        <span class="qlb-cmp-vs">@T("مقارنة")</span>
+
+                                        <div class="qlb-cmp-box">
+                                            <div>
+                                                <div style="font-size:.72rem;color:var(--q-muted);margin-bottom:.25rem;">
+                                                    @T("القيمة الثانية")
+                                                </div>
+                                                @Html.Raw(convert(q.ComparisonValue2))
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                                else if (q.DisplayType == QdratNew.Enums.QuestionDisplayType.ComparisonWithImage)
+                                {
+                                    <div class="qlb-compare">
+                                        <div class="qlb-cmp-box">
+                                            <div>
+                                                <div style="font-size:.72rem;color:var(--q-muted);margin-bottom:.25rem;">
+                                                    @T("القيمة الأولى")
+                                                </div>
+                                                @Html.Raw(convert(q.ComparisonValue1))
+                                            </div>
+                                        </div>
+
+                                        <span class="qlb-cmp-vs">@T("مقارنة")</span>
+
+                                        <div class="qlb-cmp-box">
+                                            <div>
+                                                <div style="font-size:.72rem;color:var(--q-muted);margin-bottom:.25rem;">
+                                                    @T("القيمة الثانية")
+                                                </div>
+                                                @Html.Raw(convert(q.ComparisonValue2))
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+
+                                <!-- Question Text - Bold -->
+                                <div class="qlb-qtitle">
+                                    <strong>
+                                        @Html.Raw(convert(q.QuestionText))
+                                    </strong>
+                                </div>
+
+                                <!-- Options -->
+                                @if (q.Options != null && q.Options.Count > 0)
+                                {
+                                    <div class="qlb-options">
+                                        @foreach (var optItem in q.Options.Select((opt, optIndex) => new { opt, optIndex }))
+                                        {
+                                            var opt = optItem.opt;
+                                            var optIndex = optItem.optIndex;
+
+                                            var isSelected = opt.Text == q.StudentAnswer;
+                                            var isCorrect = opt.Text == q.CorrectAnswer;
+
+                                            var optCls = isCorrect ? "opt-correct"
+                                            : isSelected ? "opt-wrong"
+                                            : "opt-normal";
+
+                                            var optIcon = isCorrect ? "fa-check-circle"
+                                            : isSelected ? "fa-times-circle"
+                                            : "fa-circle";
+
+                                            <div class="qlb-opt @optCls">
+                                                <div class="qlb-opt-content">
+                                                    @if (!string.IsNullOrWhiteSpace(opt.ImageUrl))
+                                                    {
+                                                        <img src="@Url.Content(opt.ImageUrl)"
+                                                             alt="صورة الاختيار"
+                                                             class="qlb-opt-img"
+                                                             loading="lazy" />
+                                                    }
+
+                                                    @if (!string.IsNullOrWhiteSpace(opt.Text))
+                                                    {
+                                                        <div class="qlb-opt-text">
+                                                            @Html.Raw(convert(opt.Text))
+                                                        </div>
+                                                    }
+
+                                                    <div class="qlb-opt-tags">
+                                                        @if (isSelected)
+                                                        {
+                                                            <span class="qlb-mini-badge badge-student">
+                                                                <i class="fas fa-user-check"></i>
+                                                                @T("إجابتك")
+                                                            </span>
+                                                        }
+
+                                                        @if (isCorrect)
+                                                        {
+                                                            <span class="qlb-mini-badge badge-correct">
+                                                                <i class="fas fa-check"></i>
+                                                                @T("الإجابة الصحيحة")
+                                                            </span>
+                                                        }
+                                                    </div>
+                                                </div>
+
+                                                <i class="fas @optIcon qlb-opt-icon"></i>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+
+                                <!-- Result -->
+                                <div class="qlb-result-box @(q.IsCorrect ? "is-correct" : "is-wrong")">
+                                    <div class="qlb-result-title">
+                                        <i class="fas @(q.IsCorrect ? "fa-check-circle" : "fa-times-circle")"></i>
+                                        @T("النتيجة")
+                                    </div>
+
+                                    <div class="qlb-result-value @(q.IsCorrect ? "text-ok" : "text-bad")">
+                                        @(q.IsCorrect ? "✔️ " + T("صحيح") : "❌ " + T("خطأ"))
+                                    </div>
+                                </div>
+
+                                <!-- Explanation Partial -->
+                                <div class="qlb-explanation-wrap">
+                                    @await Html.PartialAsync("_QuestionExplanationPartial", q)
+                                </div>
+
+                            </div>
+
+                            <!-- Card Footer -->
+                            <div class="qlb-card-foot">
+                                <span class="qlb-foot-chip fc-primary">
+                                    <i class="fas fa-hash"></i>
+                                    @T("سؤال") @ConvertNumber(questionIndex.ToString())
+                                </span>
+
+                                @if (q.IsCorrect)
+                                {
+                                    <span class="qlb-foot-chip fc-success">
+                                        <i class="fas fa-check"></i>
+                                        @T("صحيح")
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="qlb-foot-chip fc-danger">
+                                        <i class="fas fa-times"></i>
+                                        @T("خطأ")
+                                    </span>
+                                }
+
+                                <span class="qlb-foot-chip fc-time">
+                                    <i class="fas fa-stopwatch"></i>
+                                    @FormatQuestionTime(q.TimeTakenSeconds)
+                                </span>
+                            </div>
+
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="qlb-empty">
+                    <i class="fas fa-info-circle"></i>
+                    @T("لا توجد أسئلة لعرضها.")
+                </div>
+            }
+
+        </div>
+    </div>
+</div>

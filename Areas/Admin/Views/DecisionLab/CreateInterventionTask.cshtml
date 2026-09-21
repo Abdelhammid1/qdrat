@@ -1,0 +1,1230 @@
+@model QdratNew.ViewModels.Admin.DecisionLab.CreateInterventionTaskViewModel
+@using System.Text.Json
+
+@functions {
+    private static double Dbl(JsonElement el, string key)
+    {
+        try { return el.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : 0; }
+        catch { return 0; }
+    }
+    private static int Int(JsonElement el, string key)
+    {
+        try { return el.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : 0; }
+        catch { return 0; }
+    }
+    private static string Str(JsonElement el, string key)
+    {
+        try { return el.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : ""; }
+        catch { return ""; }
+    }
+}
+
+@{
+    // ── parse snapshot ──────────────────────────────────────────────
+    bool hasSnap = false;
+    double sExam = 0, sHw = 0, sAtt = 0, sHwSub = 0, sExamPart = 0, sRisk = 0;
+    int sStudents = 0, sWeakLessons = 0, sHighRiskQ = 0;
+    string sRiskLevel = "Low";
+    double sbAtt = 0, sbHw = 0, sbExam = 0, sbWeak = 0, sbQ = 0;
+
+    if (!string.IsNullOrWhiteSpace(Model.BeforeSnapshotJson))
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(Model.BeforeSnapshotJson);
+            var r = doc.RootElement;
+            hasSnap      = true;
+            sExam        = Dbl(r, "AverageExamScore");
+            sHw          = Dbl(r, "AverageHomeworkScore");
+            sAtt         = Dbl(r, "AttendancePercent");
+            sHwSub       = Dbl(r, "HomeworkSubmissionPercent");
+            sExamPart    = Dbl(r, "ExamParticipationPercent");
+            sRisk        = Dbl(r, "RiskScore");
+            sStudents    = Int(r, "ActiveStudentsCount");
+            sWeakLessons = Int(r, "WeakLessonsCount");
+            sHighRiskQ   = Int(r, "HighRiskQuestionsCount");
+            sRiskLevel   = Str(r, "RiskLevel");
+            if (r.TryGetProperty("RiskBreakdown", out var rb))
+            {
+                sbAtt  = Dbl(rb, "AttendanceRiskScore");
+                sbHw   = Dbl(rb, "HomeworkRiskScore");
+                sbExam = Dbl(rb, "ExamRiskScore");
+                sbWeak = Dbl(rb, "WeakLessonRiskScore");
+                sbQ    = Dbl(rb, "QuestionRiskScore");
+            }
+        }
+        catch { hasSnap = false; }
+    }
+
+    // colour helpers
+    string ScoreColor(double v) => v >= 70 ? "#16a34a" : v >= 50 ? "#d97706" : "#dc2626";
+    string ScoreBg(double v)   => v >= 70 ? "#dcfce7"  : v >= 50 ? "#fef3c7" : "#fee2e2";
+    string RiskColor(double v) => v >= 70 ? "#dc2626"  : v >= 50 ? "#d97706" : "#16a34a";
+
+    string riskBadgeColor = sRiskLevel == "High" ? "#dc2626" : sRiskLevel == "Medium" ? "#d97706" : "#16a34a";
+    string riskBadgeBg    = sRiskLevel == "High" ? "#fee2e2" : sRiskLevel == "Medium" ? "#fef3c7" : "#dcfce7";
+    string riskBadgeLabel = sRiskLevel == "High" ? "خطر عالي" : sRiskLevel == "Medium" ? "متوسط" : "مستقر";
+}
+
+<link rel="stylesheet" href="~/css/decision-analytics-ui.css" asp-append-version="true" />
+
+@* ══════════════════════════════════════════════════════════════════
+   PAGE
+══════════════════════════════════════════════════════════════════ *@
+<div class="cit-root" dir="rtl">
+
+    @* ── HEADER ─────────────────────────────────────────────────── *@
+    <header class="cit-header">
+        <div class="cit-header-inner">
+            <div>
+                <nav class="cit-breadcrumb">
+                    <a asp-area="Admin" asp-controller="DecisionLab" asp-action="Index">
+                        <i class="fas fa-brain me-1"></i>DecisionLab
+                    </a>
+                    <span>/</span>
+                    <a asp-area="Admin" asp-controller="DecisionLab" asp-action="RecommendationDetails"
+                       asp-route-id="@Model.DecisionRecommendationId">التوصية #@Model.DecisionRecommendationId</a>
+                    <span>/</span>
+                    <span>إنشاء مهمة التدخل</span>
+                </nav>
+                <h1 class="cit-header-title">
+                    <span class="cit-header-icon"><i class="fas fa-bolt"></i></span>
+                    إنشاء مهمة تدخل تعليمية
+                </h1>
+                <p class="cit-header-sub">
+                    بناءً على التوصية المعتمدة — راجع سياق القرار أدناه ثم حدّد تفاصيل التدخل
+                </p>
+            </div>
+            <div class="cit-header-actions">
+                <a class="cit-btn cit-btn-ghost"
+                   asp-area="Admin" asp-controller="Analytics" asp-action="BatchPerformanceDetails"
+                   asp-route-batchId="@Model.BatchId" asp-route-curriculumId="@Model.CurriculumId">
+                    <i class="fas fa-chart-line me-1"></i>تحليل الدفعة
+                </a>
+                <a class="cit-btn cit-btn-ghost"
+                   asp-area="Admin" asp-controller="DecisionLab" asp-action="RecommendationDetails"
+                   asp-route-id="@Model.DecisionRecommendationId">
+                    <i class="fas fa-arrow-right me-1"></i>رجوع
+                </a>
+            </div>
+        </div>
+    </header>
+
+    @* ── CONTEXT STRIP ──────────────────────────────────────────── *@
+    <div class="cit-context-strip">
+
+        @* Recommendation Card *@
+        <div class="cit-rec-card">
+            <div class="cit-rec-card-eye">
+                <i class="fas fa-brain me-1"></i>التوصية المرتبطة
+                <span class="cit-status-pill cit-status-approved">
+                    <i class="fas fa-circle-check me-1"></i>@Model.RecommendationStatus
+                </span>
+            </div>
+            <div class="cit-rec-type-row">
+                <span class="cit-type-badge">@Model.RecommendationType</span>
+                <span class="cit-meta-chip"><i class="fas fa-users me-1"></i>@Model.BatchName</span>
+                @if (!string.IsNullOrWhiteSpace(Model.CourseName))
+                {
+                    <span class="cit-meta-chip"><i class="fas fa-book me-1"></i>@Model.CourseName</span>
+                }
+            </div>
+            <p class="cit-rec-summary">@Model.RecommendationSummary</p>
+            @if (!string.IsNullOrWhiteSpace(Model.RecommendationReason))
+            {
+                <div class="cit-rec-reason">
+                    <i class="fas fa-clipboard-question me-1 text-muted"></i>@Model.RecommendationReason
+                </div>
+            }
+        </div>
+
+        @* Snapshot Metrics *@
+        @if (hasSnap)
+        {
+            <div class="cit-snap-metrics">
+                <div class="cit-snap-header">
+                    <span><i class="fas fa-camera me-1"></i>بيانات الدفعة وقت القرار</span>
+                    <span class="cit-risk-badge" style="background:@riskBadgeBg;color:@riskBadgeColor">
+                        @riskBadgeLabel
+                    </span>
+                </div>
+                <div class="cit-snap-bars">
+                    <div class="cit-snap-bar-item">
+                        <div class="cit-snap-bar-label">
+                            <span>متوسط الاختبارات</span>
+                            <strong style="color:@ScoreColor(sExam)">@sExam.ToString("0.0")%</strong>
+                        </div>
+                        <div class="cit-bar-track">
+                            <div class="cit-bar-fill" style="width:@sExam%;background:@ScoreColor(sExam)"></div>
+                        </div>
+                    </div>
+                    <div class="cit-snap-bar-item">
+                        <div class="cit-snap-bar-label">
+                            <span>متوسط الواجبات</span>
+                            <strong style="color:@ScoreColor(sHw)">@sHw.ToString("0.0")%</strong>
+                        </div>
+                        <div class="cit-bar-track">
+                            <div class="cit-bar-fill" style="width:@sHw%;background:@ScoreColor(sHw)"></div>
+                        </div>
+                    </div>
+                    <div class="cit-snap-bar-item">
+                        <div class="cit-snap-bar-label">
+                            <span>معدل الحضور</span>
+                            <strong style="color:@ScoreColor(sAtt)">@sAtt.ToString("0.0")%</strong>
+                        </div>
+                        <div class="cit-bar-track">
+                            <div class="cit-bar-fill" style="width:@sAtt%;background:@ScoreColor(sAtt)"></div>
+                        </div>
+                    </div>
+                    <div class="cit-snap-bar-item">
+                        <div class="cit-snap-bar-label">
+                            <span>مشاركة الاختبارات</span>
+                            <strong style="color:@ScoreColor(sExamPart)">@sExamPart.ToString("0.0")%</strong>
+                        </div>
+                        <div class="cit-bar-track">
+                            <div class="cit-bar-fill" style="width:@sExamPart%;background:@ScoreColor(sExamPart)"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="cit-snap-counters">
+                    <div class="cit-counter" style="--cc:@RiskColor(sWeakLessons * 10)">
+                        <div class="cit-counter-val">@sWeakLessons</div>
+                        <div class="cit-counter-lbl">درس ضعيف</div>
+                    </div>
+                    <div class="cit-counter" style="--cc:@RiskColor(sHighRiskQ * 5)">
+                        <div class="cit-counter-val">@sHighRiskQ</div>
+                        <div class="cit-counter-lbl">سؤال حرج</div>
+                    </div>
+                    <div class="cit-counter" style="--cc:#1e40af">
+                        <div class="cit-counter-val">@sStudents</div>
+                        <div class="cit-counter-lbl">طالب نشط</div>
+                    </div>
+                </div>
+            </div>
+
+            @* Risk Radar Chart *@
+            <div class="cit-chart-panel">
+                <div class="cit-chart-title">
+                    <i class="fas fa-radar me-1 text-muted"></i>تحليل مخاطر الدفعة
+                </div>
+                <div class="cit-radar-wrap">
+                    <canvas id="citRiskRadar"
+                            data-att="@sbAtt" data-hw="@sbHw" data-exam="@sbExam"
+                            data-weak="@sbWeak" data-q="@sbQ"></canvas>
+                </div>
+                <div class="cit-risk-score-row">
+                    <span>مؤشر الخطر الكلي</span>
+                    <span class="cit-risk-score" style="color:@RiskColor(sRisk)">
+                        @sRisk.ToString("0.0")%
+                    </span>
+                </div>
+            </div>
+        }
+    </div>
+
+    @* ── MAIN FORM ───────────────────────────────────────────────── *@
+    <form method="post"
+          asp-area="Admin" asp-controller="DecisionLab" asp-action="CreateInterventionTask"
+          id="citForm" novalidate>
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="DecisionRecommendationId" />
+        <input type="hidden" asp-for="BatchId" />
+        <input type="hidden" asp-for="CourseId" />
+        <input type="hidden" asp-for="CurriculumId" />
+        <input type="hidden" asp-for="RecommendedNextLectureId" />
+        <input type="hidden" asp-for="TargetLessonsJson" />
+        <input type="hidden" asp-for="TargetQuestionsJson" />
+        <input type="hidden" asp-for="BeforeSnapshotJson" />
+
+        <div asp-validation-summary="ModelOnly" class="cit-validation-summary"></div>
+
+        <div class="cit-form-body">
+
+            @* ─── Section 1: هوية المهمة ─────────────────────────────── *@
+            <section class="cit-section">
+                <div class="cit-section-head">
+                    <span class="cit-section-num">١</span>
+                    <div>
+                        <h2 class="cit-section-title">هوية المهمة</h2>
+                        <p class="cit-section-sub">العنوان الرسمي والوصف التنفيذي للمهمة</p>
+                    </div>
+                </div>
+                <div class="cit-form-grid">
+                    <div class="cit-field cit-field-full">
+                        <label asp-for="Title" class="cit-label">
+                            عنوان المهمة <span class="cit-required">*</span>
+                        </label>
+                        <input asp-for="Title" class="cit-input" placeholder="مثال: إعادة شرح درس التفاضل للدفعة ب" />
+                        <span asp-validation-for="Title" class="cit-error"></span>
+                    </div>
+                    <div class="cit-field cit-field-full">
+                        <label asp-for="Description" class="cit-label">وصف المهمة</label>
+                        <textarea asp-for="Description" class="cit-textarea" rows="3"
+                                  placeholder="شرح موجز لما يجب على المدرب تنفيذه بالضبط..."></textarea>
+                        <span asp-validation-for="Description" class="cit-error"></span>
+                    </div>
+                </div>
+            </section>
+
+            @* ─── Section 2: إعدادات التنفيذ ────────────────────────── *@
+            <section class="cit-section">
+                <div class="cit-section-head">
+                    <span class="cit-section-num">٢</span>
+                    <div>
+                        <h2 class="cit-section-title">إعدادات التنفيذ</h2>
+                        <p class="cit-section-sub">نوع التدخل وطريقة التسليم والجهة المستهدفة</p>
+                    </div>
+                </div>
+                <div class="cit-form-grid">
+                    <div class="cit-field">
+                        <label asp-for="TaskType" class="cit-label">
+                            نوع المهمة <span class="cit-required">*</span>
+                        </label>
+                        <select asp-for="TaskType" asp-items="Model.TaskTypeOptions" class="cit-select"></select>
+                        <span asp-validation-for="TaskType" class="cit-error"></span>
+                    </div>
+                    <div class="cit-field">
+                        <label asp-for="DeliveryMode" class="cit-label">
+                            طريقة التنفيذ <span class="cit-required">*</span>
+                        </label>
+                        <select asp-for="DeliveryMode" asp-items="Model.DeliveryModeOptions" class="cit-select"></select>
+                        <span asp-validation-for="DeliveryMode" class="cit-error"></span>
+                    </div>
+                    <div class="cit-field">
+                        <label asp-for="TargetType" class="cit-label">
+                            الجهة المستهدفة <span class="cit-required">*</span>
+                        </label>
+                        <select asp-for="TargetType" asp-items="Model.TargetTypeOptions" class="cit-select"></select>
+                        <span asp-validation-for="TargetType" class="cit-error"></span>
+                    </div>
+                    <div class="cit-field">
+                        <label asp-for="Priority" class="cit-label">
+                            الأولوية <span class="cit-required">*</span>
+                        </label>
+                        <div class="cit-priority-group" id="priorityGroup">
+                            @foreach (var opt in Model.PriorityOptions)
+                            {
+                                var isSelected = opt.Value == Model.Priority;
+                                var pIcon = opt.Value == "Critical" ? "fa-fire" : opt.Value == "High" ? "fa-arrow-up" : opt.Value == "Normal" ? "fa-minus" : "fa-arrow-down";
+                                var pColor = opt.Value == "Critical" ? "cit-pri-critical" : opt.Value == "High" ? "cit-pri-high" : opt.Value == "Normal" ? "cit-pri-normal" : "cit-pri-low";
+                                <label class="cit-pri-btn @pColor @(isSelected ? "cit-pri-active" : "")">
+                                    <input type="radio" asp-for="Priority" value="@opt.Value" class="cit-pri-radio" />
+                                    <i class="fas @pIcon me-1"></i>@opt.Text
+                                </label>
+                            }
+                        </div>
+                        <span asp-validation-for="Priority" class="cit-error"></span>
+                    </div>
+                    <div class="cit-field">
+                        <label asp-for="DueDate" class="cit-label">تاريخ الاستحقاق</label>
+                        <input asp-for="DueDate" type="date" class="cit-input" />
+                        <span asp-validation-for="DueDate" class="cit-error"></span>
+                    </div>
+                </div>
+            </section>
+
+            @* ─── Section 3: المدرب ──────────────────────────────────── *@
+            <section class="cit-section">
+                <div class="cit-section-head">
+                    <span class="cit-section-num">٣</span>
+                    <div>
+                        <h2 class="cit-section-title">المدرب المسؤول</h2>
+                        <p class="cit-section-sub">اختر المدرب الذي سيتولى تنفيذ هذا التدخل</p>
+                    </div>
+                </div>
+                <div class="cit-form-grid">
+                    <div class="cit-field cit-field-half">
+                        <label asp-for="InstructorId" class="cit-label">المدرب</label>
+                        <select asp-for="InstructorId" asp-items="Model.InstructorOptions" class="cit-select">
+                            <option value="">— بدون تحديد —</option>
+                        </select>
+                        <span asp-validation-for="InstructorId" class="cit-error"></span>
+                    </div>
+                </div>
+            </section>
+
+            @* ─── Section 4: خريطة المحاضرات ────────────────────────── *@
+            <section class="cit-section">
+                <div class="cit-section-head">
+                    <span class="cit-section-num">٤</span>
+                    <div>
+                        <h2 class="cit-section-title">محاضرة التنفيذ</h2>
+                        <p class="cit-section-sub">اختر المحاضرة المناسبة — التوصية تُفضّل أول محاضرة قادمة</p>
+                    </div>
+                    @if (Model.RecommendedNextLectureId.HasValue)
+                    {
+                        <span class="cit-rec-note">
+                            <i class="fas fa-wand-magic-sparkles me-1"></i>تم تحديد المحاضرة القادمة تلقائياً
+                        </span>
+                    }
+                </div>
+
+                @if (!Model.LectureMap.Any())
+                {
+                    <div class="cit-empty-lectures">
+                        <i class="fas fa-calendar-xmark fa-2x mb-2 d-block" style="color:#d1d5db"></i>
+                        لا توجد محاضرات مجدولة لهذه الدفعة حالياً
+                        <small class="d-block mt-1">يمكن إنشاء المهمة بدون ربطها بمحاضرة</small>
+                    </div>
+                }
+                else
+                {
+                    <div class="cit-lecture-grid">
+
+                        @* No lecture option *@
+                        <label class="cit-lec-card cit-lec-none @(Model.LectureId == null ? "cit-lec-selected" : "")">
+                            <input type="radio" asp-for="LectureId" value="" class="cit-lec-radio" />
+                            <div class="cit-lec-icon cit-lec-icon-none">
+                                <i class="fas fa-ban"></i>
+                            </div>
+                            <div class="cit-lec-body">
+                                <div class="cit-lec-title">بدون ربط بمحاضرة</div>
+                                <div class="cit-lec-meta">يمكن تحديد المحاضرة لاحقاً</div>
+                            </div>
+                        </label>
+
+                        @foreach (var lec in Model.LectureMap)
+                        {
+                            var isSelected = Model.LectureId == lec.LectureId;
+                            var statusCss = lec.StatusText == "اليوم" ? "cit-lec-today"
+                                          : lec.StatusText == "قادمة" ? "cit-lec-upcoming"
+                                          : "cit-lec-past";
+                            var iconCss = lec.StatusText == "اليوم" ? "cit-lec-icon-today"
+                                        : lec.StatusText == "قادمة" ? "cit-lec-icon-upcoming"
+                                        : "cit-lec-icon-past";
+                            var faIcon  = lec.StatusText == "اليوم" ? "fa-star"
+                                        : lec.StatusText == "قادمة" ? "fa-calendar-plus"
+                                        : "fa-calendar-check";
+                            <label class="cit-lec-card @statusCss @(isSelected ? "cit-lec-selected" : "") @(lec.IsRecommendedNextLecture ? "cit-lec-recommended" : "")">
+                                <input type="radio" asp-for="LectureId" value="@lec.LectureId" class="cit-lec-radio" />
+                                <div class="cit-lec-icon @iconCss">
+                                    <i class="fas @faIcon"></i>
+                                </div>
+                                <div class="cit-lec-body">
+                                    <div class="cit-lec-title">
+                                        @(string.IsNullOrWhiteSpace(lec.Title) ? $"محاضرة #{lec.LectureId}" : lec.Title)
+                                    </div>
+                                    <div class="cit-lec-meta">
+                                        <i class="fas fa-calendar me-1"></i>@lec.Date.ToString("yyyy/MM/dd — HH:mm")
+                                    </div>
+                                    @if (!string.IsNullOrWhiteSpace(lec.InstructorName))
+                                    {
+                                        <div class="cit-lec-meta">
+                                            <i class="fas fa-user-tie me-1"></i>@lec.InstructorName
+                                        </div>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(lec.CurriculumTitle))
+                                    {
+                                        <div class="cit-lec-meta">
+                                            <i class="fas fa-book me-1"></i>@lec.CurriculumTitle
+                                        </div>
+                                    }
+                                    <div class="cit-lec-badges">
+                                        <span class="cit-lec-status-badge cit-lec-sb-@(lec.StatusText == "اليوم" ? "today" : lec.StatusText == "قادمة" ? "upcoming" : "past")">
+                                            @lec.StatusText
+                                        </span>
+                                        @if (lec.IsRecommendedNextLecture)
+                                        {
+                                            <span class="cit-lec-status-badge cit-lec-sb-rec">
+                                                <i class="fas fa-wand-magic-sparkles me-1"></i>مقترحة
+                                            </span>
+                                        }
+                                    </div>
+                                </div>
+                            </label>
+                        }
+                    </div>
+                }
+                <span asp-validation-for="LectureId" class="cit-error mt-2 d-block"></span>
+            </section>
+
+            @* ─── Section 5: تعليمات المالك ──────────────────────────── *@
+            <section class="cit-section">
+                <div class="cit-section-head">
+                    <span class="cit-section-num">٥</span>
+                    <div>
+                        <h2 class="cit-section-title">تعليمات المالك</h2>
+                        <p class="cit-section-sub">التوجيهات التفصيلية للمدرب — ما الذي تتوقع منه بالضبط؟</p>
+                    </div>
+                </div>
+                <div class="cit-form-grid">
+                    <div class="cit-field cit-field-full">
+                        <label asp-for="OwnerInstructions" class="cit-label">
+                            التعليمات <span class="cit-required">*</span>
+                        </label>
+                        <textarea asp-for="OwnerInstructions" class="cit-textarea cit-textarea-lg"
+                                  rows="6"
+                                  placeholder="اكتب تعليماتك للمدرب... مثال: أعد شرح درس التفاضل مع التركيز على الأسئلة من نوع التطبيق، وراجع الأخطاء الشائعة في الاختبار السابق."></textarea>
+                        <span asp-validation-for="OwnerInstructions" class="cit-error"></span>
+                    </div>
+                </div>
+            </section>
+
+        </div>@* /cit-form-body *@
+
+        @* ── STICKY ACTION BAR ─────────────────────────────────────── *@
+        <div class="cit-action-bar">
+            <div class="cit-action-inner">
+                <div class="cit-action-left">
+                    <a class="cit-btn cit-btn-ghost"
+                       asp-area="Admin" asp-controller="DecisionLab" asp-action="RecommendationDetails"
+                       asp-route-id="@Model.DecisionRecommendationId">
+                        <i class="fas fa-arrow-right me-1"></i>إلغاء
+                    </a>
+                </div>
+                <div class="cit-action-right">
+                    <span class="cit-action-hint">
+                        <i class="fas fa-shield-check me-1"></i>المهمة لن تُنفَّذ تلقائياً — تحتاج قبولاً من المدرب
+                    </span>
+                    <button type="submit" class="cit-btn cit-btn-primary" id="citSubmitBtn">
+                        <i class="fas fa-paper-plane me-2"></i>إنشاء مهمة التدخل
+                        <i class="fas fa-arrow-left ms-1"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </form>
+</div>
+
+@* ══════════════════════════════════════════════════════════════════
+   CHART
+══════════════════════════════════════════════════════════════════ *@
+@if (hasSnap)
+{
+    <script>
+    (function () {
+        if (typeof Chart === 'undefined') return;
+
+        const canvas = document.getElementById('citRiskRadar');
+        if (!canvas) return;
+
+        const att  = +canvas.dataset.att  || 0;
+        const hw   = +canvas.dataset.hw   || 0;
+        const exam = +canvas.dataset.exam || 0;
+        const weak = +canvas.dataset.weak || 0;
+        const q    = +canvas.dataset.q    || 0;
+
+        new Chart(canvas, {
+            type: 'radar',
+            data: {
+                labels: ['الحضور', 'الواجبات', 'الاختبارات', 'الدروس الضعيفة', 'الأسئلة الحرجة'],
+                datasets: [{
+                    label: 'درجة الخطر',
+                    data: [att, hw, exam, weak, q],
+                    backgroundColor: 'rgba(220,38,38,.12)',
+                    borderColor: '#dc2626',
+                    borderWidth: 2,
+                    pointBackgroundColor: '#dc2626',
+                    pointRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        rtl: true,
+                        callbacks: { label: ctx => ` ${ctx.raw.toFixed(0)}% خطر` }
+                    }
+                },
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: { display: false, stepSize: 25 },
+                        grid: { color: 'rgba(0,0,0,.08)' },
+                        pointLabels: {
+                            font: { family: 'Cairo', size: 11, weight: '700' },
+                            color: '#374151'
+                        }
+                    }
+                },
+                animation: { duration: 900, easing: 'easeInOutQuart' }
+            }
+        });
+    })();
+    </script>
+}
+
+@* ── Priority radio interaction ──────────────────────────────── *@
+<script>
+(function () {
+    const radios = document.querySelectorAll('.cit-pri-radio');
+    radios.forEach(r => {
+        r.addEventListener('change', () => {
+            document.querySelectorAll('.cit-pri-btn').forEach(b => b.classList.remove('cit-pri-active'));
+            r.closest('.cit-pri-btn')?.classList.add('cit-pri-active');
+        });
+    });
+
+    // Lecture card selection highlight
+    document.querySelectorAll('.cit-lec-radio').forEach(r => {
+        r.addEventListener('change', () => {
+            document.querySelectorAll('.cit-lec-card').forEach(c => c.classList.remove('cit-lec-selected'));
+            r.closest('.cit-lec-card')?.classList.add('cit-lec-selected');
+        });
+    });
+
+    // Submit loading state
+    const form = document.getElementById('citForm');
+    const btn  = document.getElementById('citSubmitBtn');
+    if (form && btn) {
+        form.addEventListener('submit', () => {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>جاري الحفظ...';
+        });
+    }
+})();
+</script>
+
+@* ══════════════════════════════════════════════════════════════════
+   STYLES
+══════════════════════════════════════════════════════════════════ *@
+<style>
+    /* ── Root tokens ─────────────────────────────────────────────── */
+    :root {
+        --cit-bg:         #f0f2f7;
+        --cit-surface:    #ffffff;
+        --cit-border:     #e5e7eb;
+        --cit-primary:    #1e40af;
+        --cit-primary-d:  #1e3a8a;
+        --cit-primary-l:  #dbeafe;
+        --cit-success:    #16a34a;
+        --cit-warning:    #d97706;
+        --cit-danger:     #dc2626;
+        --cit-text:       #111827;
+        --cit-muted:      #6b7280;
+        --cit-radius:     16px;
+        --cit-radius-sm:  10px;
+        --cit-shadow:     0 4px 20px rgba(0,0,0,.07);
+        --cit-shadow-sm:  0 2px 10px rgba(0,0,0,.05);
+        --cit-font:       'Cairo', Tahoma, Arial, sans-serif;
+    }
+
+    /* ── Page wrapper ────────────────────────────────────────────── */
+    .cit-root {
+        background: var(--cit-bg);
+        color: var(--cit-text);
+        font-family: var(--cit-font);
+        min-height: 100vh;
+        padding: 0 0 120px;
+        direction: rtl;
+    }
+
+    /* ── Header ──────────────────────────────────────────────────── */
+    .cit-header {
+        background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 55%, #1d4ed8 100%);
+        padding: 28px 32px 24px;
+        position: relative;
+        overflow: hidden;
+    }
+    .cit-header::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/svg%3E");
+        pointer-events: none;
+    }
+    .cit-header-inner {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 20px;
+        flex-wrap: wrap;
+        position: relative;
+        z-index: 1;
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+    .cit-breadcrumb {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        font-weight: 700;
+        color: rgba(255,255,255,.6);
+        margin-bottom: 10px;
+    }
+    .cit-breadcrumb a { color: rgba(255,255,255,.75); text-decoration: none; }
+    .cit-breadcrumb a:hover { color: #fff; }
+    .cit-breadcrumb span:last-child { color: rgba(255,255,255,.45); }
+    .cit-header-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px; height: 40px;
+        background: rgba(255,255,255,.15);
+        border-radius: 12px;
+        margin-left: 10px;
+        font-size: 16px;
+        color: #fbbf24;
+        vertical-align: middle;
+    }
+    .cit-header-title {
+        font-size: 26px;
+        font-weight: 900;
+        color: #fff;
+        margin: 0 0 6px;
+        line-height: 1.3;
+    }
+    .cit-header-sub {
+        color: rgba(255,255,255,.65);
+        font-size: 14px;
+        font-weight: 700;
+        margin: 0;
+    }
+    .cit-header-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    /* ── Shared Button ───────────────────────────────────────────── */
+    .cit-btn {
+        display: inline-flex;
+        align-items: center;
+        border-radius: var(--cit-radius-sm);
+        font-family: var(--cit-font);
+        font-size: 14px;
+        font-weight: 800;
+        padding: 9px 20px;
+        text-decoration: none;
+        transition: all .18s;
+        cursor: pointer;
+        border: none;
+        white-space: nowrap;
+    }
+    .cit-btn-ghost {
+        background: rgba(255,255,255,.12);
+        color: rgba(255,255,255,.9);
+        border: 1.5px solid rgba(255,255,255,.2);
+    }
+    .cit-btn-ghost:hover {
+        background: rgba(255,255,255,.2);
+        color: #fff;
+    }
+    .cit-btn-primary {
+        background: linear-gradient(135deg, #2563eb, #1d4ed8);
+        color: #fff;
+        box-shadow: 0 4px 14px rgba(30,64,175,.4);
+    }
+    .cit-btn-primary:hover {
+        background: linear-gradient(135deg, #1d4ed8, #1e3a8a);
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(30,64,175,.5);
+    }
+    .cit-btn-primary:disabled {
+        opacity: .7;
+        cursor: not-allowed;
+        transform: none;
+    }
+
+    /* ── Context strip ───────────────────────────────────────────── */
+    .cit-context-strip {
+        display: grid;
+        grid-template-columns: 1fr 1fr auto;
+        gap: 16px;
+        padding: 20px 32px;
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+
+    /* Recommendation card */
+    .cit-rec-card {
+        background: var(--cit-surface);
+        border: 1px solid var(--cit-border);
+        border-radius: var(--cit-radius);
+        padding: 20px;
+        box-shadow: var(--cit-shadow-sm);
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    .cit-rec-card-eye {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 12px;
+        font-weight: 900;
+        color: var(--cit-muted);
+        text-transform: uppercase;
+        letter-spacing: .06em;
+    }
+    .cit-status-pill {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 900;
+        padding: 3px 10px;
+    }
+    .cit-status-approved { background: #dcfce7; color: #166534; }
+    .cit-type-badge {
+        background: #ede9fe;
+        border-radius: 999px;
+        color: #4c1d95;
+        font-size: 12px;
+        font-weight: 900;
+        padding: 4px 12px;
+    }
+    .cit-meta-chip {
+        background: #f3f4f6;
+        border-radius: 999px;
+        color: #374151;
+        font-size: 12px;
+        font-weight: 700;
+        padding: 4px 10px;
+    }
+    .cit-rec-type-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+    }
+    .cit-rec-summary {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--cit-text);
+        line-height: 1.7;
+        margin: 0;
+    }
+    .cit-rec-reason {
+        font-size: 13px;
+        color: var(--cit-muted);
+        line-height: 1.7;
+        background: #f8fafc;
+        border-radius: var(--cit-radius-sm);
+        padding: 10px 14px;
+        border-inline-start: 3px solid #e5e7eb;
+    }
+
+    /* Snapshot metrics */
+    .cit-snap-metrics {
+        background: var(--cit-surface);
+        border: 1px solid var(--cit-border);
+        border-radius: var(--cit-radius);
+        padding: 18px 20px;
+        box-shadow: var(--cit-shadow-sm);
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    .cit-snap-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 12px;
+        font-weight: 900;
+        color: var(--cit-muted);
+        text-transform: uppercase;
+        letter-spacing: .06em;
+    }
+    .cit-risk-badge {
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 900;
+        padding: 4px 12px;
+    }
+    .cit-snap-bars { display: flex; flex-direction: column; gap: 8px; }
+    .cit-snap-bar-item { display: flex; flex-direction: column; gap: 4px; }
+    .cit-snap-bar-label {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        font-weight: 700;
+        color: #374151;
+    }
+    .cit-bar-track {
+        height: 6px;
+        background: #f3f4f6;
+        border-radius: 999px;
+        overflow: hidden;
+    }
+    .cit-bar-fill {
+        height: 100%;
+        border-radius: 999px;
+        transition: width .8s ease;
+    }
+    .cit-snap-counters {
+        display: flex;
+        gap: 8px;
+        padding-top: 4px;
+        border-top: 1px solid #f3f4f6;
+    }
+    .cit-counter {
+        flex: 1;
+        text-align: center;
+        padding: 8px 4px;
+        background: #f8fafc;
+        border-radius: var(--cit-radius-sm);
+        border: 1px solid #e5e7eb;
+    }
+    .cit-counter-val {
+        font-size: 22px;
+        font-weight: 900;
+        color: var(--cc, #1e40af);
+        line-height: 1.1;
+    }
+    .cit-counter-lbl {
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--cit-muted);
+        margin-top: 2px;
+    }
+
+    /* Radar chart panel */
+    .cit-chart-panel {
+        background: var(--cit-surface);
+        border: 1px solid var(--cit-border);
+        border-radius: var(--cit-radius);
+        padding: 18px 20px;
+        box-shadow: var(--cit-shadow-sm);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        min-width: 220px;
+    }
+    .cit-chart-title {
+        font-size: 12px;
+        font-weight: 900;
+        color: var(--cit-muted);
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        align-self: flex-start;
+    }
+    .cit-radar-wrap {
+        width: 190px;
+        height: 190px;
+    }
+    .cit-risk-score-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--cit-muted);
+        background: #f8fafc;
+        border-radius: var(--cit-radius-sm);
+        padding: 8px 14px;
+    }
+    .cit-risk-score {
+        font-size: 18px;
+        font-weight: 900;
+    }
+
+    /* ── Form body ───────────────────────────────────────────────── */
+    .cit-form-body {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 0 32px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+    .cit-validation-summary {
+        max-width: 1400px;
+        margin: 8px auto 0;
+        padding: 0 32px;
+        color: var(--cit-danger);
+        font-weight: 700;
+        font-size: 14px;
+    }
+
+    /* ── Section ─────────────────────────────────────────────────── */
+    .cit-section {
+        background: var(--cit-surface);
+        border: 1px solid var(--cit-border);
+        border-radius: var(--cit-radius);
+        box-shadow: var(--cit-shadow-sm);
+        padding: 24px 28px;
+    }
+    .cit-section-head {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+    .cit-section-num {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px; height: 36px;
+        background: var(--cit-primary-l);
+        border-radius: 50%;
+        color: var(--cit-primary);
+        font-size: 16px;
+        font-weight: 900;
+        flex-shrink: 0;
+        margin-top: 2px;
+    }
+    .cit-section-title {
+        font-size: 17px;
+        font-weight: 900;
+        color: var(--cit-text);
+        margin: 0 0 3px;
+    }
+    .cit-section-sub {
+        font-size: 13px;
+        color: var(--cit-muted);
+        font-weight: 700;
+        margin: 0;
+    }
+    .cit-rec-note {
+        display: inline-flex;
+        align-items: center;
+        background: #dcfce7;
+        border-radius: 999px;
+        color: #166534;
+        font-size: 12px;
+        font-weight: 900;
+        padding: 5px 12px;
+        margin-top: 4px;
+    }
+
+    /* ── Form grid ───────────────────────────────────────────────── */
+    .cit-form-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+    }
+    .cit-field-full  { grid-column: 1 / -1; }
+    .cit-field-half  { grid-column: span 2; }
+
+    /* ── Form controls ───────────────────────────────────────────── */
+    .cit-label {
+        display: block;
+        font-size: 13px;
+        font-weight: 900;
+        color: #374151;
+        margin-bottom: 7px;
+    }
+    .cit-required { color: var(--cit-danger); }
+    .cit-input,
+    .cit-select,
+    .cit-textarea {
+        width: 100%;
+        background: #f8fafc;
+        border: 1.5px solid var(--cit-border);
+        border-radius: var(--cit-radius-sm);
+        color: var(--cit-text);
+        font-family: var(--cit-font);
+        font-size: 14px;
+        font-weight: 700;
+        padding: 10px 14px;
+        transition: border-color .18s, box-shadow .18s;
+        outline: none;
+    }
+    .cit-input:focus,
+    .cit-select:focus,
+    .cit-textarea:focus {
+        border-color: var(--cit-primary);
+        background: #fff;
+        box-shadow: 0 0 0 3px rgba(30,64,175,.12);
+    }
+    .cit-textarea { resize: vertical; }
+    .cit-textarea-lg { min-height: 140px; }
+    .cit-error {
+        font-size: 12px;
+        color: var(--cit-danger);
+        font-weight: 700;
+        margin-top: 4px;
+        display: block;
+    }
+
+    /* ── Priority group ──────────────────────────────────────────── */
+    .cit-priority-group {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .cit-pri-btn {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        border: 1.5px solid var(--cit-border);
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 800;
+        padding: 6px 14px;
+        transition: all .18s;
+        background: #f3f4f6;
+        color: #374151;
+    }
+    .cit-pri-radio { display: none; }
+    .cit-pri-critical         { border-color: #fecaca; color: #991b1b; background: #fff1f1; }
+    .cit-pri-critical.cit-pri-active { background: #dc2626; color: #fff; border-color: #dc2626; }
+    .cit-pri-high             { border-color: #fde68a; color: #92400e; background: #fffbeb; }
+    .cit-pri-high.cit-pri-active { background: #d97706; color: #fff; border-color: #d97706; }
+    .cit-pri-normal           { border-color: #bfdbfe; color: #1e3a8a; background: #eff6ff; }
+    .cit-pri-normal.cit-pri-active { background: #2563eb; color: #fff; border-color: #2563eb; }
+    .cit-pri-low              { border-color: #d1fae5; color: #065f46; background: #f0fdf4; }
+    .cit-pri-low.cit-pri-active { background: #16a34a; color: #fff; border-color: #16a34a; }
+
+    /* ── Lecture grid ────────────────────────────────────────────── */
+    .cit-empty-lectures {
+        border: 2px dashed #d1d5db;
+        border-radius: var(--cit-radius);
+        color: var(--cit-muted);
+        font-weight: 700;
+        padding: 32px;
+        text-align: center;
+        font-size: 14px;
+    }
+    .cit-lecture-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+    }
+    .cit-lec-card {
+        background: var(--cit-surface);
+        border: 2px solid var(--cit-border);
+        border-radius: var(--cit-radius-sm);
+        cursor: pointer;
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 14px 16px;
+        transition: border-color .18s, box-shadow .18s, background .18s;
+    }
+    .cit-lec-card:hover { border-color: #93c5fd; background: #f8fafc; }
+    .cit-lec-selected  {
+        border-color: var(--cit-primary) !important;
+        box-shadow: 0 0 0 3px rgba(30,64,175,.14);
+        background: #eff6ff !important;
+    }
+    .cit-lec-recommended { border-color: #22c55e !important; }
+    .cit-lec-recommended.cit-lec-selected { border-color: #16a34a !important; }
+
+    .cit-lec-none { border-style: dashed; }
+    .cit-lec-none:hover { border-color: #9ca3af; }
+
+    .cit-lec-icon {
+        width: 38px; height: 38px;
+        border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
+        font-size: 15px;
+    }
+    .cit-lec-icon-none     { background: #f3f4f6; color: #9ca3af; }
+    .cit-lec-icon-today    { background: #fef3c7; color: #d97706; }
+    .cit-lec-icon-upcoming { background: #dbeafe; color: #1e40af; }
+    .cit-lec-icon-past     { background: #f3f4f6; color: #9ca3af; }
+
+    .cit-lec-radio { display: none; }
+    .cit-lec-body { min-width: 0; flex: 1; }
+    .cit-lec-title {
+        font-size: 13px;
+        font-weight: 900;
+        color: var(--cit-text);
+        margin-bottom: 4px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .cit-lec-meta {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--cit-muted);
+        line-height: 1.6;
+    }
+    .cit-lec-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+    .cit-lec-status-badge {
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 900;
+        padding: 2px 8px;
+    }
+    .cit-lec-sb-today    { background: #fef3c7; color: #92400e; }
+    .cit-lec-sb-upcoming { background: #dbeafe; color: #1e3a8a; }
+    .cit-lec-sb-past     { background: #f3f4f6; color: #6b7280; }
+    .cit-lec-sb-rec      { background: #dcfce7; color: #166534; }
+
+    /* ── Sticky action bar ───────────────────────────────────────── */
+    .cit-action-bar {
+        position: fixed;
+        bottom: 0; left: 0; right: 0;
+        background: rgba(255,255,255,.95);
+        backdrop-filter: blur(12px);
+        border-top: 1px solid var(--cit-border);
+        box-shadow: 0 -4px 24px rgba(0,0,0,.08);
+        padding: 14px 32px;
+        z-index: 100;
+    }
+    .cit-action-inner {
+        max-width: 1400px;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+    }
+    .cit-action-right {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+    }
+    .cit-btn-ghost.cit-action-cancel {
+        background: #f3f4f6;
+        color: #374151;
+        border: 1.5px solid var(--cit-border);
+    }
+    .cit-btn-ghost.cit-action-cancel:hover { background: #e5e7eb; }
+    .cit-action-hint {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--cit-muted);
+    }
+
+    /* ── Responsive ──────────────────────────────────────────────── */
+    @@media (max-width: 1100px) {
+        .cit-context-strip {
+            grid-template-columns: 1fr 1fr;
+        }
+        .cit-chart-panel { grid-column: 1 / -1; flex-direction: row; gap: 24px; }
+        .cit-radar-wrap  { width: 160px; height: 160px; }
+    }
+    @@media (max-width: 900px) {
+        .cit-context-strip { grid-template-columns: 1fr; padding: 16px 20px; }
+        .cit-form-body     { padding: 0 20px; }
+        .cit-validation-summary { padding: 0 20px; }
+        .cit-form-grid { grid-template-columns: 1fr 1fr; }
+        .cit-field-half { grid-column: span 2; }
+        .cit-lecture-grid { grid-template-columns: 1fr 1fr; }
+        .cit-action-bar { padding: 12px 20px; }
+        .cit-header { padding: 20px 20px 18px; }
+    }
+    @@media (max-width: 600px) {
+        .cit-form-grid { grid-template-columns: 1fr; }
+        .cit-field-half { grid-column: 1 / -1; }
+        .cit-lecture-grid { grid-template-columns: 1fr; }
+        .cit-action-inner { flex-direction: column; align-items: stretch; gap: 10px; }
+        .cit-action-right { flex-direction: column; gap: 8px; }
+        .cit-btn-primary { justify-content: center; }
+        .cit-header-inner { flex-direction: column; }
+        .cit-header-title { font-size: 20px; }
+        .cit-section { padding: 18px 16px; }
+    }
+
+    /* ── Dark mode ───────────────────────────────────────────────── */
+    @@media (prefers-color-scheme: dark) {
+        :root {
+            --cit-bg:      #0f172a;
+            --cit-surface: #1e293b;
+            --cit-border:  #334155;
+            --cit-text:    #f1f5f9;
+            --cit-muted:   #94a3b8;
+        }
+        .cit-input, .cit-select, .cit-textarea { background: #1e293b; color: #f1f5f9; }
+        .cit-input:focus, .cit-select:focus, .cit-textarea:focus { background: #0f172a; }
+        .cit-action-bar { background: rgba(15,23,42,.95); }
+        .cit-lec-card:hover { background: #1e293b; }
+        .cit-lec-selected  { background: #172554 !important; }
+        .cit-counter { background: #1e293b; }
+    }
+</style>

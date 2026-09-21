@@ -1,0 +1,175 @@
+﻿@model QdratNew.ViewModels.Section.SectionPerformancePerInstructorViewModel
+@{
+    ViewData["Title"] = "تحليل المحاور التعليمية - " + Model.InstructorName;
+}
+
+@section Styles {
+    <style>
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .summary-card {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 1rem;
+            text-align: center;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        }
+
+            .summary-card h5 {
+                font-weight: bold;
+                margin-bottom: .5rem;
+            }
+    </style>
+}
+
+<div class="container mt-4">
+    <h2 class="mb-4 text-dark">
+        <i class="fas fa-chalkboard-teacher"></i> تحليل المحاور التعليمية للمدرب: <strong class="text-primary">@Model.InstructorName</strong>
+    </h2>
+
+    <!-- ✅ فلتر الدفعة -->
+    <form asp-action="SectionPerformance" method="get">
+        <input type="hidden" name="instructorId" value="@Model.InstructorId" />
+
+        <div class="form-group">
+            <select name="batchId" class="form-control" onchange="this.form.submit()">
+                <option value="">اختر دفعة</option>
+                @foreach (var batch in Model.BatchList)
+                {
+                    var isSelected = Model.SelectedBatchId == int.Parse(batch.Value);
+                    <option value="@batch.Value" selected="@(isSelected)">
+                        @batch.Text
+                    </option>
+                }
+            </select>
+        </div>
+    </form>
+
+
+
+    <hr />
+
+    <!-- ✅ كروت ملخص الأداء -->
+    @if (Model.Sections.Any())
+    {
+        <div class="summary-cards">
+            <div class="summary-card">
+                <h5>📘 عدد المحاور</h5>
+                <p>@Model.Sections.Count</p>
+            </div>
+            <div class="summary-card">
+                <h5>🏆 أعلى نسبة نجاح</h5>
+                <p>@Model.Sections.Max(s => s.SuccessRate).ToString("0.0")%</p>
+            </div>
+            <div class="summary-card">
+                <h5>📉 أقل نسبة نجاح</h5>
+                <p>@Model.Sections.Min(s => s.SuccessRate).ToString("0.0")%</p>
+            </div>
+            <div class="summary-card">
+                <h5>📊 متوسط الدرجات</h5>
+                <p>@Model.Sections.Average(s => s.AverageScore).ToString("0.00")</p>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info text-center">
+            لا توجد بيانات متاحة لعرض تحليل المحاور التعليمية.
+        </div>
+    }
+
+
+    <!-- ✅ الرسم البياني -->
+    <div class="card p-4 shadow-sm mb-5">
+        <h5 class="mb-3 text-center">الرسم البياني لمتوسط الدرجات حسب المحور</h5>
+        <canvas id="sectionChart" height="120"></canvas>
+    </div>
+
+    <!-- ✅ جدول الأداء -->
+    <table class="table table-bordered table-hover text-center">
+        <thead class="table-dark">
+            <tr>
+                <th>📘 المحور</th>
+                <th>📊 متوسط الدرجة</th>
+                <th>✅ نسبة النجاح</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var s in Model.Sections)
+            {
+                <tr>
+                    <td>@s.SectionTitle</td>
+                    <td>@s.AverageScore.ToString("0.00")</td>
+                    <td>@s.SuccessRate.ToString("0.0")%</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+<div class="mt-5 text-center">
+    <a asp-area="Admin" asp-controller="InstructorsAIDashboard" asp-action="Index"
+       asp-route-instructorId="@Model.InstructorId"
+       class="btn btn-outline-primary me-2">
+        📊 العودة إلى لوحة تحكم المدرب
+    </a>
+
+    <a asp-area="Admin" asp-controller="InstructorSmartEvaluation" asp-action="Index"
+       asp-route-instructorId="@Model.InstructorId"
+       class="btn btn-outline-success me-2">
+        🤖 التحليل الذكي الشامل
+    </a>
+
+    <a asp-area="Admin" asp-controller="Instructors" asp-action="Index"
+       class="btn btn-outline-dark">
+        📋 قائمة المدربين
+    </a>
+</div>
+
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const labels = @Html.Raw(Json.Serialize(Model.Sections.Select(s => s.SectionTitle)));
+        const avgScores = @Html.Raw(Json.Serialize(Model.Sections.Select(s => s.AverageScore)));
+
+        new Chart(document.getElementById('sectionChart'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'متوسط الدرجة',
+                    data: avgScores,
+                    backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => `الدرجة: ${ctx.parsed.y.toFixed(2)} / 100`
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        title: {
+                            display: true,
+                            text: 'متوسط الدرجة'
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+}

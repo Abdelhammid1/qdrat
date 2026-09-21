@@ -1,0 +1,254 @@
+@model QdratNew.ViewModels.Exam.MinistrySimExamDetailsVm
+@{
+    ViewData["Title"] = "حالة اختبار معمل القياس";
+}
+
+<style>
+    .qdrat-page { direction: rtl; text-align: right; }
+
+    .qdrat-hero {
+        background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 48%, #2563eb 100%);
+        border-radius: 24px; padding: 28px; color: #fff; margin-bottom: 24px;
+        box-shadow: 0 18px 45px rgba(15, 23, 42, .18);
+    }
+
+    .qdrat-status-badge {
+        display: inline-flex; align-items: center; gap: 8px;
+        border-radius: 999px; padding: 7px 14px; font-size: 13px; font-weight: 800;
+    }
+
+    .qdrat-status-badge.published { background: #ecfdf5; color: #047857; }
+    .qdrat-status-badge.draft { background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.24); color: #fff; }
+
+    .qdrat-card {
+        background: #fff; border: 1px solid #e5e7eb; border-radius: 22px;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, .06); overflow: hidden; margin-bottom: 18px;
+    }
+
+    .qdrat-card-header {
+        padding: 17px 20px; background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+        border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+
+    .qdrat-card-body { padding: 20px; }
+
+    .qdrat-stage-row {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        padding: 12px 0; border-bottom: 1px dashed #e5e7eb; flex-wrap: wrap;
+    }
+
+    .qdrat-stage-row:last-child { border-bottom: none; }
+
+    .qdrat-axis-count { font-family: monospace; font-weight: 800; }
+    .qdrat-axis-count.ok { color: #047857; }
+    .qdrat-axis-count.bad { color: #b91c1c; }
+
+    .qdrat-shortfalls {
+        background: #fff6ea; border: 1px solid #e0a63b; color: #7a5615;
+        border-radius: 16px; padding: 14px 18px; margin-bottom: 18px; font-size: 13.5px; line-height: 1.9;
+    }
+
+    .qdrat-shortfalls ul { margin: 6px 0 0; padding-inline-start: 20px; }
+
+    .qdrat-btn-primary {
+        border: none; border-radius: 16px; padding: 12px 24px; font-weight: 900;
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: #fff;
+        box-shadow: 0 12px 24px rgba(37,99,235,.22);
+    }
+
+    .qdrat-btn-primary:disabled { opacity: .55; box-shadow: none; cursor: not-allowed; }
+
+    .qdrat-code-banner {
+        background: linear-gradient(135deg, #065f46 0%, #059669 100%); color: #fff; border-radius: 18px;
+        padding: 18px 22px; margin-bottom: 18px; display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+    }
+    .qdrat-code-value { font-family: monospace; font-size: 28px; font-weight: 900; letter-spacing: 4px; }
+</style>
+
+<div class="container-fluid py-4 qdrat-page">
+    <div class="qdrat-hero">
+        <span class="qdrat-status-badge @(Model.IsPublished ? "published" : "draft")">
+            <i class="bi @(Model.IsPublished ? "bi-check-circle" : "bi-pencil-square")"></i>
+            @(Model.IsPublished ? "منشور" : "مسودة")
+        </span>
+        <h2 class="mt-3 mb-1"><i class="bi bi-diagram-3 ms-2"></i> @Model.Title</h2>
+        <p class="mb-0" style="opacity:.9">الدورة: @Model.CourseName</p>
+        @if (Model.IsPublished && Model.PublishedAt.HasValue)
+        {
+            <p class="mb-0" style="opacity:.8">تاريخ النشر: @Model.PublishedAt.Value.ToString("yyyy-MM-dd HH:mm")</p>
+        }
+    </div>
+
+    @if (TempData["PublishError"] != null)
+    {
+        <div class="alert alert-danger">@TempData["PublishError"]</div>
+    }
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success">@TempData["Success"]</div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger">@TempData["Error"]</div>
+    }
+    @if (TempData["Warning"] != null)
+    {
+        <div class="alert alert-warning">@TempData["Warning"]</div>
+    }
+
+    @* Sprint 17 (MSE-J / J2): الرمز المرجعي المولَّد بعد إسناد حضوري — يُعرض مرة واحدة هنا فور التحويل من شاشة الإسناد *@
+    @if (TempData["GeneratedReferenceCode"] != null)
+    {
+        <div class="qdrat-code-banner">
+            <div>
+                <div class="fw-bold mb-1"><i class="bi bi-key ms-1"></i> الرمز المرجعي لهذه الجلسة الحضورية</div>
+                <div class="small" style="opacity:.9">أعلِنه شفهيًا للطلاب الحاضرين في المعمل — رمز واحد لكل من أُسنِد لهم الاختبار في هذه العملية</div>
+            </div>
+            <span class="qdrat-code-value" id="generatedCode">@TempData["GeneratedReferenceCode"]</span>
+            <button type="button" class="btn btn-sm btn-light" onclick="navigator.clipboard.writeText(document.getElementById('generatedCode').textContent.trim())">
+                <i class="bi bi-clipboard ms-1"></i> نسخ
+            </button>
+        </div>
+    }
+
+    @if (!Model.IsReadyToPublish && Model.ShortfallMessages.Any())
+    {
+        <div class="qdrat-shortfalls" id="shortfallBox">
+            <strong><i class="bi bi-exclamation-triangle ms-1"></i> لا يمكن نشر الاختبار حاليًا — النواقص التالية تمنع النشر:</strong>
+            <ul>
+                @foreach (var msg in Model.ShortfallMessages)
+                {
+                    <li>@msg</li>
+                }
+            </ul>
+        </div>
+    }
+
+    <div class="qdrat-card">
+        <div class="qdrat-card-header">
+            <h5 class="mb-0"><i class="bi bi-list-check ms-1"></i> حالة المراحل الخمس</h5>
+        </div>
+        <div class="qdrat-card-body">
+            @foreach (var stage in Model.Stages)
+            {
+                <div class="qdrat-stage-row">
+                    <div><strong>المرحلة @stage.StageNumber</strong> — @stage.DurationMinutes دقيقة</div>
+                    <div>
+                        @stage.QuantSectionTitle (كمي):
+                        <span class="qdrat-axis-count @(stage.QuantActual == stage.QuantTarget ? "ok" : "bad")">@stage.QuantActual / @stage.QuantTarget</span>
+                    </div>
+                    <div>
+                        @stage.VerbalSectionTitle (لفظي):
+                        <span class="qdrat-axis-count @(stage.VerbalActual == stage.VerbalTarget ? "ok" : "bad")">@stage.VerbalActual / @stage.VerbalTarget</span>
+                    </div>
+                    <div>
+                        <a class="btn btn-outline-secondary btn-sm" href="@Url.Action("ReviewStage", "MinistrySimExam", new { area = "Admin", stageId = stage.StageId })">
+                            <i class="bi bi-list-ol ms-1"></i> مراجعة الأسئلة
+                        </a>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    @if (!Model.IsPublished)
+    {
+        <form id="antiForgeryForm">@Html.AntiForgeryToken()</form>
+        <button type="button" id="publishBtn" class="btn qdrat-btn-primary" @(Model.IsReadyToPublish ? "" : "disabled")
+                title="@(Model.IsReadyToPublish ? "" : "أكمل العدد المطلوب بالضبط في كل محور ومؤشر قبل النشر")">
+            <i class="bi bi-send-check ms-1"></i>
+            نشر الاختبار
+        </button>
+    }
+    else
+    {
+        @* Sprint 8 (MSE-E): الإسناد لا يُتاح إلا بعد النشر (E1/E2) *@
+        <div class="qdrat-card">
+            <div class="qdrat-card-header">
+                <h5 class="mb-0"><i class="bi bi-send ms-1"></i> الإسناد</h5>
+                <span class="text-muted" style="font-size:13px">@Model.AssignedBatchesCount دفعة — @Model.AssignedStudentsCount طالب مُسنَد لهم الاختبار</span>
+            </div>
+            <div class="qdrat-card-body d-flex gap-2 flex-wrap">
+                <a class="btn qdrat-btn-primary" href="@Url.Action("AssignToBatch", "MinistrySimExam", new { area = "Admin", id = Model.ExamId })">
+                    <i class="bi bi-people ms-1"></i> إسناد لدفعة/دفعات
+                </a>
+                <a class="btn btn-outline-primary" href="@Url.Action("AssignToStudent", "MinistrySimExam", new { area = "Admin", id = Model.ExamId })">
+                    <i class="bi bi-person-check ms-1"></i> إسناد لطالب/طلاب
+                </a>
+            </div>
+        </div>
+
+        @* Sprint 14 (MSE-H): عرض نتيجة طالب محدد (Drill-down) *@
+        <div class="qdrat-card">
+            <div class="qdrat-card-header">
+                <h5 class="mb-0"><i class="bi bi-bar-chart-line ms-1"></i> نتائج الطلاب</h5>
+            </div>
+            <div class="qdrat-card-body d-flex gap-2 flex-wrap">
+                <a class="btn qdrat-btn-primary" href="@Url.Action("SelectStudentForResult", "MinistrySimExam", new { area = "Admin", id = Model.ExamId })">
+                    <i class="bi bi-person-lines-fill ms-1"></i> عرض نتيجة طالب
+                </a>
+                @* Sprint 19 (MSE-K / K5): تقرير ولي الأمر يبدأ دائمًا باختيار الطالب — نفس مسار عرض النتيجة *@
+                <a class="btn btn-outline-primary" href="@Url.Action("SelectStudentForResult", "MinistrySimExam", new { area = "Admin", id = Model.ExamId })">
+                    <i class="bi bi-file-earmark-pdf ms-1"></i> تقرير ولي الأمر (PDF)
+                </a>
+            </div>
+        </div>
+
+        @* Sprint 15 (MSE-I): تحليلات مجمّعة لكل دفعة مُسنَد لها الاختبار *@
+        @if (Model.AssignedBatches.Any())
+        {
+            <div class="qdrat-card">
+                <div class="qdrat-card-header">
+                    <h5 class="mb-0"><i class="bi bi-graph-up ms-1"></i> تحليلات الدفعة</h5>
+                </div>
+                <div class="qdrat-card-body d-flex gap-2 flex-wrap">
+                    @foreach (var batch in Model.AssignedBatches)
+                    {
+                        <a class="btn btn-outline-primary" href="@Url.Action("BatchAnalytics", "MinistrySimExam", new { area = "Admin", examId = Model.ExamId, batchId = batch.BatchId })">
+                            <i class="bi bi-graph-up ms-1"></i> تحليلات دفعة "@batch.BatchName"
+                        </a>
+                    }
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            'use strict';
+            var publishBtn = document.getElementById('publishBtn');
+            if (!publishBtn) return;
+
+            publishBtn.addEventListener('click', function () {
+                var token = document.querySelector('#antiForgeryForm input[name="__RequestVerificationToken"]').value;
+                publishBtn.disabled = true;
+
+                fetch('@Url.Action("Publish", "MinistrySimExam", new { area = "Admin" })', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'RequestVerificationToken': token
+                    },
+                    body: 'id=@Model.ExamId'
+                })
+                    .then(function (response) { return response.json().then(function (data) { return { ok: response.ok, data: data }; }); })
+                    .then(function (result) {
+                        if (result.ok && result.data.success) {
+                            window.location.reload();
+                        } else {
+                            var messages = (result.data.messages || [result.data.message || 'تعذّر نشر الاختبار.']).join('\n');
+                            alert(messages);
+                            publishBtn.disabled = false;
+                        }
+                    })
+                    .catch(function () {
+                        alert('تعذّر الاتصال بالخادم — حاول مرة أخرى.');
+                        publishBtn.disabled = false;
+                    });
+            });
+        })();
+    </script>
+}

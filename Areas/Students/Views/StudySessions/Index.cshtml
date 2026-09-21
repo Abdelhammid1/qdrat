@@ -1,0 +1,135 @@
+﻿@model List<QdratNew.ViewModels.Students.StudentSessionReservationListViewModel>
+@using QdratNew.Enums
+@using QdratNew.Helpers
+
+@{
+    ViewData["Title"] = "📚 قائمة جلسات المذاكرة";
+}
+
+<h2 class="text-primary mb-4 text-center"><i class="fas fa-calendar-alt"></i> قائمة جلسات المذاكرة</h2>
+
+<div class="table-responsive">
+    <table id="sessionsTable" class="table table-hover table-bordered text-center mb-0 bg-white">
+        <thead class="table-secondary">
+            <tr>
+                <th>📅 التاريخ</th>
+                <th>🕐 الوقت</th>
+
+                <th>👨‍🏫 المدرب</th>
+                <th>💺 المقاعد</th>
+                <th>💵 الرسوم</th>
+                <th>📌 الحالة</th>
+                <th>📌 الاجراءات</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var session in Model)
+            {
+                var badgeClass = session.Status switch
+                {
+                    QdratNew.Enums.StudySessionStatus.Pending => "bg-warning text-dark",
+                    QdratNew.Enums.StudySessionStatus.Approved => "bg-success",
+                    QdratNew.Enums.StudySessionStatus.Rejected => "bg-danger",
+                    _ => "bg-secondary"
+                };
+
+                <tr>
+                    <td>@session.RequestedDate.ToString("yyyy-MM-dd")</td>
+                    <td>@session.StartTime.ToString(@"hh\:mm") - @session.EndTime.ToString(@"hh\:mm")</td>
+
+                    <td>@session.InstructorName</td>
+                    <td>@session.TotalSeats</td>
+                    <td>@(session.Fee.HasValue ? $"{session.Fee.Value} ريال" : "بدون")</td>
+                    <td><span class="badge @badgeClass">@session.Status.GetDisplayName()</span></td>
+                    <td>
+                        <a asp-action="Details" asp-route-id="@session.Id" class="btn btn-dark btn-sm me-1" title="تفاصيل">
+                            <i class="fas fa-eye"></i>
+                        </a>
+
+                        @if (session.Status == StudySessionStatus.Pending)
+                        {
+                            <a asp-action="Edit" asp-route-id="@session.Id" class="btn btn-dark btn-sm me-1" title="تعديل">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                        }
+
+                        @if (session.Status == StudySessionStatus.Pending || session.Status == StudySessionStatus.Approved)
+                        {
+                            <!-- زر يظهر المودال -->
+                            <a href="#" class="btn btn-sm btn-dark" data-bs-toggle="modal" data-bs-target="#cancelModal-@session.Id" title="إلغاء">
+                                <i class="fas fa-times"></i>
+                            </a>
+
+                        }
+                    </td>
+
+                </tr>
+
+                <div class="modal fade" id="cancelModal-@session.Id" tabindex="-1" aria-labelledby="cancelModalLabel-@session.Id" aria-hidden="true">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content text-center">
+                            <div class="modal-header bg-danger text-white">
+                                <h5 class="modal-title w-100" id="cancelModalLabel-@session.Id">تأكيد إلغاء الجلسة</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p>هل أنت متأكد من أنك تريد إلغاء الجلسة بتاريخ <strong>@session.RequestedDate.ToString("yyyy-MM-dd")</strong>؟</p>
+                            </div>
+                            <div class="modal-footer justify-content-center">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">رجوع</button>
+                                <a asp-action="Cancel" asp-route-id="@session.Id" class="btn btn-danger">تأكيد الإلغاء</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
+
+
+            }
+        </tbody>
+    </table>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            $('#sessionsTable').DataTable({
+                language: {
+                    "decimal": "",
+                    "emptyTable": "لا توجد بيانات متاحة",
+                    "info": "عرض _START_ إلى _END_ من أصل _TOTAL_ جلسة",
+                    "infoEmpty": "عرض 0 إلى 0 من 0 جلسة",
+                    "infoFiltered": "(تمت التصفية من إجمالي _MAX_ جلسة)",
+                    "lengthMenu": "عرض _MENU_ جلسات لكل صفحة",
+                    "loadingRecords": "جارٍ التحميل...",
+                    "processing": "جارٍ المعالجة...",
+                    "search": "🔍 بحث:",
+                    "zeroRecords": "لم يتم العثور على نتائج مطابقة",
+                    "paginate": {
+                        "first": "الأول",
+                        "last": "الأخير",
+                        "next": "التالي",
+                        "previous": "السابق"
+                    },
+                    "buttons": {
+                        "copy": "📋 نسخ",
+                        "excel": "📊 تصدير Excel",
+                        "print": "🖨️ طباعة"
+                    }
+                },
+                dom: 'Bfrtip',
+                buttons: [
+                    { extend: 'copy', text: '<i class="fas fa-copy"></i> نسخ', className: 'btn btn-secondary' },
+                    { extend: 'excel', text: '<i class="fas fa-file-excel"></i> Excel', className: 'btn btn-success' },
+                    { extend: 'print', text: '<i class="fas fa-print"></i> طباعة', className: 'btn btn-primary' }
+                ],
+                responsive: true
+            });
+        });
+    </script>
+}

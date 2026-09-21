@@ -1,0 +1,249 @@
+@model QdratNew.ViewModels.Admin.EmployeeDashboard.EmployeeDashboardViewModel
+
+@{
+    ViewData["Title"] = "لوحة المتابعة التشغيلية";
+
+    var dayNames = new[] { "الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت" };
+    var dayName = dayNames[(int)Model.Today.DayOfWeek];
+
+    string[] monthNames = ["يناير","فبراير","مارس","أبريل","مايو","يونيو",
+                            "يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
+    var dateFormatted = $"{dayName}، {Model.Today.Day} {monthNames[Model.Today.Month - 1]} {Model.Today.Year}";
+}
+
+@section Styles {
+    <link href="~/css/employee-dashboard.css" rel="stylesheet" asp-append-version="true" />
+
+    <style>
+        /* Type-label colors (inline because they use Arabic class names) */
+        .emp-timeline-type.محاضرة        { background: rgba(34,197,94,0.1);   color: var(--emp-green); }
+        .emp-timeline-type.إغلاق-واجب   { background: rgba(59,130,246,0.1);  color: var(--emp-blue); }
+        .emp-timeline-type.إغلاق-اختبار { background: rgba(139,92,246,0.1);  color: var(--emp-purple); }
+    </style>
+}
+
+<div class="emp-page">
+
+    @* ══ Hero Header ══ *@
+    <div class="emp-hero">
+        <div class="emp-hero-content">
+            <div class="emp-hero-greeting">مرحباً بك في لوحة المتابعة التشغيلية</div>
+            <div class="emp-hero-name">@Model.EmployeeName</div>
+            <div class="emp-hero-meta">
+                @if (!string.IsNullOrEmpty(Model.ProfileName))
+                {
+                    <span class="emp-hero-badge">
+                        <i class="fas fa-id-badge"></i>
+                        @Model.ProfileName
+                    </span>
+                }
+                <span class="emp-hero-badge">
+                    <i class="fas fa-calendar-alt"></i>
+                    @dateFormatted
+                </span>
+                <span class="emp-hero-badge">
+                    <i class="fas fa-clock"></i>
+                    @Model.Today.ToString("hh:mm tt")
+                </span>
+            </div>
+        </div>
+    </div>
+
+    @* ══ Summary Stats Row ══ *@
+    <div class="emp-stats-row">
+        <div class="emp-stat-card">
+            <div class="emp-stat-icon blue"><i class="fas fa-th-large"></i></div>
+            <div class="emp-stat-body">
+                <div class="emp-stat-value">@Model.AllowedModulesCount</div>
+                <div class="emp-stat-label">وحدة متاحة</div>
+            </div>
+        </div>
+        <div class="emp-stat-card">
+            <div class="emp-stat-icon green"><i class="fas fa-chart-bar"></i></div>
+            <div class="emp-stat-body">
+                <div class="emp-stat-value">@Model.ReportActionsCount</div>
+                <div class="emp-stat-label">أداة تقارير</div>
+            </div>
+        </div>
+        <div class="emp-stat-card">
+            <div class="emp-stat-icon orange"><i class="fas fa-paper-plane"></i></div>
+            <div class="emp-stat-body">
+                <div class="emp-stat-value">@Model.NotificationActionsCount</div>
+                <div class="emp-stat-label">أداة إرسال وإشعارات</div>
+            </div>
+        </div>
+    </div>
+
+    @* ══ KPI Cards ══ *@
+    @if (Model.KpiCards.Count > 0)
+    {
+        <div class="emp-section-title">
+            <i class="fas fa-tachometer-alt" style="color: var(--brand-accent);"></i>
+            مؤشرات حية
+        </div>
+        <div class="emp-kpi-row">
+            @foreach (var kpi in Model.KpiCards)
+            {
+                if (!string.IsNullOrEmpty(kpi.TargetUrl))
+                {
+                    <a href="@kpi.TargetUrl" class="emp-kpi-card @kpi.AccentCssClass">
+                        <div class="emp-kpi-icon"><i class="@kpi.IconCssClass"></i></div>
+                        <div class="emp-kpi-value">@kpi.Value</div>
+                        <div class="emp-kpi-label">@kpi.Title</div>
+                    </a>
+                }
+                else
+                {
+                    <div class="emp-kpi-card @kpi.AccentCssClass">
+                        <div class="emp-kpi-icon"><i class="@kpi.IconCssClass"></i></div>
+                        <div class="emp-kpi-value">@kpi.Value</div>
+                        <div class="emp-kpi-label">@kpi.Title</div>
+                    </div>
+                }
+            }
+        </div>
+    }
+
+    @* ══ Action Queue + Upcoming Items ══ *@
+    @if (Model.ActionQueue.Count > 0 || Model.UpcomingItems.Count > 0)
+    {
+        <div class="emp-bottom-grid">
+
+            @* — Action Queue — *@
+            <div>
+                <div class="emp-section-title">
+                    <i class="fas fa-list-check" style="color: var(--emp-orange);"></i>
+                    أولويات اليوم
+                </div>
+                <div class="emp-queue-card">
+                    @if (Model.ActionQueue.Count == 0)
+                    {
+                        <div class="emp-queue-empty">
+                            <i class="fas fa-check-circle" style="font-size:1.5rem;margin-bottom:.5rem;display:block;"></i>
+                            لا توجد إجراءات معلّقة اليوم
+                        </div>
+                    }
+                    else
+                    {
+                        @foreach (var item in Model.ActionQueue)
+                        {
+                            var isUrgent = item.DueAt.HasValue && item.DueAt.Value <= DateTime.Now.AddHours(6);
+                            <div class="emp-queue-item">
+                                <div class="emp-queue-icon @item.ModuleKey">
+                                    @if (item.ModuleKey == "Homework")      { <i class="fas fa-tasks"></i> }
+                                    else if (item.ModuleKey == "Exams")     { <i class="fas fa-pencil-alt"></i> }
+                                    else                                    { <i class="fas fa-chart-line"></i> }
+                                </div>
+                                <div class="emp-queue-body">
+                                    <div class="emp-queue-title">@item.Title</div>
+                                    <div class="emp-queue-meta">
+                                        @if (!string.IsNullOrEmpty(item.Context))
+                                        {
+                                            <span><i class="fas fa-users" style="opacity:.6;"></i> @item.Context</span>
+                                        }
+                                        @if (item.DueAt.HasValue)
+                                        {
+                                            <span class="emp-queue-due @(isUrgent ? "urgent" : "")">
+                                                <i class="fas fa-clock"></i>
+                                                @item.DueAt.Value.ToString("dd/MM hh:mm tt")
+                                            </span>
+                                        }
+                                    </div>
+                                </div>
+                                <a href="@item.PrimaryActionUrl" class="emp-queue-action">
+                                    <i class="fas fa-arrow-left"></i>
+                                    @item.PrimaryActionTitle
+                                </a>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+
+            @* — Upcoming 7 days timeline — *@
+            <div>
+                <div class="emp-section-title">
+                    <i class="fas fa-calendar-week" style="color: var(--emp-teal);"></i>
+                    القادم خلال 7 أيام
+                </div>
+                <div class="emp-timeline-card">
+                    @if (Model.UpcomingItems.Count == 0)
+                    {
+                        <div class="emp-timeline-empty">
+                            <i class="fas fa-calendar-check" style="font-size:1.5rem;margin-bottom:.5rem;display:block;"></i>
+                            لا توجد مواعيد قادمة خلال 7 أيام
+                        </div>
+                    }
+                    else
+                    {
+                        @foreach (var item in Model.UpcomingItems)
+                        {
+                            var typeClass = item.TypeLabel.Replace(" ", "-");
+                            <div class="emp-timeline-item">
+                                <div class="emp-timeline-date">
+                                    <div class="emp-timeline-day">@item.ScheduledAt.Day</div>
+                                    <div class="emp-timeline-month">@monthNames[item.ScheduledAt.Month - 1]</div>
+                                </div>
+                                <div class="emp-timeline-divider"></div>
+                                <div class="emp-timeline-body">
+                                    <span class="emp-timeline-type @typeClass">@item.TypeLabel</span>
+                                    <div class="emp-timeline-title">@item.Title</div>
+                                    <div class="emp-timeline-batch">@item.BatchName</div>
+                                </div>
+                                <div class="emp-timeline-time">@item.ScheduledAt.ToString("hh:mm tt")</div>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+
+        </div>
+    }
+
+    @* ══ Modules ══ *@
+    @if (Model.Modules.Count == 0)
+    {
+        <div class="emp-empty">
+            <div class="emp-empty-icon"><i class="fas fa-lock"></i></div>
+            <div class="emp-empty-title">لا توجد أدوات متاحة</div>
+            <div class="emp-empty-desc">لم يتم تعيين أي صلاحيات لحسابك بعد. يرجى التواصل مع مسؤول النظام.</div>
+        </div>
+    }
+    else
+    {
+        <div class="emp-section-title">
+            <i class="fas fa-tools" style="color: var(--brand-accent);"></i>
+            الوحدات المتاحة
+        </div>
+        <div class="emp-modules-grid">
+            @foreach (var module in Model.Modules)
+            {
+                <div class="emp-module-card" data-accent="@module.AccentCssClass">
+                    <div class="emp-module-header">
+                        <div class="emp-module-icon-wrap @module.AccentCssClass">
+                            <i class="@module.IconCssClass"></i>
+                        </div>
+                        <div class="emp-module-info">
+                            <h3 class="emp-module-title">@module.Title</h3>
+                            <p class="emp-module-desc">@module.Description</p>
+                        </div>
+                    </div>
+                    <div class="emp-module-actions">
+                        @foreach (var action in module.Actions)
+                        {
+                            var btnClass = action.IsPrimary ? "primary" : "secondary";
+                            var href = action.RouteValues != null
+                                ? Url.Action(action.Action, action.Controller, action.RouteValues)
+                                : Url.Action(action.Action, action.Controller, new { area = action.Area });
+                            <a href="@href" class="emp-action-btn @btnClass">
+                                <i class="@action.IconCssClass"></i>
+                                @action.Title
+                            </a>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+</div>

@@ -1,0 +1,459 @@
+﻿@model QdratNew.ViewModels.Analytics.PerformanceInsightResult
+@{
+    ViewData["Title"] = "📊 تقرير اختبار مؤشرات الأداء";
+}
+
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;700;800&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+
+<style>
+    body {
+        background: linear-gradient(135deg, #f8fafc, #eef2ff);
+        font-family: 'Cairo', sans-serif;
+        direction: rtl;
+    }
+
+    .dashboard-card {
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 1.2rem;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+        border: 1px solid rgba(0,0,0,0.05);
+        transition: all .25s ease;
+    }
+
+    .dashboard-card:hover {
+        transform: translateY(-4px);
+    }
+
+    .section-heading {
+        font-weight: 700;
+        color: #334155;
+        border-right: 5px solid #6366f1;
+        padding-right: 10px;
+    }
+
+    .table th {
+        background: #f1f4ff;
+        color: #0d6efd;
+        font-weight: 700;
+    }
+
+    .chart-container {
+        position: relative;
+        height: auto;
+        min-height: 300px;
+        width: 100%;
+    }
+
+    .report-card {
+        background: #fff;
+        border-radius: 16px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.05);
+        text-align: center;
+        padding: 25px 10px;
+    }
+
+    /* =============================
+       🖨️ إعدادات الطباعة
+       ============================= */
+@@media print {
+
+    @@page {
+        size: A4 portrait;
+        margin: 10mm 10mm;
+    }
+
+    body {
+        background: #fff !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        zoom: 0.96;
+    }
+
+    .no-print, nav, header, footer {
+        display: none !important;
+    }
+
+    /* ✅ الكارت الخاص بالتشارت */
+    .chart-container, canvas {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        height: auto !important;
+        max-height: 400px !important;
+    }
+
+    /* ✅ دمج التشارت والجدول معًا بدون فاصل */
+    .chart-container,
+    .dashboard-card.performance-section {
+        page-break-after: avoid !important;
+        page-break-before: auto !important;
+    }
+
+    /* ✅ الجدول لا ينكسر والصفحة لا تبدأ به */
+    .dashboard-card.performance-table {
+        page-break-before: avoid !important;
+        page-break-inside: avoid !important;
+        margin-top: -10px !important;
+    }
+
+    /* ✅ إخفاء عمودي الإجراءات والتوصية */
+    .performance-table th:nth-last-child(1),
+    .performance-table td:nth-last-child(1),
+    .performance-table th:nth-last-child(2),
+    .performance-table td:nth-last-child(2) {
+        display: none !important;
+    }
+
+    /* ✅ تحسين توزيع الجدول */
+    table {
+        font-size: 11px !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+    }
+
+    /* ✅ الكروت العامة */
+    .dashboard-card {
+        box-shadow: none !important;
+        border: 1px solid #ddd !important;
+        overflow: visible !important;
+        margin-bottom: 10px !important;
+    }
+
+        .chart-container {
+            margin-bottom: 0 !important;
+            padding-bottom: 0 !important;
+            line-height: 0 !important;
+        }
+
+        canvas {
+            display: block;
+            margin: 0 auto !important;
+            padding: 0 !important;
+            height: auto !important;
+        }
+        /* إزالة أي فراغ بصري بعد الكارت */
+        .dashboard-card.performance-section {
+            margin-bottom: 4px !important;
+            padding-bottom: 6px !important;
+            border-bottom: none !important;
+        }
+        /* الجدول مباشرة تحت التشارت بدون هوامش إضافية */
+        .dashboard-card.performance-table {
+            margin-top: 2px !important;
+        }
+
+
+
+}
+
+
+
+
+</style>
+
+
+
+
+<div class="container py-5">
+
+    <br />
+    <br />
+    <!-- 🖨️ زر الطباعة -->
+@*     <div class="text-center mb-4 no-print">
+        <button id="printReportBtn" class="btn btn-dark shadow-sm px-4 py-2 rounded-pill">
+            <i class="fas fa-print me-2"></i> طباعة التقرير بالكامل
+        </button>
+    </div> *@
+
+    <!-- 🧾 بيانات الاختبار والطالب -->
+    <div class="dashboard-card p-4 mb-5 shadow-sm border-0 rounded-4 bg-white">
+        <div class="row align-items-center">
+
+            <!-- الشعار -->
+            <div class="col-md-2 text-center mb-3 mb-md-0">
+                <img src="~/images/160×100.png"
+                     alt="شعار معهد القدرات"
+                     class="img-fluid rounded-3 shadow-sm"
+                     style="max-width:160px;" />
+            </div>
+
+            <!-- بيانات التقرير -->
+            <div class="col-md-10">
+
+                <!-- الصف الأول: هوية الطالب -->
+                <div class="row gy-2 small mb-2">
+                    <div class="col-md-12">
+                        <div class="fw-bold fs-5">
+                            👨‍🎓 الطالب: <span class="text-dark">@ViewBag.StudentName</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- الصف الثاني: الانتماء الأكاديمي -->
+                <div class="row gy-2 small">
+                    <div class="col-md-4">
+                        <div>
+                            <strong>📘 الدورة :</strong>
+                            <span>@ViewBag.CourseTitle</span>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <div>
+                            <strong>🎯 الدفعة:</strong>
+                            <span>@ViewBag.BatchName</span>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <div>
+                            <strong>📗 نوع المنهج:</strong>
+                            <span>@ViewBag.CurriculumTitle</span>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-3" />
+
+                <!-- الصف الثالث: بيانات الاختبار -->
+                <div class="row gy-2 small">
+                    <div class="col-md-4">
+                        <div>
+                            <strong>🧾 رقم الاختبار:</strong>
+                            <span>@ViewBag.ExamReference</span>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <div>
+                            <strong>📂 نوع الاختبار:</strong>
+                            <span>@ViewBag.ExamType</span>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <div>
+                            <strong>📅 تاريخ الاختبار:</strong>
+                            <span>@(((DateTime)ViewBag.ExamDate).ToString("yyyy/MM/dd"))</span>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-3" />
+
+                <!-- ملخص الأداء -->
+                <div class="d-flex flex-wrap gap-4 justify-content-start">
+                    <div>
+                        <strong>📊 النسبة النهائية:</strong>
+                        <span class="fw-bold text-primary">
+                            @Model.OverallScore.ToString("0.0")%
+                        </span>
+                    </div>
+
+                    <div>
+                        <strong>🕒 الزمن المستغرق:</strong>
+                        <span class="fw-bold text-success">
+                            @Model.ElapsedTimeFormatted
+                        </span>
+                    </div>
+
+                    <div>
+                        <strong>🏅 مستوى الأداء:</strong>
+                        <span class="fw-bold text-warning">
+                            @Model.ScoreBand
+                        </span>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    <br />
+    <!-- 📊 كروت الأداء العامة -->
+    <div class="row g-4 mb-5 text-center">
+        <div class="col-md-4 col-12">
+            <div class="dashboard-card p-4 h-100">
+                <div class="small text-muted mb-2"><i class="bi bi-bar-chart-fill text-primary"></i> النسبة العامة</div>
+                <h3 class="fw-bold text-primary">@Model.OverallScore.ToString("0.0")%</h3>
+            </div>
+        </div>
+        <div class="col-md-4 col-12">
+            <div class="dashboard-card p-4 h-100">
+                <div class="small text-muted mb-2"><i class="bi bi-clock text-success"></i> الوقت المستغرق</div>
+                <h3 class="fw-bold text-success">@Model.ElapsedTimeFormatted</h3>
+            </div>
+        </div>
+        <div class="col-md-4 col-12">
+            <div class="dashboard-card p-4 h-100">
+                <div class="small text-muted mb-2"><i class="bi bi-award text-warning"></i> مستوى الأداء</div>
+                <h5 class="fw-bold text-warning">@Model.ScoreBand</h5>
+            </div>
+        </div>
+    </div>
+
+
+
+    @* 🚨 تنبيه الغش أو السلوك غير الطبيعي *@
+    @if (!string.IsNullOrWhiteSpace(Model.CheatingFlagMessage))
+    {
+        <div class="alert alert-danger shadow-sm p-3 mb-4 rounded-4 fw-bold">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            @Model.CheatingFlagMessage
+        </div>
+    }
+
+
+
+
+
+    <hr class="p-3" />
+    <!-- 📊 الرسم البياني -->
+    <div class="dashboard-card p-4 mb-5 performance-section">
+        <h5 class="section-heading mb-3">
+            <i class="bi bi-bar-chart-steps text-primary"></i> تحليل تفصيلي للأداء حسب المحاور
+        </h5>
+        <p class="text-muted small mb-3">
+            يوضح هذا المخطط مقارنة بين الإجابات الصحيحة والخاطئة والمتخطاة في كل محور.
+        </p>
+        <div class="chart-container">
+            <canvas id="sectionsPerformanceChart"></canvas>
+        </div>
+    </div>
+
+  
+
+    <!-- 🧮 جدول المحاور -->
+    <div class="dashboard-card p-4 mb-5 performance-table">
+        <h5 class="section-heading mb-3"><i class="bi bi-diagram-3"></i> تحليل المحاور وخطتك العلاجية</h5>
+        <table class="table table-bordered table-hover text-center align-middle mt-3">
+            <thead class="table-light">
+                <tr>
+                    <th>المحور</th>
+                    <th>صحيحة</th>
+                    <th>خاطئة</th>
+                    <th>متخطاة</th>
+                    <th>النسبة</th>
+                    <th>الاجراءات</th>
+                    <th>التوصية</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var s in Model.Sections)
+                {
+                    var colorClass = s.Score switch
+                    {
+                        >= 80 => "table-success",
+                        >= 60 => "table-warning",
+                        _ => "table-danger"
+                    };
+                    <tr class="@colorClass">
+                        <td>@s.SectionTitle</td>
+                        <td class="text-success fw-bold">@s.CorrectCount</td>
+                        <td class="text-danger fw-bold">@s.WrongCount</td>
+                        <td class="text-muted">@s.SkippedCount</td>
+                        <td>@s.Score.ToString("0.0")%</td>
+
+                        <td>
+                            <a asp-area="Students"
+                               asp-controller="PerformanceIndicatorExams"
+                               asp-action="ReviewSectionQuestions"
+                               asp-route-examId="@Model.ExamId"
+                               asp-route-sectionId="@s.SectionId"
+                               class="btn btn-outline-primary btn-sm rounded-pill shadow-sm">
+                                <i class="fa-solid fa-list-check me-1"></i> عرض الأسئلة
+                            </a>
+
+
+                        </td>
+
+                        <td>@s.Guidance</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ⚡ تحليل الأداء الذكي -->
+    <div class="dashboard-card p-4 mb-5">
+        <h5 class="section-heading mb-3"><i class="bi bi-lightning-charge"></i> التحليل الذكي للأداء</h5>
+        <p><strong>⚙️ السرعة × الدقة:</strong> @Model.SpeedAccuracyFeedback</p>
+        <p class="mt-3"><strong>💬 التوصية العامة:</strong> @Model.MotivationalMessage</p>
+    </div>
+
+    <!-- ✅ رسالة تحفيزية -->
+    <div class="dashboard-card p-4 text-center">
+        <h4 class="fw-bold text-success mb-3">💪 استمر في تطوير نفسك!</h4>
+        <p class="text-secondary">@Model.MotivationalMessage</p>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // 📊 البيانات الخاصة بالمحاور
+        const labels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Sections.Select(s => s.SectionTitle)));
+        const correctData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Sections.Select(s => s.CorrectCount)));
+        const wrongData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Sections.Select(s => s.WrongCount)));
+        const skippedData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Sections.Select(s => s.SkippedCount)));
+
+        const ctx = document.getElementById('sectionsPerformanceChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'صحيحة', data: correctData, backgroundColor: '#22c55e', borderRadius: 6, barThickness: 25 },
+                    { label: 'خاطئة', data: wrongData, backgroundColor: '#ef4444', borderRadius: 6, barThickness: 25 },
+                    { label: 'متخطاة', data: skippedData, backgroundColor: '#9ca3af', borderRadius: 6, barThickness: 25 }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false, // ✅ لمنع تمدد الرسم
+                scales: {
+                    y: { beginAtZero: true, title: { display: true, text: 'عدد الأسئلة' } },
+                    x: { ticks: { autoSkip: false, maxRotation: 0 } }
+                },
+                plugins: {
+                    legend: { position: 'top' },
+                    tooltip: { backgroundColor: '#fff', titleColor: '#111', bodyColor: '#333', borderColor: '#ddd', borderWidth: 1 }
+                }
+            }
+        });
+    </script>
+
+    <script>
+        // 🖨️ الطباعة
+     
+                document.getElementById("printReportBtn").addEventListener("click", () => {
+            Chart.helpers.each(Chart.instances, function(instance) {
+                instance.resize();
+            });
+            setTimeout(() => { window.print(); },300);
+        });
+
+    </script>
+
+
+    <script>
+        // 🖨️ إصلاح مشكلة قص التشارت أثناء الطباعة
+        window.addEventListener('beforeprint', () => {
+            console.log("🖨️ Preparing charts for print...");
+            document.querySelectorAll('canvas').forEach(canvas => {
+                // تكبير الكانفاس مؤقتًا للطباعة
+                canvas.style.height = '320px';
+                canvas.style.width = '100%';
+            });
+        });
+
+        window.addEventListener('afterprint', () => {
+            console.log("✅ Print done, restoring charts...");
+            document.querySelectorAll('canvas').forEach(canvas => {
+                // استعادة الحجم الطبيعي بعد الطباعة
+                canvas.style.height = '';
+                canvas.style.width = '';
+            });
+        });
+    </script>
+
+}

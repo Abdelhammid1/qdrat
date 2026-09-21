@@ -1,0 +1,1422 @@
+﻿@model QdratNew.ViewModels.Batch.BatchStudentsViewModel
+
+@{
+    ViewData["Title"] = $"الطلاب في الدفعة {Model.BatchName}";
+
+    var totalStudents = Model.Students != null ? Model.Students.Count() : 0;
+    var activeStudents = Model.Students != null ? Model.Students.Count(x => x.Status == "Active") : 0;
+    var inactiveStudents = totalStudents - activeStudents;
+
+    var withPhoneStudents = Model.Students != null
+        ? Model.Students.Count(x => !string.IsNullOrWhiteSpace(x.PhoneNumber))
+        : 0;
+}
+
+@section Styles {
+    <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+    <link href="https://cdn.datatables.net/buttons/2.4.1/css/buttons.bootstrap5.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet" />
+
+    <style>
+        :root {
+            --c-brand: #2563EB;
+            --c-brand-d: #1D4ED8;
+            --c-brand-l: #EFF6FF;
+            --c-brand-xl: #DBEAFE;
+            --c-emerald: #059669;
+            --c-emerald-l: #ECFDF5;
+            --c-rose: #DC2626;
+            --c-rose-l: #FEF2F2;
+            --c-amber: #D97706;
+            --c-amber-l: #FFFBEB;
+            --c-violet: #7C3AED;
+            --c-violet-l: #F5F3FF;
+            --c-sky: #0284C7;
+            --c-sky-l: #F0F9FF;
+            --c-bg: #F1F5F9;
+            --c-surface: #FFFFFF;
+            --c-surface-2: #F8FAFC;
+            --c-border: #E2E8F0;
+            --c-border-2: #CBD5E1;
+            --c-ink-1: #0F172A;
+            --c-ink-2: #1E293B;
+            --c-ink-3: #475569;
+            --c-ink-4: #94A3B8;
+            --c-ink-5: #CBD5E1;
+            --r-sm: 8px;
+            --r-md: 12px;
+            --r-lg: 16px;
+            --r-xl: 22px;
+            --r-full: 9999px;
+            --sh-card: 0 1px 3px rgba(15,23,42,.06), 0 1px 2px rgba(15,23,42,.04);
+            --sh-lift: 0 4px 12px rgba(15,23,42,.10), 0 2px 4px rgba(15,23,42,.06);
+            --sh-pop: 0 12px 28px rgba(15,23,42,.14), 0 4px 8px rgba(15,23,42,.08);
+            --ease: cubic-bezier(.25,.46,.45,.94);
+            --ease-spring: cubic-bezier(.34,1.56,.64,1);
+            --t-fast: 150ms;
+            --t-base: 220ms;
+            --t-slow: 350ms;
+            --font: 'Cairo', 'Segoe UI', system-ui, sans-serif;
+        }
+
+        .batch-students-page {
+            max-width: 1440px;
+            margin: 0 auto;
+            min-height: 100vh;
+            padding: 28px 24px 100px;
+            direction: rtl;
+            font-family: var(--font);
+            color: var(--c-ink-2);
+            background: var(--c-bg);
+        }
+
+        .batch-students-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+
+        .batch-students-brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex: 1;
+        }
+
+        .batch-students-brand-icon {
+            width: 52px;
+            height: 52px;
+            border-radius: var(--r-lg);
+            background: linear-gradient(135deg, var(--c-brand) 0%, #60A5FA 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 1.4rem;
+            flex-shrink: 0;
+            box-shadow: 0 4px 14px rgba(37,99,235,.35);
+        }
+
+        .batch-students-brand-title {
+            font-size: 1.3rem;
+            font-weight: 800;
+            color: var(--c-ink-1);
+            letter-spacing: -.3px;
+            margin: 0;
+            line-height: 1.2;
+        }
+
+        .batch-students-brand-sub {
+            font-size: .78rem;
+            color: var(--c-ink-4);
+            margin-top: 4px;
+            line-height: 1.8;
+        }
+
+        .batch-pill,
+        .course-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 11px;
+            border-radius: var(--r-full);
+            font-size: .74rem;
+            font-weight: 800;
+            margin-top: 8px;
+            margin-left: 6px;
+            white-space: nowrap;
+        }
+
+        .batch-pill {
+            background: var(--c-brand-xl);
+            color: var(--c-brand);
+        }
+
+        .course-pill {
+            background: var(--c-violet-l);
+            color: var(--c-violet);
+        }
+
+        .top-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .btn-secondary-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            background: var(--c-surface);
+            color: var(--c-ink-3);
+            border: 1px solid var(--c-border);
+            border-radius: var(--r-md);
+            padding: 9px 18px;
+            font-size: .84rem;
+            font-weight: 700;
+            text-decoration: none;
+            cursor: pointer;
+            transition: background var(--t-fast) var(--ease), transform var(--t-fast), box-shadow var(--t-fast);
+            box-shadow: var(--sh-card);
+            white-space: nowrap;
+        }
+
+            .btn-secondary-action:hover {
+                background: var(--c-surface-2);
+                color: var(--c-ink-2);
+                border-color: var(--c-border-2);
+                transform: translateY(-1px);
+            }
+
+        .batch-students-kpis {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+
+        .kpi-card {
+            background: var(--c-surface);
+            border: 1px solid var(--c-border);
+            border-radius: var(--r-lg);
+            padding: 16px 18px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            box-shadow: var(--sh-card);
+            transition: transform var(--t-base) var(--ease-spring), box-shadow var(--t-base) var(--ease);
+            position: relative;
+            overflow: hidden;
+        }
+
+            .kpi-card::before {
+                content: '';
+                position: absolute;
+                inset: 0 0 0 auto;
+                width: 4px;
+                background: transparent;
+            }
+
+            .kpi-card:hover {
+                transform: translateY(-3px);
+                box-shadow: var(--sh-lift);
+            }
+
+        .kpi-blue::before {
+            background: var(--c-brand);
+        }
+
+        .kpi-emerald::before {
+            background: var(--c-emerald);
+        }
+
+        .kpi-amber::before {
+            background: var(--c-amber);
+        }
+
+        .kpi-violet::before {
+            background: var(--c-violet);
+        }
+
+        .kpi-ico {
+            width: 44px;
+            height: 44px;
+            border-radius: var(--r-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
+
+        .ico-blue {
+            background: var(--c-brand-xl);
+            color: var(--c-brand);
+        }
+
+        .ico-emerald {
+            background: var(--c-emerald-l);
+            color: var(--c-emerald);
+        }
+
+        .ico-amber {
+            background: var(--c-amber-l);
+            color: var(--c-amber);
+        }
+
+        .ico-violet {
+            background: var(--c-violet-l);
+            color: var(--c-violet);
+        }
+
+        .kpi-label {
+            font-size: .71rem;
+            font-weight: 700;
+            color: var(--c-ink-4);
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+        }
+
+        .kpi-val {
+            font-size: 1.55rem;
+            font-weight: 900;
+            color: var(--c-ink-1);
+            line-height: 1;
+        }
+
+        .students-table-topbar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .table-section-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: .9rem;
+            font-weight: 800;
+            color: var(--c-ink-1);
+            margin-left: 8px;
+        }
+
+            .table-section-title i {
+                color: var(--c-brand);
+            }
+
+        .students-table-search-wrap {
+            position: relative;
+            flex: 1;
+            min-width: 280px;
+        }
+
+            .students-table-search-wrap i {
+                position: absolute;
+                right: 13px;
+                top: 50%;
+                transform: translateY(-50%);
+                color: var(--c-ink-4);
+                font-size: .9rem;
+                pointer-events: none;
+            }
+
+            .students-table-search-wrap input {
+                width: 100%;
+                height: 42px;
+                padding: 0 40px 0 14px;
+                background: var(--c-surface);
+                border: 1.5px solid var(--c-border);
+                border-radius: var(--r-md);
+                font-family: var(--font);
+                font-size: .85rem;
+                color: var(--c-ink-2);
+                transition: border-color var(--t-fast), box-shadow var(--t-fast);
+                outline: none;
+            }
+
+                .students-table-search-wrap input:focus {
+                    border-color: var(--c-brand);
+                    box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+                }
+
+        .students-count-badge {
+            font-size: .78rem;
+            color: var(--c-ink-4);
+        }
+
+            .students-count-badge strong {
+                color: var(--c-brand);
+                font-weight: 800;
+            }
+
+        .table-responsive-safe {
+            width: 100%;
+            overflow-x: auto;
+            overflow-y: visible;
+        }
+
+        .students-table-card {
+            background: transparent;
+            border: none;
+            box-shadow: none;
+            border-radius: 0;
+            overflow: visible;
+        }
+
+        #studentsTable {
+            width: 100% !important;
+            border-collapse: separate;
+            border-spacing: 0 7px;
+            font-size: .855rem;
+        }
+
+            #studentsTable thead th {
+                padding: 6px 16px 18px !important;
+                text-align: right;
+                font-size: .64rem !important;
+                font-weight: 800 !important;
+                color: var(--c-ink-4) !important;
+                text-transform: uppercase;
+                letter-spacing: .09em;
+                white-space: nowrap;
+                user-select: none;
+                background: transparent !important;
+                border: none !important;
+                border-bottom: 2px solid var(--c-border) !important;
+            }
+
+            #studentsTable tbody tr {
+                background: var(--c-surface);
+                box-shadow: 0 1px 4px rgba(15,23,42,.06), 0 1px 2px rgba(15,23,42,.04);
+                cursor: pointer;
+                transition: transform var(--t-base) var(--ease-spring), box-shadow var(--t-base) var(--ease);
+            }
+
+                #studentsTable tbody tr:hover {
+                    transform: translateY(-2px);
+                    box-shadow: 0 8px 28px rgba(15,23,42,.10), 0 3px 8px rgba(15,23,42,.05);
+                }
+
+                #studentsTable tbody tr.is-selected {
+                    box-shadow: 0 0 0 2px var(--c-brand), 0 6px 22px rgba(37,99,235,.16);
+                    transform: translateY(-1px);
+                }
+
+                    #studentsTable tbody tr.is-selected:hover {
+                        box-shadow: 0 0 0 2px var(--c-brand), 0 12px 32px rgba(37,99,235,.22);
+                        transform: translateY(-3px);
+                    }
+
+            #studentsTable tbody td {
+                padding: 15px 16px !important;
+                vertical-align: middle !important;
+                color: var(--c-ink-3);
+                background: inherit;
+                border-top: 1px solid var(--c-border) !important;
+                border-bottom: 1px solid var(--c-border) !important;
+                text-align: right;
+                font-size: .855rem !important;
+            }
+
+                #studentsTable tbody td:first-child {
+                    border-right: 1px solid var(--c-border) !important;
+                    border-radius: 0 var(--r-lg) var(--r-lg) 0;
+                }
+
+                #studentsTable tbody td:last-child {
+                    border-left: 1px solid var(--c-border) !important;
+                    border-radius: var(--r-lg) 0 0 var(--r-lg);
+                }
+
+            #studentsTable tbody tr.is-selected td {
+                background: var(--c-brand-l) !important;
+                border-color: rgba(37,99,235,.18) !important;
+            }
+
+        th.col-cb,
+        td.col-cb {
+            width: 46px;
+            text-align: center !important;
+            padding: 15px 10px !important;
+        }
+
+        .row-cb {
+            width: 17px;
+            height: 17px;
+            accent-color: var(--c-brand);
+            cursor: pointer;
+            display: block;
+            margin: 0 auto;
+        }
+
+        .student-title-cell {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-align: right;
+            min-width: 220px;
+        }
+
+        .student-avatar {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            background: var(--c-brand-xl);
+            color: var(--c-brand);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: .9rem;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,.08);
+        }
+
+        .student-item-name {
+            font-weight: 800;
+            color: var(--c-ink-1);
+            font-size: .91rem;
+            line-height: 1.35;
+            display: block;
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .student-item-sub {
+            font-size: .72rem;
+            color: var(--c-ink-4);
+            margin-top: 2px;
+        }
+
+        .national-id-wrap {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            direction: ltr;
+        }
+
+        .copy-national-id-btn {
+            width: 28px;
+            height: 28px;
+            min-width: 28px;
+            border-radius: 8px;
+            border: 0;
+            background: transparent;
+            color: var(--c-ink-4);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: .85rem;
+            cursor: pointer;
+            transition: color var(--t-fast), transform var(--t-fast);
+        }
+
+            .copy-national-id-btn:hover {
+                color: var(--c-brand);
+                transform: scale(1.15);
+            }
+
+            .copy-national-id-btn.copied {
+                color: var(--c-emerald);
+            }
+
+        .row-number-chip,
+        .id-chip,
+        .phone-chip,
+        .stage-chip,
+        .level-chip,
+        .date-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 9px;
+            border-radius: var(--r-full);
+            font-size: .7rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .row-number-chip {
+            background: var(--c-brand-xl);
+            color: var(--c-brand);
+        }
+
+        .id-chip {
+            background: var(--c-surface-2);
+            color: var(--c-ink-3);
+            direction: ltr;
+            border: 1px solid var(--c-border);
+        }
+
+        .phone-chip {
+            background: var(--c-emerald-l);
+            color: var(--c-emerald);
+            direction: ltr;
+            border: 1px solid rgba(5,150,105,.12);
+        }
+
+        .stage-chip {
+            background: var(--c-violet-l);
+            color: var(--c-violet);
+            border: 1px solid rgba(124,58,237,.12);
+        }
+
+        .level-chip {
+            background: var(--c-amber-l);
+            color: var(--c-amber);
+            border: 1px solid rgba(217,119,6,.12);
+        }
+
+        .date-chip {
+            background: var(--c-surface-2);
+            color: var(--c-ink-3);
+            direction: ltr;
+            border: 1px solid var(--c-border);
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 12px;
+            border-radius: var(--r-full);
+            font-size: .73rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .sp-active {
+            background: var(--c-emerald-l);
+            color: var(--c-emerald);
+            border: 1px solid rgba(5,150,105,.15);
+        }
+
+        .sp-inactive {
+            background: var(--c-rose-l);
+            color: var(--c-rose);
+            border: 1px solid rgba(220,38,38,.15);
+        }
+
+        .students-empty {
+            background: var(--c-surface);
+            border: 1px dashed var(--c-border-2);
+            border-radius: var(--r-xl);
+            padding: 42px 20px;
+            text-align: center;
+            color: var(--c-ink-4);
+            box-shadow: var(--sh-card);
+        }
+
+            .students-empty i {
+                font-size: 2rem;
+                color: var(--c-ink-5);
+                margin-bottom: 8px;
+            }
+
+        .students-empty-title {
+            font-weight: 800;
+            color: var(--c-ink-2);
+            margin-bottom: 4px;
+        }
+
+        .students-empty-sub {
+            font-size: .82rem;
+        }
+
+        .dataTables_wrapper .dataTables_length,
+        .dataTables_wrapper .dataTables_filter,
+        .dataTables_wrapper .dataTables_info,
+        .dataTables_wrapper .dataTables_paginate {
+            padding: 12px 4px;
+            font-size: .8rem;
+            color: var(--c-ink-4);
+            font-family: var(--font);
+        }
+
+        .dataTables_wrapper .dataTables_filter {
+            display: none;
+        }
+
+        .dataTables_wrapper,
+        .dataTables_scroll,
+        .dataTables_scrollBody {
+            overflow: visible !important;
+        }
+
+        #studentsTable,
+        #studentsTable tbody,
+        #studentsTable tr,
+        #studentsTable td {
+            overflow: visible !important;
+        }
+
+        .dt-buttons {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin: 8px 0 4px;
+        }
+
+            .dt-buttons .btn {
+                border-radius: var(--r-md) !important;
+                font-size: .78rem !important;
+                font-weight: 700 !important;
+                padding: 6px 12px !important;
+                font-family: var(--font) !important;
+            }
+
+        .action-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 9900;
+            pointer-events: none;
+        }
+
+        .action-bar__inner {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding: 14px 24px;
+            background: rgba(15, 23, 42, 0.92);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border-top: 1px solid rgba(255,255,255,.10);
+            box-shadow: 0 -8px 32px rgba(15,23,42,.28);
+            transform: translateY(110%);
+            transition: transform var(--t-slow) var(--ease);
+        }
+
+        .action-bar.is-visible .action-bar__inner {
+            transform: translateY(0);
+        }
+
+        .action-bar.is-visible {
+            pointer-events: all;
+        }
+
+        .ab-sel {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px 6px 8px;
+            background: rgba(255,255,255,.10);
+            border-radius: var(--r-full);
+            border: 1px solid rgba(255,255,255,.14);
+            flex-shrink: 0;
+        }
+
+        .ab-sel__count {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 28px;
+            height: 28px;
+            padding: 0 7px;
+            border-radius: var(--r-full);
+            background: var(--c-brand);
+            color: #fff;
+            font-size: .8rem;
+            font-weight: 800;
+            font-family: var(--font);
+        }
+
+            .ab-sel__count.bump {
+                animation: countBump .3s var(--ease-spring);
+            }
+
+        @@keyframes countBump {
+            0%, 100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.35);
+            }
+        }
+
+        .ab-sel__text {
+            font-size: .82rem;
+            font-weight: 600;
+            color: rgba(255,255,255,.75);
+            white-space: nowrap;
+        }
+
+        .ab-sep {
+            width: 1px;
+            height: 28px;
+            background: rgba(255,255,255,.14);
+            flex-shrink: 0;
+        }
+
+        .ab-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 14px;
+            border-radius: var(--r-md);
+            font-size: .8rem;
+            font-weight: 700;
+            font-family: var(--font);
+            cursor: pointer;
+            border: 1px solid transparent;
+            white-space: nowrap;
+            transition: all var(--t-fast);
+            background: rgba(255,255,255,.09);
+            color: rgba(255,255,255,.85);
+            border-color: rgba(255,255,255,.14);
+            text-decoration: none;
+        }
+
+            .ab-action:hover:not(:disabled) {
+                background: rgba(255,255,255,.16);
+                color: #fff;
+                border-color: rgba(255,255,255,.24);
+                transform: translateY(-1px);
+            }
+
+            .ab-action:disabled {
+                opacity: .3;
+                cursor: not-allowed;
+                pointer-events: none;
+            }
+
+        .ab-action--report {
+            background: rgba(124,58,237,.18);
+            color: #DDD6FE;
+            border-color: rgba(124,58,237,.28);
+        }
+
+        .ab-action--exam {
+            background: rgba(5,150,105,.18);
+            color: #A7F3D0;
+            border-color: rgba(5,150,105,.28);
+        }
+
+        .ab-action--clear {
+            background: transparent;
+            color: rgba(255,255,255,.45);
+            border-color: transparent;
+            margin-right: auto;
+        }
+
+            .ab-action--clear:hover:not(:disabled) {
+                background: rgba(255,255,255,.08);
+                color: rgba(255,255,255,.75);
+                border-color: transparent;
+                transform: none;
+            }
+
+        .ab-tip {
+            position: relative;
+            display: inline-flex;
+        }
+
+        .ab-tip__text {
+            display: none;
+            position: absolute;
+            bottom: calc(100% + 8px);
+            right: 50%;
+            transform: translateX(50%);
+            background: rgba(15,23,42,.95);
+            color: rgba(255,255,255,.9);
+            font-size: .7rem;
+            font-weight: 600;
+            padding: 5px 10px;
+            border-radius: var(--r-sm);
+            white-space: nowrap;
+            pointer-events: none;
+            border: 1px solid rgba(255,255,255,.1);
+            backdrop-filter: blur(8px);
+        }
+
+        .ab-tip:hover .ab-tip__text {
+            display: block;
+        }
+
+        @@media (max-width: 1200px) {
+            .batch-students-kpis {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @@media (max-width: 768px) {
+            .batch-students-page {
+                padding: 16px 12px 100px;
+            }
+
+            .batch-students-kpis {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .top-actions {
+                width: 100%;
+            }
+
+            .btn-secondary-action {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .students-table-search-wrap {
+                min-width: 100%;
+            }
+
+            .action-bar__inner {
+                padding: 12px 14px;
+                gap: 6px;
+            }
+        }
+
+        @@media (max-width: 520px) {
+            .batch-students-kpis {
+                grid-template-columns: 1fr;
+            }
+
+            .student-item-name {
+                max-width: 210px;
+            }
+        }
+    </style>
+}
+
+<div class="batch-students-page">
+
+    <div class="batch-students-topbar">
+        <div class="batch-students-brand">
+            <div class="batch-students-brand-icon">
+                <i class="bi bi-people-fill"></i>
+            </div>
+
+            <div>
+                <div class="batch-students-brand-title">طلاب الدفعة</div>
+                <div class="batch-students-brand-sub">
+                    عرض الطلاب المسجلين داخل الدفعة ومتابعة بياناتهم وإجراءات الاختبارات.
+                </div>
+
+                <div>
+                    <span class="batch-pill">
+                        <i class="bi bi-layers"></i>
+                        @Model.BatchName
+                    </span>
+
+                    <span class="course-pill">
+                        <i class="bi bi-book"></i>
+                        @Model.CourseName
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div class="top-actions">
+            <a asp-action="Index" class="btn-secondary-action">
+                <i class="bi bi-arrow-left"></i>
+                عودة إلى قائمة الدفعات
+            </a>
+        </div>
+    </div>
+
+    <div class="batch-students-kpis">
+        <div class="kpi-card kpi-blue">
+            <div class="kpi-ico ico-blue"><i class="bi bi-people"></i></div>
+            <div>
+                <div class="kpi-label">إجمالي الطلاب</div>
+                <div class="kpi-val">@totalStudents</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-emerald">
+            <div class="kpi-ico ico-emerald"><i class="bi bi-person-check"></i></div>
+            <div>
+                <div class="kpi-label">طلاب نشطون</div>
+                <div class="kpi-val">@activeStudents</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-amber">
+            <div class="kpi-ico ico-amber"><i class="bi bi-person-x"></i></div>
+            <div>
+                <div class="kpi-label">غير نشطين</div>
+                <div class="kpi-val">@inactiveStudents</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-violet">
+            <div class="kpi-ico ico-violet"><i class="bi bi-telephone"></i></div>
+            <div>
+                <div class="kpi-label">لديهم جوال</div>
+                <div class="kpi-val">@withPhoneStudents</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="students-table-card">
+        <div class="students-table-topbar">
+            <div class="table-section-title">
+                <i class="bi bi-table"></i>
+                قائمة طلاب الدفعة
+            </div>
+
+            <div class="students-table-search-wrap">
+                <i class="bi bi-search"></i>
+                <input type="text"
+                       id="studentsSearch"
+                       placeholder="ابحث في الاسم أو الهوية أو الجوال أو المرحلة أو الحالة..." />
+            </div>
+
+            <div class="students-count-badge">
+                إجمالي: <strong>@totalStudents</strong> طالب
+            </div>
+        </div>
+
+        @if (Model.Students == null || !Model.Students.Any())
+        {
+            <div class="students-empty">
+                <i class="bi bi-inbox"></i>
+                <div class="students-empty-title">لا يوجد طلاب داخل هذه الدفعة</div>
+                <div class="students-empty-sub">ستظهر بيانات الطلاب هنا بعد تسجيلهم في الدفعة</div>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive-safe">
+                <table id="studentsTable">
+                    <thead>
+                        <tr>
+                            <th class="col-cb">
+                                <input type="checkbox" class="row-cb" id="selectAllCb" />
+                            </th>
+                            <th style="width:6%">#</th>
+                            <th style="width:26%">اسم الطالب</th>
+                            <th style="width:15%">رقم الهوية</th>
+                            <th style="width:14%">رقم الجوال</th>
+                            <th style="width:13%">المرحلة</th>
+                            <th style="width:10%">المستوى</th>
+                            <th style="width:12%">تاريخ الالتحاق</th>
+                            <th style="width:10%">الحالة</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @{
+                            int i = 1;
+                        }
+
+                        @foreach (var s in Model.Students)
+                        {
+                            var nationalIdText = s.NationalId != null ? s.NationalId.ToString() : "";
+                            var isActive = s.Status == "Active";
+
+                            <tr data-student-id="@s.StudentId"
+                                data-student-name="@s.FullName"
+                                data-branch-id="@Model.BranchId"
+                                data-batch-id="@Model.BatchId">
+                                <td class="col-cb">
+                                    <input type="checkbox"
+                                           class="row-cb student-row-cb"
+                                           data-student-id="@s.StudentId"
+                                           data-student-name="@s.FullName"
+                                           onclick="event.stopPropagation()" />
+                                </td>
+
+                                <td>
+                                    <span class="row-number-chip">@i</span>
+                                </td>
+
+                                <td>
+                                    <div class="student-title-cell">
+                                        <div class="student-avatar"><i class="bi bi-person-fill"></i></div>
+                                        <div style="min-width:0">
+                                            <span class="student-item-name" title="@s.FullName">@s.FullName</span>
+                                            <div class="student-item-sub">كود الطالب: @s.StudentId</div>
+                                        </div>
+                                    </div>
+                                </td>
+
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(nationalIdText))
+                                    {
+                                        <div class="national-id-wrap">
+                                            <button type="button"
+                                                    class="copy-national-id-btn"
+                                                    data-national-id="@nationalIdText"
+                                                    title="نسخ رقم الهوية"
+                                                    aria-label="نسخ رقم الهوية"
+                                                    onclick="event.stopPropagation()">
+                                                <i class="bi bi-copy"></i>
+                                            </button>
+
+                                            <span class="id-chip">
+                                                <i class="bi bi-credit-card-2-front"></i>
+                                                @nationalIdText
+                                            </span>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span class="id-chip">
+                                            <i class="bi bi-credit-card-2-front"></i>
+                                            —
+                                        </span>
+                                    }
+                                </td>
+
+                                <td>
+                                    <span class="phone-chip">
+                                        <i class="bi bi-telephone"></i>
+                                        @(string.IsNullOrWhiteSpace(s.PhoneNumber) ? "—" : s.PhoneNumber)
+                                    </span>
+                                </td>
+
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(s.Stage))
+                                    {
+                                        <span class="stage-chip"><i class="bi bi-building"></i>@s.Stage</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="stage-chip"><i class="bi bi-dash-circle"></i>غير محددة</span>
+                                    }
+                                </td>
+
+                                <td>
+                                    <span class="level-chip">
+                                        <i class="bi bi-bar-chart-steps"></i>
+                                        @(string.IsNullOrWhiteSpace(s.Level) ? "—" : s.Level)
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="date-chip">
+                                        <i class="bi bi-calendar-event"></i>
+                                        @s.EnrolledAt.ToString("yyyy/MM/dd")
+                                    </span>
+                                </td>
+
+                                <td>
+                                    @if (isActive)
+                                    {
+                                        <span class="status-pill sp-active"><i class="bi bi-check-circle"></i>نشط</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="status-pill sp-inactive"><i class="bi bi-x-circle"></i>غير نشط</span>
+                                    }
+                                </td>
+                            </tr>
+
+                            i++;
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+<div class="action-bar" id="studentsActionBar" role="toolbar" aria-label="إجراءات الطلاب المحددين">
+    <div class="action-bar__inner">
+        <div class="ab-sel">
+            <span class="ab-sel__count" id="selectedStudentsCount">0</span>
+            <span class="ab-sel__text" id="selectedStudentsText">طالب محدد</span>
+        </div>
+
+        <div class="ab-sep"></div>
+
+        <div class="ab-tip">
+            <button type="button" class="ab-action ab-action--report" id="studentReportAction">
+                <i class="bi bi-graph-up-arrow"></i>
+                تقرير الطالب
+            </button>
+            <span class="ab-tip__text">يتطلب تحديد طالب واحد فقط</span>
+        </div>
+
+        <div class="ab-tip">
+            <button type="button" class="ab-action ab-action--exam" id="studentExamAction">
+                <i class="bi bi-pencil-square"></i>
+                اختبار فردي
+            </button>
+            <span class="ab-tip__text">يتطلب تحديد طالب واحد فقط</span>
+        </div>
+
+        <button type="button" class="ab-action ab-action--clear" id="clearStudentsSelection">
+            <i class="bi bi-x-circle"></i>
+            إلغاء
+        </button>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.bootstrap5.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js"></script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            var tableElement = document.getElementById('studentsTable');
+            var selectedStudents = new Map();
+            var dataTable = null;
+
+            var actionBar = document.getElementById('studentsActionBar');
+            var countEl = document.getElementById('selectedStudentsCount');
+            var textEl = document.getElementById('selectedStudentsText');
+            var reportBtn = document.getElementById('studentReportAction');
+            var examBtn = document.getElementById('studentExamAction');
+            var clearBtn = document.getElementById('clearStudentsSelection');
+            var selectAllCb = document.getElementById('selectAllCb');
+
+            if (tableElement) {
+                dataTable = $('#studentsTable').DataTable({
+                    language: {
+                        url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json"
+                    },
+                    pageLength: 25,
+                    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "الكل"]],
+                    order: [[1, "asc"]],
+                    responsive: false,
+                    stateSave: true,
+                    dom: 'Brtip',
+                    buttons: [
+                        {
+                            extend: 'copyHtml5',
+                            text: '<i class="bi bi-copy"></i> نسخ',
+                            className: 'btn btn-outline-secondary btn-sm',
+                            exportOptions: { columns: [1, 2, 3, 4, 5, 6, 7, 8] }
+                        },
+                        {
+                            extend: 'excelHtml5',
+                            text: '<i class="bi bi-file-earmark-excel"></i> Excel',
+                            className: 'btn btn-success btn-sm',
+                            exportOptions: { columns: [1, 2, 3, 4, 5, 6, 7, 8] }
+                        },
+                        {
+                            extend: 'pdfHtml5',
+                            text: '<i class="bi bi-file-earmark-pdf"></i> PDF',
+                            className: 'btn btn-danger btn-sm',
+                            exportOptions: { columns: [1, 2, 3, 4, 5, 6, 7, 8] }
+                        },
+                        {
+                            extend: 'print',
+                            text: '<i class="bi bi-printer"></i> طباعة',
+                            className: 'btn btn-primary btn-sm',
+                            exportOptions: { columns: [1, 2, 3, 4, 5, 6, 7, 8] }
+                        }
+                    ],
+                    columnDefs: [
+                        { orderable: false, targets: [0] }
+                    ],
+                    drawCallback: function () {
+                        reapplySelectionState();
+                        syncSelectAllState();
+                    }
+                });
+
+                $('#studentsSearch').on('input', function () {
+                    dataTable.search(this.value).draw();
+                });
+
+                $('#studentsTable tbody').on('click', 'tr', function (e) {
+                    if ($(e.target).closest('button, a, input').length) {
+                        return;
+                    }
+
+                    var cb = this.querySelector('.student-row-cb');
+                    if (!cb) {
+                        return;
+                    }
+
+                    cb.checked = !cb.checked;
+                    toggleStudentSelection(cb);
+                });
+
+                $('#studentsTable tbody').on('change', '.student-row-cb', function () {
+                    toggleStudentSelection(this);
+                });
+            }
+
+            if (selectAllCb) {
+                selectAllCb.addEventListener('change', function () {
+                    var visibleCheckboxes = document.querySelectorAll('#studentsTable tbody .student-row-cb');
+
+                    visibleCheckboxes.forEach(function (cb) {
+                        cb.checked = selectAllCb.checked;
+                        toggleStudentSelection(cb, false);
+                    });
+
+                    updateActionBar();
+                });
+            }
+
+            if (clearBtn) {
+                clearBtn.addEventListener('click', function () {
+                    clearSelection();
+                });
+            }
+
+            if (reportBtn) {
+                reportBtn.addEventListener('click', function () {
+                    if (selectedStudents.size !== 1) {
+                        return;
+                    }
+
+                    var student = Array.from(selectedStudents.values())[0];
+                    window.location.href = '@Url.Action("StudentAnalyticsReport", "ExamAssignments", new { area = "Admin" })' + '?studentId=' + encodeURIComponent(student.studentId);
+                });
+            }
+
+            if (examBtn) {
+                examBtn.addEventListener('click', function () {
+                    if (selectedStudents.size !== 1) {
+                        return;
+                    }
+
+                    var student = Array.from(selectedStudents.values())[0];
+                    var url = '@Url.Action("CreateStudentExam", "ExamIndividualAssignments", new { area = "Admin" })'
+                        + '?branchId=' + encodeURIComponent(student.branchId)
+                        + '&batchId=' + encodeURIComponent(student.batchId)
+                        + '&studentId=' + encodeURIComponent(student.studentId);
+
+                    window.location.href = url;
+                });
+            }
+
+            document.querySelectorAll(".copy-national-id-btn").forEach(function (btn) {
+                btn.addEventListener("click", function () {
+                    var nationalId = this.getAttribute("data-national-id");
+
+                    if (!nationalId) {
+                        return;
+                    }
+
+                    if (navigator.clipboard && window.isSecureContext) {
+                        navigator.clipboard.writeText(nationalId).then(function () {
+                            markCopied(btn);
+                        });
+                    } else {
+                        var tempInput = document.createElement("input");
+                        tempInput.value = nationalId;
+                        document.body.appendChild(tempInput);
+                        tempInput.select();
+                        document.execCommand("copy");
+                        document.body.removeChild(tempInput);
+                        markCopied(btn);
+                    }
+                });
+            });
+
+            function toggleStudentSelection(cb, shouldUpdateBar) {
+                var row = cb.closest('tr');
+                if (!row) {
+                    return;
+                }
+
+                var studentId = cb.getAttribute('data-student-id');
+
+                if (cb.checked) {
+                    selectedStudents.set(studentId, {
+                        studentId: studentId,
+                        studentName: cb.getAttribute('data-student-name') || '',
+                        branchId: row.getAttribute('data-branch-id') || '@Model.BranchId',
+                        batchId: row.getAttribute('data-batch-id') || '@Model.BatchId'
+                    });
+
+                    row.classList.add('is-selected');
+                } else {
+                    selectedStudents.delete(studentId);
+                    row.classList.remove('is-selected');
+                }
+
+                syncSelectAllState();
+
+                if (shouldUpdateBar !== false) {
+                    updateActionBar();
+                }
+            }
+
+            function clearSelection() {
+                selectedStudents.clear();
+
+                document.querySelectorAll('#studentsTable tbody .student-row-cb').forEach(function (cb) {
+                    cb.checked = false;
+                });
+
+                document.querySelectorAll('#studentsTable tbody tr.is-selected').forEach(function (row) {
+                    row.classList.remove('is-selected');
+                });
+
+                if (selectAllCb) {
+                    selectAllCb.checked = false;
+                    selectAllCb.indeterminate = false;
+                }
+
+                updateActionBar();
+            }
+
+            function reapplySelectionState() {
+                document.querySelectorAll('#studentsTable tbody .student-row-cb').forEach(function (cb) {
+                    var studentId = cb.getAttribute('data-student-id');
+                    var isSelected = selectedStudents.has(studentId);
+                    cb.checked = isSelected;
+                    cb.closest('tr').classList.toggle('is-selected', isSelected);
+                });
+            }
+
+            function syncSelectAllState() {
+                if (!selectAllCb) {
+                    return;
+                }
+
+                var visibleCheckboxes = Array.from(document.querySelectorAll('#studentsTable tbody .student-row-cb'));
+
+                if (!visibleCheckboxes.length) {
+                    selectAllCb.checked = false;
+                    selectAllCb.indeterminate = false;
+                    return;
+                }
+
+                var checkedCount = visibleCheckboxes.filter(function (cb) { return cb.checked; }).length;
+                selectAllCb.checked = checkedCount === visibleCheckboxes.length;
+                selectAllCb.indeterminate = checkedCount > 0 && checkedCount < visibleCheckboxes.length;
+            }
+
+            function updateActionBar() {
+                var count = selectedStudents.size;
+
+                if (countEl) {
+                    countEl.textContent = count;
+                    countEl.classList.remove('bump');
+                    void countEl.offsetWidth;
+                    countEl.classList.add('bump');
+                }
+
+                if (textEl) {
+                    textEl.textContent = count === 1 ? 'طالب محدد' : 'طلاب محددون';
+                }
+
+                if (actionBar) {
+                    actionBar.classList.toggle('is-visible', count > 0);
+                }
+
+                var single = count === 1;
+
+                if (reportBtn) {
+                    reportBtn.disabled = !single;
+                }
+
+                if (examBtn) {
+                    examBtn.disabled = !single;
+                }
+            }
+
+            function markCopied(btn) {
+                var oldHtml = btn.innerHTML;
+                btn.classList.add("copied");
+                btn.innerHTML = '<i class="bi bi-check2"></i>';
+
+                setTimeout(function () {
+                    btn.classList.remove("copied");
+                    btn.innerHTML = oldHtml;
+                }, 1200);
+            }
+        });
+    </script>
+}

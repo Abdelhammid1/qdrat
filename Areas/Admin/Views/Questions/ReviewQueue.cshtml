@@ -1,0 +1,291 @@
+﻿@model List<QdratNew.ViewModels.Question.QuestionViewModel>
+@using QdratNew.Helpers
+@{
+    ViewData["Title"] = "لوحة مراجعة الأسئلة";
+
+    var notCompleteCount = Model.Count(q => !q.IsComplete && !q.IsRejected);
+    var rejectedCount = Model.Count(q => q.IsRejected);
+    var noAnswerCount = Model.Count(q => q.IsComplete && string.IsNullOrWhiteSpace(q.CorrectAnswer));
+    var pendingReviewCount = Model.Count(q => q.IsComplete && !q.IsRejected && !q.IsReviewed && !string.IsNullOrWhiteSpace(q.CorrectAnswer));
+}
+
+<div class="container mt-4" dir="rtl">
+    <h2 class="text-primary mb-4 d-flex align-items-center gap-2">
+        <i class="fas fa-check-double"></i> مراجعة الأسئلة الذكية
+    </h2>
+
+    <!-- ✅ كروت الإحصائيات -->
+    <div class="row text-center g-4 mb-4">
+        <div class="col-md-3">
+            <a href="@Url.Action("ReviewQueue", new { filter = "pending" })" class="text-decoration-none">
+                <div class="card border-primary shadow-sm">
+                    <div class="card-body">
+                        <h5 class="text-primary fw-bold">بانتظار المراجعة</h5>
+                        <h2 class="text-primary">@Model.Count(q => q.IsComplete && !q.IsReviewed && !q.IsRejected)</h2>
+                        <div class="text-muted">جاهزة للموافقة الجماعية</div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3">
+            <a href="@Url.Action("ReviewQueue", new { filter = "unanswered" })" class="text-decoration-none">
+                <div class="card border-warning shadow-sm">
+                    <div class="card-body">
+                        <h5 class="text-warning fw-bold">بدون إجابة</h5>
+                        <h2 class="text-warning">@Model.Count(q => q.IsComplete && string.IsNullOrWhiteSpace(q.CorrectAnswer) && !q.IsRejected)</h2>
+                        <div class="text-muted">بحاجة لتحديد الإجابة الصحيحة</div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3">
+            <a href="@Url.Action("ReviewQueue", new { filter = "rejected" })" class="text-decoration-none">
+                <div class="card border-dark shadow-sm">
+                    <div class="card-body">
+                        <h5 class="text-dark fw-bold">مرفوضة</h5>
+                        <h2 class="text-dark">@Model.Count(q => q.IsRejected)</h2>
+                        <div class="text-muted">تم رفضها من المراجع</div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3">
+            <a href="@Url.Action("ReviewQueue", new { filter = "uncomplete" })" class="text-decoration-none">
+                <div class="card border-danger shadow-sm">
+                    <div class="card-body">
+                        <h5 class="text-danger fw-bold">غير مكتملة</h5>
+                        <h2 class="text-danger">@Model.Count(q => !q.IsComplete && !q.IsRejected)</h2>
+                        <div class="text-muted">أسئلة لا تحتوي كل البيانات</div>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+
+</div>
+
+<!-- ✅ سيتم ربط جدول البيانات تحت الكروت تلقائيًا بنفس الصفحة ReviewQueue.cshtml عند تمرير الفلتر عبر الأكشن -->
+<!-- لا تنسى تعديل الأكشن ReviewQueue ليفلتر حسب قيمة filter من الرابط -->
+
+    <table id="questionsTable" class="table table-bordered table-striped table-sm text-center align-middle" style="width: 100%; font-size: 0.85rem;">
+        <thead class="table-dark">
+            <tr>
+                <th>
+                    <input type="checkbox" id="checkAll" />
+                </th>
+                <th>#</th>
+                <th>السؤال</th>
+                <th>المنهج</th>
+                <th>المحور</th>
+                <th>المؤشر</th>
+                <th>جاهز للبنك</th>
+
+                <th>تاريخ الإضافة</th>
+                <th>التعديلات</th>
+
+
+                <th>إجراءات</th>
+            </tr>
+        </thead>
+        <tbody>
+            @{
+                int row = 1;
+            }
+            @foreach (var q in Model)
+            {
+                <tr>
+                    <td>
+                        <input type="checkbox" name="selectedQuestions" value="@q.Id" class="question-checkbox" />
+                    </td>
+                    <td>@row</td>
+                    <td class="text-nowrap">
+                        <div class="d-flex justify-content-between align-items-center">
+                            @if (!string.IsNullOrWhiteSpace(q.Title) && q.Title.Length > 15)
+                            {
+                                <button class="btn btn-sm btn-outline-dark" data-bs-toggle="modal" data-bs-target="#questionModal_@q.Id" title="عرض كامل">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            }
+                            <span class="me-2">
+                                @Html.Raw(q.IsQuantitative ? NumberHelper.ToIndicNumbersSafe(q.TitlePreview) : q.TitlePreview)
+                            </span>
+                        </div>
+
+                        <!-- Modal عرض نص السؤال الكامل -->
+                        <div class="modal fade" id="questionModal_@q.Id" tabindex="-1">
+                            <div class="modal-dialog modal-dialog-scrollable">
+                                <div class="modal-content text-end">
+                                    <div class="modal-header bg-dark text-white">
+                                        <h5 class="modal-title"><i class="fas fa-eye"></i> نص السؤال الكامل</h5>
+                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        @Html.Raw(q.IsQuantitative ? NumberHelper.ToIndicNumbersSafe(q.Title) : q.Title)
+                                    </div>
+                                    <div class="modal-footer justify-content-center">
+                                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">إغلاق</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                    <td>@q.CurriculumTitle</td>
+                    <td>@q.SectionTitle</td>
+                    <td>@q.LessonTitle</td>
+                    <td>
+                        @if (!q.IsComplete)
+                        {
+                            <span class="text-danger" title="السؤال غير مكتمل">
+                                <i class="fas fa-times-circle fa-lg"></i>
+                            </span>
+                        }
+                        else if (string.IsNullOrWhiteSpace(q.CorrectAnswer))
+                        {
+                            <span class="text-warning" title="السؤال مكتمل ولكن بدون إجابة مؤكدة">
+                                <i class="fas fa-exclamation-circle fa-lg"></i>
+                            </span>
+                        }
+                        else if (!q.IsReviewed)
+                        {
+                            <span class="text-primary" title="بانتظار مراجعة">
+                                <i class="fas fa-hourglass-half fa-lg"></i>
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="text-success" title="جاهز للظهور في بنك الأسئلة">
+                                <i class="fas fa-check-circle fa-lg"></i>
+                            </span>
+                        }
+
+
+                    <td>@q.CreatedAt.ToString("yyyy/MM/dd")</td>
+
+                    <td>
+                        <button class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#logModal_@q.Id">
+                            <i class="fas fa-history"></i> عرض
+                        </button>
+
+                        <!-- Modal سجل التعديلات -->
+                        <div class="modal fade" id="logModal_@q.Id" tabindex="-1">
+                            <div class="modal-dialog modal-dialog-scrollable">
+                                <div class="modal-content text-end">
+                                    <div class="modal-header bg-dark text-white">
+                                        <h5 class="modal-title"><i class="fas fa-clipboard-list"></i> سجل التعديلات</h5>
+                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        @if (q.AuditLogItems?.Any() == true)
+                                        {
+                                            <ul class="list-group">
+                                                @foreach (var log in q.AuditLogItems)
+                                                {
+                                                    <li class="list-group-item">
+                                                        <i class="fas fa-user-edit text-secondary me-2"></i>
+                                                        <strong>@log.UserName</strong> — @log.Action
+                                                        <br />
+                                                        <small class="text-muted">@log.PerformedAt.ToString("yyyy/MM/dd HH:mm")</small>
+                                                    </li>
+                                                }
+                                            </ul>
+                                        }
+                                        else
+                                        {
+                                            <p class="text-muted">لا يوجد سجل تعديلات لهذا السؤال بعد.</p>
+                                        }
+                                    </div>
+                                    <div class="modal-footer justify-content-center">
+                                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">إغلاق</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+
+
+                    <td>
+                        <div class="d-flex justify-content-center gap-1">
+                            <!-- زر التعديل -->
+                            <a asp-action="Edit" asp-route-id="@q.Id"
+                               class="btn btn-dark btn-sm"
+                               title="تعديل السؤال">
+                                <i class="fas fa-edit"></i>
+                            </a>
+
+                            <!-- زر التفاصيل -->
+                            <a asp-action="Details" asp-route-id="@q.Id"
+                               class="btn btn-secondary btn-sm"
+                               title="عرض التفاصيل">
+                                <i class="fas fa-eye"></i>
+                            </a>
+
+                            <!-- زر الحذف -->
+                            <button class="btn btn-outline-danger btn-sm"
+                                    title="حذف"
+                                    onclick="openDeleteModal('@q.Id', this)">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+
+                            <!-- زر المراجعة -->
+                            <a asp-action="Review" asp-route-id="@q.Id"
+                               class="btn btn-warning btn-sm"
+                               title="مراجعة السؤال">
+                                <i class="fas fa-clipboard-check"></i>
+                            </a>
+                        </div>
+                    </td>
+
+                </tr>
+                row++;
+            }
+        </tbody>
+    </table>
+
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.datatables.net/1.13.5/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.5/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+    <script>
+        $(document).ready(function () {
+            $('#questionsTable').DataTable({
+                paging: true,
+                searching: true,
+                ordering: true,
+                responsive: true,
+                order: [[6, 'desc']],
+                autoWidth: false,
+                dom: 'Bfrtip',
+                buttons: [
+                    { extend: 'copy', className: 'btn btn-secondary btn-sm', text: '<i class="fas fa-copy"></i> نسخ' },
+                    { extend: 'excel', className: 'btn btn-success btn-sm', text: '<i class="fas fa-file-excel"></i> إكسل' },
+                    { extend: 'print', className: 'btn btn-primary btn-sm', text: '<i class="fas fa-print"></i> طباعة' }
+                ],
+                language: {
+                    url: "//cdn.datatables.net/plug-ins/1.13.5/i18n/ar.json"
+                }
+            });
+        });
+
+
+                document.getElementById("checkAll")?.addEventListener("change", function () {
+            document.querySelectorAll(".question-checkbox").forEach(cb => cb.checked = this.checked);
+        });
+
+        document.getElementById("bulkApproveForm")?.addEventListener("submit", function (e) {
+            const selected = Array.from(document.querySelectorAll(".question-checkbox:checked")).map(cb => cb.value);
+            if (!selected.length) {
+                e.preventDefault();
+                alert("⚠️ لم يتم تحديد أي سؤال.");
+                return;
+            }
+            document.getElementById("selectedIds").value = selected.join(",");
+        });
+
+    </script>
+}

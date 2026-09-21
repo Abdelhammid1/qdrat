@@ -1,0 +1,205 @@
+﻿@{
+    ViewData["Title"] = "تسجيل المؤشرات المنتهية";
+}
+
+<h2 class="text-center text-qdrat mb-4">تسجيل المؤشرات المنتهية للدفعة</h2>
+
+<form asp-action="SaveAndGenerate" method="post">
+    <div class="row mb-3">
+
+        <div class="mb-3">
+            <label class="mb-1">عنوان التسجيل (اختياري):</label>
+            <input type="text" name="completionTitle" class="form-control" placeholder="مثلاً: مؤشرات الأسبوع الرابع" required oninvalid="this.setCustomValidity('الرجاء إدخال عنوان التسجيل')" oninput="setCustomValidity('')" />
+        </div>
+
+
+
+        <div class="col-md-4">
+            <label>اختر الدفعة:</label>
+            <select class="form-control" id="batchSelect" name="batchId" required>
+                <option disabled selected>-- اختر دفعة --</option>
+                @foreach (var batch in ViewBag.Batches as List<SelectListItem>)
+                {
+                    <option value="@batch.Value">@batch.Text</option>
+                }
+            </select>
+        </div>
+
+        <div class="col-md-4">
+            <label>اختر المحور:</label>
+            <select class="form-control" id="sectionSelect" name="sectionId" required>
+                <option disabled selected>-- اختر المحور --</option>
+            </select>
+        </div>
+
+        <div class="col-md-4">
+            <label>اختر المحاضرة:</label>
+            <select class="form-control" id="lectureSelect" name="lectureId" required>
+                <option disabled selected>-- اختر المحاضرة --</option>
+            </select>
+        </div>
+    </div>
+
+
+    <div class="row">
+        <div class="col-md-5">
+            <h5 class="text-center">المؤشرات المتاحة</h5>
+            <ul id="availableLessons" class="list-group min-vh-50"></ul>
+        </div>
+
+        <div class="col-md-2 text-center d-flex align-items-center justify-content-center">
+            <div>
+                <button type="button" id="addLesson" class="btn btn-qdrat mb-2">➕</button><br />
+                <button type="button" id="removeLesson" class="btn btn-danger">➖</button>
+            </div>
+        </div>
+
+        <div class="col-md-5">
+            <h5 class="text-center">المؤشرات المنتهية</h5>
+            <ul id="selectedLessons" class="list-group min-vh-50"></ul>
+        </div>
+    </div>
+
+    <input type="hidden" name="lessonIds" id="lessonIds" />
+
+    <div class="text-center mt-4">
+        <button type="submit" class="btn btn-primary">💾 حفظ وتوليد الواجب</button>
+    </div>
+</form>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script>
+        @if (TempData["Error"] != null)
+        {
+                <text>
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'حدث خطأ',
+                        html: '@TempData["Error"]',
+                        confirmButtonText: 'حسنًا'
+                    });
+                </text>
+        }
+    </script>
+
+    <script>
+        const batchSelect = document.getElementById("batchSelect");
+        const sectionSelect = document.getElementById("sectionSelect");
+        const lectureSelect = document.getElementById("lectureSelect");
+        const availableList = document.getElementById("availableLessons");
+        const selectedList = document.getElementById("selectedLessons");
+        const lessonIdsInput = document.getElementById("lessonIds");
+
+        // تغيير الدفعة: جلب المحاور وتفريغ كل شيء
+        batchSelect.addEventListener("change", async () => {
+            const batchId = batchSelect.value;
+            sectionSelect.innerHTML = `<option disabled selected>-- جاري التحميل --</option>`;
+            lectureSelect.innerHTML = `<option disabled selected>-- اختر المحاضرة --</option>`;
+            availableList.innerHTML = "";
+            selectedList.innerHTML = "";
+            lessonIdsInput.value = "";
+
+            const res = await fetch(`/Admin/AdminLessonCompletions/GetSectionsByBatch?batchId=${batchId}`);
+            const data = await res.json();
+            sectionSelect.innerHTML = `<option disabled selected>-- اختر المحور --</option>`;
+            data.forEach(s => {
+                sectionSelect.innerHTML += `<option value="${s.id}">${s.title}</option>`;
+            });
+        });
+
+        // تغيير المحور: جلب المحاضرات والمؤشرات
+        sectionSelect.addEventListener("change", async () => {
+            const batchId = batchSelect.value;
+            const sectionId = sectionSelect.value;
+
+            // جلب المحاضرات
+            lectureSelect.innerHTML = `<option disabled selected>-- جاري التحميل --</option>`;
+        const lecRes = await fetch(`/Admin/AdminLessonCompletions/GetLecturesByBatch?batchId=${batchId}`);
+                    const lectures = await lecRes.json();
+            lectureSelect.innerHTML = `<option disabled selected>-- اختر المحاضرة --</option>`;
+            lectures.forEach(l => {
+                lectureSelect.innerHTML += `<option value="${l.id}">${l.title} - ${l.date}</option>`;
+            });
+
+            // جلب المؤشرات
+            availableList.innerHTML = `<li class='list-group-item text-muted'>جارٍ التحميل...</li>`;
+            const lessonRes = await fetch(`/Admin/AdminLessonCompletions/GetLessonsBySection?sectionId=${sectionId}`);
+            const lessons = await lessonRes.json();
+
+            availableList.innerHTML = "";
+            lessons.forEach(l => {
+                const li = document.createElement("li");
+                li.className = "list-group-item";
+                li.textContent = l.title;
+                li.dataset.id = l.id;
+                availableList.appendChild(li);
+            });
+
+            selectedList.innerHTML = "";
+            lessonIdsInput.value = "";
+        });
+
+        // نقل المؤشرات
+        document.getElementById("addLesson").addEventListener("click", () => {
+            moveSelected(availableList, selectedList);
+            updateHiddenInput();
+        });
+
+        document.getElementById("removeLesson").addEventListener("click", () => {
+            moveSelected(selectedList, availableList);
+            updateHiddenInput();
+        });
+
+        // تفعيل التحديد للعناصر
+        document.querySelectorAll("ul.list-group").forEach(ul => {
+            ul.addEventListener("click", e => {
+                if (e.target && e.target.classList.contains("list-group-item")) {
+                    e.target.classList.toggle("active");
+                }
+            });
+        });
+
+        // دوال مساعدة
+        function moveSelected(fromList, toList) {
+            const selectedItems = [...fromList.querySelectorAll(".list-group-item.active")];
+            selectedItems.forEach(li => {
+                li.classList.remove("active");
+                toList.appendChild(li);
+            });
+        }
+
+        function updateHiddenInput() {
+            const ids = [...selectedList.querySelectorAll(".list-group-item")].map(li => li.dataset.id);
+            lessonIdsInput.value = ids.join(",");
+        }
+
+
+                document.querySelector("form").addEventListener("submit", function (e) {
+            const batch = batchSelect.value;
+            const section = sectionSelect.value;
+            const lecture = lectureSelect.value;
+
+            if (!batch || !section || !lecture) {
+                e.preventDefault();
+
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'تنبيه',
+                    html: 'يجب اختيار الدفعة والمحور والمحاضرة قبل الحفظ.',
+                    confirmButtonText: 'حسنًا'
+                });
+
+                return false;
+            }
+        });
+
+
+
+
+
+
+    </script>
+}
+

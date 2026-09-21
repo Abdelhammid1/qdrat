@@ -1,0 +1,753 @@
+@model QdratNew.ViewModels.InstructorPermissions.ManageBatchPermissionsVM
+
+@{
+    ViewData["Title"] = $"صلاحيات دفعة: {Model.BatchName}";
+    var features = new[]
+    {
+        QdratNew.Entities.InstructorBatchFeature.ViewBatch,
+        QdratNew.Entities.InstructorBatchFeature.Attendance,
+        QdratNew.Entities.InstructorBatchFeature.Homework,
+        QdratNew.Entities.InstructorBatchFeature.Exams
+    };
+    string FeatIcon(QdratNew.Entities.InstructorBatchFeature f) => f switch
+    {
+        QdratNew.Entities.InstructorBatchFeature.ViewBatch    => "fa-eye",
+        QdratNew.Entities.InstructorBatchFeature.Attendance   => "fa-clipboard-check",
+        QdratNew.Entities.InstructorBatchFeature.Homework     => "fa-tasks",
+        QdratNew.Entities.InstructorBatchFeature.Exams        => "fa-file-alt",
+        _ => "fa-key"
+    };
+    string FeatClass(QdratNew.Entities.InstructorBatchFeature f) => f switch
+    {
+        QdratNew.Entities.InstructorBatchFeature.ViewBatch    => "view",
+        QdratNew.Entities.InstructorBatchFeature.Attendance   => "attend",
+        QdratNew.Entities.InstructorBatchFeature.Homework     => "hw",
+        QdratNew.Entities.InstructorBatchFeature.Exams        => "exam",
+        _ => "view"
+    };
+}
+
+<div class="mngbatch-page" dir="rtl">
+
+    <section class="page-hero">
+        <div class="hero-main">
+            <div class="hero-icon"><i class="fas fa-shield-alt"></i></div>
+            <div>
+                <div class="hero-eyebrow">
+                    <a asp-area="Admin" asp-controller="Batches" asp-action="Archive" class="back-link">
+                        <i class="fas fa-arrow-right"></i> أرشيف الدفعات
+                    </a>
+                    <span class="sep">/</span>
+                    إدارة الصلاحيات
+                </div>
+                <h1>@Model.BatchName</h1>
+                <p>
+                    <i class="fas fa-book"></i> @Model.CourseName
+                    @if (Model.IsArchived)
+                    {
+                        <span class="archived-badge"><i class="fas fa-archive"></i> مؤرشفة</span>
+                    }
+                </p>
+            </div>
+        </div>
+        <div class="hero-counters">
+            <div class="hcounter blue">
+                <strong>@Model.Instructors.Count(i => i.HasAnyPermission)</strong>
+                <span>مدرب لديه صلاحية</span>
+            </div>
+            <div class="hcounter green">
+                <strong>@Model.Employees.Count(e => e.HasAnyPermission)</strong>
+                <span>مستخدم لديه صلاحية</span>
+            </div>
+        </div>
+    </section>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert-bar success"><i class="fas fa-check-circle"></i> @TempData["SuccessMessage"]</div>
+    }
+
+    <div id="toastContainer"></div>
+    @Html.AntiForgeryToken()
+
+    @* ====================== المدربون ====================== *@
+    <div class="section-header">
+        <div class="section-title">
+            <span class="section-title-icon blue"><i class="fas fa-chalkboard-teacher"></i></span>
+            المدربون
+            <span class="section-count">(@Model.Instructors.Count مدرب)</span>
+        </div>
+    </div>
+
+    @if (!Model.Instructors.Any())
+    {
+        <div class="empty-section">
+            <i class="fas fa-users-slash"></i>
+            <strong>لا يوجد مدربون مسجلون</strong>
+        </div>
+    }
+    else
+    {
+        @foreach (var instr in Model.Instructors)
+        {
+            <div class="person-card @(instr.HasAnyPermission ? "has-perms" : "")">
+                <div class="person-card-header">
+                    <div class="person-info">
+                        <div class="avatar-sm blue">@BuildAvatar(instr.FullName)</div>
+                        <div>
+                            <strong>
+                                @instr.FullName
+                                @if (!instr.IsActive) { <span class="inactive-tag">غير نشط</span> }
+                            </strong>
+                            <span>@instr.Email</span>
+                        </div>
+                    </div>
+                    <div class="bulk-actions">
+                        @if (instr.HasAllPermissions)
+                        {
+                            <form asp-action="RevokeAll" method="post" class="inline-form">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="instructorId" value="@instr.InstructorId" />
+                                <input type="hidden" name="batchId" value="@Model.BatchId" />
+                                <button type="submit" class="bulk-btn revoke"
+                                        onclick="return confirm('سيتم سحب جميع الصلاحيات من @instr.FullName لهذه الدفعة. هل تريد المتابعة؟')">
+                                    <i class="fas fa-ban"></i> سحب الكل
+                                </button>
+                            </form>
+                        }
+                        else
+                        {
+                            <form asp-action="GrantAll" method="post" class="inline-form">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="instructorId" value="@instr.InstructorId" />
+                                <input type="hidden" name="batchId" value="@Model.BatchId" />
+                                <button type="submit" class="bulk-btn grant"
+                                        onclick="return confirm('سيتم منح جميع الصلاحيات لـ @instr.FullName في هذه الدفعة. هل تريد المتابعة؟')">
+                                    <i class="fas fa-check-double"></i> منح الكل
+                                </button>
+                            </form>
+                        }
+                    </div>
+                </div>
+                <div class="features-row">
+                    @foreach (var feat in instr.FeaturePermissions)
+                    {
+                        <div class="feat-cell @(feat.IsGranted ? "granted" : "")">
+                            <div class="feat-left">
+                                <span class="feat-icon @FeatClass(feat.Feature)">
+                                    <i class="fas @FeatIcon(feat.Feature)"></i>
+                                </span>
+                                <div>
+                                    <span class="feat-label">@feat.FeatureNameAr</span>
+                                    @if (feat.IsGranted && feat.GrantedAt.HasValue)
+                                    {
+                                        <span class="feat-sub granted-text">@feat.GrantedAt.Value.ToString("yyyy/MM/dd")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="feat-sub">لا توجد صلاحية</span>
+                                    }
+                                </div>
+                            </div>
+                            <label class="tog">
+                                <input type="checkbox"
+                                       class="perm-toggle instr-toggle"
+                                       @(feat.IsGranted ? "checked" : "")
+                                       data-instructor-id="@instr.InstructorId"
+                                       data-batch-id="@Model.BatchId"
+                                       data-feature="@((int)feat.Feature)" />
+                                <span class="tog-slider"></span>
+                            </label>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    }
+
+    @* ====================== المستخدمون (موظف / أدمن / سوبر أدمن) ====================== *@
+    <div class="section-header">
+        <div class="section-title">
+            <span class="section-title-icon green"><i class="fas fa-user-tie"></i></span>
+            المستخدمون
+            <span class="section-count">(@Model.Employees.Count مستخدم — موظف / أدمن / سوبر أدمن)</span>
+        </div>
+    </div>
+
+    @if (!Model.Employees.Any())
+    {
+        <div class="empty-section">
+            <i class="fas fa-user-slash"></i>
+            <strong>لا يوجد مستخدمون بهذه الأدوار</strong>
+        </div>
+    }
+    else
+    {
+        @foreach (var emp in Model.Employees)
+        {
+            <div class="person-card @(emp.HasAnyPermission ? "has-perms" : "")">
+                <div class="person-card-header">
+                    <div class="person-info">
+                        <div class="avatar-sm green">@BuildAvatar(emp.FullName)</div>
+                        <div>
+                            <strong>
+                                @emp.FullName
+                                @if (!string.IsNullOrWhiteSpace(emp.RoleName))
+                                {
+                                    var roleClass = emp.RoleName switch {
+                                        "SuperAdmin" => "role-tag superadmin",
+                                        "Admin"      => "role-tag admin",
+                                        _            => "role-tag employee"
+                                    };
+                                    <span class="@roleClass">@emp.RoleName</span>
+                                }
+                            </strong>
+                            <span>@emp.Email</span>
+                        </div>
+                    </div>
+                    <div class="bulk-actions">
+                        @if (emp.HasAllPermissions)
+                        {
+                            <form asp-action="RevokeAllEmployee" method="post" class="inline-form">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="userId" value="@emp.UserId" />
+                                <input type="hidden" name="batchId" value="@Model.BatchId" />
+                                <button type="submit" class="bulk-btn revoke"
+                                        onclick="return confirm('سيتم سحب جميع الصلاحيات من هذا المستخدم. هل تريد المتابعة؟')">
+                                    <i class="fas fa-ban"></i> سحب الكل
+                                </button>
+                            </form>
+                        }
+                        else
+                        {
+                            <form asp-action="GrantAllEmployee" method="post" class="inline-form">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="userId" value="@emp.UserId" />
+                                <input type="hidden" name="batchId" value="@Model.BatchId" />
+                                <button type="submit" class="bulk-btn grant"
+                                        onclick="return confirm('سيتم منح جميع الصلاحيات لهذا المستخدم. هل تريد المتابعة؟')">
+                                    <i class="fas fa-check-double"></i> منح الكل
+                                </button>
+                            </form>
+                        }
+                    </div>
+                </div>
+                <div class="features-row">
+                    @foreach (var feat in emp.FeaturePermissions)
+                    {
+                        <div class="feat-cell @(feat.IsGranted ? "granted" : "")">
+                            <div class="feat-left">
+                                <span class="feat-icon @FeatClass(feat.Feature)">
+                                    <i class="fas @FeatIcon(feat.Feature)"></i>
+                                </span>
+                                <div>
+                                    <span class="feat-label">@feat.FeatureNameAr</span>
+                                    @if (feat.IsGranted && feat.GrantedAt.HasValue)
+                                    {
+                                        <span class="feat-sub granted-text">@feat.GrantedAt.Value.ToString("yyyy/MM/dd")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="feat-sub">لا توجد صلاحية</span>
+                                    }
+                                </div>
+                            </div>
+                            <label class="tog">
+                                <input type="checkbox"
+                                       class="perm-toggle emp-toggle"
+                                       @(feat.IsGranted ? "checked" : "")
+                                       data-user-id="@emp.UserId"
+                                       data-batch-id="@Model.BatchId"
+                                       data-feature="@((int)feat.Feature)" />
+                                <span class="tog-slider"></span>
+                            </label>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    }
+
+</div>
+
+@functions {
+    string BuildAvatar(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "م";
+        var parts = name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2) return (parts[0][0].ToString() + parts[1][0].ToString()).ToUpper();
+        return name.Trim().Substring(0, Math.Min(2, name.Trim().Length)).ToUpper();
+    }
+}
+
+<style>
+    .mngbatch-page {
+        --font: 'Cairo','Tahoma',sans-serif;
+        --ink: #0d1117; --ink-3: #374151; --mute: #6b7280; --mute-2: #9ca3af;
+        --bg: #f4f6fb; --surface: #fff; --border: #e5e8f0; --bg-2: #eef1f8;
+        --blue: #2563eb; --blue-lt: #dbeafe; --blue-dk: #1e3a8a;
+        --green: #059669; --green-lt: #d1fae5; --green-dk: #064e3b;
+        --red: #dc2626; --red-lt: #fee2e2; --red-dk: #7f1d1d;
+        --purple: #7c3aed; --purple-lt: #ede9fe; --purple-dk: #3b0764;
+        --amber: #d97706; --amber-lt: #fef3c7; --amber-dk: #78350f;
+        --radius: 14px; --radius-lg: 22px;
+        --shadow: 0 2px 16px rgba(13,17,23,.07); --shadow-sm: 0 1px 6px rgba(13,17,23,.05);
+        background: var(--bg); min-height: 100vh; padding: 24px;
+        color: var(--ink); font-family: var(--font);
+    }
+    .mngbatch-page * { box-sizing: border-box; }
+    .mngbatch-page a { text-decoration: none; }
+
+    /* Hero */
+    .page-hero {
+        background: linear-gradient(135deg, #0d1117, #172554);
+        color: #fff; border-radius: var(--radius-lg); padding: 24px;
+        display: flex; justify-content: space-between; align-items: center;
+        gap: 18px; margin-bottom: 14px; box-shadow: var(--shadow);
+    }
+    .hero-main { display: flex; align-items: center; gap: 16px; }
+    .hero-icon {
+        width: 58px; height: 58px; border-radius: 18px;
+        background: rgba(255,255,255,.10); border: 1px solid rgba(255,255,255,.12);
+        display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0;
+    }
+    .hero-eyebrow { color: #93c5fd; font-size: 12px; font-weight: 900; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+    .back-link { color: #93c5fd; } .back-link:hover { color: #fff; }
+    .sep { color: rgba(255,255,255,.3); }
+    .page-hero h1 { margin: 0; font-size: 22px; font-weight: 900; }
+    .page-hero p { margin: 6px 0 0; color: rgba(255,255,255,.72); font-size: 12.5px; display: flex; align-items: center; gap: 8px; }
+    .archived-badge {
+        background: rgba(217,119,6,.25); color: #fcd34d;
+        border: 1px solid rgba(217,119,6,.30); border-radius: 999px;
+        padding: 2px 9px; font-size: 11px; font-weight: 900;
+        display: inline-flex; align-items: center; gap: 5px;
+    }
+    .hero-counters { display: flex; gap: 12px; flex-shrink: 0; }
+    .hcounter {
+        background: rgba(255,255,255,.10); border: 1px solid rgba(255,255,255,.15);
+        border-radius: 14px; padding: 12px 18px; text-align: center;
+    }
+    .hcounter strong { display: block; font-size: 24px; font-weight: 900; }
+    .hcounter span { display: block; font-size: 11px; color: rgba(255,255,255,.70); margin-top: 3px; font-weight: 700; }
+
+    /* Alert */
+    .alert-bar { border-radius: var(--radius); padding: 12px 16px; margin-bottom: 14px; display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 800; }
+    .alert-bar.success { background: var(--green-lt); color: var(--green-dk); border: 1px solid rgba(5,150,105,.20); }
+
+    /* Section Header */
+    .section-header {
+        display: flex; align-items: center; justify-content: space-between;
+        margin: 18px 0 10px; gap: 12px;
+    }
+    .section-title {
+        display: flex; align-items: center; gap: 10px;
+        font-size: 16px; font-weight: 900; color: var(--ink);
+    }
+    .section-title-icon {
+        width: 36px; height: 36px; border-radius: 12px;
+        display: flex; align-items: center; justify-content: center; font-size: 15px;
+    }
+    .section-title-icon.blue { background: var(--blue-lt); color: var(--blue-dk); }
+    .section-title-icon.green { background: var(--green-lt); color: var(--green-dk); }
+    .section-count { color: var(--mute); font-size: 13px; font-weight: 700; }
+
+    /* Person Card */
+    .person-card {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius-lg); margin-bottom: 10px; box-shadow: var(--shadow-sm);
+        overflow: hidden; transition: .15s;
+    }
+    .person-card.has-perms { border-color: rgba(37,99,235,.22); }
+    .person-card-header {
+        padding: 14px 18px; border-bottom: 1px solid var(--border);
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        background: linear-gradient(180deg,#fff,#f8fafc);
+    }
+    .person-info { display: flex; align-items: center; gap: 12px; }
+    .avatar-sm {
+        width: 40px; height: 40px; border-radius: 13px; flex-shrink: 0;
+        color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 900;
+    }
+    .avatar-sm.blue { background: linear-gradient(135deg,var(--blue-dk),var(--blue)); }
+    .avatar-sm.green { background: linear-gradient(135deg,var(--green-dk),var(--green)); }
+    .person-info strong { display: block; color: var(--ink); font-size: 13px; font-weight: 900; }
+    .person-info span { display: block; color: var(--mute); font-size: 11px; margin-top: 2px; }
+    .inactive-tag {
+        background: var(--red-lt); color: var(--red-dk);
+        border: 1px solid rgba(220,38,38,.18); border-radius: 999px;
+        padding: 2px 7px; font-size: 10px; font-weight: 900; margin-right: 6px;
+    }
+    .role-tag {
+        display: inline-block; border-radius: 999px;
+        padding: 2px 8px; font-size: 10px; font-weight: 900;
+        margin-right: 5px; vertical-align: middle;
+    }
+    .role-tag.superadmin { background: #fef3c7; color: #78350f; border: 1px solid rgba(217,119,6,.20); }
+    .role-tag.admin      { background: var(--blue-lt); color: var(--blue-dk); border: 1px solid rgba(37,99,235,.18); }
+    .role-tag.employee   { background: var(--green-lt); color: var(--green-dk); border: 1px solid rgba(5,150,105,.18); }
+
+    .bulk-actions { display: flex; gap: 8px; }
+    .bulk-btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        border: none; border-radius: 10px; padding: 7px 12px;
+        font-family: var(--font); font-size: 11.5px; font-weight: 900; cursor: pointer; transition: .15s;
+    }
+    .bulk-btn.grant { background: var(--green); color: #fff; }
+    .bulk-btn.grant:hover { background: var(--green-dk); }
+    .bulk-btn.revoke { background: var(--red-lt); color: var(--red-dk); border: 1px solid rgba(220,38,38,.20); }
+    .bulk-btn.revoke:hover { background: var(--red); color: #fff; }
+    .inline-form { display: inline-flex; margin: 0; }
+
+    /* Features Row */
+    .features-row {
+        display: grid; grid-template-columns: repeat(4,1fr); gap: 0;
+    }
+    .feat-cell {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 10px; padding: 13px 16px;
+        border-left: 1px solid var(--border);
+        background: #fff; transition: background .15s;
+    }
+    .feat-cell:last-child { border-left: none; }
+    .feat-cell.granted { background: #f0fdf4; }
+    .feat-left { display: flex; align-items: center; gap: 9px; min-width: 0; }
+    .feat-icon {
+        width: 34px; height: 34px; border-radius: 11px; flex-shrink: 0;
+        display: inline-flex; align-items: center; justify-content: center; font-size: 14px;
+    }
+    .feat-icon.view   { background: var(--blue-lt);   color: var(--blue-dk); }
+    .feat-icon.attend { background: var(--green-lt);  color: var(--green-dk); }
+    .feat-icon.hw     { background: var(--amber-lt);  color: var(--amber-dk); }
+    .feat-icon.exam   { background: var(--purple-lt); color: var(--purple-dk); }
+    .feat-label { display: block; color: var(--ink); font-size: 11.5px; font-weight: 900; }
+    .feat-sub { display: block; color: var(--mute-2); font-size: 10px; font-weight: 700; margin-top: 2px; }
+    .feat-sub.granted-text { color: var(--green-dk); }
+
+    /* Toggle */
+    .tog { position: relative; flex-shrink: 0; cursor: pointer; }
+    .tog input { opacity: 0; width: 0; height: 0; }
+    .tog-slider {
+        display: block; width: 42px; height: 22px; border-radius: 999px;
+        background: #d1d5db; transition: .25s; position: relative;
+    }
+    .tog-slider::before {
+        content: ''; position: absolute; left: 3px; top: 2px;
+        width: 18px; height: 18px; border-radius: 50%; background: #fff;
+        transition: .25s; box-shadow: 0 1px 4px rgba(0,0,0,.20);
+    }
+    .tog input:checked + .tog-slider { background: var(--green); }
+    .tog input:checked + .tog-slider::before { left: 21px; }
+
+    /* Empty */
+    .empty-section {
+        background: var(--surface); border: 1px dashed var(--border);
+        border-radius: var(--radius-lg); padding: 32px 20px; text-align: center;
+        color: var(--mute); margin-bottom: 14px;
+    }
+    .empty-section i { font-size: 28px; color: var(--mute-2); margin-bottom: 8px; display: block; }
+    .empty-section strong { display: block; color: var(--ink); font-size: 14px; font-weight: 900; margin-bottom: 3px; }
+
+    /* Toast */
+    #toastContainer { position: fixed; bottom: 20px; left: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
+    .toast {
+        color: #fff; border-radius: 12px; padding: 10px 16px; font-size: 13px; font-weight: 800;
+        display: flex; align-items: center; gap: 8px; animation: slideUp .25s ease; box-shadow: var(--shadow);
+    }
+    .toast.success { background: var(--green-dk); }
+    .toast.error { background: var(--red-dk); }
+    @@keyframes slideUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+
+    @@media (max-width: 900px) {
+        .features-row { grid-template-columns: repeat(2,1fr); }
+        .feat-cell { border-bottom: 1px solid var(--border); border-left: none; }
+        .hero-counters { display: none; }
+        .page-hero { flex-direction: column; align-items: flex-start; }
+    }
+    @@media (max-width: 600px) {
+        .features-row { grid-template-columns: 1fr; }
+    }
+</style>
+
+@* ====================== المدربون ====================== *@
+<div class="section-header">
+    <div class="section-title">
+        <span class="section-title-icon blue"><i class="fas fa-chalkboard-teacher"></i></span>
+        المدربون
+        <span class="section-count">(@Model.Instructors.Count مدرب)</span>
+    </div>
+</div>
+
+@if (!Model.Instructors.Any())
+{
+    <div class="empty-section">
+        <i class="fas fa-users-slash"></i>
+        <strong>لا يوجد مدربون مسجلون</strong>
+    </div>
+}
+else
+{
+    @foreach (var instr in Model.Instructors)
+    {
+        <div class="person-card @(instr.HasAnyPermission ? "has-perms" : "")">
+            <div class="person-card-header">
+                <div class="person-info">
+                    <div class="avatar-sm blue">@BuildAvatar(instr.FullName)</div>
+                    <div>
+                        <strong>
+                            @instr.FullName
+                            @if (!instr.IsActive) { <span class="inactive-tag">غير نشط</span> }
+                        </strong>
+                        <span>@instr.Email</span>
+                    </div>
+                </div>
+                <div class="bulk-actions">
+                    @if (instr.HasAllPermissions)
+                    {
+                        <form asp-action="RevokeAll" method="post" class="inline-form">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="instructorId" value="@instr.InstructorId" />
+                            <input type="hidden" name="batchId" value="@Model.BatchId" />
+                            <button type="submit" class="bulk-btn revoke"
+                                    onclick="return confirm('سيتم سحب جميع الصلاحيات من @instr.FullName لهذه الدفعة. هل تريد المتابعة؟')">
+                                <i class="fas fa-ban"></i> سحب الكل
+                            </button>
+                        </form>
+                    }
+                    else
+                    {
+                        <form asp-action="GrantAll" method="post" class="inline-form">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="instructorId" value="@instr.InstructorId" />
+                            <input type="hidden" name="batchId" value="@Model.BatchId" />
+                            <button type="submit" class="bulk-btn grant"
+                                    onclick="return confirm('سيتم منح جميع الصلاحيات لـ @instr.FullName في هذه الدفعة. هل تريد المتابعة؟')">
+                                <i class="fas fa-check-double"></i> منح الكل
+                            </button>
+                        </form>
+                    }
+                </div>
+            </div>
+            <div class="features-row">
+                @foreach (var feat in instr.FeaturePermissions)
+                {
+                    <div class="feat-cell @(feat.IsGranted ? "granted" : "")">
+                        <div class="feat-left">
+                            <span class="feat-icon @FeatClass(feat.Feature)">
+                                <i class="fas @FeatIcon(feat.Feature)"></i>
+                            </span>
+                            <div>
+                                <span class="feat-label">@feat.FeatureNameAr</span>
+                                @if (feat.IsGranted && feat.GrantedAt.HasValue)
+                                {
+                                    <span class="feat-sub granted-text">@feat.GrantedAt.Value.ToString("yyyy/MM/dd")</span>
+                                }
+                                else
+                                {
+                                    <span class="feat-sub">لا توجد صلاحية</span>
+                                }
+                            </div>
+                        </div>
+                        <label class="tog">
+                            <input type="checkbox"
+                                   class="perm-toggle instr-toggle"
+                                   @(feat.IsGranted ? "checked" : "")
+                                   data-instructor-id="@instr.InstructorId"
+                                   data-batch-id="@Model.BatchId"
+                                   data-feature="@((int)feat.Feature)" />
+                            <span class="tog-slider"></span>
+                        </label>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+}
+
+@* ====================== المستخدمون (موظف / أدمن / سوبر أدمن) ====================== *@
+<div class="section-header">
+    <div class="section-title">
+        <span class="section-title-icon green"><i class="fas fa-user-tie"></i></span>
+        المستخدمون
+        <span class="section-count">(@Model.Employees.Count مستخدم — موظف / أدمن / سوبر أدمن)</span>
+    </div>
+</div>
+
+@if (!Model.Employees.Any())
+{
+    <div class="empty-section">
+        <i class="fas fa-user-slash"></i>
+        <strong>لا يوجد موظفون مسجلون</strong>
+    </div>
+}
+else
+{
+    @foreach (var emp in Model.Employees)
+    {
+        <div class="person-card @(emp.HasAnyPermission ? "has-perms" : "")">
+            <div class="person-card-header">
+                <div class="person-info">
+                    <div class="avatar-sm green">@BuildAvatar(emp.FullName)</div>
+                    <div>
+                        <strong>
+                            @emp.FullName
+                            @if (!string.IsNullOrWhiteSpace(emp.RoleName))
+                            {
+                                var roleClass = emp.RoleName switch {
+                                    "SuperAdmin" => "role-tag superadmin",
+                                    "Admin"      => "role-tag admin",
+                                    _            => "role-tag employee"
+                                };
+                                <span class="@roleClass">@emp.RoleName</span>
+                            }
+                        </strong>
+                        <span>@emp.Email</span>
+                    </div>
+                </div>
+                <div class="bulk-actions">
+                    @if (emp.HasAllPermissions)
+                    {
+                        <form asp-action="RevokeAllEmployee" method="post" class="inline-form">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="userId" value="@emp.UserId" />
+                            <input type="hidden" name="batchId" value="@Model.BatchId" />
+                            <button type="submit" class="bulk-btn revoke"
+                                    onclick="return confirm('سيتم سحب جميع الصلاحيات من هذا الموظف. هل تريد المتابعة؟')">
+                                <i class="fas fa-ban"></i> سحب الكل
+                            </button>
+                        </form>
+                    }
+                    else
+                    {
+                        <form asp-action="GrantAllEmployee" method="post" class="inline-form">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="userId" value="@emp.UserId" />
+                            <input type="hidden" name="batchId" value="@Model.BatchId" />
+                            <button type="submit" class="bulk-btn grant"
+                                    onclick="return confirm('سيتم منح جميع الصلاحيات لهذا الموظف. هل تريد المتابعة؟')">
+                                <i class="fas fa-check-double"></i> منح الكل
+                            </button>
+                        </form>
+                    }
+                </div>
+            </div>
+            <div class="features-row">
+                @foreach (var feat in emp.FeaturePermissions)
+                {
+                    <div class="feat-cell @(feat.IsGranted ? "granted" : "")">
+                        <div class="feat-left">
+                            <span class="feat-icon @FeatClass(feat.Feature)">
+                                <i class="fas @FeatIcon(feat.Feature)"></i>
+                            </span>
+                            <div>
+                                <span class="feat-label">@feat.FeatureNameAr</span>
+                                @if (feat.IsGranted && feat.GrantedAt.HasValue)
+                                {
+                                    <span class="feat-sub granted-text">@feat.GrantedAt.Value.ToString("yyyy/MM/dd")</span>
+                                }
+                                else
+                                {
+                                    <span class="feat-sub">لا توجد صلاحية</span>
+                                }
+                            </div>
+                        </div>
+                        <label class="tog">
+                            <input type="checkbox"
+                                   class="perm-toggle emp-toggle"
+                                   @(feat.IsGranted ? "checked" : "")
+                                   data-user-id="@emp.UserId"
+                                   data-batch-id="@Model.BatchId"
+                                   data-feature="@((int)feat.Feature)" />
+                            <span class="tog-slider"></span>
+                        </label>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+}
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const toastContainer = document.getElementById('toastContainer');
+        const token = document.querySelector('input[name="__RequestVerificationToken"]');
+
+        function showToast(message, type) {
+            const t = document.createElement('div');
+            t.className = 'toast ' + (type || '');
+            t.innerHTML = '<i class="fas ' + (type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle') + '"></i> ' + message;
+            toastContainer.appendChild(t);
+            setTimeout(() => t.remove(), 3000);
+        }
+
+        function postJson(url, body) {
+            return fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'RequestVerificationToken': token ? token.value : ''
+                },
+                body: new URLSearchParams({ ...body, __RequestVerificationToken: token ? token.value : '' })
+            }).then(r => r.json());
+        }
+
+        // مدربون
+        document.querySelectorAll('.instr-toggle').forEach(function (tog) {
+            tog.addEventListener('change', function () {
+                const instrId = this.getAttribute('data-instructor-id');
+                const batchId = this.getAttribute('data-batch-id');
+                const feature = this.getAttribute('data-feature');
+                const isGranted = this.checked;
+                const cell = this.closest('.feat-cell');
+                const card = this.closest('.person-card');
+                const self = this;
+
+                postJson('/Admin/InstructorBatchPermissions/UpdatePermission', {
+                    instructorId: instrId, batchId, feature, isGranted
+                }).then(function (data) {
+                    if (data.success) {
+                        showToast(data.message, 'success');
+                        cell?.classList.toggle('granted', isGranted);
+                        const anyChecked = Array.from(card?.querySelectorAll('.instr-toggle') || []).some(t => t.checked);
+                        card?.classList.toggle('has-perms', anyChecked);
+                    } else {
+                        showToast(data.message, 'error');
+                        self.checked = !isGranted;
+                    }
+                }).catch(function () {
+                    showToast('حدث خطأ في الاتصال.', 'error');
+                    self.checked = !isGranted;
+                });
+            });
+        });
+
+        // موظفون
+        document.querySelectorAll('.emp-toggle').forEach(function (tog) {
+            tog.addEventListener('change', function () {
+                const userId = this.getAttribute('data-user-id');
+                const batchId = this.getAttribute('data-batch-id');
+                const feature = this.getAttribute('data-feature');
+                const isGranted = this.checked;
+                const cell = this.closest('.feat-cell');
+                const card = this.closest('.person-card');
+                const self = this;
+
+                postJson('/Admin/InstructorBatchPermissions/UpdateEmployeePermission', {
+                    userId, batchId, feature, isGranted
+                }).then(function (data) {
+                    if (data.success) {
+                        showToast(data.message, 'success');
+                        cell?.classList.toggle('granted', isGranted);
+                        const anyChecked = Array.from(card?.querySelectorAll('.emp-toggle') || []).some(t => t.checked);
+                        card?.classList.toggle('has-perms', anyChecked);
+                    } else {
+                        showToast(data.message, 'error');
+                        self.checked = !isGranted;
+                    }
+                }).catch(function () {
+                    showToast('حدث خطأ في الاتصال.', 'error');
+                    self.checked = !isGranted;
+                });
+            });
+        });
+    });
+</script>

@@ -1,0 +1,741 @@
+﻿@model QdratNew.ViewModels.Exam.ReplaceQuestionViewModel
+@using QdratNew.Helpers
+
+@{
+    ViewData["Title"] = "استبدال السؤال";
+}
+
+@functions {
+    string CleanText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "—";
+        }
+
+        var text = System.Text.RegularExpressions.Regex.Replace(value, "<.*?>", " ");
+        text = System.Net.WebUtility.HtmlDecode(text);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ").Trim();
+
+        return string.IsNullOrWhiteSpace(text) ? "—" : text;
+    }
+
+    string ShortText(string? value, int maxLength)
+    {
+        var text = CleanText(value);
+
+        if (text == "—")
+        {
+            return text;
+        }
+
+        return text.Length <= maxLength ? text : text.Substring(0, maxLength) + "...";
+    }
+
+    string GetDifficultyText(int? difficultyLevel)
+    {
+        var level = difficultyLevel ?? 0;
+
+        if (level <= 1)
+        {
+            return "سهل";
+        }
+
+        if (level == 2)
+        {
+            return "متوسط";
+        }
+
+        if (level == 3)
+        {
+            return "صعب";
+        }
+
+        return "صعب جدًا";
+    }
+
+    string GetDifficultyClass(int? difficultyLevel)
+    {
+        var level = difficultyLevel ?? 0;
+
+        if (level <= 1)
+        {
+            return "pr-badge-success";
+        }
+
+        if (level == 2)
+        {
+            return "pr-badge-warning";
+        }
+
+        return "pr-badge-danger";
+    }
+
+    string GetDifficultyIcon(int? difficultyLevel)
+    {
+        var level = difficultyLevel ?? 0;
+
+        if (level <= 1)
+        {
+            return "bi bi-check-circle";
+        }
+
+        if (level == 2)
+        {
+            return "bi bi-exclamation-circle";
+        }
+
+        return "bi bi-fire";
+    }
+}
+
+@section Styles {
+    <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet" />
+
+    <style>
+        :root {
+            --pr-bg: #f4f7fb;
+            --pr-card: #ffffff;
+            --pr-border: #dbe4ef;
+            --pr-accent: #2563eb;
+            --pr-success: #16a34a;
+            --pr-danger: #dc2626;
+            --pr-warning: #f59e0b;
+            --pr-text: #0f172a;
+            --pr-muted: #64748b;
+            --pr-radius: 14px;
+            --pr-radius-sm: 9px;
+            --pr-shadow: 0 8px 22px rgba(15, 23, 42, .06);
+            --pr-transition: .2s cubic-bezier(.4,0,.2,1);
+        }
+
+        body {
+            background: var(--pr-bg) !important;
+        }
+
+        .pr-page {
+            min-height: 100vh;
+            padding: 28px 0 60px;
+            direction: rtl;
+            font-family: 'Cairo', Arial, sans-serif;
+        }
+
+        .pr-header,
+        .pr-alert,
+        .pr-table-panel,
+        .pr-submit-panel {
+            background: #ffffff;
+            border: 1px solid var(--pr-border);
+            border-radius: var(--pr-radius);
+            box-shadow: var(--pr-shadow);
+        }
+
+        .pr-header {
+            padding: 18px 22px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .pr-header-title {
+            color: var(--pr-text);
+            font-size: 22px;
+            font-weight: 900;
+            margin: 0;
+            line-height: 1.35;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+            .pr-header-title i {
+                color: var(--pr-accent);
+            }
+
+        .pr-header-sub {
+            color: #475569;
+            font-size: 13px;
+            font-weight: 700;
+            margin-top: 6px;
+            line-height: 1.8;
+        }
+
+        .btn-pr-primary,
+        .btn-pr-success,
+        .btn-pr-outline {
+            border-radius: var(--pr-radius-sm);
+            padding: 8px 18px;
+            font-size: 13px;
+            font-weight: 900;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            text-decoration: none;
+            border: 1px solid transparent;
+            transition: var(--pr-transition);
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .btn-pr-success {
+            background: var(--pr-success);
+            border-color: var(--pr-success);
+            color: #ffffff;
+        }
+
+        .btn-pr-outline {
+            background: #ffffff;
+            border-color: #cbd5e1;
+            color: #334155;
+        }
+
+        .btn-pr-success:hover {
+            color: #ffffff;
+            transform: translateY(-1px);
+            text-decoration: none;
+            filter: brightness(.96);
+        }
+
+        .btn-pr-outline:hover {
+            background: #f1f5f9;
+            color: #0f172a;
+            transform: translateY(-1px);
+            text-decoration: none;
+        }
+
+        .pr-hero {
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+            border: 1px solid var(--pr-border);
+            border-radius: var(--pr-radius);
+            padding: 24px 28px;
+            margin-bottom: 24px;
+            box-shadow: var(--pr-shadow);
+        }
+
+        .pr-hero-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            background: #eff6ff;
+            color: #1d4ed8;
+            border: 1px solid #bfdbfe;
+            border-radius: 999px;
+            padding: 5px 12px;
+            font-size: 12px;
+            font-weight: 900;
+            margin-bottom: 12px;
+        }
+
+        .pr-hero-title {
+            margin: 0;
+            color: var(--pr-text);
+            font-size: 28px;
+            font-weight: 900;
+            line-height: 1.35;
+        }
+
+        .pr-hero-sub {
+            color: #475569;
+            font-size: 13px;
+            font-weight: 700;
+            margin-top: 8px;
+            line-height: 1.8;
+        }
+
+        .pr-alert {
+            padding: 16px 18px;
+            margin-bottom: 22px;
+            border-right: 4px solid var(--pr-accent);
+        }
+
+        .pr-alert-label {
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 900;
+            margin-bottom: 6px;
+        }
+
+        .pr-alert-value {
+            color: #0f172a;
+            font-size: 14px;
+            font-weight: 900;
+            line-height: 1.9;
+        }
+
+        .pr-section-label {
+            font-size: 14px;
+            font-weight: 900;
+            color: #334155;
+            margin: 20px 0 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+            .pr-section-label::after {
+                content: "";
+                flex: 1;
+                height: 1px;
+                background: #dbe4ef;
+            }
+
+        .pr-table-panel {
+            overflow: hidden;
+        }
+
+            .pr-table-panel .table {
+                margin: 0 !important;
+                vertical-align: middle;
+                table-layout: fixed;
+            }
+
+                .pr-table-panel .table thead th {
+                    background: #f1f5f9 !important;
+                    color: #0f172a !important;
+                    border-bottom: 1px solid #cbd5e1 !important;
+                    font-size: 12px !important;
+                    font-weight: 900 !important;
+                    padding: 12px 8px !important;
+                    white-space: nowrap;
+                    text-align: center;
+                    vertical-align: middle;
+                }
+
+                .pr-table-panel .table tbody td {
+                    color: #0f172a;
+                    border-bottom: 1px solid #edf2f7;
+                    padding: 11px 8px;
+                    font-size: 13px;
+                    font-weight: 700;
+                    vertical-align: middle;
+                    text-align: center;
+                    background: #ffffff;
+                }
+
+                .pr-table-panel .table tbody tr:hover td {
+                    background: #f8fafc;
+                }
+
+        .pr-q-title {
+            max-width: 360px;
+            display: inline-block;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            font-weight: 900;
+            color: #0f172a;
+            line-height: 1.7;
+        }
+
+        .pr-short-text {
+            max-width: 150px;
+            display: inline-block;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            vertical-align: middle;
+        }
+
+        .pr-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            border-radius: 999px;
+            padding: 5px 10px;
+            font-size: 11px;
+            font-weight: 900;
+            white-space: nowrap;
+            border: 1px solid transparent;
+        }
+
+        .pr-badge-success {
+            background: #dcfce7;
+            color: #166534;
+            border-color: #86efac;
+        }
+
+        .pr-badge-warning {
+            background: #fef3c7;
+            color: #92400e;
+            border-color: #fde68a;
+        }
+
+        .pr-badge-danger {
+            background: #fee2e2;
+            color: #991b1b;
+            border-color: #fecaca;
+        }
+
+        .pr-actions {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: nowrap;
+        }
+
+        .pr-action-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            border: 1px solid transparent;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            transition: var(--pr-transition);
+            padding: 0;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+            .pr-action-btn.preview {
+                color: #0369a1;
+                background: #e0f2fe;
+                border-color: #bae6fd;
+            }
+
+            .pr-action-btn.select {
+                color: #166534;
+                background: #dcfce7;
+                border-color: #86efac;
+            }
+
+            .pr-action-btn:hover {
+                transform: translateY(-1px);
+                text-decoration: none;
+                filter: brightness(.97);
+            }
+
+        .pr-submit-panel {
+            padding: 16px 18px;
+            margin-top: 18px;
+            display: flex;
+            justify-content: flex-start;
+        }
+
+        .pr-modal .modal-content {
+            background: #ffffff !important;
+            border: 1px solid #cbd5e1;
+            border-radius: var(--pr-radius);
+            color: #0f172a;
+            overflow: hidden;
+            box-shadow: 0 24px 70px rgba(15, 23, 42, 0.25);
+        }
+
+        .pr-modal .modal-header {
+            background: #ffffff;
+            border-bottom: 1px solid #dbe4ef;
+            padding: 16px 22px;
+        }
+
+        .pr-modal .modal-title {
+            font-size: 15px;
+            font-weight: 900;
+            color: #0f172a;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+            .pr-modal .modal-title i {
+                color: var(--pr-accent);
+            }
+
+        .pr-modal .modal-body {
+            background: #f8fafc !important;
+            padding: 22px !important;
+            min-height: 220px;
+        }
+
+        .pr-empty {
+            text-align: center;
+            color: #64748b;
+            font-weight: 800;
+            padding: 40px 20px;
+        }
+
+        .dataTables_wrapper {
+            padding: 16px;
+        }
+
+            .dataTables_wrapper .dataTables_filter label,
+            .dataTables_wrapper .dataTables_length label,
+            .dataTables_wrapper .dataTables_info {
+                color: #334155 !important;
+                font-size: 13px !important;
+                font-weight: 800 !important;
+            }
+
+            .dataTables_wrapper .dataTables_filter input,
+            .dataTables_wrapper .dataTables_length select {
+                background: #ffffff !important;
+                border: 1px solid #94a3b8 !important;
+                color: #0f172a !important;
+                border-radius: 8px !important;
+                font-size: 13px !important;
+                font-weight: 700 !important;
+                padding: 5px 10px;
+            }
+
+            .dataTables_wrapper .dataTables_paginate .paginate_button {
+                background: #ffffff !important;
+                border: 1px solid #cbd5e1 !important;
+                color: #334155 !important;
+                font-weight: 800 !important;
+                border-radius: 7px !important;
+                margin: 0 2px;
+                font-size: 12px;
+                padding: 4px 10px !important;
+            }
+
+                .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+                .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+                    background: var(--pr-accent) !important;
+                    border-color: var(--pr-accent) !important;
+                    color: #ffffff !important;
+                }
+
+        @@media (max-width: 1200px) {
+            .pr-table-panel .table {
+                table-layout: auto;
+            }
+        }
+
+        @@media (max-width: 768px) {
+            .pr-page {
+                padding: 18px 0 40px;
+            }
+
+            .pr-hero {
+                padding: 20px;
+            }
+
+            .pr-hero-title {
+                font-size: 23px;
+            }
+
+            .btn-pr-outline,
+            .btn-pr-success {
+                width: 100%;
+            }
+        }
+    </style>
+}
+
+<div class="pr-page container-fluid px-4" dir="rtl">
+
+    <div class="pr-header">
+        <div>
+            <h1 class="pr-header-title">
+                <i class="bi bi-arrow-repeat"></i>
+                استبدال السؤال في الاختبار
+            </h1>
+
+            <div class="pr-header-sub">
+                اختر سؤالًا بديلًا مناسبًا من بنك الأسئلة لنفس الاختبار.
+            </div>
+        </div>
+
+        <div>
+            <a asp-action="Review"
+               asp-route-id="@Model.ExamId"
+               class="btn-pr-outline">
+                <i class="bi bi-arrow-right"></i>
+                عودة إلى مراجعة الاختبار
+            </a>
+        </div>
+    </div>
+
+    <div class="pr-hero">
+        <div class="pr-hero-label">
+            <i class="bi bi-question-circle"></i>
+            السؤال الحالي
+        </div>
+
+        <h2 class="pr-hero-title">استبدال سؤال داخل اختبار مؤشر الأداء</h2>
+
+        <div class="pr-hero-sub">
+            اختر سؤالًا جديدًا من القائمة التالية ليحل محل السؤال الحالي.
+        </div>
+    </div>
+
+    <div class="pr-alert">
+        <div class="pr-alert-label">السؤال الحالي</div>
+        <div class="pr-alert-value">@Html.Raw(NumberHelper.ToIndicNumbersSafe(Model.OldQuestionTitle))</div>
+    </div>
+
+    <form asp-action="ReplaceQuestionPage" method="post">
+        @Html.AntiForgeryToken()
+
+        <input type="hidden" asp-for="ExamId" />
+        <input type="hidden" asp-for="SectionId" />
+        <input type="hidden" asp-for="OldQuestionId" />
+
+        <div class="pr-section-label">الأسئلة البديلة المتاحة</div>
+
+        <div class="pr-table-panel">
+            <div class="table-responsive">
+                <table id="questionsTable" class="table table-hover align-middle text-center w-100">
+                    <thead>
+                        <tr>
+                            <th style="min-width:360px;">نص السؤال</th>
+                            <th style="width:120px;">الصعوبة</th>
+                            <th style="width:160px;">الإجابة الصحيحة</th>
+                            <th style="min-width:180px;">ملاحظات داخلية</th>
+                            <th style="width:110px;">إجراءات</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @foreach (var q in Model.AvailableQuestions)
+                        {
+                            var fullTitle = CleanText(q.Title);
+                            var shortTitle = ShortText(q.Title, 70);
+
+                            var correctAnswer = CleanText(q.CorrectAnswer);
+                            var shortCorrectAnswer = ShortText(q.CorrectAnswer, 22);
+
+                            var internalNote = CleanText(q.InternalNote);
+                            var shortInternalNote = ShortText(q.InternalNote, 30);
+
+                            var difficultyText = GetDifficultyText(q.Difficulty);
+                            var difficultyClass = GetDifficultyClass(q.Difficulty);
+                            var difficultyIcon = GetDifficultyIcon(q.Difficulty);
+
+                            <tr>
+                                <td class="text-end">
+                                    <span class="pr-q-title" title="@fullTitle">
+                                        @Html.Raw(NumberHelper.ToIndicNumbersSafe(shortTitle))
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="pr-badge @difficultyClass">
+                                        <i class="@difficultyIcon"></i>
+                                        @difficultyText
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="pr-short-text" title="@correctAnswer">
+                                        @Html.Raw(NumberHelper.ToIndicNumbersSafe(shortCorrectAnswer))
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="pr-short-text" title="@internalNote">
+                                        @shortInternalNote
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <div class="pr-actions">
+                                        <button type="button"
+                                                class="pr-action-btn preview"
+                                                onclick="previewQuestion('@q.Id')"
+                                                title="معاينة">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+
+                                        <button type="submit"
+                                                name="NewQuestionId"
+                                                value="@q.Id"
+                                                class="pr-action-btn select"
+                                                title="اختيار">
+                                            <i class="bi bi-check2-circle"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="pr-submit-panel">
+            <a asp-action="Review"
+               asp-route-id="@Model.ExamId"
+               class="btn-pr-outline">
+                <i class="bi bi-arrow-right"></i>
+                عودة إلى مراجعة الاختبار
+            </a>
+        </div>
+    </form>
+</div>
+
+<div class="modal fade pr-modal" id="previewModal" tabindex="-1" aria-hidden="true" dir="rtl">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content text-end">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-eye"></i>
+                    معاينة السؤال
+                </h5>
+
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body" id="previewContent">
+                <div class="pr-empty">جارٍ التحميل...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+    <script>
+        $(document).ready(function () {
+            $('#questionsTable').DataTable({
+                language: {
+                    url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json"
+                },
+                pageLength: 10,
+                order: [[1, "asc"]],
+                columnDefs: [
+                    { orderable: false, targets: [4] }
+                ]
+            });
+        });
+
+        function previewQuestion(id) {
+            const modal = new bootstrap.Modal(document.getElementById("previewModal"));
+            const body = document.getElementById("previewContent");
+
+            body.innerHTML = "<div class='pr-empty'>جارٍ التحميل...</div>";
+            modal.show();
+
+            fetch(`/Admin/PerformanceIndicatorExams/PreviewQuestion/${id}`)
+                .then(async response => {
+                    if (!response.ok) {
+                        throw new Error("PREVIEW_FAILED");
+                    }
+
+                    const html = await response.text();
+
+                    if (html.includes("System.InvalidOperationException") || html.includes("DeveloperExceptionPage")) {
+                        throw new Error("SERVER_EXCEPTION");
+                    }
+
+                    return html;
+                })
+                .then(html => {
+                    body.innerHTML = html;
+                })
+                .catch(() => {
+                    body.innerHTML = "<div class='pr-empty text-danger'>حدث خطأ أثناء تحميل المعاينة.</div>";
+                });
+        }
+    </script>
+}

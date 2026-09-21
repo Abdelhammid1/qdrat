@@ -1,0 +1,1664 @@
+﻿@model QdratNew.ViewModels.Admin.Analytics.DecisionMetricDetailsVM
+
+@{
+    ViewData["Title"] = Model.Title + " — تحليل القرار";
+    Layout = "~/Areas/Admin/Views/Shared/_AdminLayout.cshtml";
+
+    var themeAccent = Model.Theme switch
+    {
+        "primary" => "#4f46e5",
+        "info" => "#0284c7",
+        "warning" => "#d97706",
+        "danger" => "#dc2626",
+        "success" => "#16a34a",
+        "violet" => "#7c3aed",
+        _ => "#4f46e5"
+    };
+
+    var hasSelectableRows = Model.Rows.Any(r =>
+        r.StudentId.HasValue ||
+        r.BatchId.HasValue ||
+        r.InstructorId.HasValue ||
+        r.LessonId.HasValue);
+    var tableGridColumns = hasSelectableRows
+        ? "44px 3fr 2fr 2fr 1fr 2fr 1fr 2fr"
+        : "3fr 2fr 2fr 1fr 2fr 1fr 2fr";
+}
+
+@functions {
+    private static double ExtractMetricNumber(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return 0;
+        }
+
+        var match = System.Text.RegularExpressions.Regex.Match(value, @"-?\d+(?:[\.,]\d+)?");
+        if (!match.Success)
+        {
+            return 0;
+        }
+
+        var normalized = match.Value.Replace(',', '.');
+        return double.TryParse(
+            normalized,
+            System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var number)
+            ? number
+            : 0;
+    }
+}
+
+@section Styles {
+    <style>
+        :root {
+            --metric-accent: @themeAccent;
+            --metric-page-bg: #f6f8fc;
+            --metric-card-bg: #ffffff;
+            --metric-soft-bg: #f8fafc;
+            --metric-border: #e2e8f0;
+            --metric-border-strong: #cbd5e1;
+            --metric-title: #0f172a;
+            --metric-body: #334155;
+            --metric-muted: #64748b;
+            --metric-muted-light: #94a3b8;
+            --metric-shadow: 0 14px 35px rgba(15, 23, 42, .08);
+            --metric-shadow-soft: 0 8px 22px rgba(15, 23, 42, .06);
+        }
+
+        body {
+            background: var(--metric-page-bg);
+            color: var(--metric-body);
+        }
+
+        .metric-page {
+            background: radial-gradient(circle at top left, rgba(79, 70, 229, .08), transparent 28rem), radial-gradient(circle at bottom right, rgba(14, 165, 233, .08), transparent 26rem), var(--metric-page-bg);
+            min-height: calc(100vh - 80px);
+        }
+
+        .metric-breadcrumb {
+            color: var(--metric-muted);
+        }
+
+            .metric-breadcrumb a {
+                color: var(--metric-muted);
+            }
+
+                .metric-breadcrumb a:hover {
+                    color: var(--metric-accent);
+                }
+
+        .metric-tabs {
+            background: #ffffff;
+            border: 1px solid var(--metric-border);
+            box-shadow: var(--metric-shadow-soft);
+        }
+
+        .metric-nav-btn {
+            transition: all .2s ease;
+            border-radius: .65rem;
+            color: var(--metric-muted);
+        }
+
+            .metric-nav-btn:hover {
+                background: #f1f5f9;
+                color: var(--metric-title);
+            }
+
+            .metric-nav-btn.active {
+                background: rgba(79, 70, 229, .10);
+                color: var(--metric-accent);
+                box-shadow: inset 0 0 0 1px rgba(79, 70, 229, .16);
+            }
+
+        .metric-hero-card {
+            background: linear-gradient(135deg, rgba(255,255,255,.98) 0%, rgba(248,250,252,.96) 100%);
+            border: 1px solid rgba(79, 70, 229, .18);
+            border-radius: 1.25rem;
+            position: relative;
+            overflow: hidden;
+            box-shadow: var(--metric-shadow);
+        }
+
+            .metric-hero-card::before {
+                content: '';
+                position: absolute;
+                top: -3rem;
+                left: -3rem;
+                width: 10rem;
+                height: 10rem;
+                border-radius: 50%;
+                background: var(--metric-accent);
+                opacity: .10;
+                pointer-events: none;
+            }
+
+            .metric-hero-card::after {
+                content: '';
+                position: absolute;
+                bottom: -4rem;
+                right: -4rem;
+                width: 12rem;
+                height: 12rem;
+                border-radius: 50%;
+                background: #0ea5e9;
+                opacity: .07;
+                pointer-events: none;
+            }
+
+        .metric-card-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .kpi-card {
+            background: #ffffff;
+            border-radius: 1rem;
+            border: 1px solid var(--metric-border);
+            box-shadow: var(--metric-shadow-soft);
+            transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+        }
+
+            .kpi-card:hover {
+                transform: translateY(-2px);
+                box-shadow: var(--metric-shadow);
+                border-color: var(--metric-border-strong);
+            }
+
+        .kpi-icon {
+            width: 2.1rem;
+            height: 2.1rem;
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+        }
+
+        .decision-panel {
+            background: #ffffff;
+            border: 1px solid var(--metric-border);
+            border-radius: 1.25rem;
+            box-shadow: var(--metric-shadow);
+        }
+
+        .decision-box {
+            background: #f8fafc;
+            border: 1px solid var(--metric-border);
+            border-radius: 1rem;
+        }
+
+        .recommended-box {
+            background: linear-gradient(135deg, rgba(79, 70, 229, .08), rgba(14, 165, 233, .05));
+            border: 1px solid rgba(79, 70, 229, .18);
+            border-radius: 1rem;
+        }
+
+        .chart-section {
+            background: #ffffff;
+            border: 1px solid var(--metric-border);
+            border-radius: 1.25rem;
+            padding: 1.25rem;
+            box-shadow: var(--metric-shadow);
+        }
+
+        canvas.metric-chart {
+            display: block;
+            width: 100%;
+            height: 220px;
+            max-height: 220px;
+        }
+
+        .metric-table-wrapper {
+            border: 1px solid var(--metric-border);
+            background: #ffffff;
+            border-radius: 1.25rem;
+            box-shadow: var(--metric-shadow);
+        }
+
+        .data-table-header {
+            background: #f8fafc;
+            font-size: .75rem;
+            color: var(--metric-muted);
+            font-weight: 700;
+            border-bottom: 1px solid var(--metric-border);
+        }
+
+        .row-card {
+            transition: background .15s ease, transform .15s ease;
+            background: #ffffff;
+        }
+
+            .row-card:hover {
+                background: #f8fafc;
+            }
+
+            .row-card.row-selected {
+                background: rgba(79, 70, 229, .08);
+            }
+
+        .metric-checkbox {
+            width: 1rem;
+            height: 1rem;
+            accent-color: var(--metric-accent);
+            cursor: pointer;
+        }
+
+        .status-badge {
+            font-size: .72rem;
+            padding: .35rem .75rem;
+            border-radius: 9999px;
+            font-weight: 800;
+            background: #ffffff;
+            border: 1px solid var(--metric-border);
+            color: var(--metric-body);
+            box-shadow: 0 6px 16px rgba(15, 23, 42, .05);
+        }
+
+        .risk-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+            padding: .28rem .65rem;
+            border-radius: 9999px;
+            font-size: .72rem;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+            .risk-badge::before {
+                content: '';
+                display: inline-block;
+                width: .42rem;
+                height: .42rem;
+                border-radius: 50%;
+                background: currentColor;
+            }
+
+        .risk-high {
+            background: #fef2f2;
+            color: #dc2626;
+            border: 1px solid #fecaca;
+        }
+
+        .risk-med {
+            background: #fffbeb;
+            color: #d97706;
+            border: 1px solid #fde68a;
+        }
+
+        .risk-low {
+            background: #f0fdf4;
+            color: #16a34a;
+            border: 1px solid #bbf7d0;
+        }
+
+        .risk-ok {
+            background: #f8fafc;
+            color: #64748b;
+            border: 1px solid #e2e8f0;
+        }
+
+        .gauge-value {
+            font-size: 3rem;
+            font-weight: 900;
+            color: var(--metric-accent);
+            line-height: 1;
+        }
+
+        .metric-title {
+            color: var(--metric-title);
+        }
+
+        .metric-text {
+            color: var(--metric-body);
+        }
+
+        .metric-muted {
+            color: var(--metric-muted);
+        }
+
+        .metric-table-count {
+            background: #f1f5f9;
+            color: var(--metric-muted);
+            font-weight: 700;
+            border: 1px solid var(--metric-border);
+        }
+
+        .export-btn {
+            border: 1px solid var(--metric-border);
+            background: #ffffff;
+            color: var(--metric-muted);
+            font-size: .75rem;
+            border-radius: .65rem;
+            transition: all .18s ease;
+        }
+
+            .export-btn:hover {
+                background: #f8fafc;
+                color: var(--metric-title);
+                border-color: var(--metric-border-strong);
+            }
+
+        .primary-action-btn {
+            background: var(--metric-accent);
+            border: none;
+            border-radius: .85rem;
+            padding: .75rem 1rem;
+            box-shadow: 0 12px 24px rgba(79, 70, 229, .18);
+        }
+
+            .primary-action-btn:hover {
+                filter: brightness(.95);
+            }
+
+        .row-index {
+            width: 1.85rem;
+            height: 1.85rem;
+            background: rgba(79, 70, 229, .10);
+            color: var(--metric-accent);
+            border: 1px solid rgba(79, 70, 229, .15);
+            font-size: .72rem;
+        }
+
+        .metric-bulk-footer {
+            position: fixed;
+            right: 50%;
+            bottom: 1.25rem;
+            transform: translateX(50%);
+            z-index: 1050;
+            width: min(920px, calc(100% - 2rem));
+            background: #0f172a;
+            color: #ffffff;
+            border: 1px solid rgba(255,255,255,.14);
+            border-radius: 1rem;
+            box-shadow: 0 18px 45px rgba(15, 23, 42, .28);
+            padding: .75rem;
+            display: flex;
+            align-items: center;
+            gap: .75rem;
+            flex-wrap: wrap;
+        }
+
+            .metric-bulk-footer.is-hidden {
+                display: none;
+            }
+
+        .metric-bulk-btn {
+            border: 1px solid rgba(255,255,255,.14);
+            border-radius: .75rem;
+            color: #ffffff;
+            font-size: .78rem;
+            font-weight: 800;
+            padding: .55rem .8rem;
+            background: rgba(255,255,255,.08);
+        }
+
+            .metric-bulk-btn:hover {
+                background: rgba(255,255,255,.16);
+                color: #ffffff;
+            }
+
+        .metric-bulk-primary {
+            background: var(--metric-accent);
+            border-color: transparent;
+        }
+
+        .metric-bulk-clear {
+            width: 2.15rem;
+            height: 2.15rem;
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,.18);
+            background: rgba(255,255,255,.08);
+            color: #ffffff;
+        }
+
+        .metric-modal-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 1060;
+            background: rgba(15, 23, 42, .58);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+
+            .metric-modal-overlay.open {
+                display: flex;
+            }
+
+        .metric-action-modal {
+            width: min(620px, 100%);
+            background: #ffffff;
+            border-radius: 1rem;
+            box-shadow: 0 22px 55px rgba(15, 23, 42, .30);
+            overflow: hidden;
+        }
+
+        .metric-modal-header,
+        .metric-modal-footer {
+            padding: 1rem 1.15rem;
+            border-bottom: 1px solid var(--metric-border);
+        }
+
+        .metric-modal-footer {
+            border-top: 1px solid var(--metric-border);
+            border-bottom: 0;
+            display: flex;
+            justify-content: flex-end;
+            gap: .5rem;
+        }
+
+        .metric-modal-body {
+            padding: 1rem 1.15rem;
+        }
+
+        .metric-form-control {
+            width: 100%;
+            border: 1px solid var(--metric-border);
+            border-radius: .7rem;
+            padding: .65rem .75rem;
+            font-size: .86rem;
+            color: var(--metric-title);
+            background: #ffffff;
+        }
+
+        .metric-form-control:focus {
+            outline: none;
+            border-color: var(--metric-accent);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, .12);
+        }
+
+        .metric-selected-list {
+            max-height: 150px;
+            overflow: auto;
+            border: 1px solid var(--metric-border);
+            border-radius: .75rem;
+            background: #f8fafc;
+            padding: .55rem;
+            margin-bottom: 1rem;
+        }
+
+        .metric-selected-item {
+            display: flex;
+            align-items: center;
+            gap: .45rem;
+            font-size: .78rem;
+            font-weight: 700;
+            color: var(--metric-title);
+            padding: .35rem .25rem;
+        }
+
+        @@media (max-width: 768px) {
+            .metric-value-display {
+                flex-direction: column;
+                align-items: flex-start !important;
+                gap: .75rem;
+            }
+
+            .data-table-header {
+                display: none !important;
+            }
+
+            .row-card {
+                display: block !important;
+            }
+
+                .row-card > div {
+                    margin-bottom: .65rem;
+                }
+
+                    .row-card > div:last-child {
+                        margin-bottom: 0;
+                    }
+
+            .gauge-value {
+                font-size: 2.35rem;
+            }
+        }
+    </style>
+}
+
+<div class="metric-page py-4 px-2 px-lg-3" dir="rtl">
+
+    <!-- ═══════════════════════════════════════════════════ READ-ONLY BANNER -->
+    <div class="alert alert-info d-flex align-items-center gap-2 mb-3 py-2 px-3" role="alert"
+         style="border-radius:.85rem;font-size:.86rem;">
+        <i class="bi bi-info-circle-fill flex-shrink-0"></i>
+        <span>
+            هذه الصفحة للاطلاع فقط — لاتخاذ القرار وحفظه انتقل إلى
+            <strong>مختبر القرار</strong>
+        </span>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════ BREADCRUMB -->
+    <div class="metric-breadcrumb d-flex align-items-center gap-2 mb-4 small">
+        <a asp-action="AdvancedDashboard"
+           asp-route-curriculumId="@Model.SelectedCurriculumId"
+           asp-route-batchId="@Model.SelectedBatchId"
+           asp-route-instructorId="@Model.SelectedInstructorId"
+           class="text-decoration-none d-flex align-items-center gap-1">
+            <i class="bi bi-arrow-right"></i>
+            لوحة التحليلات
+        </a>
+        <span>/</span>
+        <span style="color: var(--metric-accent);" class="fw-bold">@Model.Title</span>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════ METRIC NAV TABS -->
+    <div class="metric-tabs d-flex flex-wrap gap-1 mb-4 p-1 rounded-3">
+        @{
+            var metrics = new[]
+            {
+                ("total-batches",     "الدفعات"),
+                ("total-instructors", "المدربون"),
+                ("analyzed-students", "الطلاب"),
+                ("critical-cases",    "الحالات الحرجة"),
+                ("high-risk-lessons", "الدروس الخطرة"),
+                ("avg-exam",          "الاختبارات"),
+                ("avg-homework",      "الواجبات"),
+                ("avg-attendance",    "الحضور"),
+                };
+        }
+
+        @foreach (var (key, label) in metrics)
+        {
+            var isActive = Model.MetricKey == key;
+
+            <a asp-action="MetricDecisionDetails"
+               asp-route-metric="@key"
+               asp-route-curriculumId="@Model.SelectedCurriculumId"
+               asp-route-batchId="@Model.SelectedBatchId"
+               asp-route-instructorId="@Model.SelectedInstructorId"
+               class="metric-nav-btn px-3 py-2 text-decoration-none small fw-bold @(isActive ? "active" : "")">
+                @label
+            </a>
+        }
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════ ROW 1: HERO + KPIs -->
+    <div class="row g-3 mb-3">
+
+        <!-- Hero Metric Card -->
+        <div class="col-12 col-lg-4">
+            <div class="metric-hero-card p-4 h-100">
+                <div class="metric-card-content">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <p class="metric-muted small mb-1">@Model.Subtitle</p>
+                            <h4 class="fw-black metric-title mb-0">@Model.Title</h4>
+                        </div>
+
+                        <span class="status-badge">
+                            @{
+                                var statusColor = Model.StatusClass == "danger"
+                                ? "#dc2626"
+                                : Model.StatusClass == "warning"
+                                ? "#d97706"
+                                : "#16a34a";
+                            }
+                            <span style="color:@statusColor">⬤</span>&nbsp;@Model.Status
+                        </span>
+                    </div>
+
+                    <div class="metric-value-display d-flex align-items-center gap-3">
+                        @{
+                            bool isPercent = Model.Unit == "%";
+                            bool isParseable = double.TryParse(Model.Value, out var numVal);
+                        }
+
+                        @if (isPercent && isParseable)
+                        {
+                            <!-- SVG Gauge -->
+                            <svg viewBox="0 0 140 100" width="130" class="flex-shrink-0">
+                                @{
+                                    double pct = Math.Min(numVal / 100.0, 1.0);
+                                    double startA = Math.PI * 0.75;
+                                    double endA = Math.PI * 2.25;
+                                    double sweep = endA - startA;
+                                    double cx = 70, cy = 70, r = 52;
+
+                                    string ToXY(double angle) =>
+                                    $"{cx + r * Math.Cos(angle):F2},{cy + r * Math.Sin(angle):F2}";
+
+                                    var bg1 = ToXY(startA);
+                                    var bg2 = ToXY(endA);
+                                    var fg1 = ToXY(startA);
+                                    double fillEnd = startA + sweep * pct;
+                                    var fg2 = ToXY(fillEnd);
+                                    int larc = sweep * pct > Math.PI ? 1 : 0;
+                                }
+
+                                <path d="M @bg1 A @r @r 0 1 1 @bg2"
+                                      fill="none"
+                                      stroke="#e2e8f0"
+                                      stroke-width="10"
+                                      stroke-linecap="round" />
+
+                                <path d="M @fg1 A @r @r 0 @larc 1 @fg2"
+                                      fill="none"
+                                      stroke="@themeAccent"
+                                      stroke-width="10"
+                                      stroke-linecap="round" />
+
+                                <text x="70" y="64" text-anchor="middle" font-size="22" font-weight="900" fill="@themeAccent">@numVal</text>
+                                <text x="70" y="80" text-anchor="middle" font-size="10" fill="#64748b">من 100</text>
+                            </svg>
+                        }
+                        else
+                        {
+                            <div class="d-flex align-items-end gap-1">
+                                <span class="gauge-value">@Model.Value</span>
+
+                                @if (!string.IsNullOrEmpty(Model.Unit))
+                                {
+                                    <span class="metric-muted fs-5 mb-2">@Model.Unit</span>
+                                }
+                            </div>
+                        }
+
+                        <p class="small metric-muted lh-base mb-0">@Model.DecisionSummary</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- KPI Cards -->
+        <div class="col-12 col-lg-8">
+            <div class="row g-3 h-100">
+                @foreach (var card in Model.Cards)
+                {
+                    var ct = card.Theme switch
+                    {
+                        "primary" => "#4f46e5",
+                        "info" => "#0284c7",
+                        "warning" => "#d97706",
+                        "danger" => "#dc2626",
+                        "success" => "#16a34a",
+                        _ => "#64748b"
+                    };
+
+                    <div class="col-6 col-md-3">
+                        <div class="kpi-card p-3 h-100" style="--card-accent:@ct;">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="small metric-muted fw-semibold">@card.Label</span>
+
+                                <span class="kpi-icon rounded-3 d-flex align-items-center justify-content-center"
+                                      style="color:@ct;">
+                                    <i class="bi @card.Icon small"></i>
+                                </span>
+                            </div>
+
+                            <div class="fw-black" style="font-size:1.75rem; color:@ct;">@card.Value</div>
+                            <p class="metric-muted small mb-0 lh-sm mt-1">@card.Hint</p>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════ ROW 2: DECISION + CHARTS -->
+    <div class="row g-3 mb-3">
+
+        <!-- Decision Panel -->
+        <div class="col-12 col-lg-4">
+            <div class="decision-panel p-4 h-100 d-flex flex-column gap-3">
+                <h6 class="fw-bold metric-title mb-0">
+                    <i class="bi bi-bullseye metric-muted me-1"></i>
+                    تحليل القرار
+                </h6>
+
+                <div class="decision-box p-3">
+                    <p class="small fw-bold metric-title mb-1">الملخص التنفيذي</p>
+                    <p class="small metric-muted lh-base mb-0">@Model.DecisionExplanation</p>
+                </div>
+
+                <div class="recommended-box p-3">
+                    <p class="small fw-bold mb-1" style="color:@themeAccent;">الإجراء الموصى به</p>
+                    <p class="small metric-text lh-base mb-0">@Model.RecommendedAction</p>
+                </div>
+
+                <a asp-action="@Model.PrimaryActionName"
+                   asp-route-curriculumId="@Model.SelectedCurriculumId"
+                   asp-route-batchId="@Model.SelectedBatchId"
+                   asp-route-instructorId="@Model.SelectedInstructorId"
+                   class="primary-action-btn btn fw-bold text-white mt-auto d-flex align-items-center justify-content-center gap-2">
+                    <i class="bi bi-box-arrow-up-left small"></i>
+                    @Model.PrimaryActionText
+                </a>
+            </div>
+        </div>
+
+        <!-- Charts Panel -->
+        <div class="col-12 col-lg-8">
+            <div class="chart-section h-100">
+                <h6 class="fw-bold metric-title mb-3">
+                    <i class="bi bi-bar-chart-fill metric-muted me-1"></i>
+                    التحليل البياني
+                </h6>
+
+                <div class="row g-3">
+                    <div class="col-12 col-md-6">
+                        <p class="small metric-muted fw-semibold mb-2">توزيع المستويات</p>
+                        <canvas id="chartMain" class="metric-chart w-100" height="220"></canvas>
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                        <p class="small metric-muted fw-semibold mb-2">الاتجاه التحليلي</p>
+                        <canvas id="chartSecond" class="metric-chart w-100" height="220"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════ ROW 3: DATA TABLE -->
+    <div class="metric-table-wrapper overflow-hidden">
+
+        <!-- Table Header -->
+        <div class="d-flex align-items-center justify-content-between px-4 py-3"
+             style="border-bottom:1px solid var(--metric-border);">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-activity metric-muted small"></i>
+                <span class="fw-bold small metric-title">التفاصيل التنفيذية</span>
+
+                <span class="metric-table-count badge rounded-pill">
+                    @Model.Rows.Count سجل
+                </span>
+            </div>
+
+            <button type="button" class="export-btn btn btn-sm d-flex align-items-center gap-1" onclick="exportMetricRows(false)">
+                <i class="bi bi-download small"></i>
+                تصدير
+            </button>
+        </div>
+
+        <!-- Column Headers -->
+        <div class="data-table-header d-none d-md-grid px-4 py-2"
+             style="grid-template-columns: @tableGridColumns;">
+            @if (hasSelectableRows)
+            {
+                <div class="text-center">
+                    <input type="checkbox" id="metricSelectAll" class="metric-checkbox" aria-label="تحديد الكل" onchange="toggleMetricRows(this)">
+                </div>
+            }
+            <div>الاسم</div>
+            <div>المجموعة</div>
+            <div>المسؤول</div>
+            <div class="text-center">القيمة</div>
+            <div>معلومة إضافية</div>
+            <div class="text-center">المستوى</div>
+            <div>التوصية</div>
+        </div>
+
+        <!-- Rows -->
+        @for (int i = 0; i < Model.Rows.Count; i++)
+        {
+            var row = Model.Rows[i];
+            var riskValue = row.RiskLevel ?? "";
+
+            var riskCss =
+            riskValue.IndexOf("عالي", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            riskValue.IndexOf("حرج", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            riskValue.IndexOf("أولوية", StringComparison.OrdinalIgnoreCase) >= 0
+            ? "risk-high"
+            : riskValue.IndexOf("متوسط", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            riskValue.IndexOf("مقبول", StringComparison.OrdinalIgnoreCase) >= 0
+            ? "risk-med"
+            : riskValue.IndexOf("منخفض", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            riskValue.IndexOf("مستقر", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            riskValue.IndexOf("جيد", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            riskValue.IndexOf("ممتاز", StringComparison.OrdinalIgnoreCase) >= 0
+            ? "risk-low"
+            : "risk-ok";
+
+            var rowActionUrl = row.ActionName switch
+            {
+                "BatchPerformanceDetails" when row.BatchId.HasValue => Url.Action(row.ActionName, "Analytics", new
+                {
+                    area = "Admin",
+                    batchId = row.BatchId.Value,
+                    curriculumId = Model.SelectedCurriculumId,
+                    instructorId = Model.SelectedInstructorId
+                }),
+                "WeakLessonDetails" when row.LessonId.HasValue => Url.Action(row.ActionName, "Analytics", new
+                {
+                    area = "Admin",
+                    lessonId = row.LessonId.Value,
+                    curriculumId = Model.SelectedCurriculumId,
+                    batchId = Model.SelectedBatchId,
+                    instructorId = Model.SelectedInstructorId
+                }),
+                "InstructorPerformanceDetails" when row.InstructorId.HasValue => Url.Action(row.ActionName, "Analytics", new
+                {
+                    area = "Admin",
+                    instructorId = row.InstructorId.Value
+                }),
+                _ => null
+            };
+
+            string? rowDecisionLabUrl = null;
+            if (row.BatchId.HasValue)
+            {
+                rowDecisionLabUrl = Url.Action("RecommendationPreview", "DecisionLab", new
+                {
+                    area = "Admin",
+                    batchId = row.BatchId.Value,
+                    curriculumId = Model.SelectedCurriculumId,
+                    sourceArea = "Admin",
+                    sourceController = "Analytics",
+                    sourceAction = "MetricDecisionDetails",
+                    sourceMetric = Model.MetricKey,
+                    sourcePage = "MetricDecisionDetails",
+                    returnUrl = Url.Action("MetricDecisionDetails", "Analytics", new {
+                        area = "Admin",
+                        metric = Model.MetricKey,
+                        curriculumId = Model.SelectedCurriculumId,
+                        batchId = Model.SelectedBatchId,
+                        instructorId = Model.SelectedInstructorId
+                    })
+                });
+            }
+
+            var rowKind = row.StudentId.HasValue
+                ? "student"
+                : row.BatchId.HasValue
+                    ? "batch"
+                    : row.InstructorId.HasValue
+                        ? "instructor"
+                        : row.LessonId.HasValue
+                            ? "lesson"
+                            : "";
+
+            var rowId = row.StudentId ?? row.BatchId ?? row.InstructorId ?? row.LessonId;
+
+            <div class="row-card d-md-grid px-4 py-3"
+                 style="border-top:1px solid var(--metric-border);
+                            grid-template-columns: @tableGridColumns;
+                            align-items:center; gap:1rem;"
+                 data-row-name="@row.Name"
+                 data-primary-value="@row.PrimaryValue"
+                 data-secondary-value="@row.SecondaryValue"
+                 data-risk-level="@row.RiskLevel"
+                 data-recommendation="@row.Recommendation">
+
+                @if (hasSelectableRows)
+                {
+                    <div class="text-center">
+                        @if (rowId.HasValue)
+                        {
+                            <input type="checkbox"
+                                   class="metric-checkbox metric-row-cb"
+                                   value="@rowId.Value"
+                                   data-kind="@rowKind"
+                                   data-name="@row.Name"
+                                   data-risk="@row.RiskLevel"
+                                   data-action-url="@rowActionUrl"
+                                   onchange="onMetricSelectionChanged()"
+                                   aria-label="تحديد @row.Name">
+                        }
+                    </div>
+                }
+
+                <!-- Name -->
+                <div class="d-flex align-items-center gap-2">
+                    <span class="row-index rounded-circle d-flex align-items-center justify-content-center fw-bold small flex-shrink-0">
+                        @(i + 1)
+                    </span>
+
+                    <span class="fw-bold metric-title small">@row.Name</span>
+                </div>
+
+                <!-- Group -->
+                <div class="small metric-muted text-truncate">@(row.Group ?? "—")</div>
+
+                <!-- Owner -->
+                <div class="small metric-muted text-truncate">@(row.Owner ?? "—")</div>
+
+                <!-- Primary Value -->
+                <div class="text-center fw-black" style="color:@themeAccent;">@row.PrimaryValue</div>
+
+                <!-- Secondary Value -->
+                <div class="small metric-muted lh-sm">@row.SecondaryValue</div>
+
+                <!-- Risk Level -->
+                <div class="d-flex justify-content-center">
+                    <span class="risk-badge @riskCss">@row.RiskLevel</span>
+                </div>
+
+                <!-- Recommendation -->
+                <div class="small metric-muted lh-sm">
+                    <div>@row.Recommendation</div>
+                    @if (!string.IsNullOrWhiteSpace(rowActionUrl))
+                    {
+                        <a href="@rowActionUrl"
+                           class="btn btn-sm export-btn mt-2 d-inline-flex align-items-center gap-1">
+                            <i class="bi bi-box-arrow-up-left small"></i>
+                            فتح التفاصيل
+                        </a>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(rowDecisionLabUrl))
+                    {
+                        <a href="@rowDecisionLabUrl"
+                           class="btn btn-sm btn-outline-primary mt-1 d-inline-flex align-items-center gap-1"
+                           style="border-radius:.6rem;font-size:.78rem;">
+                            <i class="bi bi-cpu-fill small"></i>
+                            مختبر القرار
+                        </a>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (!Model.Rows.Any())
+        {
+            <div class="text-center py-5 metric-muted small">
+                <i class="bi bi-inbox fs-2 d-block mb-2 opacity-25"></i>
+                لا توجد بيانات لهذا المؤشر
+            </div>
+        }
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════ DECISION LAB CTA -->
+    @if (Model.SelectedBatchId.HasValue)
+    {
+        var returnUrl = Url.Action("MetricDecisionDetails", "Analytics", new {
+            area = "Admin",
+            metric = Model.MetricKey,
+            curriculumId = Model.SelectedCurriculumId,
+            batchId = Model.SelectedBatchId,
+            instructorId = Model.SelectedInstructorId
+        });
+        <div class="d-flex justify-content-center mt-4 mb-2">
+            <a asp-area="Admin"
+               asp-controller="DecisionLab"
+               asp-action="RecommendationPreview"
+               asp-route-batchId="@Model.SelectedBatchId"
+               asp-route-curriculumId="@Model.SelectedCurriculumId"
+               asp-route-sourceArea="Admin"
+               asp-route-sourceController="Analytics"
+               asp-route-sourceAction="MetricDecisionDetails"
+               asp-route-sourceMetric="@Model.MetricKey"
+               asp-route-sourcePage="MetricDecisionDetails"
+               asp-route-returnUrl="@returnUrl"
+               class="btn btn-primary fw-bold px-4 py-2"
+               style="border-radius:.85rem;font-size:.95rem;
+                      box-shadow:0 8px 20px rgba(79,70,229,.22);">
+                <i class="bi bi-arrow-left me-2"></i>
+                فتح هذه الدفعة في مختبر القرار
+            </a>
+        </div>
+    }
+
+    @if (hasSelectableRows)
+    {
+        <div class="metric-bulk-footer is-hidden" id="metricBulkFooter">
+            <div class="d-flex align-items-center gap-2 me-auto">
+                <strong id="metricSelectedCount">0</strong>
+                <span class="small" id="metricSelectedLabel">عنصر محدد</span>
+            </div>
+
+            <div class="d-flex align-items-center gap-2 flex-wrap" id="metricStudentActions">
+                <button type="button" class="metric-bulk-btn metric-bulk-primary" onclick="openMetricActionModal('notify')">
+                    <i class="bi bi-bell-fill me-1"></i>
+                    إرسال إشعار
+                </button>
+                <button type="button" class="metric-bulk-btn" onclick="openMetricActionModal('session')">
+                    <i class="bi bi-calendar-plus-fill me-1"></i>
+                    جدولة جلسة
+                </button>
+                <button type="button" class="metric-bulk-btn" onclick="openMetricActionModal('teacher')">
+                    <i class="bi bi-person-plus-fill me-1"></i>
+                    تعيين مدرس
+                </button>
+            </div>
+            <button type="button" class="metric-bulk-btn metric-bulk-primary" id="metricOpenDetailsBtn" onclick="openSelectedMetricDetails()">
+                <i class="bi bi-box-arrow-up-left me-1"></i>
+                فتح التفاصيل
+            </button>
+            <button type="button" class="metric-bulk-btn" id="metricBatchGuidanceBtn" onclick="sendSelectedBatchGuidance()">
+                <i class="bi bi-send-check me-1"></i>
+                توجيه مدربي الدفعة
+            </button>
+            <button type="button"
+                    class="metric-bulk-btn metric-bulk-primary"
+                    id="metricDecisionLabBtn"
+                    onclick="openInDecisionLab()"
+                    style="display:none;">
+                <i class="bi bi-cpu-fill me-1"></i>
+                مختبر القرار
+            </button>
+            <button type="button" class="metric-bulk-btn" onclick="exportMetricRows(true)">
+                <i class="bi bi-download me-1"></i>
+                تصدير المحدد
+            </button>
+            <button type="button" class="metric-bulk-clear" onclick="clearMetricSelection()" aria-label="إلغاء التحديد">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+
+        <div class="metric-modal-overlay" id="metricActionModalOverlay">
+            <div class="metric-action-modal" role="dialog" aria-modal="true">
+                <div class="metric-modal-header d-flex align-items-center justify-content-between">
+                    <div>
+                        <h6 class="fw-bold metric-title mb-1" id="metricModalTitle"></h6>
+                        <p class="small metric-muted mb-0" id="metricModalSubtitle"></p>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-light" onclick="closeMetricActionModal()" aria-label="إغلاق">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+                <div class="metric-modal-body">
+                    <div class="small fw-bold metric-muted mb-2">العناصر المحددة</div>
+                    <div class="metric-selected-list" id="metricSelectedList"></div>
+                    <div id="metricModalForm"></div>
+                </div>
+                <div class="metric-modal-footer">
+                    <button type="button" class="btn btn-light btn-sm fw-bold" onclick="closeMetricActionModal()">إلغاء</button>
+                    <button type="button" class="btn btn-sm fw-bold text-white" id="metricModalSubmit" style="background:var(--metric-accent);" onclick="submitMetricAction()"></button>
+                </div>
+            </div>
+        </div>
+
+        @Html.AntiForgeryToken()
+    }
+</div>
+
+@section Scripts {
+    @{
+        var mainSourceRows = Model.Rows.Any()
+            ? Model.Rows.Take(8).Select(r => new
+            {
+                Label = r.Name.Length > 10 ? r.Name[..9] + "…" : r.Name,
+                Value = ExtractMetricNumber(r.PrimaryValue),
+                RiskLevel = r.RiskLevel
+            }).ToList()
+            : Model.Cards.Take(4).Select(c => new
+            {
+                Label = c.Label,
+                Value = ExtractMetricNumber(c.Value),
+                RiskLevel = c.Theme
+            }).ToList();
+
+        if (!mainSourceRows.Any())
+        {
+            mainSourceRows = new[]
+            {
+                new { Label = Model.Title, Value = ExtractMetricNumber(Model.Value), RiskLevel = Model.StatusClass }
+            }.ToList();
+        }
+
+        var chartLabels = Json.Serialize(mainSourceRows.Select(x => x.Label).ToList());
+        var chartValues = Json.Serialize(mainSourceRows.Select(x => x.Value).ToList());
+        var chartColors = Json.Serialize(mainSourceRows.Select(x =>
+        {
+            var risk = x.RiskLevel ?? "";
+
+            if (risk.IndexOf("danger", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                risk.IndexOf("عالي", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                risk.IndexOf("حرج", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                risk.IndexOf("أولوية", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "#dc2626";
+            }
+
+            if (risk.IndexOf("warning", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                risk.IndexOf("متوسط", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                risk.IndexOf("مقبول", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "#d97706";
+            }
+
+            if (risk.IndexOf("info", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "#0284c7";
+            }
+
+            return "#16a34a";
+        }).ToList());
+
+        var maxChartValue = Math.Max(100, Math.Ceiling((mainSourceRows.Any() ? mainSourceRows.Max(x => x.Value) : 0) / 10) * 10);
+
+        var distLabels = new[] { "ممتاز 80%+", "جيد 65-79%", "متوسط 50-64%", "ضعيف <50%" };
+        var distColors = new[] { "#16a34a", "#65a30d", "#d97706", "#dc2626" };
+
+        int excellent = Model.Rows.Count(r =>
+        {
+            var d = ExtractMetricNumber(r.PrimaryValue);
+            return d >= 80;
+        });
+
+        int good = Model.Rows.Count(r =>
+        {
+            var d = ExtractMetricNumber(r.PrimaryValue);
+            return d >= 65 && d < 80;
+        });
+
+        int medium = Model.Rows.Count(r =>
+        {
+            var d = ExtractMetricNumber(r.PrimaryValue);
+            return d >= 50 && d < 65;
+        });
+
+        int weak = Model.Rows.Count(r =>
+        {
+            var d = ExtractMetricNumber(r.PrimaryValue);
+            return d > 0 && d < 50;
+        });
+
+        var hasDistributionData = excellent + good + medium + weak > 0;
+        var distValues = Json.Serialize(hasDistributionData ? new[] { excellent, good, medium, weak } : new[] { 1 });
+        var distLabelsJs = Json.Serialize(hasDistributionData ? distLabels : new[] { "لا توجد بيانات مصنفة" });
+        var distColorsJs = Json.Serialize(hasDistributionData ? distColors : new[] { "#cbd5e1" });
+    }
+
+    <script>
+        (function () {
+            const barLabels = @chartLabels;
+            const barValues = @chartValues;
+            const barColors = @chartColors;
+            const barMax = @maxChartValue;
+            const donutLabels = @distLabelsJs;
+            const donutValues = @distValues;
+            const donutColors = @distColorsJs;
+
+            function prepareCanvas(canvas) {
+                const dpr = window.devicePixelRatio || 1;
+                const rect = canvas.getBoundingClientRect();
+                const width = Math.max(rect.width, 280);
+                const height = Math.max(rect.height || 220, 220);
+
+                canvas.width = width * dpr;
+                canvas.height = height * dpr;
+
+                const ctx = canvas.getContext('2d');
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                ctx.clearRect(0, 0, width, height);
+                ctx.font = '12px Cairo, sans-serif';
+                ctx.direction = 'rtl';
+
+                return { ctx, width, height };
+            }
+
+            function roundedRect(ctx, x, y, width, height, radius) {
+                const r = Math.min(radius, Math.abs(height) / 2, width / 2);
+                ctx.beginPath();
+                ctx.moveTo(x + r, y);
+                ctx.lineTo(x + width - r, y);
+                ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+                ctx.lineTo(x + width, y + height);
+                ctx.lineTo(x, y + height);
+                ctx.lineTo(x, y + r);
+                ctx.quadraticCurveTo(x, y, x + r, y);
+                ctx.closePath();
+            }
+
+            function drawEmpty(ctx, width, height, text) {
+                ctx.fillStyle = '#94a3b8';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.font = '600 13px Cairo, sans-serif';
+                ctx.fillText(text, width / 2, height / 2);
+            }
+
+            function drawBarChart() {
+                const canvas = document.getElementById('chartMain');
+                if (!canvas) return;
+
+                const { ctx, width, height } = prepareCanvas(canvas);
+                const labels = Array.isArray(barLabels) ? barLabels : [];
+                const values = Array.isArray(barValues) ? barValues.map(Number) : [];
+
+                const padding = { top: 16, right: 34, bottom: 42, left: 18 };
+                const chartWidth = width - padding.right - padding.left;
+                const chartHeight = height - padding.top - padding.bottom;
+                const axisX = padding.right;
+                const axisY = padding.top + chartHeight;
+                const maxValue = Math.max(10, Number(barMax) || 100, ...values);
+
+                ctx.strokeStyle = '#e2e8f0';
+                ctx.lineWidth = 1;
+                ctx.fillStyle = '#64748b';
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'middle';
+                ctx.font = '10px Cairo, sans-serif';
+
+                for (let i = 0; i <= 4; i++) {
+                    const value = Math.round((maxValue / 4) * i);
+                    const y = axisY - (chartHeight * i / 4);
+                    ctx.beginPath();
+                    ctx.moveTo(axisX, y);
+                    ctx.lineTo(axisX + chartWidth, y);
+                    ctx.stroke();
+                    ctx.fillText(value.toString(), axisX - 8, y);
+                }
+
+                ctx.strokeStyle = '#cbd5e1';
+                ctx.beginPath();
+                ctx.moveTo(axisX, padding.top);
+                ctx.lineTo(axisX, axisY);
+                ctx.lineTo(axisX + chartWidth, axisY);
+                ctx.stroke();
+
+                if (!values.length) {
+                    drawEmpty(ctx, width, height, 'لا توجد بيانات للرسم');
+                    return;
+                }
+
+                const gap = 12;
+                const barWidth = Math.max(18, (chartWidth - gap * (values.length + 1)) / values.length);
+
+                values.forEach(function (value, index) {
+                    const x = axisX + gap + index * (barWidth + gap);
+                    const barHeight = Math.max(2, (Math.max(value, 0) / maxValue) * chartHeight);
+                    const y = axisY - barHeight;
+
+                    ctx.fillStyle = barColors[index] || '#4f46e5';
+                    roundedRect(ctx, x, y, barWidth, barHeight, 7);
+                    ctx.fill();
+
+                    ctx.fillStyle = '#64748b';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'top';
+                    ctx.font = '10px Cairo, sans-serif';
+                    ctx.fillText(labels[index] || '', x + barWidth / 2, axisY + 10, Math.max(42, barWidth + 18));
+                });
+            }
+
+            function drawDonutChart() {
+                const canvas = document.getElementById('chartSecond');
+                if (!canvas) return;
+
+                const { ctx, width, height } = prepareCanvas(canvas);
+                const labels = Array.isArray(donutLabels) ? donutLabels : [];
+                const values = Array.isArray(donutValues) ? donutValues.map(Number) : [];
+                const total = values.reduce(function (sum, value) { return sum + Math.max(value, 0); }, 0);
+
+                if (!total) {
+                    drawEmpty(ctx, width, height, 'لا توجد بيانات مصنفة');
+                    return;
+                }
+
+                const centerX = width * 0.5;
+                const centerY = height * 0.42;
+                const radius = Math.min(width, height) * 0.24;
+                const innerRadius = radius * 0.58;
+                let start = -Math.PI / 2;
+
+                values.forEach(function (value, index) {
+                    const slice = (Math.max(value, 0) / total) * Math.PI * 2;
+                    ctx.beginPath();
+                    ctx.moveTo(centerX, centerY);
+                    ctx.arc(centerX, centerY, radius, start, start + slice);
+                    ctx.closePath();
+                    ctx.fillStyle = donutColors[index] || '#cbd5e1';
+                    ctx.fill();
+                    start += slice;
+                });
+
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, innerRadius, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
+                ctx.fill();
+
+                ctx.fillStyle = '#0f172a';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.font = '800 18px Cairo, sans-serif';
+                ctx.fillText(total.toString(), centerX, centerY - 4);
+                ctx.fillStyle = '#64748b';
+                ctx.font = '10px Cairo, sans-serif';
+                ctx.fillText('سجل', centerX, centerY + 15);
+
+                const legendY = height - 54;
+                const itemWidth = width / Math.max(labels.length, 1);
+                labels.forEach(function (label, index) {
+                    const x = itemWidth * index + itemWidth / 2;
+                    ctx.fillStyle = donutColors[index] || '#cbd5e1';
+                    ctx.beginPath();
+                    ctx.arc(x + 20, legendY, 5, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.fillStyle = '#64748b';
+                    ctx.textAlign = 'center';
+                    ctx.font = '10px Cairo, sans-serif';
+                    ctx.fillText(label, x, legendY + 14, itemWidth - 8);
+                });
+            }
+
+            function drawMetricCharts() {
+                drawBarChart();
+                drawDonutChart();
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', drawMetricCharts);
+            } else {
+                drawMetricCharts();
+            }
+
+            window.addEventListener('resize', function () {
+                window.clearTimeout(window.metricDecisionChartsResizeTimer);
+                window.metricDecisionChartsResizeTimer = window.setTimeout(drawMetricCharts, 120);
+            });
+        }());
+    </script>
+
+    @if (hasSelectableRows)
+    {
+        <script>
+            (function () {
+                const instructorOptions = @Json.Serialize(Model.InstructorsFilter.Select(i => new { id = i.Id, name = i.Name }).ToList());
+                const endpoints = {
+                    notify: '@Url.Action("SendBulkNotification", "Analytics", new { area = "Admin" })',
+                    session: '@Url.Action("ScheduleAnalyticsSession", "Analytics", new { area = "Admin" })',
+                    teacher: '@Url.Action("AssignAnalyticsInstructor", "Analytics", new { area = "Admin" })',
+                    batchGuidance: '@Url.Action("SendBatchGuidanceToInstructors", "Analytics", new { area = "Admin" })'
+                };
+
+                let currentMetricAction = null;
+
+                function getSelectedChecks() {
+                    return Array.from(document.querySelectorAll('.metric-row-cb:checked'));
+                }
+
+                function buildInstructorOptions() {
+                    if (!Array.isArray(instructorOptions) || instructorOptions.length === 0) {
+                        return '<option value="0">-- لا يوجد مدرسون --</option>';
+                    }
+
+                    return '<option value="0">-- اختر مدرساً --</option>' +
+                        instructorOptions.map(function (item) {
+                            return '<option value="' + item.id + '">' + item.name + '</option>';
+                        }).join('');
+                }
+
+                function actionConfig(type) {
+                    const instructorSelect = buildInstructorOptions();
+                    return {
+                        notify: {
+                            title: 'إرسال إشعار للطلاب',
+                            subtitle: 'سيصل الإشعار للطلاب المحددين من جدول القرار.',
+                            submit: 'إرسال الإشعار',
+                            form: '<div class="mb-3"><label class="form-label small fw-bold">نوع الإشعار</label><select class="metric-form-control" name="notificationType"><option value="تحذير أداء">تحذير أداء</option><option value="طلب مراجعة">طلب مراجعة</option><option value="دعوة لحضور جلسة">دعوة لحضور جلسة</option></select></div><div class="mb-2"><label class="form-label small fw-bold">نص الرسالة</label><textarea class="metric-form-control" name="message" rows="4" required></textarea></div>'
+                        },
+                        session: {
+                            title: 'جدولة جلسة تدارك',
+                            subtitle: 'إرسال موعد جلسة متابعة للطلاب المحددين.',
+                            submit: 'تأكيد الجدولة',
+                            form: '<div class="row g-2"><div class="col-12 col-md-6"><label class="form-label small fw-bold">تاريخ الجلسة</label><input type="date" class="metric-form-control" name="sessionDate" required></div><div class="col-12 col-md-6"><label class="form-label small fw-bold">الوقت</label><input type="time" class="metric-form-control" name="sessionTime"></div><div class="col-12"><label class="form-label small fw-bold">المدرس المسؤول</label><select class="metric-form-control" name="instructorId">' + instructorSelect + '</select></div><div class="col-12"><label class="form-label small fw-bold">ملاحظات</label><textarea class="metric-form-control" name="notes" rows="3"></textarea></div></div>'
+                        },
+                        teacher: {
+                            title: 'تعيين مدرس متابعة',
+                            subtitle: 'ربط الطلاب المحددين بمدرس للمتابعة.',
+                            submit: 'تعيين المدرس',
+                            form: '<div class="mb-3"><label class="form-label small fw-bold">المدرس</label><select class="metric-form-control" name="instructorId">' + instructorSelect + '</select></div><div class="mb-2"><label class="form-label small fw-bold">نوع المتابعة</label><select class="metric-form-control" name="followupType"><option value="متابعة يومية">متابعة يومية</option><option value="متابعة أسبوعية">متابعة أسبوعية</option><option value="مراجعة الواجبات فقط">مراجعة الواجبات فقط</option></select></div>'
+                        }
+                    }[type];
+                }
+
+                function showModalMessage(type, text) {
+                    const old = document.getElementById('metricModalMessage');
+                    if (old) old.remove();
+
+                    const isSuccess = type === 'success';
+                    const message = document.createElement('div');
+                    message.id = 'metricModalMessage';
+                    message.className = 'small fw-bold mt-3 p-3 rounded-3';
+                    message.style.background = isSuccess ? '#dcfce7' : '#fee2e2';
+                    message.style.color = isSuccess ? '#166534' : '#991b1b';
+                    message.textContent = text;
+                    document.getElementById('metricModalForm').appendChild(message);
+                }
+
+                window.onMetricSelectionChanged = function () {
+                    const selected = getSelectedChecks();
+                    const footer = document.getElementById('metricBulkFooter');
+                    const count = document.getElementById('metricSelectedCount');
+                    const label = document.getElementById('metricSelectedLabel');
+                    const selectAll = document.getElementById('metricSelectAll');
+                    const allChecks = Array.from(document.querySelectorAll('.metric-row-cb'));
+                    const selectedKinds = selected.map(function (cb) { return cb.dataset.kind || ''; });
+                    const isOnlyStudents = selected.length > 0 && selectedKinds.every(function (kind) { return kind === 'student'; });
+                    const isSingleBatch = selected.length === 1 && selectedKinds[0] === 'batch';
+                    const hasSingleDetailsUrl = selected.length === 1 && !!selected[0].dataset.actionUrl;
+
+                    document.querySelectorAll('.row-card').forEach(function (row) {
+                        const cb = row.querySelector('.metric-row-cb');
+                        row.classList.toggle('row-selected', !!cb && cb.checked);
+                    });
+
+                    if (footer) {
+                        footer.classList.toggle('is-hidden', selected.length === 0);
+                    }
+
+                    if (count) {
+                        count.textContent = selected.length;
+                    }
+
+                    if (label) {
+                        label.textContent = isOnlyStudents ? 'طالب محدد' : 'عنصر محدد';
+                    }
+
+                    document.getElementById('metricStudentActions')?.classList.toggle('d-none', !isOnlyStudents);
+                    document.getElementById('metricBatchGuidanceBtn')?.classList.toggle('d-none', !isSingleBatch);
+                    document.getElementById('metricOpenDetailsBtn')?.classList.toggle('d-none', !hasSingleDetailsUrl);
+
+                    const decisionLabBtn = document.getElementById('metricDecisionLabBtn');
+                    if (decisionLabBtn) {
+                        decisionLabBtn.style.display =
+                            (selected.length === 1 && selected[0].dataset.kind === 'batch')
+                            ? '' : 'none';
+                    }
+
+                    if (selectAll) {
+                        selectAll.checked = selected.length > 0 && selected.length === allChecks.length;
+                        selectAll.indeterminate = selected.length > 0 && selected.length < allChecks.length;
+                    }
+                };
+
+                window.toggleMetricRows = function (master) {
+                    document.querySelectorAll('.metric-row-cb').forEach(function (cb) {
+                        cb.checked = master.checked;
+                    });
+                    window.onMetricSelectionChanged();
+                };
+
+                window.clearMetricSelection = function () {
+                    document.querySelectorAll('.metric-row-cb').forEach(function (cb) {
+                        cb.checked = false;
+                    });
+                    window.onMetricSelectionChanged();
+                };
+
+                window.openSelectedMetricDetails = function () {
+                    const selected = getSelectedChecks();
+                    if (selected.length !== 1 || !selected[0].dataset.actionUrl) return;
+
+                    window.location.href = selected[0].dataset.actionUrl;
+                };
+
+                window.openInDecisionLab = function () {
+                    const selected = getSelectedChecks();
+                    if (selected.length !== 1 || selected[0].dataset.kind !== 'batch') return;
+                    const batchId = selected[0].value;
+                    const url = '@Url.Action("RecommendationPreview", "DecisionLab", new { area = "Admin", sourceArea = "Admin", sourceController = "Analytics", sourceAction = "MetricDecisionDetails", sourceMetric = Model.MetricKey })'
+                        + '&batchId=' + batchId
+                        + '&returnUrl=' + encodeURIComponent(window.location.href);
+                    window.location.href = url;
+                };
+
+                window.sendSelectedBatchGuidance = function () {
+                    const selected = getSelectedChecks();
+                    if (selected.length !== 1 || selected[0].dataset.kind !== 'batch') return;
+
+                    const form = document.createElement('form');
+                    form.method = 'post';
+                    form.action = endpoints.batchGuidance;
+
+                    const batchInput = document.createElement('input');
+                    batchInput.type = 'hidden';
+                    batchInput.name = 'batchId';
+                    batchInput.value = selected[0].value;
+                    form.appendChild(batchInput);
+
+                    const token = document.querySelector('input[name="__RequestVerificationToken"]');
+                    if (token) {
+                        const tokenInput = document.createElement('input');
+                        tokenInput.type = 'hidden';
+                        tokenInput.name = '__RequestVerificationToken';
+                        tokenInput.value = token.value;
+                        form.appendChild(tokenInput);
+                    }
+
+                    document.body.appendChild(form);
+                    form.submit();
+                };
+
+                window.openMetricActionModal = function (type) {
+                    const selected = getSelectedChecks();
+                    const config = actionConfig(type);
+                    const isOnlyStudents = selected.length > 0 && selected.every(function (cb) {
+                        return cb.dataset.kind === 'student';
+                    });
+                    if (!selected.length || !config || !isOnlyStudents) return;
+
+                    currentMetricAction = type;
+                    document.getElementById('metricModalTitle').textContent = config.title;
+                    document.getElementById('metricModalSubtitle').textContent = config.subtitle;
+                    document.getElementById('metricModalSubmit').textContent = config.submit;
+                    document.getElementById('metricModalSubmit').disabled = false;
+                    document.getElementById('metricModalForm').innerHTML = config.form;
+                    document.getElementById('metricSelectedList').innerHTML = selected.map(function (cb) {
+                        return '<div class="metric-selected-item"><i class="bi bi-person-check"></i><span>' + cb.dataset.name + '</span></div>';
+                    }).join('');
+                    document.getElementById('metricActionModalOverlay').classList.add('open');
+                    document.body.style.overflow = 'hidden';
+                };
+
+                window.closeMetricActionModal = function () {
+                    document.getElementById('metricActionModalOverlay').classList.remove('open');
+                    document.body.style.overflow = '';
+                };
+
+                window.submitMetricAction = function () {
+                    const selected = getSelectedChecks();
+                    const endpoint = endpoints[currentMetricAction];
+                    if (!selected.length || !endpoint) return;
+
+                    const formData = new FormData();
+                    selected.forEach(function (cb) {
+                        formData.append('studentIds', cb.value);
+                    });
+
+                    const token = document.querySelector('input[name="__RequestVerificationToken"]');
+                    if (token) {
+                        formData.append('__RequestVerificationToken', token.value);
+                    }
+
+                    if (currentMetricAction === 'notify') {
+                        const message = document.querySelector('#metricModalForm [name="message"]');
+                        const notificationType = document.querySelector('#metricModalForm [name="notificationType"]');
+                        if (!message || !message.value.trim()) {
+                            showModalMessage('error', 'يرجى كتابة نص الرسالة');
+                            return;
+                        }
+                        formData.append('message', message.value.trim());
+                        formData.append('notificationType', notificationType ? notificationType.value : 'تحذير أداء');
+                    }
+
+                    if (currentMetricAction === 'session') {
+                        const sessionDate = document.querySelector('#metricModalForm [name="sessionDate"]');
+                        if (!sessionDate || !sessionDate.value) {
+                            showModalMessage('error', 'يرجى تحديد تاريخ الجلسة');
+                            return;
+                        }
+                        formData.append('sessionDate', sessionDate.value);
+                        formData.append('sessionTime', document.querySelector('#metricModalForm [name="sessionTime"]')?.value || '');
+                        formData.append('instructorId', document.querySelector('#metricModalForm [name="instructorId"]')?.value || '0');
+                        formData.append('notes', document.querySelector('#metricModalForm [name="notes"]')?.value || '');
+                    }
+
+                    if (currentMetricAction === 'teacher') {
+                        const instructorId = document.querySelector('#metricModalForm [name="instructorId"]');
+                        if (!instructorId || !instructorId.value || instructorId.value === '0') {
+                            showModalMessage('error', 'يرجى اختيار مدرس');
+                            return;
+                        }
+                        formData.append('instructorId', instructorId.value);
+                        formData.append('followupType', document.querySelector('#metricModalForm [name="followupType"]')?.value || 'متابعة أسبوعية');
+                    }
+
+                    const submit = document.getElementById('metricModalSubmit');
+                    submit.disabled = true;
+                    submit.textContent = 'جار التنفيذ...';
+
+                    fetch(endpoint, { method: 'POST', body: formData })
+                        .then(function (response) { return response.json(); })
+                        .then(function (data) {
+                            if (data.success) {
+                                showModalMessage('success', data.message || 'تمت العملية بنجاح');
+                                setTimeout(function () {
+                                    window.closeMetricActionModal();
+                                    window.clearMetricSelection();
+                                }, 1600);
+                                return;
+                            }
+
+                            showModalMessage('error', data.error || 'حدث خطأ أثناء تنفيذ الإجراء');
+                            submit.disabled = false;
+                            submit.textContent = actionConfig(currentMetricAction).submit;
+                        })
+                        .catch(function () {
+                            showModalMessage('error', 'حدث خطأ في الاتصال بالخادم');
+                            submit.disabled = false;
+                            submit.textContent = actionConfig(currentMetricAction).submit;
+                        });
+                };
+
+                document.getElementById('metricActionModalOverlay')?.addEventListener('click', function (event) {
+                    if (event.target === this) {
+                        window.closeMetricActionModal();
+                    }
+                });
+            }());
+        </script>
+    }
+
+    <script>
+        function exportMetricRows(onlySelected) {
+            const rows = Array.from(document.querySelectorAll('.row-card')).filter(function (row) {
+                if (!onlySelected) return true;
+                const cb = row.querySelector('.metric-row-cb');
+                return cb && cb.checked;
+            });
+
+            if (!rows.length) return;
+
+            const csvRows = [['الاسم', 'القيمة', 'معلومة إضافية', 'المستوى', 'التوصية']];
+            rows.forEach(function (row) {
+                csvRows.push([
+                    row.dataset.rowName || '',
+                    row.dataset.primaryValue || '',
+                    row.dataset.secondaryValue || '',
+                    row.dataset.riskLevel || '',
+                    row.dataset.recommendation || ''
+                ]);
+            });
+
+            const csv = '\uFEFF' + csvRows.map(function (items) {
+                return items.map(function (item) {
+                    return '"' + String(item || '').replace(/"/g, '""') + '"';
+                }).join(',');
+            }).join('\r\n');
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'metric_decision_details.csv';
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+    </script>
+}

@@ -1,0 +1,259 @@
+﻿@model QdratNew.ViewModels.Reports.AdminPlacementReportViewModel
+
+@{
+    ViewData["Title"] = "تقرير أداء الطالب";
+    double percent = Model.OverallPercent;
+    double minutes = Model.AverageSolveMinutes;
+}
+
+<div class="container py-5">
+
+    <!-- 🟦 العنوان العام -->
+    <div class="card shadow-sm border-0 mb-4 p-4 rounded-4">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h3 class="fw-bold text-primary mb-1">
+                    <i class="bi bi-person-lines-fill"></i> تقرير أداء الطالب في اختبار تحديد المستوى
+                </h3>
+                <p class="text-muted mb-0">تحليل تفصيلي للمستوى الكمي واللفظي</p>
+            </div>
+            <div class="col-md-4 text-md-end text-center">
+                <span class="badge bg-primary bg-opacity-10 text-primary px-3 py-2 rounded-pill">
+                    <i class="bi bi-calendar3"></i> @Model.ExamDate.ToString("yyyy/MM/dd")
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🟩 الكروت الثلاث -->
+    <div class="row g-3 mb-4 text-center">
+        <!-- الأداء العام -->
+        <div class="col-md-4 col-sm-6">
+            <div class="card border-0 shadow-sm h-100"
+                 style="background: linear-gradient(135deg, #dbeafe, #bfdbfe); color: #0d47a1; border-radius: 1rem;">
+                <div class="card-body py-4">
+                    <div class="small text-muted mb-1">
+                        <i class="bi bi-graph-up-arrow me-1"></i> النسبة الكلية
+                    </div>
+                    <h3 class="fw-bold mb-1">@percent%</h3>
+                    <div class="small">
+                        التقدير:
+                        <span class="fw-semibold">
+                            @(percent >= 80 ? "ممتاز" : (percent >= 60 ? "متوسط" : "قيد التطوير"))
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- السرعة والتركيز -->
+        <div class="col-md-4 col-sm-6">
+            <div class="card border-0 shadow-sm h-100"
+                 style="background: linear-gradient(135deg, #fef9c3, #fde68a); color: #854d0e; border-radius: 1rem;">
+                <div class="card-body py-4">
+                    <div class="small text-muted mb-1">
+                        <i class="bi bi-stopwatch me-1 text-warning"></i> متوسط زمن الحل
+                    </div>
+                    <h4 class="fw-bold mb-1">@minutes دقيقة</h4>
+                    <div class="small text-secondary">معدل السرعة والتركيز أثناء الحل</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- أقوى المحاور -->
+        <div class="col-md-4 col-sm-12">
+            <div class="card border-0 shadow-sm h-100"
+                 style="background: linear-gradient(135deg, #dcfce7, #bbf7d0); color: #166534; border-radius: 1rem;">
+                <div class="card-body py-4">
+                    <div class="small text-muted mb-1">
+                        <i class="bi bi-lightbulb me-1 text-success"></i> أقوى المحاور
+                    </div>
+                    @if (Model.StrongestTopics?.Any() == true)
+                    {
+                        <ul class="list-unstyled small mb-0">
+                            @foreach (var item in Model.StrongestTopics)
+                            {
+                                <li>• @item</li>
+                            }
+                        </ul>
+                    }
+                    else
+                    {
+                        <span class="text-muted">لا يوجد بيانات كافية</span>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @if (Model.DontKnowAnswers > 0)
+        {
+            <!-- لا أعرف الإجابة -->
+            <div class="col-md-4 col-sm-6">
+                <div class="card border-0 shadow-sm h-100"
+                     style="background: linear-gradient(135deg, #e2e8f0, #cbd5e1); color: #334155; border-radius: 1rem;">
+                    <div class="card-body py-4">
+                        <div class="small text-muted mb-1">
+                            <i class="bi bi-patch-question me-1"></i> لا أعرف الإجابة
+                        </div>
+                        <h3 class="fw-bold mb-1">@Model.DontKnowAnswers</h3>
+                        <div class="small text-secondary">إجابات مُحتسَبة كخطأ باختيار "لا أعرف"</div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- 🟦 رسم نصف الدائرة (المستوى العام) -->
+    <div class="card shadow-sm border-0 p-4 rounded-4 mb-4">
+        <h5 class="fw-bold text-center mb-3">المستوى العام للطالب</h5>
+        <div class="position-relative mx-auto" style="max-width:320px;">
+            <canvas id="gaugeChart" height="220"></canvas>
+            <div class="position-absolute top-50 start-50 translate-middle text-center">
+                <div class="fs-1 fw-bold">@percent%</div>
+                <div class="text-muted small">
+                    @(percent >= 80 ? "جيد جدًا" : (percent >= 60 ? "متوسط" : "قيد التطوير"))
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 📊 تحليل المحاور -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card shadow-sm border-0 p-3 h-100">
+                <h6 class="fw-bold mb-3 text-center text-primary">تحليل المحاور الكمية</h6>
+                <canvas id="quantChart" height="180"></canvas>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card shadow-sm border-0 p-3 h-100">
+                <h6 class="fw-bold mb-3 text-center text-primary">تحليل المحاور اللفظية</h6>
+                <canvas id="verbalChart" height="180"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🧠 التوصيات الإدارية -->
+    <div class="card shadow-sm border-0 p-4 rounded-4 mb-4">
+        <h5 class="fw-bold mb-3 text-primary">
+            <i class="bi bi-person-gear me-1"></i> التوصيات الإدارية
+        </h5>
+        <div class="alert alert-info bg-opacity-10 border-0">
+            <strong>ملاحظة تحليلية:</strong> @Model.RecommendationText
+        </div>
+        <div class="alert alert-success bg-opacity-10 border-0">
+            <strong>قرار إداري مقترح:</strong> @Model.AdminDecisionTip
+        </div>
+    </div>
+
+    <!-- 🔙 زر العودة -->
+    <div class="text-center mt-4">
+        <a href="javascript:history.back()" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> عودة إلى قائمة الطلاب
+        </a>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        // 🟢 البيانات العامة
+        const percent = @Model.OverallPercent;
+        const rest = 100 - percent;
+        const color = percent >= 80 ? '#10b981' : (percent >= 60 ? '#f59e0b' : '#ef4444');
+
+        // 🔹 نصف الدائرة للمستوى العام
+        new Chart(document.getElementById('gaugeChart'), {
+            type: 'doughnut',
+            data: {
+                labels: ['المستوى', 'الباقي'],
+                datasets: [{
+                    data: [percent, rest],
+                    backgroundColor: [color, '#e5e7eb'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                cutout: '75%',
+                rotation: -90,
+                circumference: 180,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { enabled: false }
+                }
+            }
+        });
+
+        // 🔹 تحليل المحاور الكمية
+        const quantLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.QuantLabels ?? new List<string>()));
+        const quantScores = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.QuantScores ?? new List<double>()));
+        if (quantLabels.length > 0) {
+            new Chart(document.getElementById('quantChart'), {
+                type: 'bar',
+                data: {
+                    labels: quantLabels,
+                    datasets: [{
+                        label: 'نسبة الإجابات الصحيحة %',
+                        data: quantScores,
+                        backgroundColor: '#60a5fa',
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    scales: { y: { beginAtZero: true, max: 100 } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        // 🔹 تحليل المحاور اللفظية
+        const verbalLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.VerbalLabels ?? new List<string>()));
+        const verbalScores = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.VerbalScores ?? new List<double>()));
+        if (verbalLabels.length > 0) {
+            new Chart(document.getElementById('verbalChart'), {
+                type: 'bar',
+                data: {
+                    labels: verbalLabels,
+                    datasets: [{
+                        label: 'نسبة الإجابات الصحيحة %',
+                        data: verbalScores,
+                        backgroundColor: '#a5b4fc',
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    scales: { y: { beginAtZero: true, max: 100 } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+    </script>
+}
+
+<style>
+    .card h5, .card h6 {
+        font-weight: 600;
+    }
+
+    .progress-bar {
+        transition: width 0.6s ease;
+    }
+
+    .alert {
+        font-size: 0.95rem;
+    }
+
+    .list-unstyled li {
+        margin-bottom: 3px;
+    }
+
+    @@media (max-width: 576px) {
+        h3
+
+    {
+        font-size: 1.2rem;
+    }
+
+    }
+</style>

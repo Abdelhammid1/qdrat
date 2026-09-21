@@ -1,0 +1,105 @@
+@model QdratNew.ViewModels.EnhancementSkills.EnhancementResultViewModel
+@using QdratNew.Helpers
+
+@{
+    ViewData["Title"] = "نتيجة المهارة التعزيزية";
+    var isRTL = Model.IsRTL;
+    var successRate = Model.TotalQuestions > 0
+        ? (int)Math.Round(Model.CorrectAnswers * 100.0 / Model.TotalQuestions)
+        : 0;
+
+    Func<string, string> T = key => isRTL ? key : key switch
+    {
+        "نتيجة المهارة التعزيزية"                          => "Enhancement Skill Result",
+        "الإجابات الصحيحة"                                 => "Correct Answers",
+        "نسبة النجاح"                                      => "Success Rate",
+        "من"                                               => "of",
+        "الأسئلة التي أجبت عليها بشكل خاطئ"               => "Wrong Answers",
+        "السؤال"                                           => "Question",
+        "إجابتك"                                           => "Your Answer",
+        "الإجابة الصحيحة"                                  => "Correct Answer",
+        "أحسنت! لقد أجبت على جميع الأسئلة بشكل صحيح."    => "Great job! All answers are correct.",
+        "مراجعة الإجابات"                                  => "Review Answers",
+        _                                                  => key
+    };
+}
+@functions {
+    string ToIndic(object input)
+    {
+        var str = Convert.ToString(input) ?? "";
+        return Model.IsQuantitative ? NumberHelper.ToIndicNumbersSafe(str) : str;
+    }
+}
+
+<div class="@(isRTL ? "rtl-mode" : "ltr-mode")">
+<div class="container mt-4">
+
+    <h2 class="text-center mb-4">📊 @T("نتيجة المهارة التعزيزية")</h2>
+
+    <div class="text-center mb-4">
+        <h4 class="fw-bold text-success">
+            ✅ @T("الإجابات الصحيحة"): @Html.Raw(ToIndic(Model.CorrectAnswers)) @T("من") @Html.Raw(ToIndic(Model.TotalQuestions))
+        </h4>
+        <h5 class="text-info">
+            @T("نسبة النجاح"): @Html.Raw(ToIndic(successRate))%
+        </h5>
+    </div>
+
+    @if (Model.Questions.Any(q => !q.IsCorrect))
+    {
+        <h5 class="mb-3 text-danger fw-bold">❌ @T("الأسئلة التي أجبت عليها بشكل خاطئ"):</h5>
+
+        @foreach (var item in Model.Questions.Where(q => !q.IsCorrect))
+        {
+            <div class="card mb-4 shadow-sm border-0" style="background-color:#f9f9f9;">
+                <div class="card-body bg-qdrat-light">
+                    <div class="p-1 mb-3 rounded">
+                        <strong class="text-dark">📌 @T("السؤال"):</strong>
+                        <div class="mt-2 bg-qdrat text-white p-md-2 rounded-2">
+                            @Html.Raw(Model.IsQuantitative ? NumberHelper.ToIndicNumbersSafe(item.QuestionTitle) : item.QuestionTitle)
+                        </div>
+                    </div>
+                    <p>
+                        <span class="text-danger">❌ @T("إجابتك"):</span>
+                        <strong>@Html.Raw(Model.IsQuantitative ? NumberHelper.ToIndicNumbersSafe(item.StudentAnswer ?? "") : (item.StudentAnswer ?? "لم يجب"))</strong>
+                    </p>
+                    <p>
+                        <span class="text-success">✅ @T("الإجابة الصحيحة"):</span>
+                        <strong>@Html.Raw(Model.IsQuantitative ? NumberHelper.ToIndicNumbersSafe(item.CorrectAnswer ?? "") : (item.CorrectAnswer ?? ""))</strong>
+                    </p>
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="alert alert-success text-center mt-4">
+            🎉 @T("أحسنت! لقد أجبت على جميع الأسئلة بشكل صحيح.")
+        </div>
+    }
+
+    <div class="text-center mt-4">
+        <a asp-action="Review" asp-route-id="@Model.SetId" class="btn btn-outline-primary me-2">
+            <i class="fa-solid fa-eye me-1"></i> @T("مراجعة الإجابات")
+        </a>
+        <a asp-action="AllEnhancements" class="btn btn-outline-secondary">
+            <i class="fa-solid fa-arrow-right me-1"></i> @(isRTL ? "العودة للقائمة" : "Back to List")
+        </a>
+    </div>
+
+</div>
+
+@if (successRate >= 90)
+{
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        Swal.fire({
+            title: '🎉 @(isRTL ? "ممتاز!" : "Excellent!")',
+            text: '@(isRTL ? "أنت من الأوائل في هذه المهارة التعزيزية. واصل التألق!" : "You are among the top performers. Keep going!")',
+            icon: 'success',
+            confirmButtonText: '@(isRTL ? "شكرًا" : "OK")',
+            confirmButtonColor: '#3085d6'
+        });
+    </script>
+}
+</div>

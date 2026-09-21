@@ -1,0 +1,1017 @@
+@model QdratNew.ViewModels.Exam.PerformanceIndicatorExamViewModel
+
+@{
+    ViewData["Title"] = "تفاصيل اختبار مؤشر الأداء";
+
+    var totalSections = Model.Sections?.Count(s => s.QuestionCount > 0) ?? 0;
+    var totalQuestions = Model.TotalQuestions;
+    var activeSections = Model.Sections?.Where(s => s.QuestionCount > 0).ToList() ?? new List<QdratNew.ViewModels.Exam.PerformanceIndicatorExamSectionViewModel>();
+}
+
+@functions {
+    string CleanText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "—";
+        }
+
+        var text = System.Text.RegularExpressions.Regex.Replace(value, "<.*?>", " ");
+        text = System.Net.WebUtility.HtmlDecode(text);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ").Trim();
+
+        return string.IsNullOrWhiteSpace(text) ? "—" : text;
+    }
+
+    string ShortText(string? value, int maxLength)
+    {
+        var text = CleanText(value);
+
+        if (text == "—")
+        {
+            return text;
+        }
+
+        return text.Length <= maxLength ? text : text.Substring(0, maxLength) + "...";
+    }
+
+    string GetDifficultyClass(string? difficultyText)
+    {
+        var text = difficultyText ?? "";
+
+        if (text.Contains("سهل") || text.Contains("Easy"))
+        {
+            return "pr-badge-success";
+        }
+
+        if (text.Contains("صعب") || text.Contains("Hard"))
+        {
+            return "pr-badge-danger";
+        }
+
+        return "pr-badge-warning";
+    }
+
+    string GetDifficultyIcon(string? difficultyText)
+    {
+        var text = difficultyText ?? "";
+
+        if (text.Contains("سهل") || text.Contains("Easy"))
+        {
+            return "fa-solid fa-check-circle";
+        }
+
+        if (text.Contains("صعب") || text.Contains("Hard"))
+        {
+            return "fa-solid fa-fire";
+        }
+
+        return "fa-solid fa-exclamation-circle";
+    }
+}
+
+@section Styles {
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+
+    <style>
+        :root {
+            --pr-bg: #f4f7fb;
+            --pr-card: #ffffff;
+            --pr-border: #dbe4ef;
+            --pr-accent: #2563eb;
+            --pr-success: #16a34a;
+            --pr-danger: #dc2626;
+            --pr-warning: #f59e0b;
+            --pr-info: #0284c7;
+            --pr-text: #0f172a;
+            --pr-muted: #64748b;
+            --pr-radius: 14px;
+            --pr-radius-sm: 9px;
+            --pr-transition: .2s cubic-bezier(.4,0,.2,1);
+            --pr-shadow: 0 8px 22px rgba(15, 23, 42, .06);
+        }
+
+        body {
+            background: var(--pr-bg) !important;
+        }
+
+        .pr-page {
+            direction: rtl;
+            min-height: 100vh;
+            padding: 28px 0 60px;
+            font-family: 'Cairo', Arial, sans-serif;
+        }
+
+        .pr-header {
+            background: #ffffff;
+            border: 1px solid var(--pr-border);
+            border-radius: var(--pr-radius);
+            padding: 18px 22px;
+            box-shadow: var(--pr-shadow);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .pr-header-title {
+            color: var(--pr-text);
+            font-size: 22px;
+            font-weight: 900;
+            margin: 0;
+            line-height: 1.35;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+            .pr-header-title i {
+                color: var(--pr-accent);
+            }
+
+        .pr-header-sub {
+            color: #475569;
+            font-size: 13px;
+            font-weight: 700;
+            margin-top: 6px;
+            line-height: 1.8;
+        }
+
+        .pr-header-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .btn-pr-primary,
+        .btn-pr-success,
+        .btn-pr-outline {
+            border-radius: var(--pr-radius-sm);
+            padding: 8px 18px;
+            font-size: 13px;
+            font-weight: 900;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            text-decoration: none;
+            border: 1px solid transparent;
+            transition: var(--pr-transition);
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .btn-pr-primary {
+            background: var(--pr-accent);
+            border-color: var(--pr-accent);
+            color: #ffffff;
+        }
+
+        .btn-pr-success {
+            background: var(--pr-success);
+            border-color: var(--pr-success);
+            color: #ffffff;
+        }
+
+        .btn-pr-outline {
+            background: #ffffff;
+            border-color: #cbd5e1;
+            color: #334155;
+        }
+
+        .btn-pr-primary:hover,
+        .btn-pr-success:hover {
+            color: #ffffff;
+            transform: translateY(-1px);
+            text-decoration: none;
+            filter: brightness(.96);
+        }
+
+        .btn-pr-outline:hover {
+            background: #f1f5f9;
+            color: #0f172a;
+            transform: translateY(-1px);
+            text-decoration: none;
+        }
+
+        .pr-hero {
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+            border: 1px solid var(--pr-border);
+            border-radius: var(--pr-radius);
+            padding: 24px 28px;
+            margin-bottom: 24px;
+            box-shadow: var(--pr-shadow);
+        }
+
+        .pr-hero-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            background: #eff6ff;
+            color: #1d4ed8;
+            border: 1px solid #bfdbfe;
+            border-radius: 999px;
+            padding: 5px 12px;
+            font-size: 12px;
+            font-weight: 900;
+            margin-bottom: 12px;
+        }
+
+        .pr-hero-title {
+            margin: 0;
+            color: var(--pr-text);
+            font-size: 28px;
+            font-weight: 900;
+            line-height: 1.35;
+        }
+
+        .pr-hero-sub {
+            color: #475569;
+            font-size: 13px;
+            font-weight: 700;
+            margin-top: 8px;
+            line-height: 1.8;
+        }
+
+        .pr-chips {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+
+        .pr-chip {
+            background: #ffffff;
+            border: 1px solid #dbe4ef;
+            border-radius: 13px;
+            padding: 14px;
+            text-align: center;
+            box-shadow: 0 4px 14px rgba(15, 23, 42, .04);
+        }
+
+        .pr-chip-val {
+            font-size: 22px;
+            font-weight: 900;
+            line-height: 1;
+        }
+
+        .pr-chip-lbl {
+            margin-top: 7px;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .pr-section-label {
+            font-size: 14px;
+            font-weight: 900;
+            color: #334155;
+            margin: 20px 0 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+            .pr-section-label::after {
+                content: "";
+                flex: 1;
+                height: 1px;
+                background: #dbe4ef;
+            }
+
+        .pr-info-panel {
+            background: #ffffff;
+            border: 1px solid var(--pr-border);
+            border-radius: var(--pr-radius);
+            padding: 20px;
+            margin-bottom: 24px;
+            box-shadow: var(--pr-shadow);
+        }
+
+        .pr-info-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+
+        .pr-info-item {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 13px 14px;
+        }
+
+        .pr-info-label {
+            display: block;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 900;
+            margin-bottom: 6px;
+        }
+
+        .pr-info-value {
+            color: #0f172a;
+            font-size: 14px;
+            font-weight: 900;
+            line-height: 1.7;
+            word-break: break-word;
+        }
+
+        .pr-section-card {
+            background: #ffffff;
+            border: 1px solid var(--pr-border);
+            border-radius: var(--pr-radius);
+            box-shadow: var(--pr-shadow);
+            overflow: hidden;
+            margin-bottom: 22px;
+        }
+
+        .pr-section-head {
+            background: #ffffff;
+            border-bottom: 1px solid var(--pr-border);
+            padding: 14px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .pr-section-title {
+            color: #0f172a;
+            font-size: 15px;
+            font-weight: 900;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            line-height: 1.7;
+        }
+
+            .pr-section-title i {
+                color: var(--pr-accent);
+            }
+
+        .pr-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            border-radius: 999px;
+            padding: 5px 10px;
+            font-size: 11px;
+            font-weight: 900;
+            white-space: nowrap;
+            border: 1px solid transparent;
+        }
+
+        .pr-badge-primary {
+            background: #dbeafe;
+            color: #1d4ed8;
+            border-color: #bfdbfe;
+        }
+
+        .pr-badge-success {
+            background: #dcfce7;
+            color: #166534;
+            border-color: #86efac;
+        }
+
+        .pr-badge-warning {
+            background: #fef3c7;
+            color: #92400e;
+            border-color: #fde68a;
+        }
+
+        .pr-badge-danger {
+            background: #fee2e2;
+            color: #991b1b;
+            border-color: #fecaca;
+        }
+
+        .pr-badge-secondary {
+            background: #f1f5f9;
+            color: #475569;
+            border-color: #cbd5e1;
+        }
+
+        .pr-table-panel {
+            background: #ffffff;
+            overflow-x: auto;
+        }
+
+        .pr-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0;
+            table-layout: fixed;
+        }
+
+            .pr-table th {
+                background: #f1f5f9;
+                color: #0f172a;
+                padding: 12px 8px;
+                font-size: 12px;
+                font-weight: 900;
+                border: 1px solid #dbe4ef;
+                text-align: center;
+                white-space: nowrap;
+            }
+
+            .pr-table td {
+                padding: 11px 8px;
+                border: 1px solid #e2e8f0;
+                vertical-align: middle;
+                text-align: center;
+                font-size: 13px;
+                font-weight: 700;
+                color: #0f172a;
+                background: #ffffff;
+            }
+
+            .pr-table tbody tr:hover td {
+                background: #f8fafc;
+            }
+
+        .pr-col-order {
+            width: 60px;
+        }
+
+        .pr-col-ref {
+            width: 110px;
+        }
+
+        .pr-col-question {
+            width: 330px;
+        }
+
+        .pr-col-curriculum {
+            width: 140px;
+        }
+
+        .pr-col-lesson {
+            width: 150px;
+        }
+
+        .pr-col-difficulty {
+            width: 120px;
+        }
+
+        .pr-col-answer {
+            width: 150px;
+        }
+
+        .pr-col-actions {
+            width: 150px;
+        }
+
+        .pr-question-title {
+            color: #0f172a;
+            font-size: 13px;
+            font-weight: 900;
+            line-height: 1.7;
+            max-width: 300px;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            display: inline-block;
+            vertical-align: middle;
+            text-align: right;
+        }
+
+        .pr-short-text {
+            max-width: 125px;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            display: inline-block;
+            vertical-align: middle;
+        }
+
+        .pr-actions {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: nowrap;
+        }
+
+        .pr-action-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            border: 1px solid transparent;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            transition: var(--pr-transition);
+            padding: 0;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+            .pr-action-btn.preview {
+                color: #0369a1;
+                background: #e0f2fe;
+                border-color: #bae6fd;
+            }
+
+            .pr-action-btn.replace {
+                color: #6d28d9;
+                background: #ede9fe;
+                border-color: #ddd6fe;
+            }
+
+            .pr-action-btn:hover {
+                transform: translateY(-1px);
+                text-decoration: none;
+                filter: brightness(.97);
+            }
+
+        .pr-empty {
+            background: #fff7ed;
+            color: #9a3412;
+            border: 1px solid #fed7aa;
+            border-radius: var(--pr-radius);
+            padding: 18px;
+            font-weight: 900;
+            text-align: center;
+            box-shadow: var(--pr-shadow);
+        }
+
+        .pr-send-panel {
+            background: #ffffff;
+            border: 1px solid var(--pr-border);
+            border-radius: var(--pr-radius);
+            padding: 16px 18px;
+            box-shadow: var(--pr-shadow);
+            display: flex;
+            justify-content: center;
+            margin-top: 24px;
+        }
+
+        .pr-modal .modal-content {
+            background: #ffffff !important;
+            border: 1px solid #cbd5e1;
+            border-radius: var(--pr-radius);
+            color: #0f172a;
+            overflow: hidden;
+            box-shadow: 0 24px 70px rgba(15, 23, 42, 0.25);
+        }
+
+        .pr-modal .modal-header {
+            background: #ffffff;
+            border-bottom: 1px solid #dbe4ef;
+            padding: 16px 22px;
+        }
+
+        .pr-modal .modal-title {
+            font-size: 15px;
+            font-weight: 900;
+            color: #0f172a;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+            .pr-modal .modal-title i {
+                color: var(--pr-accent);
+            }
+
+        .pr-modal .modal-body {
+            background: #f8fafc !important;
+            padding: 22px !important;
+            min-height: 240px;
+        }
+
+        .pr-preview-loading {
+            text-align: center;
+            color: #64748b;
+            font-weight: 800;
+            padding: 42px 20px;
+        }
+
+            .pr-preview-loading i {
+                display: block;
+                font-size: 30px;
+                margin-bottom: 10px;
+                color: var(--pr-accent);
+            }
+
+        #questionPreviewBody p,
+        #questionPreviewBody div,
+        #questionPreviewBody span,
+        #questionPreviewBody label,
+        #questionPreviewBody strong,
+        #questionPreviewBody small,
+        #questionPreviewBody li {
+            color: #0f172a !important;
+            opacity: 1 !important;
+        }
+
+        #questionPreviewBody .card,
+        #questionPreviewBody .question-card,
+        #questionPreviewBody .question-preview-card,
+        #questionPreviewBody .q-card,
+        #questionPreviewBody .preview-box,
+        #questionPreviewBody .question-box {
+            background: #ffffff !important;
+            color: #0f172a !important;
+            border: 1px solid #dbe4ef !important;
+            border-radius: 16px !important;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08) !important;
+            padding: 18px !important;
+        }
+
+        @@media (max-width: 1200px) {
+            .pr-table {
+                table-layout: auto;
+            }
+
+            .pr-col-question {
+                min-width: 300px;
+            }
+
+            .pr-col-actions {
+                min-width: 130px;
+            }
+        }
+
+        @@media (max-width: 992px) {
+            .pr-info-grid,
+            .pr-chips {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @@media (max-width: 768px) {
+            .pr-page {
+                padding: 18px 0 40px;
+            }
+
+            .pr-hero {
+                padding: 20px;
+            }
+
+            .pr-hero-title {
+                font-size: 23px;
+            }
+
+            .pr-info-grid,
+            .pr-chips {
+                grid-template-columns: 1fr;
+            }
+
+            .pr-header-actions,
+            .btn-pr-outline,
+            .btn-pr-primary,
+            .btn-pr-success {
+                width: 100%;
+            }
+        }
+    </style>
+}
+
+<div class="pr-page container-fluid px-4" dir="rtl">
+    <div class="pr-header">
+        <div>
+            <h1 class="pr-header-title">
+                <i class="fa-solid fa-clipboard-list"></i>
+                تفاصيل اختبار مؤشر الأداء
+            </h1>
+
+            <div class="pr-header-sub">
+                مراجعة بيانات الاختبار، المحاور، الأسئلة المرسلة، وحالة الإرسال إلى الطلاب.
+            </div>
+        </div>
+
+        <div class="pr-header-actions">
+            <a asp-action="Index" class="btn-pr-outline">
+                <i class="fa-solid fa-arrow-right"></i>
+                رجوع
+            </a>
+
+            <a asp-action="Review"
+               asp-route-id="@Model.Id"
+               class="btn-pr-outline">
+                <i class="fa-solid fa-eye"></i>
+                مراجعة الأسئلة
+            </a>
+
+            <a asp-action="ExamStudents"
+               asp-route-id="@Model.Id"
+               class="btn-pr-primary">
+                <i class="fa-solid fa-users"></i>
+                الطلاب والنتائج
+            </a>
+        </div>
+    </div>
+
+    <div class="pr-hero">
+        <div class="row g-4 align-items-center">
+            <div class="col-lg-5">
+                <div class="pr-hero-label">
+                    <i class="fa-solid fa-chart-line"></i>
+                    اختبار رقم @Model.Id
+                </div>
+
+                <h2 class="pr-hero-title">@Model.Title</h2>
+
+                <div class="pr-hero-sub">
+                    المنهج: @Model.CurriculumTitle
+                    <br />
+                    الدفعات: @Model.BatchName
+                </div>
+            </div>
+
+            <div class="col-lg-7">
+                <div class="pr-chips">
+                    <div class="pr-chip">
+                        <div class="pr-chip-val" style="color:#2563eb;">@Model.TotalQuestions</div>
+                        <div class="pr-chip-lbl">إجمالي الأسئلة</div>
+                    </div>
+
+                    <div class="pr-chip">
+                        <div class="pr-chip-val" style="color:#16a34a;">@totalSections</div>
+                        <div class="pr-chip-lbl">محاور بها أسئلة</div>
+                    </div>
+
+                    <div class="pr-chip">
+                        <div class="pr-chip-val" style="color:#f59e0b;">@Model.DurationMinutes</div>
+                        <div class="pr-chip-lbl">دقيقة</div>
+                    </div>
+
+                    <div class="pr-chip">
+                        <div class="pr-chip-val" style="color:#dc2626;">@Model.PassPercent%</div>
+                        <div class="pr-chip-lbl">نسبة الاجتياز</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="pr-section-label">معلومات الاختبار</div>
+
+    <div class="pr-info-panel">
+        <div class="pr-info-grid">
+            <div class="pr-info-item">
+                <span class="pr-info-label">الكود المرجعي</span>
+                <div class="pr-info-value">@(string.IsNullOrWhiteSpace(Model.ReferenceCode) ? "—" : Model.ReferenceCode)</div>
+            </div>
+
+            <div class="pr-info-item">
+                <span class="pr-info-label">تاريخ الإنشاء</span>
+                <div class="pr-info-value">@Model.CreatedAt.ToString("yyyy/MM/dd HH:mm")</div>
+            </div>
+
+            <div class="pr-info-item">
+                <span class="pr-info-label">بداية الاختبار</span>
+                <div class="pr-info-value">@Model.StartAt.ToString("yyyy/MM/dd HH:mm")</div>
+            </div>
+
+            <div class="pr-info-item">
+                <span class="pr-info-label">نهاية الاختبار</span>
+                <div class="pr-info-value">@Model.EndAt.ToString("yyyy/MM/dd HH:mm")</div>
+            </div>
+
+            <div class="pr-info-item">
+                <span class="pr-info-label">نوع الاختبار</span>
+                <div class="pr-info-value">@(Model.IsOnline ? "أونلاين" : "حضوري")</div>
+            </div>
+
+            <div class="pr-info-item">
+                <span class="pr-info-label">حالة الإرسال</span>
+                <div class="pr-info-value">@(Model.IsSent ? "تم الإرسال" : "لم يرسل")</div>
+            </div>
+
+            <div class="pr-info-item">
+                <span class="pr-info-label">عدد المحاور</span>
+                <div class="pr-info-value">@Model.TotalSections</div>
+            </div>
+
+            <div class="pr-info-item">
+                <span class="pr-info-label">عدد الأسئلة</span>
+                <div class="pr-info-value">@Model.TotalQuestions</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="pr-section-label">أسئلة الاختبار حسب المحاور</div>
+
+    @if (Model.Sections == null || !Model.Sections.Any(s => s.QuestionCount > 0))
+    {
+        <div class="pr-empty">
+            <i class="fa-solid fa-triangle-exclamation me-2"></i>
+            لا توجد أسئلة مرتبطة بهذا الاختبار حتى الآن.
+        </div>
+    }
+    else
+    {
+        foreach (var sec in Model.Sections.Where(s => s.QuestionCount > 0))
+        {
+            <div class="pr-section-card">
+                <div class="pr-section-head">
+                    <h3 class="pr-section-title">
+                        <i class="fa-solid fa-layer-group"></i>
+                        @sec.SectionTitle
+                    </h3>
+
+                    <span class="pr-badge pr-badge-primary">
+                        <i class="fa-solid fa-question-circle"></i>
+                        @sec.QuestionCount سؤال
+                    </span>
+                </div>
+
+                @if (sec.Questions == null || !sec.Questions.Any())
+                {
+                    <div class="p-3">
+                        <div class="pr-empty">لا توجد أسئلة في هذا المحور.</div>
+                    </div>
+                }
+                else
+                {
+                    <div class="pr-table-panel">
+                        <div class="table-responsive">
+                            <table class="pr-table">
+                                <thead>
+                                    <tr>
+                                        <th class="pr-col-order">#</th>
+                                        <th class="pr-col-ref">رقم السؤال</th>
+                                        <th class="pr-col-question">نص السؤال</th>
+                                        <th class="pr-col-curriculum">المنهج</th>
+                                        <th class="pr-col-lesson">المؤشر</th>
+                                        <th class="pr-col-difficulty">الصعوبة</th>
+                                        <th class="pr-col-answer">الإجابة</th>
+                                        <th class="pr-col-actions">الإجراءات</th>
+                                    </tr>
+                                </thead>
+
+                                <tbody>
+                                    @foreach (var question in sec.Questions)
+                                    {
+                                        var fullTitle = CleanText(question.Title);
+                                        var shortTitle = ShortText(question.Title, 55);
+
+                                        var curriculumTitle = CleanText(question.CurriculumTitle);
+                                        var lessonTitle = CleanText(question.LessonTitle);
+
+                                        var correctAnswer = CleanText(question.CorrectAnswer);
+                                        var shortCorrectAnswer = ShortText(question.CorrectAnswer, 18);
+
+                                        var difficultyClass = GetDifficultyClass(question.DifficultyText);
+                                        var difficultyIcon = GetDifficultyIcon(question.DifficultyText);
+
+                                        <tr>
+                                            <td>
+                                                <span class="pr-badge pr-badge-primary">@question.Order</span>
+                                            </td>
+
+                                            <td>
+                                                <span class="pr-badge pr-badge-secondary">
+                                                    @(string.IsNullOrWhiteSpace(question.ReferenceNumber) ? "—" : question.ReferenceNumber)
+                                                </span>
+                                            </td>
+
+                                            <td class="text-end">
+                                                <span class="pr-question-title" title="@fullTitle">
+                                                    @shortTitle
+                                                </span>
+                                            </td>
+
+                                            <td>
+                                                <span class="pr-short-text" title="@curriculumTitle">
+                                                    @ShortText(question.CurriculumTitle, 16)
+                                                </span>
+                                            </td>
+
+                                            <td>
+                                                <span class="pr-short-text" title="@lessonTitle">
+                                                    @ShortText(question.LessonTitle, 18)
+                                                </span>
+                                            </td>
+
+                                            <td>
+                                                <span class="pr-badge @difficultyClass">
+                                                    <i class="@difficultyIcon"></i>
+                                                    @(string.IsNullOrWhiteSpace(question.DifficultyText) ? "متوسط" : question.DifficultyText)
+                                                </span>
+                                            </td>
+
+                                            <td>
+                                                <span class="pr-short-text" title="@correctAnswer">
+                                                    @shortCorrectAnswer
+                                                </span>
+                                            </td>
+
+                                            <td>
+                                                <div class="pr-actions">
+                                                    <button type="button"
+                                                            class="pr-action-btn preview"
+                                                            data-question-preview="@question.QuestionId"
+                                                            title="معاينة السؤال">
+                                                        <i class="fa-solid fa-eye"></i>
+                                                    </button>
+
+                                                    <a asp-action="ReplaceQuestionPage"
+                                                       asp-route-examId="@Model.Id"
+                                                       asp-route-sectionId="@sec.SectionId"
+                                                       asp-route-oldId="@question.QuestionId"
+                                                       class="pr-action-btn replace"
+                                                       title="استبدال السؤال">
+                                                        <i class="fa-solid fa-arrow-rotate-right"></i>
+                                                    </a>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    }
+
+    @if (!Model.IsSent)
+    {
+        <div class="pr-send-panel">
+            <a asp-action="ConfirmSend"
+               asp-route-id="@Model.Id"
+               class="btn-pr-success">
+                <i class="fa-solid fa-paper-plane"></i>
+                إرسال الاختبار للدفعات
+            </a>
+        </div>
+    }
+</div>
+
+<div class="modal fade pr-modal" id="questionPreviewModal" tabindex="-1" aria-hidden="true" dir="rtl">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content text-end">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fa-solid fa-eye"></i>
+                    معاينة السؤال
+                </h5>
+
+                <button type="button"
+                        class="btn-close"
+                        data-bs-dismiss="modal"
+                        aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body" id="questionPreviewBody">
+                <div class="pr-preview-loading">
+                    <i class="fa-solid fa-spinner fa-spin"></i>
+                    جارٍ تحميل السؤال...
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.querySelectorAll('[data-question-preview]').forEach(button => {
+            button.addEventListener('click', async () => {
+                const questionId = button.getAttribute('data-question-preview');
+                const modalEl = document.getElementById('questionPreviewModal');
+                const body = document.getElementById('questionPreviewBody');
+                const modal = new bootstrap.Modal(modalEl);
+
+                body.innerHTML = `
+                    <div class="pr-preview-loading">
+                        <i class="fa-solid fa-spinner fa-spin"></i>
+                        جارٍ تحميل السؤال...
+                    </div>`;
+
+                modal.show();
+
+                try {
+                    const response = await fetch(`/Admin/PerformanceIndicatorExams/PreviewQuestion/${questionId}`);
+
+                    if (!response.ok) {
+                        throw new Error("PREVIEW_FAILED");
+                    }
+
+                    const html = await response.text();
+
+                    if (html.includes("System.InvalidOperationException") || html.includes("DeveloperExceptionPage")) {
+                        throw new Error("SERVER_EXCEPTION");
+                    }
+
+                    body.innerHTML = html;
+                } catch {
+                    body.innerHTML = `
+                        <div class="pr-empty">
+                            <i class="fa-solid fa-triangle-exclamation me-2"></i>
+                            تعذر تحميل معاينة السؤال.
+                        </div>`;
+                }
+            });
+        });
+    </script>
+}

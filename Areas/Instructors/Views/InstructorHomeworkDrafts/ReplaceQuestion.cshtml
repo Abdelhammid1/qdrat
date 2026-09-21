@@ -1,0 +1,125 @@
+@model QdratNew.ViewModels.Partner.HomeworkDraft.ReplaceHomeworkDraftQuestionVM
+
+@{
+    ViewData["Title"] = "استبدال سؤال";
+}
+
+@section Styles {
+    <link href="~/css/instructor/instructor-drafts.css" rel="stylesheet" asp-append-version="true" />
+}
+
+<div class="instructor-page">
+
+    <div class="hw-page-header">
+        <h3 class="hw-page-title">
+            <i class="fas fa-repeat"></i>
+            استبدال سؤال
+        </h3>
+        <a asp-action="Preview"
+           asp-route-id="@Model.DraftId"
+           class="hw-back-btn ms-auto">
+            <i class="fas fa-arrow-right"></i> رجوع
+        </a>
+    </div>
+
+    <div class="instructor-card mb-4">
+        <div class="card-title-box">
+            <h3><i class="fas fa-circle-question text-warning"></i> السؤال الحالي</h3>
+        </div>
+        <div class="question-box">
+            @Html.Raw(Model.OldQuestionTitle)
+        </div>
+    </div>
+
+    <div class="instructor-card">
+        <div class="card-title-box">
+            <h3><i class="fas fa-list text-primary"></i> الأسئلة البديلة</h3>
+        </div>
+        <div class="table-responsive">
+            <table id="replaceQuestionsTable" class="instructor-table">
+                <thead>
+                    <tr>
+                        <th>السؤال</th>
+                        <th style="width:110px">معاينة</th>
+                        <th style="width:130px">استبدال</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var q in Model.Candidates)
+                    {
+                        <tr>
+                            <td>
+                                <div class="question-preview">@Html.Raw(q.Title)</div>
+                            </td>
+                            <td class="text-center">
+                                <button type="button"
+                                        class="btn btn-sm btn-outline-primary"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#questionPreviewModal"
+                                        data-question-id="@q.QuestionId">
+                                    <i class="fa fa-eye"></i> معاينة
+                                </button>
+                            </td>
+                            <td class="text-center">
+                                <form asp-action="ConfirmReplaceQuestion" method="post">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="DraftId" value="@Model.DraftId" />
+                                    <input type="hidden" name="OldQuestionId" value="@Model.OldQuestionId" />
+                                    <input type="hidden" name="NewQuestionId" value="@q.QuestionId" />
+                                    <button type="submit"
+                                            class="btn btn-sm btn-success"
+                                            onclick="return confirm('هل تريد استبدال السؤال؟')">
+                                        <i class="fas fa-check me-1"></i> استبدال
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<div class="modal fade" id="questionPreviewModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">معاينة السؤال</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="questionPreviewContent">
+                <div class="text-center text-muted py-5">جاري التحميل...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            $('#replaceQuestionsTable').DataTable({
+                paging: true, searching: true, ordering: false,
+                responsive: true, pageLength: 25,
+                language: {
+                    search: "بحث:", lengthMenu: "عرض _MENU_ سؤال",
+                    info: "عرض _START_ إلى _END_ من _TOTAL_ سؤال",
+                    infoEmpty: "لا توجد أسئلة", zeroRecords: "لا توجد نتائج",
+                    paginate: { previous: "السابق", next: "التالي" }
+                }
+            });
+        });
+
+        document.getElementById('questionPreviewModal')
+            .addEventListener('show.bs.modal', function (event) {
+                const button = event.relatedTarget;
+                const questionId = button.getAttribute('data-question-id');
+                const container = document.getElementById('questionPreviewContent');
+                container.innerHTML = '<div class="text-center py-5">جاري التحميل...</div>';
+                fetch('/Instructors/InstructorHomeworkDrafts/PreviewQuestion?questionId=' + questionId)
+                    .then(r => r.text())
+                    .then(html => { container.innerHTML = html; });
+            });
+    </script>
+}

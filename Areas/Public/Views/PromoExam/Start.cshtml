@@ -1,0 +1,82 @@
+﻿@model QdratNew.ViewModels.Promo.PromoExamSolveViewModel
+@{
+    ViewData["Title"] = "الاختبار الترويجي";
+    Layout = "~/Views/Shared/_FrontendLayout.cshtml";
+    ViewBag.HideFooter = true;   // ← إشارة لإخفاء الفوتر
+
+}
+
+<section class="py-5" style="direction: rtl;">
+    <div class="container">
+        <div class="text-center mb-4">
+            <h2 class="fw-bold text-primary">
+                ✨ الاختبار الترويجي من معهد القدرات
+            </h2>
+            <p class="text-muted">أجب على الأسئلة التالية لتتعرف على مستواك الحالي.</p>
+        </div>
+
+        <!-- 🔹 حاوية السؤال الديناميكية -->
+        <div id="question-container">
+            @await Html.PartialAsync("_SolvePromoQuestionPartial", Model)
+        </div>
+
+        <!-- 🔹 مؤشر تحميل أثناء التنقل -->
+        <div id="loading-spinner" class="text-center mt-4 d-none">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">جاري التحميل...</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+
+        // 🟢 عند الضغط على زر التالي أو السابق أو إنهاء الاختبار
+        document.addEventListener("click", async function (e) {
+            const btn = e.target.closest(".homework-nav-button");
+            if (!btn) return;
+
+            const nav = btn.dataset.nav;
+            const form = document.getElementById("homework-question-form");
+            if (!form) return;
+
+            // إظهار التحميل
+            document.getElementById("loading-spinner").classList.remove("d-none");
+
+            // حفظ الإجابة الحالية
+            const formData = new FormData(form);
+            formData.append("nav", nav);
+
+            try {
+                const response = await fetch("/Public/PromoExam/SubmitAnswerFetch", {
+                    method: "POST",
+                    body: formData
+                });
+
+                if (response.redirected) {
+                    // ✅ الانتقال إلى صفحة النتيجة
+                    window.location.href = response.url;
+                    return;
+                }
+
+                const html = await response.text();
+                document.getElementById("question-container").innerHTML = html;
+            }
+            catch (err) {
+                alert("حدث خطأ أثناء تحميل السؤال التالي");
+                console.error(err);
+            }
+            finally {
+                document.getElementById("loading-spinner").classList.add("d-none");
+            }
+        });
+    });
+</script>
+
+<style>
+    .spinner-border {
+        width: 3rem;
+        height: 3rem;
+    }
+</style>

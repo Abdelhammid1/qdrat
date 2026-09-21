@@ -1,0 +1,1680 @@
+@model QdratNew.ViewModels.Instructor.InterventionTasks.InstructorTaskDetailsVM
+
+@{
+    ViewData["Title"] = "تفاصيل مهمة التدخل";
+
+    string StatusLabel(string s) => s switch
+    {
+        "Assigned"              => "مُسندة",
+        "InProgress"            => "قيد التنفيذ",
+        "NeedsFollowUp"         => "تحتاج متابعة",
+        "CompletedByInstructor" => "مكتملة",
+        _                       => s
+    };
+
+    string PriorityLabel(string p) => p switch
+    {
+        "High"   => "عالية",
+        "Medium" => "متوسطة",
+        "Low"    => "منخفضة",
+        _        => p
+    };
+
+    string StatusCss(string s) => s switch
+    {
+        "Assigned"              => "itd-s-assigned",
+        "InProgress"            => "itd-s-inprog",
+        "NeedsFollowUp"         => "itd-s-followup",
+        "CompletedByInstructor" => "itd-s-done",
+        _                       => "itd-s-other"
+    };
+
+    string StatusIcon(string s) => s switch
+    {
+        "Assigned"              => "fa-circle-dot",
+        "InProgress"            => "fa-spinner",
+        "NeedsFollowUp"         => "fa-triangle-exclamation",
+        "CompletedByInstructor" => "fa-circle-check",
+        _                       => "fa-circle"
+    };
+
+    string PriorityCss(string p) => p switch
+    {
+        "High"   => "itd-p-high",
+        "Medium" => "itd-p-med",
+        "Low"    => "itd-p-low",
+        _        => "itd-p-other"
+    };
+
+    bool canStart    = Model.Status == "Assigned";
+    bool canComplete = Model.Status is "Assigned" or "InProgress";
+    bool isDone      = Model.Status == "CompletedByInstructor";
+    bool isOverdue   = Model.DueDate.HasValue && Model.DueDate.Value < DateTime.Now && !isDone;
+
+    string lessonsJson   = Model.TargetLessonsJson   ?? "[]";
+    string questionsJson = Model.TargetQuestionsJson ?? "[]";
+    string studentsJson  = Model.TargetStudentsJson  ?? "[]";
+}
+
+@section Styles {
+<style>
+:root {
+  --itd-p:    #4F46E5;
+  --itd-p50:  #EEF2FF;
+  --itd-p100: #E0E7FF;
+  --itd-p700: #3730A3;
+  --itd-red:  #DC2626;
+  --itd-red50:#FEF2F2;
+  --itd-amb:  #D97706;
+  --itd-amb50:#FFFBEB;
+  --itd-grn:  #059669;
+  --itd-grn50:#ECFDF5;
+  --itd-bg:   #F0F2FF;
+  --itd-card: #ffffff;
+  --itd-t9:   #0F172A;
+  --itd-t7:   #334155;
+  --itd-t5:   #64748B;
+  --itd-t4:   #94A3B8;
+  --itd-bdr:  #E2E8F0;
+  --itd-sh:   0 1px 3px rgba(15,23,42,.07), 0 1px 2px rgba(15,23,42,.04);
+  --itd-shm:  0 4px 20px rgba(15,23,42,.10), 0 2px 8px rgba(15,23,42,.06);
+  --itd-r8:   8px;
+  --itd-r12:  12px;
+  --itd-r16:  16px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+.itd-page {
+  direction: rtl;
+  font-family: 'Cairo', sans-serif;
+  background: var(--itd-bg);
+  min-height: 100vh;
+  padding: 20px 0 56px;
+}
+
+/* ── Breadcrumb ── */
+.itd-bc { display:flex; align-items:center; gap:6px; font-size:.78rem; color:var(--itd-t5); margin-bottom:18px; }
+.itd-bc a { color:var(--itd-p); text-decoration:none; font-weight:600; }
+.itd-bc a:hover { text-decoration:underline; }
+.itd-bc-sep { color:var(--itd-t4); font-size:.65rem; }
+
+/* ── Hero ── */
+.itd-hero {
+  background: linear-gradient(135deg, var(--itd-p700) 0%, var(--itd-p) 55%, #7C3AED 100%);
+  border-radius: var(--itd-r16);
+  padding: 30px 32px 28px;
+  color: #fff;
+  margin-bottom: 18px;
+  position: relative;
+  overflow: hidden;
+  animation: itdSlideIn .35s ease both;
+}
+.itd-hero::before {
+  content:''; position:absolute; top:-50px; right:-50px;
+  width:220px; height:220px; border-radius:50%;
+  background:rgba(255,255,255,.06); pointer-events:none;
+}
+.itd-hero::after {
+  content:''; position:absolute; bottom:-40px; left:-30px;
+  width:160px; height:160px; border-radius:50%;
+  background:rgba(255,255,255,.04); pointer-events:none;
+}
+@@keyframes itdSlideIn {
+  from { opacity:0; transform:translateY(-8px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+.itd-hero-top { display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:12px; }
+.itd-hero-badges { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.itd-hero h1 { font-size:1.55rem; font-weight:800; line-height:1.3; margin-bottom:8px; }
+.itd-hero-info { display:flex; gap:18px; flex-wrap:wrap; font-size:.84rem; opacity:.88; }
+.itd-hero-info span { display:flex; align-items:center; gap:6px; }
+
+/* ── Badge ── */
+.itd-badge { display:inline-flex; align-items:center; gap:5px; padding:4px 11px; border-radius:20px; font-size:.74rem; font-weight:700; line-height:1.4; }
+.itd-badge-white  { background:rgba(255,255,255,.18); color:#fff; }
+.itd-s-assigned   { background:#DBEAFE; color:#1D4ED8; }
+.itd-s-inprog     { background:#FEF3C7; color:#92400E; }
+.itd-s-followup   { background:#FEE2E2; color:#991B1B; }
+.itd-s-done       { background:#D1FAE5; color:#065F46; }
+.itd-s-other      { background:var(--itd-bdr); color:var(--itd-t7); }
+.itd-p-high       { background:#FEE2E2; color:#991B1B; }
+.itd-p-med        { background:#FEF3C7; color:#92400E; }
+.itd-p-low        { background:#D1FAE5; color:#065F46; }
+.itd-p-other      { background:var(--itd-bdr); color:var(--itd-t7); }
+
+/* ── Overdue alert ── */
+.itd-alert { background:var(--itd-red50); border:1px solid #FCA5A5; border-radius:var(--itd-r8); padding:12px 16px; display:flex; align-items:flex-start; gap:10px; color:#991B1B; font-size:.84rem; margin-bottom:18px; }
+.itd-alert i { font-size:1rem; margin-top:2px; flex-shrink:0; }
+
+/* ── KPI Strip ── */
+.itd-kpi-row { display:grid; grid-template-columns:repeat(4, 1fr); gap:14px; margin-bottom:18px; }
+@@media (max-width:900px) { .itd-kpi-row { grid-template-columns:repeat(2, 1fr); } }
+@@media (max-width:480px)  { .itd-kpi-row { grid-template-columns:1fr 1fr; } }
+
+.itd-kpi {
+  background: var(--itd-card);
+  border-radius: var(--itd-r12);
+  border: 1px solid var(--itd-bdr);
+  box-shadow: var(--itd-sh);
+  padding: 16px 18px;
+  animation: itdFadeUp .3s ease both;
+  cursor: pointer;
+  transition: transform .18s, box-shadow .18s, border-color .18s;
+  position: relative;
+  overflow: hidden;
+}
+.itd-kpi::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--itd-r12);
+  border: 2px solid transparent;
+  transition: border-color .18s;
+  pointer-events: none;
+}
+.itd-kpi:hover { transform:translateY(-3px); box-shadow:var(--itd-shm); }
+.itd-kpi:hover::after { border-color: var(--itd-p); }
+.itd-kpi:active { transform:translateY(-1px); }
+.itd-kpi-click-hint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: .65rem;
+  color: var(--itd-t4);
+  margin-top: 6px;
+  opacity: 0;
+  transition: opacity .18s;
+}
+.itd-kpi:hover .itd-kpi-click-hint { opacity: 1; }
+
+.itd-kpi-icon { width:36px; height:36px; border-radius:var(--itd-r8); display:flex; align-items:center; justify-content:center; font-size:1rem; margin-bottom:10px; }
+.itd-kpi-icon.blu { background:var(--itd-p50); color:var(--itd-p); }
+.itd-kpi-icon.red { background:var(--itd-red50); color:var(--itd-red); }
+.itd-kpi-icon.grn { background:var(--itd-grn50); color:var(--itd-grn); }
+.itd-kpi-icon.amb { background:var(--itd-amb50); color:var(--itd-amb); }
+.itd-kpi-val { font-size:1.5rem; font-weight:800; color:var(--itd-t9); line-height:1; margin-bottom:4px; }
+.itd-kpi-lbl { font-size:.73rem; color:var(--itd-t5); font-weight:600; }
+
+/* ── Main grid ── */
+.itd-grid { display:grid; grid-template-columns:1fr 290px; gap:18px; align-items:start; }
+@@media (max-width:900px) { .itd-grid { grid-template-columns:1fr; } }
+
+@@keyframes itdFadeUp {
+  from { opacity:0; transform:translateY(8px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
+/* ── Card ── */
+.itd-card { background:var(--itd-card); border-radius:var(--itd-r12); border:1px solid var(--itd-bdr); box-shadow:var(--itd-sh); overflow:hidden; margin-bottom:16px; animation:itdFadeUp .3s ease both; }
+.itd-card:last-child { margin-bottom:0; }
+.itd-card-head { display:flex; align-items:center; gap:10px; padding:14px 18px; border-bottom:1px solid var(--itd-bdr); background:#FAFBFF; }
+.itd-card-head-icon { width:32px; height:32px; border-radius:var(--itd-r8); display:flex; align-items:center; justify-content:center; font-size:.9rem; flex-shrink:0; }
+.itd-card-head-icon.blu { background:var(--itd-p50); color:var(--itd-p); }
+.itd-card-head-icon.red { background:var(--itd-red50); color:var(--itd-red); }
+.itd-card-head-icon.grn { background:var(--itd-grn50); color:var(--itd-grn); }
+.itd-card-head-icon.amb { background:var(--itd-amb50); color:var(--itd-amb); }
+.itd-card-title    { font-size:.9rem; font-weight:700; color:var(--itd-t9); }
+.itd-card-subtitle { font-size:.72rem; color:var(--itd-t5); margin-top:1px; }
+.itd-card-body     { padding:18px; }
+
+/* ── Text blocks ── */
+.itd-text-block { font-size:.875rem; color:var(--itd-t7); line-height:1.85; white-space:pre-wrap; }
+.itd-instructions-block { font-size:.875rem; color:#78350F; line-height:1.85; background:var(--itd-amb50); border:1px solid #FDE68A; border-radius:var(--itd-r8); padding:14px 16px; white-space:pre-wrap; }
+.itd-done-block { font-size:.875rem; color:#064E3B; line-height:1.85; background:var(--itd-grn50); border:1px solid #6EE7B7; border-radius:var(--itd-r8); padding:14px 16px; white-space:pre-wrap; }
+
+/* ── Gauge / Donut ── */
+.itd-gauge-wrap { display:flex; flex-direction:column; align-items:center; padding:10px 0 0; }
+.itd-gauge-canvas-wrap { position:relative; width:180px; height:100px; overflow:hidden; }
+.itd-gauge-label { position:absolute; bottom:0; left:50%; transform:translateX(-50%); font-size:1.5rem; font-weight:800; color:var(--itd-t9); text-align:center; white-space:nowrap; }
+.itd-gauge-sublabel { font-size:.72rem; color:var(--itd-t5); margin-top:6px; font-weight:600; }
+.itd-donut-wrap { display:flex; flex-direction:column; align-items:center; gap:12px; padding:6px 0; }
+.itd-donut-legend { display:flex; flex-direction:column; gap:6px; width:100%; }
+.itd-legend-item { display:flex; align-items:center; justify-content:space-between; font-size:.78rem; color:var(--itd-t7); }
+.itd-legend-dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-left:6px; flex-shrink:0; }
+
+/* ── Lesson item ── */
+.itd-lessons-list { display:flex; flex-direction:column; gap:10px; }
+.itd-lesson-item { background:#F8FAFC; border:1px solid var(--itd-bdr); border-radius:var(--itd-r8); padding:12px 14px; }
+.itd-lesson-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:8px; }
+.itd-lesson-name { font-size:.84rem; font-weight:700; color:var(--itd-t9); flex:1; min-width:0; }
+.itd-lesson-section { font-size:.7rem; color:var(--itd-t5); margin-bottom:6px; }
+.itd-lesson-pct { font-size:.8rem; font-weight:800; flex-shrink:0; }
+.itd-lesson-pct.high { color:var(--itd-red); }
+.itd-lesson-pct.mid  { color:var(--itd-amb); }
+.itd-lesson-pct.low  { color:var(--itd-grn); }
+.itd-track { width:100%; height:7px; background:var(--itd-bdr); border-radius:999px; overflow:hidden; margin-bottom:8px; }
+.itd-fill { height:100%; border-radius:999px; transition:width .8s cubic-bezier(.4,0,.2,1); }
+.itd-fill.high { background:linear-gradient(90deg, #DC2626, #F87171); }
+.itd-fill.mid  { background:linear-gradient(90deg, #D97706, #FBBF24); }
+.itd-fill.low  { background:linear-gradient(90deg, #059669, #34D399); }
+.itd-lesson-stats { display:flex; gap:12px; flex-wrap:wrap; }
+.itd-lesson-stat { font-size:.7rem; color:var(--itd-t5); display:flex; align-items:center; gap:4px; }
+.itd-risk-badge { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:20px; font-size:.68rem; font-weight:700; }
+.itd-risk-high { background:#FEE2E2; color:#991B1B; }
+.itd-risk-med  { background:#FEF3C7; color:#92400E; }
+.itd-risk-low  { background:#D1FAE5; color:#065F46; }
+
+/* ── Checkboxes (shared between page & drawer) ── */
+.itd-checks-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--itd-bdr);
+}
+.itd-check-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .75rem;
+  font-weight: 600;
+  color: var(--itd-t7);
+  cursor: pointer;
+  background: #F8FAFC;
+  border: 1px solid var(--itd-bdr);
+  padding: 5px 10px;
+  border-radius: 20px;
+  transition: background .15s, border-color .15s, color .15s;
+  user-select: none;
+}
+.itd-check-label:hover { background: var(--itd-p50); border-color: var(--itd-p); color: var(--itd-p); }
+.itd-check-label input[type="checkbox"] { display: none; }
+.itd-check-label .itd-check-icon { width: 16px; height: 16px; border: 1.5px solid var(--itd-t4); border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: background .15s, border-color .15s; flex-shrink: 0; }
+.itd-check-label.checked .itd-check-icon { background: var(--itd-grn); border-color: var(--itd-grn); }
+.itd-check-label.checked-online .itd-check-icon { background: var(--itd-p); border-color: var(--itd-p); }
+.itd-check-label.checked, .itd-check-label.checked-online { border-color: transparent; }
+.itd-check-label.checked  { background: var(--itd-grn50); color: #064E3B; }
+.itd-check-label.checked-online { background: var(--itd-p50); color: var(--itd-p700); }
+.itd-check-icon svg { display: none; }
+.itd-check-label.checked .itd-check-icon svg,
+.itd-check-label.checked-online .itd-check-icon svg { display: block; }
+
+/* ── Question cards ── */
+.itd-q-list { display:flex; flex-direction:column; gap:14px; }
+.itd-q-card { border:1px solid var(--itd-bdr); border-radius:var(--itd-r8); overflow:hidden; transition:box-shadow .2s; }
+.itd-q-card:hover { box-shadow:var(--itd-shm); }
+.itd-q-header { background:#F8FAFC; padding:12px 14px; display:flex; align-items:flex-start; gap:10px; border-bottom:1px solid var(--itd-bdr); }
+.itd-q-num { width:28px; height:28px; background:var(--itd-p); color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:.72rem; font-weight:800; flex-shrink:0; margin-top:1px; }
+.itd-q-num.high { background:var(--itd-red); }
+.itd-q-num.med  { background:var(--itd-amb); }
+.itd-q-title { font-size:.88rem; font-weight:700; color:var(--itd-t9); line-height:1.6; flex:1; }
+.itd-q-ref   { font-size:.7rem; color:var(--itd-t4); white-space:nowrap; flex-shrink:0; margin-top:3px; }
+.itd-q-body  { padding:12px 14px; }
+.itd-q-location { font-size:.75rem; color:var(--itd-t5); margin-bottom:10px; display:flex; align-items:center; gap:5px; }
+.itd-q-stats-row { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; margin-bottom:10px; }
+@@media (max-width:600px) { .itd-q-stats-row { grid-template-columns:repeat(2, 1fr); } }
+.itd-q-stat-box { background:#F8FAFC; border:1px solid var(--itd-bdr); border-radius:var(--itd-r8); padding:8px 10px; text-align:center; }
+.itd-q-stat-box.danger { background:var(--itd-red50); border-color:#FCA5A5; }
+.itd-q-stat-num { font-size:1.1rem; font-weight:800; color:var(--itd-t9); line-height:1; }
+.itd-q-stat-box.danger .itd-q-stat-num { color:var(--itd-red); }
+.itd-q-stat-lbl { font-size:.65rem; color:var(--itd-t5); margin-top:3px; font-weight:600; }
+.itd-q-footer { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+
+/* ── Empty state ── */
+.itd-empty { text-align:center; padding:32px 16px; color:var(--itd-t5); }
+.itd-empty i { font-size:2.2rem; color:var(--itd-t4); display:block; margin-bottom:10px; }
+.itd-empty p { font-size:.84rem; margin:0; }
+
+/* ── Sidebar rows ── */
+.itd-rows { display:flex; flex-direction:column; }
+.itd-row { display:flex; align-items:flex-start; gap:10px; padding:11px 0; border-bottom:1px solid var(--itd-bdr); }
+.itd-row:last-child { border-bottom:none; }
+.itd-row-icon { width:28px; height:28px; border-radius:var(--itd-r8); background:var(--itd-p50); color:var(--itd-p); display:flex; align-items:center; justify-content:center; font-size:.8rem; flex-shrink:0; margin-top:1px; }
+.itd-row-lbl { font-size:.72rem; color:var(--itd-t4); margin-bottom:2px; }
+.itd-row-val { font-size:.84rem; font-weight:700; color:var(--itd-t9); }
+
+/* ── Timeline ── */
+.itd-tl { display:flex; flex-direction:column; }
+.itd-tl-item { display:flex; gap:10px; padding-bottom:18px; position:relative; }
+.itd-tl-item:last-child { padding-bottom:0; }
+.itd-tl-col { display:flex; flex-direction:column; align-items:center; }
+.itd-tl-dot { width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:.8rem; flex-shrink:0; z-index:1; }
+.itd-tl-dot.done { background:var(--itd-grn); color:#fff; }
+.itd-tl-dot.curr { background:var(--itd-p); color:#fff; }
+.itd-tl-dot.pend { background:#E2E8F0; color:var(--itd-t4); }
+.itd-tl-line { flex:1; width:2px; background:var(--itd-bdr); margin-top:4px; }
+.itd-tl-body { padding-top:4px; }
+.itd-tl-label { font-size:.8rem; font-weight:700; color:var(--itd-t9); }
+.itd-tl-date  { font-size:.7rem; color:var(--itd-t5); margin-top:2px; }
+
+/* ── Action buttons ── */
+.itd-actions { display:flex; flex-direction:column; gap:10px; }
+.itd-btn { display:flex; align-items:center; justify-content:center; gap:7px; padding:11px 16px; border-radius:var(--itd-r8); font-size:.875rem; font-weight:700; font-family:inherit; cursor:pointer; border:none; transition:opacity .18s, transform .15s, box-shadow .18s; width:100%; text-decoration:none; }
+.itd-btn:hover  { opacity:.88; transform:translateY(-1px); }
+.itd-btn:active { transform:translateY(0); }
+.itd-btn-primary   { background:var(--itd-p); color:#fff; box-shadow:0 2px 8px rgba(79,70,229,.35); }
+.itd-btn-success   { background:var(--itd-grn); color:#fff; box-shadow:0 2px 8px rgba(5,150,105,.3); }
+.itd-btn-secondary { background:#F1F5F9; color:var(--itd-t7); border:1px solid var(--itd-bdr); }
+
+/* ── Done banner ── */
+.itd-done-banner { display:flex; flex-direction:column; align-items:center; gap:4px; padding:12px 0 0; text-align:center; }
+.itd-done-banner i { font-size:2rem; color:var(--itd-grn); }
+.itd-done-banner p { font-size:.82rem; font-weight:700; color:var(--itd-grn); margin:0; }
+
+/* ════════════════════════════════════
+   DRAWER (left-side panel)
+   ════════════════════════════════════ */
+.itd-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15,23,42,.45);
+  z-index: 8000;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .28s, visibility .28s;
+  backdrop-filter: blur(2px);
+}
+.itd-drawer-backdrop.open { opacity: 1; visibility: visible; }
+
+.itd-drawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 420px;
+  max-width: 92vw;
+  background: #fff;
+  z-index: 8100;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 4px 0 30px rgba(15,23,42,.18);
+  transform: translateX(-100%);
+  transition: transform .3s cubic-bezier(.4,0,.2,1);
+  direction: rtl;
+}
+.itd-drawer.open { transform: translateX(0); }
+
+.itd-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--itd-bdr);
+  background: linear-gradient(135deg, var(--itd-p700), var(--itd-p));
+  color: #fff;
+  flex-shrink: 0;
+}
+.itd-drawer-title {
+  font-size: 1rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.itd-drawer-close {
+  width: 32px; height: 32px;
+  background: rgba(255,255,255,.18);
+  border: none;
+  border-radius: 50%;
+  color: #fff;
+  font-size: .9rem;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s;
+  flex-shrink: 0;
+}
+.itd-drawer-close:hover { background: rgba(255,255,255,.3); }
+
+/* Tab nav in drawer */
+.itd-drawer-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--itd-bdr);
+  background: #FAFBFF;
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+.itd-drawer-tab {
+  flex: 1;
+  min-width: 0;
+  padding: 11px 12px;
+  font-size: .78rem;
+  font-weight: 700;
+  color: var(--itd-t5);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color .15s, border-color .15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  white-space: nowrap;
+  font-family: inherit;
+}
+.itd-drawer-tab:hover { color: var(--itd-p); }
+.itd-drawer-tab.active { color: var(--itd-p); border-bottom-color: var(--itd-p); background: #fff; }
+.itd-drawer-tab-badge { background: var(--itd-p50); color: var(--itd-p); border-radius: 20px; padding: 1px 6px; font-size: .65rem; font-weight: 800; }
+.itd-drawer-tab.active .itd-drawer-tab-badge { background: var(--itd-p); color: #fff; }
+
+.itd-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  scroll-behavior: smooth;
+}
+.itd-drawer-body::-webkit-scrollbar { width: 4px; }
+.itd-drawer-body::-webkit-scrollbar-track { background: transparent; }
+.itd-drawer-body::-webkit-scrollbar-thumb { background: var(--itd-bdr); border-radius: 2px; }
+
+/* Drawer section cards */
+.itd-drawer-section { display: none; }
+.itd-drawer-section.active { display: block; }
+
+/* Drawer lesson item */
+.itd-dl-item {
+  background: #F8FAFC;
+  border: 1px solid var(--itd-bdr);
+  border-radius: var(--itd-r8);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  transition: border-color .15s;
+}
+.itd-dl-item:hover { border-color: var(--itd-p); }
+.itd-dl-item:last-child { margin-bottom: 0; }
+.itd-dl-name { font-size: .84rem; font-weight: 700; color: var(--itd-t9); margin-bottom: 4px; }
+.itd-dl-section { font-size: .7rem; color: var(--itd-t5); margin-bottom: 8px; display: flex; align-items: center; gap: 4px; }
+
+/* Drawer question item */
+.itd-dq-item {
+  background: #F8FAFC;
+  border: 1px solid var(--itd-bdr);
+  border-radius: var(--itd-r8);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+.itd-dq-item:last-child { margin-bottom: 0; }
+.itd-dq-header { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+.itd-dq-num { width: 22px; height: 22px; background: var(--itd-p); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: .65rem; font-weight: 800; flex-shrink: 0; margin-top: 2px; }
+.itd-dq-num.high { background: var(--itd-red); }
+.itd-dq-title { font-size: .82rem; font-weight: 700; color: var(--itd-t9); line-height: 1.5; }
+
+/* Drawer student item */
+.itd-ds-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #F8FAFC;
+  border: 1px solid var(--itd-bdr);
+  border-radius: var(--itd-r8);
+  margin-bottom: 8px;
+}
+.itd-ds-item:last-child { margin-bottom: 0; }
+.itd-ds-avatar {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  background: var(--itd-p50);
+  color: var(--itd-p);
+  display: flex; align-items: center; justify-content: center;
+  font-size: .8rem;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.itd-ds-name { font-size: .84rem; font-weight: 700; color: var(--itd-t9); }
+
+/* Progress mini bar in drawer */
+.itd-dl-pct-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.itd-dl-pct { font-size: .75rem; font-weight: 800; flex-shrink: 0; }
+
+/* ── Question Students Sub-panel ── */
+.itd-qstu-panel {
+  display: none;
+  flex-direction: column;
+  height: 100%;
+}
+.itd-qstu-panel.active { display: flex; }
+
+.itd-qstu-back {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: none;
+  border: none;
+  color: var(--itd-p);
+  font-size: .82rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0 0 12px 0;
+  font-family: inherit;
+  transition: opacity .15s;
+}
+.itd-qstu-back:hover { opacity: .75; }
+
+.itd-qstu-title {
+  font-size: .84rem;
+  font-weight: 800;
+  color: var(--itd-t9);
+  line-height: 1.5;
+  background: var(--itd-p50);
+  border: 1px solid var(--itd-p100);
+  border-radius: var(--itd-r8);
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+
+.itd-qstu-list { display: flex; flex-direction: column; gap: 8px; }
+
+.itd-qstu-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #F8FAFC;
+  border: 1px solid var(--itd-bdr);
+  border-radius: var(--itd-r8);
+  padding: 10px 12px;
+  transition: border-color .15s;
+}
+.itd-qstu-row:hover { border-color: var(--itd-p); }
+
+.itd-qstu-avatar {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  background: var(--itd-red50);
+  color: var(--itd-red);
+  display: flex; align-items: center; justify-content: center;
+  font-size: .82rem;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.itd-qstu-name {
+  flex: 1;
+  font-size: .82rem;
+  font-weight: 700;
+  color: var(--itd-t9);
+  min-width: 0;
+}
+.itd-qstu-stats {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  flex-shrink: 0;
+}
+.itd-qstu-stat {
+  font-size: .68rem;
+  color: var(--itd-t5);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.itd-qstu-stat.warn { color: var(--itd-red); font-weight: 700; }
+.itd-qstu-stat.time { color: var(--itd-amb); font-weight: 600; }
+
+/* زر عرض الطلاب على كروت الأسئلة */
+.itd-q-stu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  background: var(--itd-p50);
+  color: var(--itd-p);
+  border: 1px solid var(--itd-p100);
+  border-radius: 20px;
+  font-size: .72rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, transform .12s;
+  font-family: inherit;
+  margin-top: 8px;
+}
+.itd-q-stu-btn:hover {
+  background: var(--itd-p);
+  color: #fff;
+  border-color: var(--itd-p);
+  transform: translateY(-1px);
+}
+.itd-q-stu-btn i { font-size: .68rem; }
+
+/* stat boxes قابلة للنقر */
+.itd-q-stat-box.itd-clickable {
+  cursor: pointer;
+  transition: transform .15s, box-shadow .15s, border-color .15s, background .15s;
+  position: relative;
+}
+.itd-q-stat-box.itd-clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(79,70,229,.15);
+  border-color: var(--itd-p);
+  background: var(--itd-p50);
+}
+.itd-q-stat-box.itd-clickable:hover .itd-q-stat-lbl { color: var(--itd-p); }
+.itd-q-stat-box.itd-clickable::after {
+  content: '\f007';
+  font-family: 'Font Awesome 6 Free';
+  font-weight: 900;
+  font-size: .55rem;
+  color: var(--itd-t4);
+  position: absolute;
+  top: 5px;
+  left: 6px;
+  transition: color .15s;
+}
+.itd-q-stat-box.itd-clickable:hover::after { color: var(--itd-p); }
+
+/* ── Complete Modal (old-style center modal) ── */
+.itd-overlay { position:fixed; inset:0; background:rgba(15,23,42,.5); display:flex; align-items:center; justify-content:center; z-index:9999; opacity:0; visibility:hidden; transition:opacity .25s, visibility .25s; }
+.itd-overlay.open { opacity:1; visibility:visible; }
+.itd-modal { background:#fff; border-radius:var(--itd-r16); padding:28px; width:92%; max-width:460px; box-shadow:var(--itd-shm); transform:translateY(14px); transition:transform .25s; direction:rtl; }
+.itd-overlay.open .itd-modal { transform:translateY(0); }
+.itd-modal-icon { width:48px; height:48px; border-radius:50%; background:var(--itd-grn50); color:var(--itd-grn); display:flex; align-items:center; justify-content:center; font-size:1.3rem; margin-bottom:14px; }
+.itd-modal h3 { font-size:1.05rem; font-weight:800; color:var(--itd-t9); margin-bottom:5px; }
+.itd-modal p  { font-size:.82rem; color:var(--itd-t5); margin-bottom:16px; }
+.itd-modal textarea { width:100%; border:1.5px solid var(--itd-bdr); border-radius:var(--itd-r8); padding:10px 12px; font-family:inherit; font-size:.875rem; resize:vertical; min-height:90px; color:var(--itd-t9); direction:rtl; outline:none; }
+.itd-modal textarea:focus { border-color:var(--itd-p); box-shadow:0 0 0 3px var(--itd-p100); }
+.itd-modal-footer { display:flex; gap:10px; margin-top:14px; }
+.itd-modal-footer .itd-btn { flex:1; }
+</style>
+}
+
+<div class="itd-page container-fluid px-3 px-md-4">
+
+    @* ── Breadcrumb ── *@
+    <nav class="itd-bc">
+        <a asp-area="Instructors" asp-controller="InstructorInterventionTasks" asp-action="Index">
+            <i class="fas fa-clipboard-list"></i> مهام التدخل
+        </a>
+        <i class="fas fa-chevron-left itd-bc-sep"></i>
+        <span>@Model.Title</span>
+    </nav>
+
+    @* ── Hero ── *@
+    <div class="itd-hero">
+        <div class="itd-hero-top">
+            <div class="itd-hero-badges">
+                <span class="itd-badge itd-badge-white"><i class="fas fa-tasks"></i> مهمة تدخل تعليمي</span>
+                <span class="itd-badge @StatusCss(Model.Status)">
+                    <i class="fas @StatusIcon(Model.Status)"></i> @StatusLabel(Model.Status)
+                </span>
+                <span class="itd-badge @PriorityCss(Model.Priority)">
+                    <i class="fas fa-flag"></i> أولوية @PriorityLabel(Model.Priority)
+                </span>
+            </div>
+            @if (Model.DueDate.HasValue)
+            {
+                <span class="itd-badge" style="background:rgba(255,255,255,.15);color:#fff;font-size:.78rem">
+                    <i class="fas fa-calendar-alt"></i>
+                    استحقاق @Model.DueDate.Value.ToString("yyyy/MM/dd")
+                </span>
+            }
+        </div>
+        <h1>@Model.Title</h1>
+        <div class="itd-hero-info">
+            <span><i class="fas fa-users"></i> @Model.BatchName</span>
+            @if (!string.IsNullOrWhiteSpace(Model.CurriculumTitle))
+            {
+                <span><i class="fas fa-book"></i> @Model.CurriculumTitle</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(Model.TaskType))
+            {
+                <span><i class="fas fa-tag"></i> @Model.TaskType</span>
+            }
+        </div>
+    </div>
+
+    @* ── Overdue Alert ── *@
+    @if (isOverdue)
+    {
+        <div class="itd-alert">
+            <i class="fas fa-exclamation-triangle"></i>
+            <div>
+                <strong>تنبيه:</strong> تجاوزت هذه المهمة تاريخ الاستحقاق
+                <strong>(@Model.DueDate!.Value.ToString("yyyy/MM/dd"))</strong>.
+                يُرجى إتمامها في أقرب وقت ممكن.
+            </div>
+        </div>
+    }
+
+    @* ── KPI Strip (Clickable) ── *@
+    <div class="itd-kpi-row">
+        <div class="itd-kpi" style="animation-delay:.05s" onclick="openDrawer('lessons')" title="انقر لعرض الدروس المستهدفة">
+            <div class="itd-kpi-icon blu"><i class="fas fa-book-open"></i></div>
+            <div class="itd-kpi-val" id="kpiLessons">—</div>
+            <div class="itd-kpi-lbl">الدروس المستهدفة</div>
+            <div class="itd-kpi-click-hint"><i class="fas fa-hand-pointer"></i> انقر للتفاصيل</div>
+        </div>
+        <div class="itd-kpi" style="animation-delay:.08s" onclick="openDrawer('questions')" title="انقر لعرض الأسئلة المستهدفة">
+            <div class="itd-kpi-icon red"><i class="fas fa-question-circle"></i></div>
+            <div class="itd-kpi-val" id="kpiQuestions">—</div>
+            <div class="itd-kpi-lbl">الأسئلة المستهدفة</div>
+            <div class="itd-kpi-click-hint"><i class="fas fa-hand-pointer"></i> انقر للتفاصيل</div>
+        </div>
+        <div class="itd-kpi" style="animation-delay:.11s" onclick="openDrawer('lessons')" title="انقر لعرض التفاصيل">
+            <div class="itd-kpi-icon red"><i class="fas fa-chart-line"></i></div>
+            <div class="itd-kpi-val" id="kpiAvgErr">—</div>
+            <div class="itd-kpi-lbl">متوسط نسبة الخطأ</div>
+            <div class="itd-kpi-click-hint"><i class="fas fa-hand-pointer"></i> انقر للتفاصيل</div>
+        </div>
+        <div class="itd-kpi" style="animation-delay:.14s" onclick="openDrawer('students')" title="انقر لعرض الطلاب المتأثرين">
+            <div class="itd-kpi-icon amb"><i class="fas fa-user-graduate"></i></div>
+            <div class="itd-kpi-val" id="kpiStudents">—</div>
+            <div class="itd-kpi-lbl">الطلاب في الدفعة</div>
+            <div class="itd-kpi-click-hint"><i class="fas fa-hand-pointer"></i> انقر لعرض القائمة</div>
+        </div>
+    </div>
+
+    @* ── Main 2-col Grid ── *@
+    <div class="itd-grid">
+
+        @* ══ LEFT: Main Content ══ *@
+        <div>
+
+            @if (!string.IsNullOrWhiteSpace(Model.Description))
+            {
+                <div class="itd-card" style="animation-delay:.1s">
+                    <div class="itd-card-head">
+                        <div class="itd-card-head-icon blu"><i class="fas fa-align-right"></i></div>
+                        <div><div class="itd-card-title">وصف المهمة</div></div>
+                    </div>
+                    <div class="itd-card-body">
+                        <div class="itd-text-block">@Model.Description</div>
+                    </div>
+                </div>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(Model.OwnerInstructions))
+            {
+                <div class="itd-card" style="animation-delay:.13s">
+                    <div class="itd-card-head">
+                        <div class="itd-card-head-icon amb"><i class="fas fa-lightbulb"></i></div>
+                        <div>
+                            <div class="itd-card-title">تعليمات الإدارة</div>
+                            <div class="itd-card-subtitle">ما تطلبه الإدارة منك في هذه المهمة</div>
+                        </div>
+                    </div>
+                    <div class="itd-card-body">
+                        <div class="itd-instructions-block">@Model.OwnerInstructions</div>
+                    </div>
+                </div>
+            }
+
+            @* ── Lessons Section (with checkboxes) ── *@
+            <div class="itd-card" style="animation-delay:.16s" id="lessonsCard">
+                <div class="itd-card-head">
+                    <div class="itd-card-head-icon red"><i class="fas fa-book-reader"></i></div>
+                    <div class="flex-grow-1">
+                        <div class="itd-card-title">الدروس المستهدفة</div>
+                        <div class="itd-card-subtitle">الدروس التي تحتاج تدخلاً بناءً على بيانات الأداء</div>
+                    </div>
+                    <button type="button" class="itd-btn itd-btn-secondary" style="width:auto;padding:6px 12px;font-size:.75rem" onclick="openDrawer('lessons')">
+                        <i class="fas fa-list-check"></i> إدارة الدروس
+                    </button>
+                </div>
+                <div class="itd-card-body">
+                    <div id="lessonsContainer">
+                        <div class="itd-empty">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <p>جارٍ التحميل...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @* ── Questions Section (with checkboxes) ── *@
+            <div class="itd-card" style="animation-delay:.19s">
+                <div class="itd-card-head">
+                    <div class="itd-card-head-icon red"><i class="fas fa-question-circle"></i></div>
+                    <div class="flex-grow-1">
+                        <div class="itd-card-title">الأسئلة المستهدفة</div>
+                        <div class="itd-card-subtitle">الأسئلة ذات نسبة الخطأ المرتفعة التي تستوجب التدخل</div>
+                    </div>
+                    <button type="button" class="itd-btn itd-btn-secondary" style="width:auto;padding:6px 12px;font-size:.75rem" onclick="openDrawer('questions')">
+                        <i class="fas fa-list-check"></i> إدارة الأسئلة
+                    </button>
+                </div>
+                <div class="itd-card-body">
+                    <div id="questionsContainer">
+                        <div class="itd-empty">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <p>جارٍ التحميل...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @if (isDone && !string.IsNullOrWhiteSpace(Model.InstructorExecutionNotes))
+            {
+                <div class="itd-card" style="animation-delay:.22s">
+                    <div class="itd-card-head">
+                        <div class="itd-card-head-icon grn"><i class="fas fa-check-circle"></i></div>
+                        <div>
+                            <div class="itd-card-title">ملاحظات التنفيذ</div>
+                            <div class="itd-card-subtitle">ما كتبته عند إتمام المهمة</div>
+                        </div>
+                    </div>
+                    <div class="itd-card-body">
+                        <div class="itd-done-block">@Model.InstructorExecutionNotes</div>
+                    </div>
+                </div>
+            }
+
+        </div>
+
+        @* ══ RIGHT: Sidebar ══ *@
+        <div>
+
+            <div class="itd-card" style="animation-delay:.08s">
+                <div class="itd-card-head">
+                    <div class="itd-card-head-icon red"><i class="fas fa-tachometer-alt"></i></div>
+                    <div><div class="itd-card-title">مؤشر الأداء العام</div></div>
+                </div>
+                <div class="itd-card-body">
+                    <div class="itd-gauge-wrap">
+                        <div class="itd-gauge-canvas-wrap">
+                            <canvas id="errGauge" width="180" height="100"></canvas>
+                            <div class="itd-gauge-label" id="gaugeLabel">—</div>
+                        </div>
+                        <div class="itd-gauge-sublabel">متوسط نسبة الخطأ</div>
+                    </div>
+                    <div style="margin-top:14px">
+                        <div class="itd-donut-wrap">
+                            <canvas id="riskDonut" width="130" height="130"></canvas>
+                            <div class="itd-donut-legend" id="riskLegend"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="itd-card" style="animation-delay:.11s">
+                <div class="itd-card-head">
+                    <div class="itd-card-head-icon blu"><i class="fas fa-history"></i></div>
+                    <div><div class="itd-card-title">الجدول الزمني</div></div>
+                </div>
+                <div class="itd-card-body">
+                    <div class="itd-tl">
+                        @{
+                            bool startedDone = Model.StartedAt.HasValue;
+                            bool completedDn = Model.CompletedAt.HasValue;
+                        }
+                        <div class="itd-tl-item">
+                            <div class="itd-tl-col">
+                                <div class="itd-tl-dot done"><i class="fas fa-check"></i></div>
+                                <div class="itd-tl-line"></div>
+                            </div>
+                            <div class="itd-tl-body">
+                                <div class="itd-tl-label">إسناد المهمة</div>
+                                <div class="itd-tl-date">@(Model.AssignedAt.HasValue ? Model.AssignedAt.Value.ToString("yyyy/MM/dd") : Model.CreatedAt.ToString("yyyy/MM/dd"))</div>
+                            </div>
+                        </div>
+                        <div class="itd-tl-item">
+                            <div class="itd-tl-col">
+                                <div class="itd-tl-dot @(startedDone ? "done" : (canStart ? "curr" : "pend"))">
+                                    @if (startedDone) { <i class="fas fa-check"></i> } else { <i class="fas fa-play"></i> }
+                                </div>
+                                <div class="itd-tl-line"></div>
+                            </div>
+                            <div class="itd-tl-body">
+                                <div class="itd-tl-label">بدء التنفيذ</div>
+                                @if (Model.StartedAt.HasValue) { <div class="itd-tl-date">@Model.StartedAt.Value.ToString("yyyy/MM/dd")</div> }
+                                else { <div class="itd-tl-date" style="color:var(--itd-t4)">لم يبدأ بعد</div> }
+                            </div>
+                        </div>
+                        <div class="itd-tl-item">
+                            <div class="itd-tl-col">
+                                <div class="itd-tl-dot @(completedDn ? "done" : "pend")">
+                                    @if (completedDn) { <i class="fas fa-check-double"></i> } else { <i class="fas fa-flag-checkered"></i> }
+                                </div>
+                            </div>
+                            <div class="itd-tl-body">
+                                <div class="itd-tl-label">الإتمام</div>
+                                @if (Model.CompletedAt.HasValue) { <div class="itd-tl-date">@Model.CompletedAt.Value.ToString("yyyy/MM/dd")</div> }
+                                else { <div class="itd-tl-date" style="color:var(--itd-t4)">لم تكتمل بعد</div> }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="itd-card" style="animation-delay:.14s">
+                <div class="itd-card-head">
+                    <div class="itd-card-head-icon grn"><i class="fas fa-bolt"></i></div>
+                    <div><div class="itd-card-title">الإجراءات</div></div>
+                </div>
+                <div class="itd-card-body">
+                    <div class="itd-actions">
+                        @if (canStart)
+                        {
+                            <form asp-area="Instructors" asp-controller="InstructorInterventionTasks" asp-action="StartTask" asp-route-id="@Model.Id" method="post">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="itd-btn itd-btn-primary">
+                                    <i class="fas fa-play"></i> بدء التنفيذ
+                                </button>
+                            </form>
+                        }
+                        @if (canComplete)
+                        {
+                            <a id="completeWithHomeworkLink"
+                               class="itd-btn itd-btn-success"
+                               asp-area="Instructors"
+                               asp-controller="InstructorInterventionTasks"
+                               asp-action="CompleteWithHomework"
+                               asp-route-id="@Model.Id">
+                                <i class="fas fa-check-circle"></i> إتمام المهمة وإعداد الواجب
+                            </a>
+                        }
+                        @if (isDone)
+                        {
+                            <div class="itd-done-banner">
+                                <i class="fas fa-check-circle"></i>
+                                <p>المهمة مكتملة</p>
+                            </div>
+                        }
+                        <a asp-area="Instructors" asp-controller="InstructorInterventionTasks" asp-action="Index" class="itd-btn itd-btn-secondary">
+                            <i class="fas fa-arrow-right"></i> العودة للقائمة
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="itd-card" style="animation-delay:.17s">
+                <div class="itd-card-head">
+                    <div class="itd-card-head-icon blu"><i class="fas fa-info-circle"></i></div>
+                    <div><div class="itd-card-title">تفاصيل المهمة</div></div>
+                </div>
+                <div class="itd-card-body">
+                    <div class="itd-rows">
+                        <div class="itd-row">
+                            <div class="itd-row-icon"><i class="fas fa-users"></i></div>
+                            <div><div class="itd-row-lbl">الدفعة</div><div class="itd-row-val">@Model.BatchName</div></div>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(Model.CurriculumTitle))
+                        {
+                            <div class="itd-row">
+                                <div class="itd-row-icon"><i class="fas fa-book"></i></div>
+                                <div><div class="itd-row-lbl">المنهج</div><div class="itd-row-val">@Model.CurriculumTitle</div></div>
+                            </div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(Model.LectureTitle))
+                        {
+                            <div class="itd-row">
+                                <div class="itd-row-icon"><i class="fas fa-file-alt"></i></div>
+                                <div><div class="itd-row-lbl">المحاضرة</div><div class="itd-row-val">@Model.LectureTitle</div></div>
+                            </div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(Model.TaskType))
+                        {
+                            <div class="itd-row">
+                                <div class="itd-row-icon"><i class="fas fa-tag"></i></div>
+                                <div><div class="itd-row-lbl">نوع المهمة</div><div class="itd-row-val">@Model.TaskType</div></div>
+                            </div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(Model.DeliveryMode))
+                        {
+                            <div class="itd-row">
+                                <div class="itd-row-icon"><i class="fas fa-desktop"></i></div>
+                                <div><div class="itd-row-lbl">طريقة التسليم</div><div class="itd-row-val">@Model.DeliveryMode</div></div>
+                            </div>
+                        }
+                        @if (Model.DueDate.HasValue)
+                        {
+                            <div class="itd-row">
+                                <div class="itd-row-icon"><i class="fas fa-calendar-alt"></i></div>
+                                <div><div class="itd-row-lbl">تاريخ الاستحقاق</div><div class="itd-row-val">@Model.DueDate.Value.ToString("yyyy/MM/dd")</div></div>
+                            </div>
+                        }
+                        <div class="itd-row">
+                            <div class="itd-row-icon"><i class="fas fa-calendar-plus"></i></div>
+                            <div><div class="itd-row-lbl">تاريخ الإنشاء</div><div class="itd-row-val">@Model.CreatedAt.ToString("yyyy/MM/dd")</div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+@* ════════ DRAWER ════════ *@
+<div class="itd-drawer-backdrop" id="drawerBackdrop" onclick="closeDrawer()"></div>
+
+<div class="itd-drawer" id="mainDrawer" dir="rtl">
+    <div class="itd-drawer-header">
+        <div class="itd-drawer-title">
+            <i class="fas fa-list-check"></i>
+            متابعة تنفيذ المهمة
+        </div>
+        <button class="itd-drawer-close" onclick="closeDrawer()">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+
+    <div class="itd-drawer-tabs">
+        <button class="itd-drawer-tab active" id="tabLessons" onclick="switchTab('lessons')">
+            <i class="fas fa-book-open"></i>
+            الدروس
+            <span class="itd-drawer-tab-badge" id="tabLessonsBadge">0</span>
+        </button>
+        <button class="itd-drawer-tab" id="tabQuestions" onclick="switchTab('questions')">
+            <i class="fas fa-question-circle"></i>
+            الأسئلة
+            <span class="itd-drawer-tab-badge" id="tabQuestionsBadge">0</span>
+        </button>
+        <button class="itd-drawer-tab" id="tabStudents" onclick="switchTab('students')">
+            <i class="fas fa-user-graduate"></i>
+            الطلاب
+            <span class="itd-drawer-tab-badge" id="tabStudentsBadge">0</span>
+        </button>
+    </div>
+
+    <div class="itd-drawer-body">
+
+        @* ── Lessons Tab ── *@
+        <div class="itd-drawer-section active" id="sectionLessons">
+            <div id="drawerLessonsContent">
+                <div class="itd-empty"><i class="fas fa-spinner fa-spin"></i><p>جارٍ التحميل...</p></div>
+            </div>
+        </div>
+
+        @* ── Questions Tab ── *@
+        <div class="itd-drawer-section" id="sectionQuestions">
+            @* قائمة الأسئلة الرئيسية *@
+            <div id="drawerQuestionsContent">
+                <div class="itd-empty"><i class="fas fa-spinner fa-spin"></i><p>جارٍ التحميل...</p></div>
+            </div>
+            @* Sub-panel: طلاب سؤال محدد *@
+            <div class="itd-qstu-panel" id="qStudentsPanel">
+                <button class="itd-qstu-back" onclick="closeQStudentsPanel()">
+                    <i class="fas fa-arrow-right"></i>
+                    العودة لقائمة الأسئلة
+                </button>
+                <div class="itd-qstu-title" id="qStudentsPanelTitle"></div>
+                <div id="qStudentsPanelBody">
+                    <div class="itd-empty"><i class="fas fa-spinner fa-spin"></i><p>جارٍ التحميل...</p></div>
+                </div>
+            </div>
+        </div>
+
+        @* ── Students Tab ── *@
+        <div class="itd-drawer-section" id="sectionStudents">
+            <div id="drawerStudentsContent">
+                <div class="itd-empty"><i class="fas fa-spinner fa-spin"></i><p>جارٍ التحميل...</p></div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+@* Complete modal removed — completion now handled via CompleteWithHomework page *@
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var TASK_ID      = @Model.Id;
+  var STORE_KEY    = 'itd_progress_' + TASK_ID;
+
+  // Escape HTML attributes safely
+  function escAttr(s) {
+    return String(s || '')
+      .replace(/&/g,'&amp;')
+      .replace(/"/g,'&quot;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;');
+  }
+
+  var lessonsRaw   = @Html.Raw(lessonsJson);
+  var questionsRaw = @Html.Raw(questionsJson);
+  var studentsRaw  = @Html.Raw(studentsJson);
+
+  var lessons   = Array.isArray(lessonsRaw)   ? lessonsRaw   : [];
+  var questions = Array.isArray(questionsRaw) ? questionsRaw : [];
+  var students  = Array.isArray(studentsRaw)  ? studentsRaw  : [];
+
+  // ── Progress store (localStorage) ──
+  var progress = {};
+  try { progress = JSON.parse(localStorage.getItem(STORE_KEY) || '{}'); } catch(e) {}
+
+  function saveProgress() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(progress)); } catch(e) {}
+  }
+
+  function getLessonDone(idx)    { return !!(progress['l_done_'   + idx]); }
+  function getLessonOnline(idx)  { return !!(progress['l_online_' + idx]); }
+  function getQDone(idx)         { return !!(progress['q_done_'   + idx]); }
+  function getQOnline(idx)       { return !!(progress['q_online_' + idx]); }
+
+  function setLessonDone(idx, v)   { progress['l_done_'   + idx] = v; saveProgress(); }
+  function setLessonOnline(idx, v) { progress['l_online_' + idx] = v; saveProgress(); }
+  function setQDone(idx, v)        { progress['q_done_'   + idx] = v; saveProgress(); }
+  function setQOnline(idx, v)      { progress['q_online_' + idx] = v; saveProgress(); }
+
+  function sortedLessonsByRisk() {
+    return lessons.slice().sort(function(a,b){ return (b.ErrorPercentage||0)-(a.ErrorPercentage||0); });
+  }
+
+  function sortedQuestionsByRisk() {
+    return questions.slice().sort(function(a,b){ return (b.ErrorPercentage||0)-(a.ErrorPercentage||0); });
+  }
+
+  function selectedQuestionIds(selector) {
+    var ids = [];
+    sortedQuestionsByRisk().forEach(function(q, idx) {
+      var qid = q.QuestionId || q.questionId || '';
+      if (qid && selector(idx)) ids.push(qid);
+    });
+    return ids;
+  }
+
+  function selectedLessonIds(selector) {
+    var ids = [];
+    sortedLessonsByRisk().forEach(function(lesson, idx) {
+      var lid = lesson.LessonId || lesson.lessonId || 0;
+      if (lid && selector(idx)) ids.push(lid);
+    });
+    return ids;
+  }
+
+  function appendSelectionParam(params, name, values) {
+    if (values.length) params.set(name, values.join(','));
+  }
+
+  function buildCompleteWithHomeworkUrl(baseUrl) {
+    var params = new URLSearchParams();
+    appendSelectionParam(params, 'homeworkQuestionIds', selectedQuestionIds(getQOnline));
+    appendSelectionParam(params, 'lectureQuestionIds', selectedQuestionIds(getQDone));
+    appendSelectionParam(params, 'homeworkLessonIds', selectedLessonIds(getLessonOnline));
+    appendSelectionParam(params, 'lectureLessonIds', selectedLessonIds(getLessonDone));
+
+    var query = params.toString();
+    if (!query) return baseUrl;
+    return baseUrl + (baseUrl.indexOf('?') >= 0 ? '&' : '?') + query;
+  }
+
+  function wireCompleteWithHomeworkLink() {
+    var link = document.getElementById('completeWithHomeworkLink');
+    if (!link) return;
+
+    link.addEventListener('click', function(e) {
+      e.preventDefault();
+      window.location.href = buildCompleteWithHomeworkUrl(link.href);
+    });
+  }
+
+  // ── Helpers ──
+  function riskClass(level) {
+    if (!level) return 'low';
+    var l = level.toLowerCase();
+    return l === 'high' ? 'high' : (l === 'medium' || l === 'med') ? 'mid' : 'low';
+  }
+  function riskLabel(level) {
+    if (!level) return 'منخفض';
+    var l = level.toLowerCase();
+    return l === 'high' ? 'خطر مرتفع' : (l === 'medium' || l === 'med') ? 'خطر متوسط' : 'خطر منخفض';
+  }
+  function fmtSec(s) {
+    if (!s || s < 1) return '—';
+    return s < 60 ? s + 'ث' : Math.round(s / 60) + 'د';
+  }
+
+  // ── Check label HTML ──
+  function checkHtml(id, type, checked, label, colorClass) {
+    var chkClass = checked ? (type === 'online' ? 'checked-online' : 'checked') : '';
+    var svgCheck = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    return '<label class="itd-check-label ' + chkClass + '" data-id="' + id + '" data-type="' + type + '">' +
+      '<span class="itd-check-icon">' + svgCheck + '</span>' +
+      '<input type="checkbox" ' + (checked ? 'checked' : '') + '>' +
+      label +
+    '</label>';
+  }
+
+  // ── Build checks row ──
+  function checksRow(itemType, idx) {
+    var isDone   = itemType === 'l' ? getLessonDone(idx)   : getQDone(idx);
+    var isOnline = itemType === 'l' ? getLessonOnline(idx) : getQOnline(idx);
+    var prefix   = itemType + '_' + idx;
+    return '<div class="itd-checks-row">' +
+      checkHtml(prefix, 'done',   isDone,   '<i class="fas fa-check-circle" style="font-size:.7rem"></i> تمت المهمة في المحاضرة', 'grn') +
+      checkHtml(prefix, 'online', isOnline, '<i class="fas fa-wifi" style="font-size:.7rem"></i> يُرحَّل أونلاين كواجب', 'blu') +
+    '</div>';
+  }
+
+  // ── KPI ──
+  function updateKPIs() {
+    document.getElementById('kpiLessons').textContent   = lessons.length   || '0';
+    document.getElementById('kpiQuestions').textContent = questions.length || '0';
+    document.getElementById('tabLessonsBadge').textContent  = lessons.length   || '0';
+    document.getElementById('tabQuestionsBadge').textContent = questions.length || '0';
+    document.getElementById('tabStudentsBadge').textContent  = students.length  || '0';
+    document.getElementById('kpiStudents').textContent  = students.length || '—';
+
+    var errSrc = lessons.length ? lessons : questions;
+    var avgErr = errSrc.length
+      ? errSrc.reduce(function(s, x) { return s + (x.ErrorPercentage || 0); }, 0) / errSrc.length
+      : 0;
+    document.getElementById('kpiAvgErr').textContent = avgErr.toFixed(0) + '%';
+  }
+
+  // ── Gauge ──
+  function buildGauge() {
+    var canvas = document.getElementById('errGauge');
+    if (!canvas) return;
+    var src = lessons.length ? lessons : questions;
+    var avg = src.length
+      ? Math.round(src.reduce(function(s,x){ return s+(x.ErrorPercentage||0); },0)/src.length)
+      : 0;
+    var color = avg >= 70 ? '#DC2626' : (avg >= 40 ? '#D97706' : '#059669');
+    new Chart(canvas, {
+      type:'doughnut',
+      data:{ datasets:[{ data:[avg, 100-avg], backgroundColor:[color,'#F1F5F9'], borderWidth:0, circumference:180, rotation:270 }] },
+      options:{ responsive:false, cutout:'72%', plugins:{ legend:{display:false}, tooltip:{enabled:false} }, animation:{duration:1000} }
+    });
+    var lbl = document.getElementById('gaugeLabel');
+    lbl.textContent = avg + '%';
+    lbl.style.color = color;
+  }
+
+  // ── Risk Donut ──
+  function buildRiskDonut() {
+    var canvas = document.getElementById('riskDonut');
+    var legend = document.getElementById('riskLegend');
+    if (!canvas) return;
+    var all = lessons.concat(questions);
+    if (!all.length) { canvas.style.display='none'; return; }
+    var high=0, med=0, low=0;
+    all.forEach(function(x) {
+      var rc = riskClass(x.RiskLevel);
+      if (rc==='high') high++; else if (rc==='mid') med++; else low++;
+    });
+    new Chart(canvas, {
+      type:'doughnut',
+      data:{ labels:['مرتفع','متوسط','منخفض'], datasets:[{ data:[high,med,low], backgroundColor:['#DC2626','#D97706','#059669'], borderWidth:2, borderColor:'#fff' }] },
+      options:{ responsive:false, cutout:'60%', plugins:{ legend:{display:false}, tooltip:{rtl:true} }, animation:{duration:900} }
+    });
+    legend.innerHTML = [
+      {color:'#DC2626',label:'خطر مرتفع',count:high},
+      {color:'#D97706',label:'خطر متوسط',count:med},
+      {color:'#059669',label:'خطر منخفض',count:low}
+    ].map(function(x) {
+      return '<div class="itd-legend-item"><span style="display:flex;align-items:center"><span class="itd-legend-dot" style="background:'+x.color+'"></span>'+x.label+'</span><strong style="color:var(--itd-t9)">'+x.count+'</strong></div>';
+    }).join('');
+  }
+
+  // ── Build Lessons (main page) ──
+  function buildLessons() {
+    var container = document.getElementById('lessonsContainer');
+    if (!container) return;
+    if (!lessons.length) {
+      container.innerHTML = '<div class="itd-empty"><i class="fas fa-book-open"></i><p>لا توجد دروس مستهدفة</p></div>';
+      return;
+    }
+    var sorted = lessons.slice().sort(function(a,b){ return (b.ErrorPercentage||0)-(a.ErrorPercentage||0); });
+    var html = '<div class="itd-lessons-list">';
+    sorted.forEach(function(lesson, idx) {
+      var rc   = riskClass(lesson.RiskLevel);
+      var barW = Math.min(Math.round(lesson.ErrorPercentage||0), 100);
+      html += '<div class="itd-lesson-item">';
+      html += '<div class="itd-lesson-header"><div class="itd-lesson-name">'+(lesson.LessonTitle||'—')+'</div>';
+      html += '<span class="itd-lesson-pct '+rc+'">'+(lesson.ErrorPercentage||0).toFixed(1)+'% خطأ</span></div>';
+      if (lesson.SectionTitle) html += '<div class="itd-lesson-section"><i class="fas fa-layer-group" style="margin-left:4px"></i>'+lesson.SectionTitle+'</div>';
+      html += '<div class="itd-track"><div class="itd-fill '+rc+'" style="width:'+barW+'%"></div></div>';
+      html += '<div class="itd-lesson-stats">';
+      if (lesson.AffectedStudentsCount) html += '<span class="itd-lesson-stat"><i class="fas fa-user-graduate"></i> '+lesson.AffectedStudentsCount+' طالب</span>';
+      if (lesson.TotalAttempts)         html += '<span class="itd-lesson-stat"><i class="fas fa-redo"></i> '+lesson.TotalAttempts+' محاولة</span>';
+      if (lesson.CorrectAttempts)       html += '<span class="itd-lesson-stat" style="color:var(--itd-grn)"><i class="fas fa-check"></i> '+lesson.CorrectAttempts+' صح</span>';
+      if (lesson.WrongAttempts)         html += '<span class="itd-lesson-stat" style="color:var(--itd-red)"><i class="fas fa-times"></i> '+lesson.WrongAttempts+' خطأ</span>';
+      html += '</div>';
+      html += '<div style="margin-top:8px"><span class="itd-risk-badge itd-risk-'+rc+'"><i class="fas fa-signal"></i> '+riskLabel(lesson.RiskLevel)+'</span></div>';
+      html += checksRow('l', idx);
+      html += '</div>';
+    });
+    html += '</div>';
+    container.innerHTML = html;
+    applyStoredChecks(container);
+  }
+
+  // ── Build Questions (main page) ──
+  function buildQuestions() {
+    var container = document.getElementById('questionsContainer');
+    if (!container) return;
+    if (!questions.length) {
+      container.innerHTML = '<div class="itd-empty"><i class="fas fa-question-circle"></i><p>لا توجد أسئلة مستهدفة</p></div>';
+      return;
+    }
+    var sorted = questions.slice().sort(function(a,b){ return (b.ErrorPercentage||0)-(a.ErrorPercentage||0); });
+    var html = '<div class="itd-q-list">';
+    sorted.forEach(function(q, idx) {
+      var rc      = riskClass(q.RiskLevel);
+      var numCls  = rc === 'high' ? 'high' : (rc === 'mid' ? 'med' : '');
+      var isDanger = rc === 'high';
+      var barW    = Math.min(Math.round(q.ErrorPercentage||0), 100);
+      var qid    = q.QuestionId || q.questionId || '';
+      var qtitle = escAttr(q.QuestionTitle || 'السؤال');
+      var qdata  = qid ? ' data-qid="'+qid+'" data-qtitle="'+qtitle+'"' : '';
+      html += '<div class="itd-q-card">';
+      html += '<div class="itd-q-header">';
+      html += '<div class="itd-q-num '+numCls+'">'+(idx+1)+'</div>';
+      html += '<div style="flex:1;min-width:0"><div class="itd-q-title">'+(q.QuestionTitle||'—')+'</div></div>';
+      if (q.ReferenceNumber) html += '<div class="itd-q-ref">رقم: '+q.ReferenceNumber+'</div>';
+      html += '</div>';
+      html += '<div class="itd-q-body">';
+      if (q.LessonTitle || q.SectionTitle) {
+        html += '<div class="itd-q-location"><i class="fas fa-map-marker-alt"></i>';
+        if (q.SectionTitle) html += '<span>'+q.SectionTitle+'</span><i class="fas fa-angle-double-left" style="font-size:.6rem;color:var(--itd-t4)"></i>';
+        if (q.LessonTitle)  html += '<span>'+q.LessonTitle+'</span>';
+        html += '</div>';
+      }
+      // الـ stat boxes — 3 منها قابلة للنقر (بدون نسبة الخطأ)
+      html += '<div class="itd-q-stats-row">';
+      html += '<div class="itd-q-stat-box'+(isDanger?' danger':'')+'"><div class="itd-q-stat-num">'+(q.ErrorPercentage||0).toFixed(1)+'%</div><div class="itd-q-stat-lbl">نسبة الخطأ</div></div>';
+      html += '<div class="itd-q-stat-box itd-clickable"'+qdata+'><div class="itd-q-stat-num">'+(q.AffectedStudentsCount||'—')+'</div><div class="itd-q-stat-lbl">طالب متأثر</div></div>';
+      html += '<div class="itd-q-stat-box itd-clickable"'+qdata+'><div class="itd-q-stat-num">'+(q.TotalAttempts||'—')+'</div><div class="itd-q-stat-lbl">إجمالي المحاولات</div></div>';
+      html += '<div class="itd-q-stat-box itd-clickable"'+qdata+'><div class="itd-q-stat-num">'+fmtSec(q.AverageTimeTakenSeconds)+'</div><div class="itd-q-stat-lbl">متوسط الوقت</div></div>';
+      html += '</div>';
+      html += '<div class="itd-track" style="margin-bottom:10px"><div class="itd-fill '+rc+'" style="width:'+barW+'%"></div></div>';
+      html += '<div class="itd-q-footer">';
+      if (q.CorrectAttempts) html += '<span class="itd-lesson-stat" style="color:var(--itd-grn)"><i class="fas fa-check-circle"></i> '+q.CorrectAttempts+' صحيح</span>';
+      if (q.WrongAttempts)   html += '<span class="itd-lesson-stat" style="color:var(--itd-red)"><i class="fas fa-times-circle"></i> '+q.WrongAttempts+' خطأ</span>';
+      html += '<span class="itd-risk-badge itd-risk-'+rc+'" style="margin-right:auto"><i class="fas fa-signal"></i> '+riskLabel(q.RiskLevel)+'</span>';
+      html += '</div>';
+      html += checksRow('q', idx);
+      if (qid) {
+        html += '<button class="itd-q-stu-btn"'+qdata+'><i class="fas fa-users"></i> عرض الطلاب المتعثرين</button>';
+      }
+      html += '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+    container.innerHTML = html;
+    applyStoredChecks(container);
+  }
+
+  // ── Build Drawer Lessons ──
+  function buildDrawerLessons() {
+    var container = document.getElementById('drawerLessonsContent');
+    if (!container) return;
+    if (!lessons.length) {
+      container.innerHTML = '<div class="itd-empty"><i class="fas fa-book-open"></i><p>لا توجد دروس مستهدفة</p></div>';
+      return;
+    }
+    var sorted = lessons.slice().sort(function(a,b){ return (b.ErrorPercentage||0)-(a.ErrorPercentage||0); });
+    var html = '';
+    sorted.forEach(function(lesson, idx) {
+      var rc   = riskClass(lesson.RiskLevel);
+      var barW = Math.min(Math.round(lesson.ErrorPercentage||0), 100);
+      html += '<div class="itd-dl-item">';
+      html += '<div class="itd-dl-name">'+(lesson.LessonTitle||'—')+'</div>';
+      if (lesson.SectionTitle) html += '<div class="itd-dl-section"><i class="fas fa-layer-group"></i>'+lesson.SectionTitle+'</div>';
+      html += '<div class="itd-dl-pct-row">';
+      html += '<div class="itd-track" style="flex:1;margin-bottom:0"><div class="itd-fill '+rc+'" style="width:'+barW+'%"></div></div>';
+      html += '<span class="itd-dl-pct '+rc+'">'+(lesson.ErrorPercentage||0).toFixed(1)+'%</span>';
+      html += '</div>';
+      if (lesson.AffectedStudentsCount) html += '<div style="font-size:.7rem;color:var(--itd-t5);margin-bottom:4px"><i class="fas fa-user-graduate" style="margin-left:3px"></i>'+lesson.AffectedStudentsCount+' طالب متأثر</div>';
+      html += checksRow('l', idx);
+      html += '</div>';
+    });
+    container.innerHTML = html;
+    applyStoredChecks(container);
+  }
+
+  // ── Build Drawer Questions ──
+  function buildDrawerQuestions() {
+    var container = document.getElementById('drawerQuestionsContent');
+    if (!container) return;
+    if (!questions.length) {
+      container.innerHTML = '<div class="itd-empty"><i class="fas fa-question-circle"></i><p>لا توجد أسئلة مستهدفة</p></div>';
+      return;
+    }
+    var sorted = questions.slice().sort(function(a,b){ return (b.ErrorPercentage||0)-(a.ErrorPercentage||0); });
+    var html = '';
+    sorted.forEach(function(q, idx) {
+      var rc     = riskClass(q.RiskLevel);
+      var numCls = rc === 'high' ? 'high' : (rc === 'mid' ? 'med' : '');
+      var qid    = q.QuestionId || q.questionId || '';
+      var qtitle = escAttr(q.QuestionTitle || 'السؤال');
+      var qdata  = qid ? ' data-qid="'+qid+'" data-qtitle="'+qtitle+'"' : '';
+      var barW   = Math.min(Math.round(q.ErrorPercentage||0),100);
+      html += '<div class="itd-dq-item">';
+      html += '<div class="itd-dq-header">';
+      html += '<div class="itd-dq-num '+numCls+'">'+(idx+1)+'</div>';
+      html += '<div class="itd-dq-title">'+(q.QuestionTitle||'—')+'</div>';
+      html += '</div>';
+      if (q.LessonTitle) html += '<div style="font-size:.7rem;color:var(--itd-t5);margin-bottom:6px"><i class="fas fa-book" style="margin-left:3px"></i>'+q.LessonTitle+'</div>';
+      html += '<div class="itd-dl-pct-row">';
+      html += '<div class="itd-track" style="flex:1;margin-bottom:0"><div class="itd-fill '+rc+'" style="width:'+barW+'%"></div></div>';
+      html += '<span class="itd-dl-pct '+rc+'">'+(q.ErrorPercentage||0).toFixed(1)+'%</span>';
+      html += '</div>';
+      if (q.AffectedStudentsCount) {
+        html += '<div style="font-size:.7rem;color:var(--itd-t5);margin-bottom:6px"><i class="fas fa-user-xmark" style="margin-left:3px;color:var(--itd-red)"></i>'+q.AffectedStudentsCount+' طالب متعثر</div>';
+      }
+      html += checksRow('q', idx);
+      if (qid) {
+        html += '<button class="itd-q-stu-btn" style="margin-top:6px"'+qdata+'><i class="fas fa-users"></i> عرض الطلاب المتعثرين</button>';
+      }
+      html += '</div>';
+    });
+    container.innerHTML = html;
+    applyStoredChecks(container);
+  }
+
+  // ── Build Drawer Students ──
+  function buildDrawerStudents() {
+    var container = document.getElementById('drawerStudentsContent');
+    if (!container) return;
+    if (!students.length) {
+      container.innerHTML = '<div class="itd-empty"><i class="fas fa-user-graduate"></i><p>لا يوجد طلاب مسجلون في هذه الدفعة</p></div>';
+      return;
+    }
+    var html = '<div style="font-size:.72rem;color:var(--itd-t5);margin-bottom:12px"><i class="fas fa-info-circle" style="margin-left:4px"></i>إجمالي الطلاب في الدفعة: <strong style="color:var(--itd-t9)">'+students.length+'</strong></div>';
+    students.forEach(function(s) {
+      var name     = s.FullName || s.fullName || 'طالب';
+      var initials = name.trim().charAt(0) || '؟';
+      html += '<div class="itd-ds-item">';
+      html += '<div class="itd-ds-avatar">'+initials+'</div>';
+      html += '<div class="itd-ds-name">'+name+'</div>';
+      html += '</div>';
+    });
+    container.innerHTML = html;
+  }
+
+  // ── Apply stored checkbox visual state ──
+  function applyStoredChecks(container) {
+    container.querySelectorAll('.itd-check-label').forEach(function(lbl) {
+      var id   = lbl.dataset.id;
+      var type = lbl.dataset.type;
+      var parts = id.split('_');
+      var itemType = parts[0];
+      var idx      = parseInt(parts[1]);
+      var checked;
+      if (itemType === 'l') checked = type === 'done' ? getLessonDone(idx) : getLessonOnline(idx);
+      else                  checked = type === 'done' ? getQDone(idx)      : getQOnline(idx);
+
+      var cls = type === 'done' ? 'checked' : 'checked-online';
+      if (checked) lbl.classList.add(cls); else lbl.classList.remove(cls);
+      var cb = lbl.querySelector('input[type="checkbox"]');
+      if (cb) cb.checked = checked;
+    });
+  }
+
+  // ── Toggle checkbox + sync across all instances ──
+  function toggleCheck(lbl) {
+    var id       = lbl.dataset.id;
+    var type     = lbl.dataset.type;
+    var parts    = id.split('_');
+    var itemType = parts[0];
+    var idx      = parseInt(parts[1]);
+    var cls      = type === 'done' ? 'checked' : 'checked-online';
+    var isNowOn  = !lbl.classList.contains(cls);
+
+    if (itemType === 'l') {
+      if (type === 'done') setLessonDone(idx, isNowOn); else setLessonOnline(idx, isNowOn);
+    } else {
+      if (type === 'done') setQDone(idx, isNowOn); else setQOnline(idx, isNowOn);
+    }
+
+    // sync ALL labels with same id+type across the page
+    document.querySelectorAll('.itd-check-label[data-id="'+id+'"][data-type="'+type+'"]').forEach(function(el) {
+      if (isNowOn) el.classList.add(cls); else el.classList.remove(cls);
+      var cb = el.querySelector('input[type="checkbox"]');
+      if (cb) cb.checked = isNowOn;
+    });
+  }
+
+  // ── Delegate checkbox clicks ──
+  document.addEventListener('click', function(e) {
+    var lbl = e.target.closest('.itd-check-label');
+    if (lbl) { e.preventDefault(); toggleCheck(lbl); return; }
+
+    // Delegate [data-qid] clicks (stat boxes + زر عرض الطلاب)
+    var qel = e.target.closest('[data-qid]');
+    if (qel && !e.target.closest('.itd-check-label')) {
+      var qid    = qel.dataset.qid;
+      var qtitle = qel.dataset.qtitle || 'السؤال';
+      if (qid) openQStudents(qid, qtitle);
+    }
+  });
+
+  // ── Question Students Sub-panel ──
+  function openQStudents(questionId, questionTitle) {
+    // افتح الدراور على تبويب الأسئلة
+    openDrawer('questions');
+
+    // أظهر sub-panel واخفِ قائمة الأسئلة
+    var panel    = document.getElementById('qStudentsPanel');
+    var list     = document.getElementById('drawerQuestionsContent');
+    var titleEl  = document.getElementById('qStudentsPanelTitle');
+    var bodyEl   = document.getElementById('qStudentsPanelBody');
+
+    if (!panel || !list) return;
+
+    titleEl.textContent = questionTitle;
+    bodyEl.innerHTML    = '<div class="itd-empty"><i class="fas fa-spinner fa-spin"></i><p>جارٍ جلب بيانات الطلاب...</p></div>';
+
+    list.style.display  = 'none';
+    panel.classList.add('active');
+
+    // Fetch من الـ API
+    var url = '/Instructors/InstructorInterventionTasks/GetQuestionStudents'
+      + '?taskId=' + TASK_ID
+      + '&questionId=' + encodeURIComponent(questionId);
+
+    fetch(url)
+      .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function(data) {
+        // السيرفر قد يُرجع { error: "..." } في حالة استثناء
+        if (data && data.error) {
+          bodyEl.innerHTML =
+            '<div class="itd-empty">'
+            + '<i class="fas fa-exclamation-triangle" style="color:var(--itd-red)"></i>'
+            + '<p style="font-size:.75rem;color:var(--itd-red)">' + data.error + '</p>'
+            + '</div>';
+          return;
+        }
+        renderQStudents(data, bodyEl);
+      })
+      .catch(function(err) {
+        var msg = err && err.message ? err.message : '';
+        bodyEl.innerHTML =
+          '<div class="itd-empty">'
+          + '<i class="fas fa-exclamation-triangle" style="color:var(--itd-red)"></i>'
+          + '<p>تعذر تحميل البيانات' + (msg ? ' (' + msg + ')' : '') + '</p>'
+          + '</div>';
+      });
+  };
+
+  window.closeQStudentsPanel = function() { closeQStudentsPanel(); };
+  function closeQStudentsPanel() {
+    var panel = document.getElementById('qStudentsPanel');
+    var list  = document.getElementById('drawerQuestionsContent');
+    if (panel) panel.classList.remove('active');
+    if (list)  list.style.display = '';
+  };
+
+  function renderQStudents(data, bodyEl) {
+    if (!data || !data.length) {
+      bodyEl.innerHTML = '<div class="itd-empty"><i class="fas fa-user-check" style="color:var(--itd-grn)"></i><p>لا يوجد طلاب متعثرون في هذا السؤال</p></div>';
+      return;
+    }
+
+    var html = '<div style="font-size:.72rem;color:var(--itd-t5);margin-bottom:10px">' +
+      '<i class="fas fa-users" style="margin-left:4px;color:var(--itd-red)"></i>' +
+      'عدد الطلاب المتعثرين: <strong style="color:var(--itd-t9)">' + data.length + '</strong>' +
+    '</div>';
+    html += '<div class="itd-qstu-list">';
+
+    data.forEach(function(s) {
+      var name     = s.StudentName || s.studentName || 'طالب';
+      var attempts = s.AttemptCount || s.attemptCount || 0;
+      var timeSecs = s.TotalTimeSecs || s.totalTimeSecs || 0;
+      var initials = name.trim().charAt(0) || '؟';
+      var timeStr  = timeSecs > 0 ? fmtSec(timeSecs) : '—';
+
+      var attemptClass = attempts >= 3 ? 'warn' : '';
+
+      html += '<div class="itd-qstu-row">';
+      html += '<div class="itd-qstu-avatar">' + initials + '</div>';
+      html += '<div class="itd-qstu-name">' + name + '</div>';
+      html += '<div class="itd-qstu-stats">';
+      html += '<span class="itd-qstu-stat ' + attemptClass + '">' +
+        '<i class="fas fa-redo-alt"></i> ' + attempts + ' محاولة</span>';
+      html += '<span class="itd-qstu-stat time">' +
+        '<i class="fas fa-stopwatch"></i> ' + timeStr + '</span>';
+      html += '</div>';
+      html += '</div>';
+    });
+
+    html += '</div>';
+    bodyEl.innerHTML = html;
+  }
+
+  // ── Drawer open/close ──
+  window.openDrawer = function(tab) {
+    document.getElementById('drawerBackdrop').classList.add('open');
+    document.getElementById('mainDrawer').classList.add('open');
+    document.body.style.overflow = 'hidden';
+    if (tab) switchTab(tab);
+  };
+
+  window.closeDrawer = function() {
+    document.getElementById('drawerBackdrop').classList.remove('open');
+    document.getElementById('mainDrawer').classList.remove('open');
+    document.body.style.overflow = '';
+  };
+
+  window.switchTab = function(tab) {
+    ['lessons','questions','students'].forEach(function(t) {
+      var btn = document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1));
+      var sec = document.getElementById('section' + t.charAt(0).toUpperCase() + t.slice(1));
+      if (btn) btn.classList.toggle('active', t === tab);
+      if (sec) sec.classList.toggle('active', t === tab);
+    });
+    // أغلق sub-panel عند الانتقال لتبويب آخر
+    if (tab !== 'questions') closeQStudentsPanel();
+  };
+
+  // ── Complete modal ──
+  window.openCompleteModal  = function() { document.getElementById('completeOverlay')?.classList.add('open'); };
+  window.closeCompleteModal = function() { document.getElementById('completeOverlay')?.classList.remove('open'); };
+  var overlay = document.getElementById('completeOverlay');
+  if (overlay) {
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) closeCompleteModal(); });
+  }
+
+  // ── ESC to close ──
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') { closeDrawer(); closeCompleteModal && closeCompleteModal(); }
+  });
+
+  // ── Init ──
+  document.addEventListener('DOMContentLoaded', function() {
+    updateKPIs();
+    buildGauge();
+    buildRiskDonut();
+    buildLessons();
+    buildQuestions();
+    buildDrawerLessons();
+    buildDrawerQuestions();
+    buildDrawerStudents();
+    wireCompleteWithHomeworkLink();
+  });
+
+}());
+</script>
+}

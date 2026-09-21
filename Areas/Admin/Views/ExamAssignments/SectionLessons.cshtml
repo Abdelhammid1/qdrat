@@ -1,0 +1,951 @@
+﻿@model QdratNew.ViewModels.Exam.SectionLessonsViewModel
+
+@{
+    ViewData["Title"] = "مؤشرات المحور: " + Model.SectionTitle;
+
+    var totalLessons = Model.Lessons?.Count() ?? 0;
+    var totalQuestions = Model.Lessons?.Sum(x => x.QuestionCount) ?? 0;
+    var totalCorrect = Model.Lessons?.Sum(x => x.CorrectCount) ?? 0;
+    var totalWrong = Model.Lessons?.Sum(x => x.WrongCount) ?? 0;
+    var totalSkipped = Model.Lessons?.Sum(x => x.SkippedCount) ?? 0;
+
+    var avgSuccess = Model.Lessons != null && Model.Lessons.Any()
+        ? Math.Round(Model.Lessons.Average(x => x.AvgSuccessRate), 1)
+        : 0;
+
+    var avgHardness = Model.Lessons != null && Model.Lessons.Any()
+        ? Math.Round(Model.Lessons.Average(x => x.HardnessIndex), 1)
+        : 0;
+}
+
+@functions {
+    string GetSuccessBadgeClass(double value)
+    {
+        if (value >= 80) return "pr-badge-success";
+        if (value >= 60) return "pr-badge-warning";
+        return "pr-badge-danger";
+    }
+
+    string GetSuccessIcon(double value)
+    {
+        if (value >= 80) return "fas fa-check-circle";
+        if (value >= 60) return "fas fa-exclamation-circle";
+        return "fas fa-triangle-exclamation";
+    }
+
+    string GetHardnessBadgeClass(double value)
+    {
+        if (value < 40) return "pr-badge-success";
+        if (value < 70) return "pr-badge-warning";
+        return "pr-badge-danger";
+    }
+
+    string ShortText(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "—";
+        }
+
+        var text = value.Trim();
+
+        return text.Length <= maxLength ? text : text.Substring(0, maxLength) + "...";
+    }
+}
+
+@section Styles {
+    <style>
+        :root {
+            --pr-bg: #f4f7fb;
+            --pr-card: #ffffff;
+            --pr-border: #dbe4ef;
+            --pr-accent: #2563eb;
+            --pr-success: #16a34a;
+            --pr-danger: #dc2626;
+            --pr-warning: #f59e0b;
+            --pr-info: #0284c7;
+            --pr-violet: #7c3aed;
+            --pr-text: #0f172a;
+            --pr-muted: #64748b;
+            --pr-radius: 14px;
+            --pr-radius-sm: 9px;
+            --pr-transition: .2s cubic-bezier(.4,0,.2,1);
+            --pr-shadow: 0 8px 22px rgba(15, 23, 42, .06);
+        }
+
+        body {
+            background: var(--pr-bg) !important;
+        }
+
+        .pr-page {
+            direction: rtl;
+            min-height: 100vh;
+            padding: 28px 0 60px;
+            font-family: 'Cairo', Arial, sans-serif;
+        }
+
+        .pr-header {
+            background: #ffffff;
+            border: 1px solid var(--pr-border);
+            border-radius: var(--pr-radius);
+            padding: 18px 22px;
+            box-shadow: var(--pr-shadow);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .pr-header-title {
+            color: var(--pr-text);
+            font-size: 22px;
+            font-weight: 900;
+            margin: 0;
+            line-height: 1.35;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+            .pr-header-title i {
+                color: var(--pr-accent);
+            }
+
+        .pr-header-sub {
+            color: #475569;
+            font-size: 13px;
+            font-weight: 700;
+            margin-top: 6px;
+            line-height: 1.8;
+        }
+
+        .pr-header-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .btn-pr-primary,
+        .btn-pr-outline {
+            border-radius: var(--pr-radius-sm);
+            padding: 8px 18px;
+            font-size: 13px;
+            font-weight: 900;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            text-decoration: none;
+            border: 1px solid transparent;
+            transition: var(--pr-transition);
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .btn-pr-primary {
+            background: var(--pr-accent);
+            border-color: var(--pr-accent);
+            color: #ffffff;
+        }
+
+        .btn-pr-outline {
+            background: #ffffff;
+            border-color: #cbd5e1;
+            color: #334155;
+        }
+
+        .btn-pr-primary:hover {
+            color: #ffffff;
+            transform: translateY(-1px);
+            text-decoration: none;
+            filter: brightness(.96);
+        }
+
+        .btn-pr-outline:hover {
+            background: #f1f5f9;
+            color: #0f172a;
+            transform: translateY(-1px);
+            text-decoration: none;
+        }
+
+        .pr-hero {
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+            border: 1px solid var(--pr-border);
+            border-radius: var(--pr-radius);
+            padding: 24px 28px;
+            margin-bottom: 24px;
+            box-shadow: var(--pr-shadow);
+        }
+
+        .pr-hero-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            background: #eff6ff;
+            color: #1d4ed8;
+            border: 1px solid #bfdbfe;
+            border-radius: 999px;
+            padding: 5px 12px;
+            font-size: 12px;
+            font-weight: 900;
+            margin-bottom: 12px;
+        }
+
+        .pr-hero-title {
+            margin: 0;
+            color: var(--pr-text);
+            font-size: 28px;
+            font-weight: 900;
+            line-height: 1.35;
+        }
+
+        .pr-hero-sub {
+            color: #475569;
+            font-size: 13px;
+            font-weight: 700;
+            margin-top: 8px;
+            line-height: 1.8;
+        }
+
+        .pr-chips {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+
+        .pr-chip {
+            background: #ffffff;
+            border: 1px solid #dbe4ef;
+            border-radius: 13px;
+            padding: 14px;
+            text-align: center;
+            box-shadow: 0 4px 14px rgba(15, 23, 42, .04);
+        }
+
+        .pr-chip-val {
+            font-size: 22px;
+            font-weight: 900;
+            line-height: 1;
+        }
+
+        .pr-chip-lbl {
+            margin-top: 7px;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .pr-section-label {
+            font-size: 14px;
+            font-weight: 900;
+            color: #334155;
+            margin: 20px 0 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+            .pr-section-label::after {
+                content: "";
+                flex: 1;
+                height: 1px;
+                background: #dbe4ef;
+            }
+
+        .pr-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .pr-stat-card {
+            background: #ffffff;
+            border: 1px solid var(--pr-border);
+            border-radius: var(--pr-radius);
+            padding: 16px 14px;
+            box-shadow: var(--pr-shadow);
+            display: flex;
+            align-items: center;
+            gap: 11px;
+            min-height: 90px;
+        }
+
+        .pr-stat-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 13px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 17px;
+        }
+
+            .pr-stat-icon.blue {
+                background: #dbeafe;
+                color: #1d4ed8;
+            }
+
+            .pr-stat-icon.green {
+                background: #dcfce7;
+                color: #15803d;
+            }
+
+            .pr-stat-icon.red {
+                background: #fee2e2;
+                color: #b91c1c;
+            }
+
+            .pr-stat-icon.gray {
+                background: #f1f5f9;
+                color: #475569;
+            }
+
+            .pr-stat-icon.orange {
+                background: #ffedd5;
+                color: #c2410c;
+            }
+
+        .pr-stat-label {
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 900;
+            margin-bottom: 4px;
+        }
+
+        .pr-stat-value {
+            color: #0f172a;
+            font-size: 22px;
+            font-weight: 900;
+            line-height: 1;
+        }
+
+        .pr-toolbar {
+            background: #ffffff;
+            border: 1px solid var(--pr-border);
+            color: #0f172a;
+            border-radius: var(--pr-radius);
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 14px;
+            box-shadow: var(--pr-shadow);
+        }
+
+        .pr-toolbar-title {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 15px;
+            font-weight: 900;
+        }
+
+            .pr-toolbar-title i {
+                color: var(--pr-accent);
+            }
+
+        .pr-selected-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #eff6ff;
+            color: #1d4ed8;
+            border: 1px solid #bfdbfe;
+            border-radius: 999px;
+            padding: 5px 12px;
+            font-size: 12px;
+            font-weight: 900;
+        }
+
+        .pr-table-panel {
+            background: #ffffff;
+            border: 1px solid var(--pr-border);
+            border-radius: var(--pr-radius);
+            overflow: hidden;
+            box-shadow: var(--pr-shadow);
+        }
+
+            .pr-table-panel .table {
+                margin: 0 !important;
+                vertical-align: middle;
+                table-layout: fixed;
+            }
+
+                .pr-table-panel .table thead th {
+                    background: #f1f5f9 !important;
+                    color: #0f172a !important;
+                    border-bottom: 1px solid #cbd5e1 !important;
+                    font-size: 12px !important;
+                    font-weight: 900 !important;
+                    padding: 12px 8px !important;
+                    white-space: nowrap;
+                    text-align: center;
+                    vertical-align: middle;
+                }
+
+                .pr-table-panel .table tbody td {
+                    color: #0f172a;
+                    border-bottom: 1px solid #edf2f7;
+                    padding: 11px 8px;
+                    font-size: 13px;
+                    font-weight: 700;
+                    vertical-align: middle;
+                    text-align: center;
+                    background: #ffffff;
+                }
+
+                .pr-table-panel .table tbody tr:hover td {
+                    background: #f8fafc;
+                }
+
+        .pr-col-lesson {
+            width: 250px;
+        }
+
+        .pr-col-small {
+            width: 95px;
+        }
+
+        .pr-col-percent {
+            width: 120px;
+        }
+
+        .pr-col-time {
+            width: 130px;
+        }
+
+        .pr-col-hardness {
+            width: 180px;
+        }
+
+        .pr-col-action {
+            width: 120px;
+        }
+
+        .pr-lesson-title {
+            color: #0f172a;
+            font-size: 13px;
+            font-weight: 900;
+            line-height: 1.7;
+            max-width: 220px;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            display: inline-block;
+            vertical-align: middle;
+        }
+
+        .pr-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            border-radius: 999px;
+            padding: 5px 10px;
+            font-size: 11px;
+            font-weight: 900;
+            white-space: nowrap;
+            border: 1px solid transparent;
+        }
+
+        .pr-badge-success {
+            background: #dcfce7;
+            color: #166534;
+            border-color: #86efac;
+        }
+
+        .pr-badge-warning {
+            background: #fef3c7;
+            color: #92400e;
+            border-color: #fde68a;
+        }
+
+        .pr-badge-danger {
+            background: #fee2e2;
+            color: #991b1b;
+            border-color: #fecaca;
+        }
+
+        .pr-badge-secondary {
+            background: #f1f5f9;
+            color: #475569;
+            border-color: #cbd5e1;
+        }
+
+        .pr-progress-wrap {
+            min-width: 130px;
+        }
+
+        .pr-progress {
+            height: 18px;
+            background: #e2e8f0;
+            border-radius: 999px;
+            overflow: hidden;
+            position: relative;
+            border: 1px solid #cbd5e1;
+        }
+
+        .pr-progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #f97316, #dc2626);
+            color: #ffffff;
+            font-size: 10px;
+            font-weight: 900;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 28px;
+            transition: width .2s ease-in-out;
+        }
+
+        .pr-action-btn {
+            min-width: 84px;
+            height: 34px;
+            border-radius: 10px;
+            border: 1px solid #cbd5e1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            text-decoration: none;
+            transition: var(--pr-transition);
+            padding: 0 12px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 900;
+            color: #334155;
+            background: #ffffff;
+        }
+
+            .pr-action-btn.view {
+                color: #0369a1;
+                background: #e0f2fe;
+                border-color: #bae6fd;
+            }
+
+            .pr-action-btn:hover {
+                transform: translateY(-1px);
+                text-decoration: none;
+                filter: brightness(.97);
+            }
+
+        .pr-footer-actions {
+            display: flex;
+            justify-content: flex-start;
+            margin-top: 18px;
+        }
+
+        .dataTables_wrapper {
+            padding: 16px;
+        }
+
+            .dataTables_wrapper .dataTables_filter label,
+            .dataTables_wrapper .dataTables_length label,
+            .dataTables_wrapper .dataTables_info {
+                color: #334155 !important;
+                font-size: 13px !important;
+                font-weight: 800 !important;
+            }
+
+            .dataTables_wrapper .dataTables_filter input,
+            .dataTables_wrapper .dataTables_length select {
+                background: #ffffff !important;
+                border: 1px solid #94a3b8 !important;
+                color: #0f172a !important;
+                border-radius: 8px !important;
+                font-size: 13px !important;
+                font-weight: 700 !important;
+                padding: 5px 10px;
+            }
+
+            .dataTables_wrapper .dataTables_paginate .paginate_button {
+                background: #ffffff !important;
+                border: 1px solid #cbd5e1 !important;
+                color: #334155 !important;
+                font-weight: 800 !important;
+                border-radius: 7px !important;
+                margin: 0 2px;
+                font-size: 12px;
+                padding: 4px 10px !important;
+            }
+
+                .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+                .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+                    background: var(--pr-accent) !important;
+                    border-color: var(--pr-accent) !important;
+                    color: #ffffff !important;
+                }
+
+        table.dataTable thead .sorting:before,
+        table.dataTable thead .sorting:after,
+        table.dataTable thead .sorting_asc:before,
+        table.dataTable thead .sorting_asc:after,
+        table.dataTable thead .sorting_desc:before,
+        table.dataTable thead .sorting_desc:after {
+            color: #475569 !important;
+            opacity: 1 !important;
+        }
+
+        @@media (max-width: 1200px) {
+            .pr-table-panel .table {
+                table-layout: auto;
+            }
+
+            .pr-col-lesson {
+                min-width: 220px;
+            }
+
+            .pr-col-hardness {
+                min-width: 170px;
+            }
+        }
+
+        @@media (max-width: 992px) {
+            .pr-chips {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .pr-stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @@media (max-width: 768px) {
+            .pr-page {
+                padding: 18px 0 40px;
+            }
+
+            .pr-hero {
+                padding: 20px;
+            }
+
+            .pr-hero-title {
+                font-size: 23px;
+            }
+
+            .pr-chips,
+            .pr-stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .pr-header-actions,
+            .btn-pr-outline,
+            .btn-pr-primary {
+                width: 100%;
+            }
+
+            .pr-footer-actions {
+                justify-content: center;
+            }
+        }
+    </style>
+}
+
+<div class="pr-page container-fluid px-4" dir="rtl">
+
+    <div class="pr-header">
+        <div>
+            <h1 class="pr-header-title">
+                <i class="fas fa-layer-group"></i>
+                مؤشرات المحور
+            </h1>
+
+            <div class="pr-header-sub">
+                متابعة أداء المؤشرات داخل المحور، عدد الأسئلة، نسب النجاح، زمن الحل، ومؤشر الصعوبة.
+            </div>
+        </div>
+
+        <div class="pr-header-actions">
+            @if (Model.StudentId.HasValue && Model.StudentId.Value > 0)
+            {
+                <a asp-area="Admin"
+                   asp-controller="ExamAssignments"
+                   asp-action="StudentExamPerformanceReport"
+                   asp-route-examAssignmentId="@Model.AssignmentId"
+                   asp-route-studentId="@Model.StudentId"
+                   class="btn-pr-outline">
+                    <i class="fas fa-arrow-right"></i>
+                    رجوع لتقرير الطالب
+                </a>
+            }
+            else
+            {
+                <a asp-area="Admin"
+                   asp-controller="ExamAssignments"
+                   asp-action="ExamBatchAnalytics"
+                   asp-route-assignmentId="@Model.AssignmentId"
+                   class="btn-pr-outline">
+                    <i class="fas fa-arrow-right"></i>
+                    رجوع للتقرير
+                </a>
+            }
+        </div>
+    </div>
+
+    <div class="pr-hero">
+        <div class="row g-4 align-items-center">
+            <div class="col-lg-5">
+                <div class="pr-hero-label">
+                    <i class="fas fa-diagram-project"></i>
+                    محور الاختبار
+                </div>
+
+                <h2 class="pr-hero-title">@Model.SectionTitle</h2>
+
+                <div class="pr-hero-sub">
+                    تحليل تفصيلي لمؤشرات هذا المحور داخل الاختبار.
+                </div>
+            </div>
+
+            <div class="col-lg-7">
+                <div class="pr-chips">
+                    <div class="pr-chip">
+                        <div class="pr-chip-val" style="color:#2563eb;">@totalLessons</div>
+                        <div class="pr-chip-lbl">عدد المؤشرات</div>
+                    </div>
+
+                    <div class="pr-chip">
+                        <div class="pr-chip-val" style="color:#16a34a;">@totalQuestions</div>
+                        <div class="pr-chip-lbl">إجمالي الأسئلة</div>
+                    </div>
+
+                    <div class="pr-chip">
+                        <div class="pr-chip-val" style="color:#f59e0b;">@avgSuccess%</div>
+                        <div class="pr-chip-lbl">متوسط النجاح</div>
+                    </div>
+
+                    <div class="pr-chip">
+                        <div class="pr-chip-val" style="color:#dc2626;">@avgHardness%</div>
+                        <div class="pr-chip-lbl">متوسط الصعوبة</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="pr-section-label">ملخص أداء المؤشرات</div>
+
+    <div class="pr-stats-grid">
+        <div class="pr-stat-card">
+            <div class="pr-stat-icon blue">
+                <i class="fas fa-list-check"></i>
+            </div>
+            <div>
+                <div class="pr-stat-label">عدد المؤشرات</div>
+                <div class="pr-stat-value">@totalLessons</div>
+            </div>
+        </div>
+
+        <div class="pr-stat-card">
+            <div class="pr-stat-icon green">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <div>
+                <div class="pr-stat-label">إجابات صحيحة</div>
+                <div class="pr-stat-value">@totalCorrect</div>
+            </div>
+        </div>
+
+        <div class="pr-stat-card">
+            <div class="pr-stat-icon red">
+                <i class="fas fa-circle-xmark"></i>
+            </div>
+            <div>
+                <div class="pr-stat-label">إجابات خاطئة</div>
+                <div class="pr-stat-value">@totalWrong</div>
+            </div>
+        </div>
+
+        <div class="pr-stat-card">
+            <div class="pr-stat-icon gray">
+                <i class="fas fa-forward-step"></i>
+            </div>
+            <div>
+                <div class="pr-stat-label">متخطاة</div>
+                <div class="pr-stat-value">@totalSkipped</div>
+            </div>
+        </div>
+
+        <div class="pr-stat-card">
+            <div class="pr-stat-icon orange">
+                <i class="fas fa-fire"></i>
+            </div>
+            <div>
+                <div class="pr-stat-label">مؤشر الصعوبة</div>
+                <div class="pr-stat-value">@avgHardness%</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="pr-section-label">جدول مؤشرات المحور</div>
+
+    <div class="pr-toolbar">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <div class="pr-toolbar-title">
+                <i class="fas fa-table"></i>
+                المؤشرات داخل المحور
+            </div>
+
+            <span class="pr-selected-badge">
+                <i class="fas fa-layer-group"></i>
+                @totalLessons مؤشر
+            </span>
+
+            <span class="pr-selected-badge">
+                <i class="fas fa-question-circle"></i>
+                @totalQuestions سؤال
+            </span>
+        </div>
+    </div>
+
+    <div class="pr-table-panel">
+        <div class="table-responsive">
+            <table class="table table-hover text-center align-middle w-100" id="sectionLessonsTable">
+                <thead>
+                    <tr>
+                        <th class="pr-col-lesson">المؤشر</th>
+                        <th class="pr-col-small">الأسئلة</th>
+                        <th class="pr-col-percent">نسبة النجاح</th>
+                        <th class="pr-col-small">صحيحة</th>
+                        <th class="pr-col-small">خاطئة</th>
+                        <th class="pr-col-small">متخطاة</th>
+                        <th class="pr-col-time">متوسط الزمن</th>
+                        <th class="pr-col-hardness">مؤشر الصعوبة</th>
+                        <th class="pr-col-action">عرض الأسئلة</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    @foreach (var l in Model.Lessons)
+                    {
+                        var successBadgeClass = GetSuccessBadgeClass(l.AvgSuccessRate);
+                        var successIcon = GetSuccessIcon(l.AvgSuccessRate);
+                        var hardnessBadgeClass = GetHardnessBadgeClass(l.HardnessIndex);
+                        var avgTime = Math.Round(l.AvgTimeSeconds, 1);
+                        var hardnessWidth = Math.Max(0, Math.Min(l.HardnessIndex, 100));
+
+                        <tr>
+                            <td class="text-end">
+                                <span class="pr-lesson-title" title="@l.LessonTitle">
+                                    @ShortText(l.LessonTitle, 42)
+                                </span>
+                            </td>
+
+                            <td>
+                                <span class="pr-badge pr-badge-secondary">
+                                    @l.QuestionCount
+                                </span>
+                            </td>
+
+                            <td>
+                                <span class="pr-badge @successBadgeClass">
+                                    <i class="@successIcon"></i>
+                                    @l.AvgSuccessRate%
+                                </span>
+                            </td>
+
+                            <td>
+                                <span class="pr-badge pr-badge-success">
+                                    @l.CorrectCount
+                                </span>
+                            </td>
+
+                            <td>
+                                <span class="pr-badge pr-badge-danger">
+                                    @l.WrongCount
+                                </span>
+                            </td>
+
+                            <td>
+                                <span class="pr-badge pr-badge-secondary">
+                                    @l.SkippedCount
+                                </span>
+                            </td>
+
+                            <td>
+                                <span class="pr-badge pr-badge-secondary">
+                                    @avgTime ث
+                                </span>
+                            </td>
+
+                            <td>
+                                <div class="pr-progress-wrap" title="@l.HardnessIndex%">
+                                    <div class="pr-progress">
+                                        <div class="pr-progress-bar"
+                                             role="progressbar"
+                                             style="width:@hardnessWidth%">
+                                            @l.HardnessIndex%
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+
+                            <td>
+                                <a asp-area="Admin"
+                                   asp-controller="ExamAssignments"
+                                   asp-action="LessonQuestionsDetail"
+                                   asp-route-assignmentId="@Model.AssignmentId"
+                                   asp-route-lessonId="@l.LessonId"
+                                   class="pr-action-btn view"
+                                   title="عرض أسئلة المؤشر">
+                                    عرض
+                                    <i class="fas fa-arrow-left"></i>
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="pr-footer-actions">
+        @if (Model.StudentId.HasValue && Model.StudentId.Value > 0)
+        {
+            <a asp-area="Admin"
+               asp-controller="ExamAssignments"
+               asp-action="StudentExamPerformanceReport"
+               asp-route-examAssignmentId="@Model.AssignmentId"
+               asp-route-studentId="@Model.StudentId"
+               class="btn-pr-outline">
+                <i class="fas fa-arrow-right"></i>
+                رجوع لتقرير الطالب
+            </a>
+        }
+        else
+        {
+            <a asp-area="Admin"
+               asp-controller="ExamAssignments"
+               asp-action="ExamBatchAnalytics"
+               asp-route-assignmentId="@Model.AssignmentId"
+               class="btn-pr-outline">
+                <i class="fas fa-arrow-right"></i>
+                رجوع للتقرير
+            </a>
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            $('#sectionLessonsTable').DataTable({
+                pageLength: 25,
+                lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "الكل"]],
+                order: [[2, 'asc']],
+                language: {
+                    url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json"
+                },
+                columnDefs: [
+                    { orderable: false, targets: [8] }
+                ]
+            });
+        });
+    </script>
+}

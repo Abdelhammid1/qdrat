@@ -1,0 +1,165 @@
+﻿@model QdratNew.ViewModels.Exam.ExamReplaceQuestionVm
+@using QdratNew.Helpers
+
+@{
+    ViewData["Title"] = "استبدال سؤال";
+}
+
+<link href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet" />
+
+<div class="container py-4" dir="rtl">
+
+    <h3 class="fw-bold text-primary mb-4">🔄 استبدال سؤال</h3>
+
+    <div class="alert alert-info">
+        <strong>السؤال الحالي:</strong> @Html.Raw(Model.OldTitle)
+        <br />
+        <strong>المحور:</strong> @Model.OldSectionTitle
+        <br />
+        <strong>الدرس:</strong> @Model.OldLessonTitle
+    </div>
+    <form id="antiForm">
+        @Html.AntiForgeryToken()
+    </form>
+
+    <table id="altTable" class="table table-striped table-bordered text-center">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>نص السؤال</th>
+                <th>الدرس</th>
+                <th>الصعوبة</th>
+                <th>صح</th>
+                <th>إجراء</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            @foreach (var q in Model.Alternatives)
+            {
+                string diffBadge =
+                q.DifficultyLevel == 1 ? "success" :
+                q.DifficultyLevel == 2 ? "warning" :
+                "danger";
+
+                <tr>
+                    <td>@q.SectionTitle</td>
+                    <td class="text-start">@Html.Raw(NumberHelper.ToIndicNumbersSafe(q.Title))</td>
+                    <td>@q.LessonTitle</td>
+                    <td><span class="badge bg-@diffBadge">@q.DifficultyLevel</span></td>
+                    <td>@Html.Raw(NumberHelper.ToIndicNumbersSafe(q.CorrectAnswer))</td>
+
+                    <td>
+                        <button class="btn btn-outline-primary btn-sm"
+                                onclick="confirmReplace('@Model.AssignmentId', '@Model.OldQuestionId', '@q.QuestionId')">
+                            <i class="bi bi-arrow-repeat"></i>
+                        </button>
+
+
+
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+</div>
+
+@section Scripts {
+<script src="https://code.jquery.com/jquery-3.7.0.js"></script>
+<script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+    new DataTable('#altTable', {
+        language: {
+            url: '//cdn.datatables.net/plug-ins/1.13.4/i18n/ar.json'
+        }
+    });
+</script>
+<script>
+
+        function submitReplace(assignmentId, oldId, newId, confirmReset, reason) {
+            const formData = new FormData();
+            formData.append("assignmentId", assignmentId);
+            formData.append("oldQuestionId", oldId);
+            formData.append("newQuestionId", newId);
+            formData.append("confirmReset", confirmReset ? "true" : "false");
+            formData.append("reason", reason || "");
+
+            return fetch(`/Admin/ExamAssignments/ReplaceQuestionConfirm`, {
+                method: "POST",
+                body: formData
+            }).then(r => r.json());
+        }
+
+        function confirmReplace(assignmentId, oldId, newId) {
+
+            Swal.fire({
+                title: "تأكيد الاستبدال؟",
+                text: "سيتم استبدال السؤال بالسؤال الجديد.",
+                icon: "warning",
+                showCancelButton: true,
+                confirmButtonText: "نعم",
+                cancelButtonText: "إلغاء"
+            }).then(result => {
+
+                if (!result.isConfirmed) return;
+
+                submitReplace(assignmentId, oldId, newId, false, null).then(data => {
+
+                    if (data.success) {
+                        Swal.fire({
+                            icon: "success",
+                            title: "تم الاستبدال بنجاح",
+                            timer: 1500,
+                            showConfirmButton: false
+                        }).then(() => {
+                            window.location.href = `/Admin/ExamAssignments/Details/${assignmentId}`;
+                        });
+                        return;
+                    }
+
+                    if (data.requiresConfirm) {
+                        Swal.fire({
+                            title: "يوجد محاولات إجابة سابقة",
+                            text: data.message,
+                            icon: "warning",
+                            input: "textarea",
+                            inputPlaceholder: "اكتب سبب الاستبدال (إجباري)...",
+                            showCancelButton: true,
+                            confirmButtonText: "تأكيد الاستبدال",
+                            cancelButtonText: "إلغاء",
+                            inputValidator: (value) => {
+                                if (!value || !value.trim()) return "سبب الاستبدال إجباري.";
+                            }
+                        }).then(reasonResult => {
+                            if (!reasonResult.isConfirmed) return;
+
+                            submitReplace(assignmentId, oldId, newId, true, reasonResult.value.trim()).then(confirmedData => {
+                                if (confirmedData.success) {
+                                    Swal.fire({
+                                        icon: "success",
+                                        title: "تم الاستبدال بنجاح",
+                                        timer: 1500,
+                                        showConfirmButton: false
+                                    }).then(() => {
+                                        window.location.href = `/Admin/ExamAssignments/Details/${assignmentId}`;
+                                    });
+                                } else {
+                                    Swal.fire("خطأ", confirmedData.message, "error");
+                                }
+                            });
+                        });
+                        return;
+                    }
+
+                    Swal.fire("خطأ", data.message, "error");
+                });
+            });
+        }
+    
+    </script>
+}

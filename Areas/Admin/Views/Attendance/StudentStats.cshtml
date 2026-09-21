@@ -1,0 +1,179 @@
+﻿@model QdratNew.ViewModels.Attendance.StudentAttendanceStatsViewModel
+@{
+    ViewData["Title"] = "تقرير حضور الطالب";
+}
+
+<div class="container py-4">
+
+    <!-- 🟦 العنوان -->
+    <div class="text-center mb-4">
+        <h3 class="fw-bold text-primary">📊 تقرير حضور الطالب</h3>
+        <h4 class="fw-bold text-dark">@Model.StudentName</h4>
+        <p class="text-muted mb-1">
+            <strong>الفرع:</strong> @Model.BranchName |
+            <strong>الدفعة:</strong> @Model.BatchName |
+            <strong>الدورة:</strong> @Model.CourseName
+        </p>
+    </div>
+
+    <!-- 🟩 الكروت الإحصائية -->
+    <div class="row g-3 text-center mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm p-3 bg-light rounded-4">
+                <h6 class="text-secondary">إجمالي المحاضرات</h6>
+                <h3 class="fw-bold">@Model.TotalLectures</h3>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm p-3 bg-success text-white rounded-4">
+                <h6>عدد الحضور</h6>
+                <h3 class="fw-bold">@Model.AttendedLectures</h3>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm p-3 bg-danger text-white rounded-4">
+                <h6>عدد الغياب</h6>
+                <h3 class="fw-bold">@Model.AbsentLectures</h3>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm p-3 bg-info text-white rounded-4">
+                <h6>نسبة الحضور العامة</h6>
+                <h3 class="fw-bold">@Model.AttendancePercentage %</h3>
+                <div class="progress mt-2" style="height:8px;">
+                    <div class="progress-bar bg-success" style="width:@Model.AttendancePercentage%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🟦 الرسم البياني العام -->
+    <div class="card shadow-sm border-0 rounded-4 p-4 mb-4">
+        <h6 class="fw-bold text-primary mb-3 text-center">نسبة الحضور والغياب</h6>
+        <div class="d-flex justify-content-center">
+            <div style="width: 350px;">
+                <canvas id="attendancePie"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🟨 جدول المحاضرات -->
+    <div class="card border-0 shadow-sm rounded-4 p-3 mb-4">
+        <h6 class="fw-bold text-primary mb-3">تفاصيل الحضور في المحاضرات</h6>
+        <table id="lecturesTable" class="table table-striped table-hover align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>#</th>
+                    <th>عنوان المحاضرة</th>
+                    <th>التاريخ</th>
+                    <th>المدرب</th>
+                    <th>الحالة</th>
+                    <th>الملاحظات</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.Lectures != null && Model.Lectures.Any())
+                {
+                    for (int i = 0; i < Model.Lectures.Count; i++)
+                    {
+                        var lec = Model.Lectures[i];
+                        <tr class="@(lec.IsPresent ? "table-success" : "table-danger")">
+                            <td>@(i + 1)</td>
+                            <td>@lec.LectureTitle</td>
+                            <td>@lec.Date.ToString("yyyy/MM/dd")</td>
+                            <td>@lec.InstructorName</td>
+                            <td>
+                                @if (lec.IsPresent)
+                                {
+                                    <span class="badge bg-success">حاضر</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger">غائب</span>
+                                }
+                            </td>
+                            <td>@lec.Notes</td>
+                        </tr>
+                    }
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="6" class="text-center text-muted">لا توجد بيانات حضور بعد</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 🟩 التحليل الذكي -->
+    <div class="card border-0 shadow-sm rounded-4 p-4 mb-4">
+        <h6 class="fw-bold text-primary mb-3">تحليل سريع لحضور الطالب</h6>
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item">
+                📅 <strong>آخر محاضرة حضرها:</strong>
+                <span class="text-dark">@Model.LastLectureAttended</span>
+            </li>
+            <li class="list-group-item">
+                🧮 <strong>متوسط الحضور في آخر 5 محاضرات:</strong>
+                <span class="text-success fw-bold">@Model.LastFiveAverage %</span>
+            </li>
+            <li class="list-group-item">
+                ⚠️ <strong>عدد المحاضرات المتتالية التي غاب عنها:</strong>
+                <span class="text-danger fw-bold">@Model.ConsecutiveAbsences</span>
+            </li>
+            @if (Model.ConsecutiveAbsences >= 3)
+            {
+                <li class="list-group-item bg-warning-subtle text-danger fw-bold">
+                    🔔 تنبيه: الطالب متغيب أكثر من 3 محاضرات متتالية ويحتاج متابعة فورية.
+                </li>
+            }
+        </ul>
+    </div>
+
+    <!-- 🔹 زر الرجوع -->
+    <div class="text-center mt-4">
+        <a asp-action="BatchAttendanceReport" asp-route-batchId="@Model.BatchId"
+           class="btn btn-outline-secondary px-4">
+            <i class="bi bi-arrow-right-circle"></i> العودة لتقرير الدفعة
+        </a>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+    <script>
+        // Pie chart
+        const ctx = document.getElementById('attendancePie');
+        new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: ['الحضور', 'الغياب'],
+                datasets: [{
+                    data: [@Model.AttendedLectures, @Model.AbsentLectures],
+                    backgroundColor: ['#198754', '#dc3545'],
+                    borderColor: ['#198754', '#dc3545'],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'bottom' }
+                }
+            }
+        });
+
+        // Table
+        $(document).ready(function () {
+            $('#lecturesTable').DataTable({
+                "language": { "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json" },
+                "pageLength": 10
+            });
+        });
+    </script>
+}
+<link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet" />

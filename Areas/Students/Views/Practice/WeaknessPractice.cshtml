@@ -1,0 +1,64 @@
+﻿@model List<QdratNew.ViewModels.Students.PracticeQuestionVm>
+
+<div class="container mt-4">
+    <h3 class="text-center fw-bold mb-4">📘 جلسة تدريبية على المحاور الضعيفة</h3>
+
+    @if (Model != null && Model.Any())
+    {
+        foreach (var item in Model)
+        {
+            @Html.Partial("_PracticeQuestionPartial", item)
+        }
+
+        <div class="text-center mt-4">
+            <form asp-action="SubmitFinalTraining" asp-controller="Practice" asp-area="Students" method="post">
+                @foreach (var item in Model)
+                {
+                    <input type="hidden" name="questionIds" value="@item.Question.Id" />
+                }
+                <button type="submit" class="btn btn-success btn-lg">
+                    ✅ إنهاء التدريب وعرض النتيجة
+                </button>
+            </form>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-warning text-center">⚠️ لا توجد أسئلة متاحة حالياً</div>
+    }
+</div>
+
+@section Scripts {
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(document).on("submit", ".practice-form", function (e) {
+            e.preventDefault();
+
+            var form = $(this);
+            var questionId = form.data("question-id");
+            var selectedAnswer = form.find("input[name='SelectedAnswer']:checked").val();
+
+            if (!selectedAnswer) {
+                form.find(".result").html("<span class='text-danger'>⚠️ اختر إجابة أولاً</span>");
+                return;
+            }
+
+            $.post("/Students/Practice/SubmitPracticeAnswer",
+                { questionId: questionId, selectedAnswer: selectedAnswer },
+                function (data) {
+                    if (data.success) {
+                        if (data.isCorrect) {
+                            form.find(".result").html("<span class='text-success fw-bold'>✅ إجابتك صحيحة</span>");
+                        } else {
+                            form.find(".result").html("<span class='text-danger fw-bold'>❌ إجابتك خاطئة.<br/>الإجابة الصحيحة: " + data.correctAnswer + "</span>");
+                        }
+                    } else {
+                        form.find(".result").html("<span class='text-danger'>" + data.message + "</span>");
+                    }
+                })
+                .fail(function () {
+                    form.find(".result").html("<span class='text-danger'>⚠️ حدث خطأ أثناء الاتصال بالخادم</span>");
+                });
+        });
+    </script>
+}

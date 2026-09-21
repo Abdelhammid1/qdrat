@@ -1,0 +1,51 @@
+﻿@model QdratNew.Entities.RemedialSession
+<h3>🧠 الجلسة العلاجية - @Model.Subject</h3>
+<p>المدة: من @Model.StartTime إلى @Model.EndTime</p>
+<video width="100%" controls>
+    <source src="@Model.Resources" type="video/mp4" />
+    المتصفح لا يدعم تشغيل الفيديو.
+</video>
+<a asp-action="Result" class="btn btn-success mt-3">إنهاء الجلسة</a>
+@section Scripts {
+    <script>
+        const studentId = @User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? 0;
+        const sessionId = @Model.Id;
+        const videoId = @Model.Id;
+        const video = document.getElementById("remedialVideo");
+
+        // 🕒 كل 15 ثانية من التشغيل يتم إرسال التقدم إلى السيرفر (Session Cache)
+        video.addEventListener('timeupdate', function () {
+            if (!video.paused && video.currentTime % 15 < 1) {
+                const seconds = Math.floor(video.currentTime);
+                fetch('/Students/RemedialSessions/CacheVideoProgress', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        studentId: parseInt(studentId),
+                        sessionId: parseInt(sessionId),
+                        videoId: parseInt(videoId),
+                        secondsWatched: seconds
+                    })
+                });
+            }
+        });
+
+        // ✅ عند انتهاء الفيديو يتم إرسال الوقت الكامل مرة واحدة
+        video.addEventListener('ended', function () {
+            const seconds = Math.floor(video.duration);
+            fetch('/Students/RemedialSessions/CacheVideoProgress', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    studentId: parseInt(studentId),
+                    sessionId: parseInt(sessionId),
+                    videoId: parseInt(videoId),
+                    secondsWatched: seconds
+                })
+            }).then(() => {
+                console.log("✅ تم حفظ المشاهدة مؤقتًا في الجلسة.");
+            });
+        });
+    </script>
+
+}

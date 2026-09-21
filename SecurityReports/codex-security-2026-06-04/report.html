@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QdratNew Security Review - 2026-06-04</title>
+  <style>
+    body{font-family:"Segoe UI",Tahoma,Arial,sans-serif;line-height:1.65;margin:0;background:#f6f7f9;color:#111827}
+    main{max-width:1080px;margin:0 auto;padding:32px 20px 64px;background:#fff}
+    h1,h2,h3{color:#0f172a;line-height:1.25}
+    h1{border-bottom:4px solid #b91c1c;padding-bottom:12px}
+    h2{margin-top:34px;border-bottom:1px solid #e5e7eb;padding-bottom:8px}
+    table{width:100%;border-collapse:collapse;margin:14px 0;direction:ltr}
+    th,td{border:1px solid #d1d5db;padding:8px 10px;text-align:left;vertical-align:top}
+    th{background:#f3f4f6}
+    code{background:#f3f4f6;padding:2px 5px;border-radius:4px;direction:ltr;display:inline-block}
+    .no-go{background:#fee2e2;border:1px solid #ef4444;color:#7f1d1d;padding:14px 16px;border-radius:8px;font-weight:700}
+    .finding{border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin:18px 0;background:#fff}
+    .critical{border-right:6px solid #991b1b}
+    .high{border-right:6px solid #dc2626}
+    .medium{border-right:6px solid #d97706}
+    ul{padding-right:24px}
+  </style>
+</head>
+<body>
+<main>
+  <h1>Security Review: QdratNew</h1>
+  <p class="no-go">Production decision: NO-GO until P0/P1 issues are fixed and secrets are rotated.</p>
+  <h2>Executive Summary</h2>
+  <table>
+    <tr><th>Field</th><th>Value</th></tr>
+    <tr><td>Review date</td><td>2026-06-04</td></tr>
+    <tr><td>Reportable findings</td><td>9</td></tr>
+    <tr><td>Severity mix</td><td>2 Critical, 4 High, 3 Medium</td></tr>
+    <tr><td>Highest business risk</td><td>Unauthorized partner data access and hardcoded production database credentials</td></tr>
+    <tr><td>Scope limitation</td><td>Static review plus targeted local commands; no live penetration test.</td></tr>
+  </table>
+  <h2>Findings</h2>
+  <section class="finding critical">
+    <h3>1. Partner tenant can be selected without authentication</h3>
+    <p><strong>Severity:</strong> Critical. <strong>Confidence:</strong> High.</p>
+    <p><code>PartnerContextController.Set(int partnerId)</code> stores any existing partner ID in session without authentication, authorization, or CSRF. Multiple Partner controllers trust that session value through <code>PartnerBaseController</code>.</p>
+    <p><strong>Affected:</strong> <code>Areas\Partner\Controllers\PartnerContextController.cs:45</code>, <code>:51</code>, <code>PartnerBaseController.cs:18</code>, <code>StudentsController.cs:42</code>.</p>
+  </section>
+  <section class="finding critical">
+    <h3>2. Production Azure SQL credentials are committed in config</h3>
+    <p><strong>Severity:</strong> Critical. <strong>Confidence:</strong> High.</p>
+    <p><code>appsettings.Production.json:3</code> contains production Azure SQL host, username, and plaintext password. Rotate immediately and move to secure configuration.</p>
+  </section>
+  <section class="finding high">
+    <h3>3. Hangfire dashboard is mapped without explicit authorization</h3>
+    <p><strong>Severity:</strong> High. <strong>Confidence:</strong> Medium.</p>
+    <p><code>Program.cs:914</code> maps <code>app.UseHangfireDashboard()</code> without visible dashboard authorization options.</p>
+  </section>
+  <section class="finding high">
+    <h3>4. Student study-session workflows are unauthenticated and object IDs are trusted</h3>
+    <p><strong>Severity:</strong> High. <strong>Confidence:</strong> High.</p>
+    <p><code>StudySessionsController</code> and <code>SessionRatingsController</code> lack controller-level authorization and use direct object IDs without ownership checks.</p>
+  </section>
+  <section class="finding high">
+    <h3>5. Student AI recommendations expose arbitrary student performance by studentId</h3>
+    <p><strong>Severity:</strong> High. <strong>Confidence:</strong> High.</p>
+    <p><code>AIRecommendationController.Index(int studentId)</code> queries performance data by attacker-controlled student ID.</p>
+  </section>
+  <section class="finding high">
+    <h3>6. Generic unauthenticated PDF rendering endpoint accepts arbitrary view names</h3>
+    <p><strong>Severity:</strong> High. <strong>Confidence:</strong> Medium.</p>
+    <p><code>PrintController.ViewAsPdf</code> accepts user-controlled view and route values without authorization.</p>
+  </section>
+  <section class="finding medium">
+    <h3>7. Impersonation cookie is not marked Secure in production code</h3>
+    <p><strong>Severity:</strong> Medium. <strong>Confidence:</strong> High.</p>
+    <p><code>Services\ImpersonationService.cs:38</code> sets <code>Secure = false</code> for a sensitive impersonation state cookie.</p>
+  </section>
+  <section class="finding medium">
+    <h3>8. Identity password and session policy are weak for production</h3>
+    <p><strong>Severity:</strong> Medium. <strong>Confidence:</strong> High.</p>
+    <p><code>Program.cs:146-152</code> disables most password complexity requirements and allows length 6; session timeout is 6 hours.</p>
+  </section>
+  <section class="finding medium">
+    <h3>9. Vulnerable transitive NuGet packages are present</h3>
+    <p><strong>Severity:</strong> Medium. <strong>Confidence:</strong> High.</p>
+    <p>NuGet audit reported vulnerable transitive packages including <code>Microsoft.Build 17.8.3</code>, <code>Npgsql 8.0.0</code>, <code>System.Data.SqlClient 4.4.0</code>, and <code>System.IO.Packaging 6.0.0</code>.</p>
+  </section>
+  <h2>Minimum Release Gate</h2>
+  <ol>
+    <li>Fix Partner authorization and tenant binding.</li>
+    <li>Rotate and remove production database credentials from repository/config.</li>
+    <li>Protect or disable Hangfire dashboard.</li>
+    <li>Fix unauthenticated/IDOR student study-session and AI recommendation endpoints.</li>
+    <li>Lock down generic PDF rendering.</li>
+    <li>Re-run security smoke tests for anonymous, cross-student, cross-partner, and admin-only routes.</li>
+  </ol>
+  <p>Full Markdown report: <code>SecurityReports\codex-security-2026-06-04\report.md</code></p>
+</main>
+</body>
+</html>

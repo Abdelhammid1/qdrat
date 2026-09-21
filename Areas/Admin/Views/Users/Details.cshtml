@@ -1,0 +1,1156 @@
+@model QdratNew.ViewModels.Users.UserDetailsViewModel
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
+@{
+    ViewData["Title"] = "تفاصيل المستخدم — " + Model.FullName;
+    var nameParts   = (Model.FullName ?? "U").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+    var initials    = string.Concat(nameParts.Take(2).Select(w => w[0]));
+    var gradeCirc   = 2 * Math.PI * 38;
+    var gradeOffset = gradeCirc * (1 - Model.OverallGradePercent / 100.0);
+    int n           = 0; // عداد مشترك لجميع الجداول
+}
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+
+<style>
+/* ══════════════════════════════════════════════
+   DESIGN TOKENS
+══════════════════════════════════════════════ */
+:root {
+    --p:        #4F46E5;
+    --p-d:      #4338CA;
+    --p-l:      #EEF2FF;
+    --p-m:      rgba(79,70,229,.08);
+    --sky:      #0EA5E9;
+    --green:    #10B981;
+    --green-l:  #D1FAE5;
+    --amber:    #F59E0B;
+    --amber-l:  #FEF3C7;
+    --red:      #EF4444;
+    --red-l:    #FEE2E2;
+    --violet:   #8B5CF6;
+    --violet-l: #EDE9FE;
+    --teal:     #14B8A6;
+    --teal-l:   #CCFBF1;
+    --orange:   #F97316;
+    --orange-l: #FFEDD5;
+    --bg:       #F0F4F8;
+    --card:     #FFFFFF;
+    --ink:      #1E293B;
+    --sub:      #475569;
+    --muted:    #64748B;
+    --light:    #94A3B8;
+    --border:   #E2E8F0;
+    --r:        12px;
+    --r-sm:     8px;
+    --r-xs:     6px;
+    --sh:       0 1px 4px rgba(15,23,42,.06),0 2px 10px rgba(15,23,42,.06);
+    --sh-md:    0 4px 20px rgba(15,23,42,.09);
+    --ease:     cubic-bezier(.4,0,.2,1);
+    --font:     'Cairo','Segoe UI',sans-serif;
+}
+
+/* ══════════════════════════════════════════════
+   BASE
+══════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+.ud { font-family: var(--font); direction: rtl; background: var(--bg);
+      min-height: 100vh; padding: 22px 20px 60px; }
+
+/* ══════════════════════════════════════════════
+   PAGE HEADER
+══════════════════════════════════════════════ */
+.ud-hd { display: flex; align-items: center; justify-content: space-between;
+         flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+.ud-bc { display: flex; align-items: center; gap: 6px;
+         font-size: 12.5px; color: var(--muted); }
+.ud-bc a { color: var(--p); text-decoration: none; font-weight: 600; }
+.ud-bc a:hover { color: var(--p-d); }
+.ud-bc .sep { font-size: 10px; color: var(--light); }
+.ud-title { font-size: 20px; font-weight: 800; color: var(--ink);
+            letter-spacing: -.3px; margin-top: 2px; }
+.ud-sub { font-size: 12px; color: var(--muted); margin-top: 1px; }
+
+/* ══════════════════════════════════════════════
+   12-COLUMN GRID  →  sidebar:2 | main:10
+══════════════════════════════════════════════ */
+.ud-grid { display: grid;
+           grid-template-columns: minmax(0,2fr) minmax(0,10fr);
+           gap: 18px; align-items: start; }
+
+/* ══════════════════════════════════════════════
+   SIDEBAR
+══════════════════════════════════════════════ */
+.ud-side { background: var(--card); border-radius: var(--r);
+           box-shadow: var(--sh); overflow: hidden;
+           position: sticky; top: 18px; }
+.side-cover { height: 64px;
+  background: linear-gradient(135deg,var(--p) 0%,var(--violet) 55%,var(--sky) 100%); }
+.side-av-row { display: flex; justify-content: center;
+               margin-top: -34px; position: relative; z-index: 2; }
+.side-av {
+    width: 68px; height: 68px; border-radius: 50%;
+    border: 3px solid var(--card); box-shadow: var(--sh-md);
+    object-fit: cover;
+    background: linear-gradient(135deg,var(--p),var(--sky));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; font-weight: 800; color: #fff; }
+.side-dot { position: absolute; bottom: 6px; left: 50%;
+            transform: translateX(-12px);
+            width: 12px; height: 12px; border-radius: 50%;
+            background: var(--green); border: 2px solid var(--card); }
+.av-upload-btn {
+    position: absolute; bottom: -2px; right: -2px;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--p); color: #fff; border: 2px solid var(--card);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 9px;
+    transition: background .2s, transform .2s; z-index: 3; }
+.av-upload-btn:hover { background: var(--p-d); transform: scale(1.1); }
+.side-info { padding: 8px 14px 14px; text-align: center; }
+.side-name  { font-size: 14.5px; font-weight: 700; color: var(--ink); }
+.side-email { font-size: 11px; color: var(--muted); margin: 2px 0 8px;
+              word-break: break-all; }
+.role-chip { display: inline-flex; align-items: center; gap: 4px;
+             padding: 3px 10px; border-radius: 20px;
+             font-size: 10.5px; font-weight: 600;
+             background: var(--p-l); color: var(--p-d); margin: 1px; }
+
+/* ── دائرة التقدير ──────────────────────── */
+.grade-sec { padding: 12px 14px;
+             border-top: 1px solid var(--border);
+             border-bottom: 1px solid var(--border); }
+.grade-lbl { font-size: 10.5px; font-weight: 700; color: var(--muted);
+             text-transform: uppercase; letter-spacing: .5px;
+             margin-bottom: 10px; text-align: center; }
+.grade-row { display: flex; align-items: center; gap: 10px; }
+.g-svg circle.trk  { fill:none; stroke:var(--border); stroke-width:7; }
+.g-svg circle.fill { fill:none; stroke:url(#gGrad); stroke-width:7;
+    stroke-linecap:round; transform:rotate(-90deg); transform-origin:50% 50%;
+    transition: stroke-dashoffset 1.2s var(--ease); }
+.g-txt  { font-size:16px; font-weight:800; fill:var(--ink);
+          text-anchor:middle; dominant-baseline:middle; }
+.g-stxt { font-size:8.5px; fill:var(--muted);
+          text-anchor:middle; dominant-baseline:middle; }
+.grade-nums .big  { font-size:24px; font-weight:800; color:var(--p); line-height:1; }
+.grade-nums .desc { font-size:10.5px; color:var(--muted); margin-top:1px; }
+
+/* ── قائمة معلومات ──────────────────────── */
+.info-list { list-style:none; padding:10px 14px;
+             border-bottom:1px solid var(--border); }
+.info-list li { display:flex; align-items:flex-start;
+                justify-content:space-between; gap:6px;
+                padding:5px 0; font-size:11.5px;
+                border-bottom:1px dashed #F1F5F9; }
+.info-list li:last-child { border-bottom:none; padding-bottom:0; }
+.info-list li:first-child { padding-top:0; }
+.ikey { color:var(--muted); display:flex; align-items:center; gap:4px; }
+.ikey i { font-size:10px; width:13px; text-align:center; }
+.ival { font-weight:600; color:var(--ink); text-align:left; font-size:11px; }
+
+/* ── أزرار ──────────────────────────────── */
+.side-acts { padding:12px 14px 14px; }
+.btn-mask {
+    display:flex; align-items:center; justify-content:center; gap:7px;
+    width:100%; padding:9px 14px; border-radius:var(--r-sm); border:none;
+    background:linear-gradient(135deg,var(--p),var(--p-d));
+    color:#fff; font-family:var(--font); font-size:12px; font-weight:700;
+    cursor:pointer; margin-bottom:10px;
+    box-shadow:0 4px 14px rgba(79,70,229,.35);
+    transition:transform .18s var(--ease),box-shadow .18s var(--ease); }
+.btn-mask:hover { transform:translateY(-1px); box-shadow:0 6px 18px rgba(79,70,229,.45); }
+.btn-mask:active { transform:translateY(0); }
+.icn-btns { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.icn-btn {
+    display:flex; flex-direction:column; align-items:center; gap:5px;
+    padding:10px 6px; border-radius:var(--r-sm);
+    border:1px solid var(--border); background:var(--card);
+    cursor:pointer; transition:all .2s var(--ease); font-family:var(--font);
+    color:var(--sub); }
+.icn-btn i { font-size:15px; }
+.icn-btn span { font-size:9.5px; font-weight:700; text-align:center; line-height:1.3; }
+.icn-btn:hover { transform:translateY(-2px); box-shadow:var(--sh); border-color:transparent; }
+.icn-btn.teal   { color:var(--teal); }
+.icn-btn.teal:hover   { background:var(--teal-l); border-color:var(--teal); }
+.icn-btn.orange { color:var(--orange); }
+.icn-btn.orange:hover { background:var(--orange-l); border-color:var(--orange); }
+
+/* ══════════════════════════════════════════════
+   MAIN CONTENT
+══════════════════════════════════════════════ */
+.ud-main { background:var(--card); border-radius:var(--r);
+           box-shadow:var(--sh); overflow:hidden; }
+
+/* ── تبويبات ────────────────────────────── */
+.tabs-nav {
+    display:flex; align-items:stretch; gap:2px;
+    border-bottom:2px solid var(--border); background:#FAFBFC;
+    overflow-x:auto; scroll-behavior:smooth; padding:0 4px; }
+.tabs-nav::-webkit-scrollbar { height:0; }
+.tab-btn {
+    display:flex; align-items:center; gap:5px;
+    padding:13px 14px; border:none; background:none;
+    font-family:var(--font); font-size:12px; font-weight:600;
+    color:var(--muted); cursor:pointer; white-space:nowrap;
+    border-bottom:2px solid transparent; margin-bottom:-2px;
+    border-radius:var(--r-xs) var(--r-xs) 0 0;
+    transition:all .2s var(--ease); }
+.tab-btn:hover { color:var(--p); background:var(--p-m); }
+.tab-btn.active { color:var(--p); border-bottom-color:var(--p); }
+.tab-btn i { font-size:12px; }
+.tab-bdg {
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:18px; height:18px; padding:0 5px; border-radius:9px;
+    font-size:10px; font-weight:700;
+    background:var(--border); color:var(--muted);
+    transition:all .2s var(--ease); }
+.tab-btn.active .tab-bdg { background:var(--p-l); color:var(--p); }
+
+.tabs-body { padding:18px; }
+.tab-pane { display:none; animation:fadeUp .22s var(--ease); }
+.tab-pane.active { display:block; }
+@@keyframes fadeUp {
+    from { opacity:0; transform:translateY(6px); }
+    to   { opacity:1; transform:translateY(0); }
+}
+
+/* ── إحصائيات ───────────────────────────── */
+.stats-row { display:grid; grid-template-columns:repeat(4,1fr);
+             gap:12px; margin-bottom:18px; }
+.stat-c {
+    background:#F8FAFC; border:1px solid var(--border);
+    border-radius:var(--r-sm); padding:13px;
+    display:flex; align-items:center; gap:11px;
+    transition:box-shadow .2s,transform .2s; }
+.stat-c:hover { box-shadow:var(--sh); transform:translateY(-1px); }
+.stat-ico { width:40px; height:40px; border-radius:var(--r-sm);
+            display:flex; align-items:center; justify-content:center;
+            font-size:16px; flex-shrink:0; }
+.ico-b { background:#DBEAFE;       color:#2563EB; }
+.ico-g { background:var(--green-l);color:var(--green); }
+.ico-v { background:var(--violet-l);color:var(--violet); }
+.ico-a { background:var(--amber-l); color:var(--amber); }
+.stat-v { font-size:22px; font-weight:800; color:var(--ink); line-height:1; }
+.stat-l { font-size:10.5px; color:var(--muted); margin-top:2px; }
+
+/* ── عنوان قسم ──────────────────────────── */
+.sec-h { font-size:13px; font-weight:700; color:var(--ink);
+         margin-bottom:12px;
+         display:flex; align-items:center; gap:7px; }
+.sec-h::after { content:''; flex:1; height:1px; background:var(--border); }
+.sec-h i { color:var(--p); font-size:12px; }
+
+/* ── جداول ──────────────────────────────── */
+.tbl-wrap { border-radius:var(--r-sm); border:1px solid var(--border); overflow:hidden; }
+.dtbl { width:100%; border-collapse:collapse; font-size:12px; }
+.dtbl thead th {
+    background:#F8FAFC; padding:9px 12px; text-align:right;
+    font-weight:600; color:var(--muted); font-size:11px;
+    text-transform:uppercase; letter-spacing:.3px;
+    border-bottom:1px solid var(--border); white-space:nowrap; }
+.dtbl tbody tr { border-bottom:1px solid #F1F5F9; transition:background .15s; }
+.dtbl tbody tr:hover { background:#F8FAFF; }
+.dtbl tbody tr:last-child { border-bottom:none; }
+.dtbl td { padding:9px 12px; color:var(--sub); vertical-align:middle; }
+.dtbl td strong { color:var(--ink); }
+
+/* ── شريط تقدم ──────────────────────────── */
+.pbar { height:6px; background:var(--border); border-radius:3px; overflow:hidden; }
+.pf   { height:100%; border-radius:3px;
+        background:linear-gradient(90deg,var(--p),var(--sky));
+        transition:width .9s var(--ease); }
+.pf-g { background:linear-gradient(90deg,var(--green),#34D399); }
+.pf-a { background:linear-gradient(90deg,var(--amber),#FCD34D); }
+.pf-r { background:linear-gradient(90deg,var(--red),#F87171); }
+
+/* ── شارات ──────────────────────────────── */
+.bdg { display:inline-flex; align-items:center; gap:3px;
+       padding:3px 9px; border-radius:12px; font-size:10.5px; font-weight:700; }
+.bg-green  { background:var(--green-l);  color:#059669; }
+.bg-amber  { background:var(--amber-l);  color:#D97706; }
+.bg-red    { background:var(--red-l);    color:#DC2626; }
+.bg-violet { background:var(--violet-l); color:#7C3AED; }
+.bg-p      { background:var(--p-l);      color:var(--p-d); }
+.bg-gray   { background:#F1F5F9;         color:var(--muted); }
+.bg-teal   { background:var(--teal-l);   color:#0D9488; }
+
+/* ── أزرار جدول ─────────────────────────── */
+.t-acts { display:flex; align-items:center; gap:5px; }
+.t-btn {
+    display:inline-flex; align-items:center; gap:3px;
+    padding:4px 9px; border-radius:5px;
+    border:1px solid var(--border); background:var(--card);
+    font-family:var(--font); font-size:10.5px; font-weight:600;
+    cursor:pointer; transition:all .18s var(--ease); color:var(--sub);
+    text-decoration:none; }
+.t-btn:hover  { border-color:var(--p); color:var(--p); background:var(--p-l); }
+.t-btn.rd:hover { border-color:var(--red); color:var(--red); background:var(--red-l); }
+
+/* ── Overview grid ──────────────────────── */
+.ov-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+
+/* Timeline */
+.tl { position:relative; padding-right:18px; }
+.tl::before { content:''; position:absolute; right:5px; top:0; bottom:0;
+              width:2px; background:var(--border); }
+.tl-item { position:relative; padding-bottom:14px; }
+.tl-dot  { position:absolute; right:-18px; top:2px;
+           width:12px; height:12px; border-radius:50%;
+           border:2px solid var(--card); z-index:1; }
+.tl-dot.hw     { background:var(--teal);  box-shadow:0 0 0 2px var(--teal-l); }
+.tl-dot.exam   { background:var(--amber); box-shadow:0 0 0 2px var(--amber-l); }
+.tl-dot.course { background:var(--p);     box-shadow:0 0 0 2px var(--p-l); }
+.tl-dot.login  { background:var(--green); box-shadow:0 0 0 2px var(--green-l); }
+.tl-t { font-size:12px; font-weight:600; color:var(--ink); }
+.tl-d { font-size:10.5px; color:var(--muted); margin-top:1px; }
+
+/* Course list */
+.crs-list { display:flex; flex-direction:column; gap:8px; }
+.crs-item {
+    display:flex; align-items:center; gap:10px;
+    padding:10px; border-radius:var(--r-sm); border:1px solid var(--border);
+    transition:border-color .2s,box-shadow .2s; }
+.crs-item:hover { border-color:var(--p); box-shadow:0 2px 8px rgba(79,70,229,.08); }
+.crs-th { width:38px; height:38px; border-radius:var(--r-sm); flex-shrink:0;
+          background:linear-gradient(135deg,var(--p),var(--sky));
+          display:flex; align-items:center; justify-content:center;
+          color:#fff; font-size:16px; }
+.crs-nm { font-size:12px; font-weight:600; color:var(--ink); margin-bottom:1px; }
+.crs-mt { font-size:10.5px; color:var(--muted); margin-bottom:5px; }
+.pb-row { display:flex; align-items:center; gap:6px; }
+.pb-pct { font-size:10.5px; font-weight:700; min-width:30px; }
+
+/* Attendance summary */
+.att-sum { display:grid; grid-template-columns:repeat(3,1fr);
+           gap:10px; margin-bottom:14px; }
+.att-c { text-align:center; padding:13px; border-radius:var(--r-sm);
+         border:1px solid var(--border); }
+.att-c .num { font-size:28px; font-weight:800; line-height:1; }
+.att-c .lbl { font-size:10.5px; color:var(--muted); margin-top:3px; }
+.att-c.prs .num { color:var(--green); }
+.att-c.abs .num { color:var(--red);   }
+.att-c.lat .num { color:var(--amber); }
+
+/* Status chip */
+.st-chip { display:inline-flex; align-items:center; gap:4px;
+           padding:2px 8px; border-radius:12px;
+           font-size:10.5px; font-weight:600; }
+.st-chip::before { content:''; width:5px; height:5px; border-radius:50%;
+                   background:currentColor; }
+.st-chip.on  { background:var(--green-l); color:var(--green); }
+.st-chip.off { background:var(--red-l);   color:var(--red); }
+
+/* ══════════════════════════════════════════════
+   RESPONSIVE
+══════════════════════════════════════════════ */
+@@media (max-width:1100px) {
+    .ud-grid { grid-template-columns:1fr; }
+    .ud-side { position:static; }
+    .stats-row { grid-template-columns:repeat(2,1fr); }
+}
+@@media (max-width:768px) {
+    .ud { padding:12px; }
+    .ov-grid { grid-template-columns:1fr; }
+}
+
+/* ══════════════════════════════════════════════
+   DARK MODE
+══════════════════════════════════════════════ */
+@@media (prefers-color-scheme:dark) {
+    :root {
+        --bg:      #0F172A; --card:   #1E293B; --ink:   #F1F5F9;
+        --sub:     #CBD5E1; --muted:  #94A3B8; --light: #475569;
+        --border:  #334155;
+        --p-l:     rgba(99,102,241,.15);  --p-m:     rgba(99,102,241,.08);
+        --green-l: rgba(16,185,129,.15);  --amber-l: rgba(245,158,11,.15);
+        --red-l:   rgba(239,68,68,.15);   --violet-l:rgba(139,92,246,.15);
+        --teal-l:  rgba(20,184,166,.15);  --orange-l:rgba(249,115,22,.15);
+    }
+}
+</style>
+
+@{
+    /* helpers */
+    string PBarClass(double pct)  => pct >= 75 ? "pf-g" : pct >= 40 ? ""    : "pf-r";
+    string PBarColor(double pct)  => pct >= 75 ? "var(--green)" : pct >= 40 ? "var(--p)" : "var(--red)";
+    string ScoreColor(double pct) => pct >= 75 ? "var(--green)" : pct >= 50 ? "var(--amber)" : "var(--red)";
+}
+
+<div class="ud">
+
+ @*  {{!-- رأس الصفحة --}} *@
+  <div class="ud-hd">
+    <div>
+      <div class="ud-bc">
+        <a asp-area="Admin" asp-controller="Home"  asp-action="Index">لوحة التحكم</a>
+        <span class="sep"><i class="fa-solid fa-chevron-left fa-xs"></i></span>
+        <a asp-area="Admin" asp-controller="Users" asp-action="Index">المستخدمون</a>
+        <span class="sep"><i class="fa-solid fa-chevron-left fa-xs"></i></span>
+        <span>@Model.FullName</span>
+      </div>
+      <div class="ud-title">تفاصيل المستخدم</div>
+      <div class="ud-sub">عرض وإدارة بيانات المستخدم الكاملة</div>
+    </div>
+  </div>
+
+  @* {{!-- شبكة 12 عمود --}} *@
+  <div class="ud-grid">
+
+@*          الشريط الجانبي  (2 / 12)
+ *@  
+ 
+ <aside class="ud-side">
+
+      <div class="side-cover"></div>
+
+      @* صورة المستخدم مع إمكانية التغيير *@
+      <div class="side-av-row">
+        <div style="position:relative;">
+          @if (!string.IsNullOrEmpty(Model.ProfileImagePath))
+          {
+            <img src="@Url.Content(Model.ProfileImagePath)"
+                 class="side-av" alt="@Model.FullName" id="avatarPreview" />
+          }
+          else
+          {
+            <div class="side-av" id="avatarPreview">@initials</div>
+          }
+          @if (Model.IsActive) { <div class="side-dot"></div> }
+          <label for="photoInput" class="av-upload-btn" title="تغيير الصورة">
+            <i class="fa-solid fa-camera"></i>
+          </label>
+        </div>
+      </div>
+
+      @* فورم رفع الصورة (مخفي) *@
+      <form id="uploadPhotoForm"
+            asp-area="Admin" asp-controller="Users" asp-action="UploadProfileImage"
+            method="post" enctype="multipart/form-data" style="display:none;">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="userId" value="@Model.UserId" />
+        <input type="file" id="photoInput" name="photo"
+               accept="image/jpeg,image/png,image/webp"
+               onchange="this.form.submit()" />
+      </form>
+
+      <div class="side-info">
+        <div class="side-name">@Model.FullName</div>
+        <div class="side-email">@Model.Email</div>
+        @foreach (var r in Model.Roles.Take(2))
+        {
+          <span class="role-chip">
+            <i class="fa-solid fa-shield-halved" style="font-size:9px;"></i>@r
+          </span>
+        }
+      </div>
+
+     @*  دائرة التقدير (طلاب فقط) *@ 
+      @if (Model.IsStudent)
+      {
+        <div class="grade-sec">
+          <div class="grade-lbl">التقدير العام</div>
+          <div class="grade-row">
+            <svg width="84" height="84" viewBox="0 0 84 84" class="g-svg">
+              <defs>
+                <linearGradient id="gGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#4F46E5"/>
+                  <stop offset="100%" stop-color="#0EA5E9"/>
+                </linearGradient>
+              </defs>
+              <circle class="trk" cx="42" cy="42" r="38"/>
+              <circle class="fill" cx="42" cy="42" r="38" id="gFill"
+                      stroke-dasharray="@gradeCirc.ToString("F2")"
+                      stroke-dashoffset="@gradeCirc.ToString("F2")"/>
+              <text class="g-txt"  x="42" y="39">@Model.OverallGradePercent.ToString("F0")%</text>
+              <text class="g-stxt" x="42" y="52">@Model.GradeLabel</text>
+            </svg>
+            <div class="grade-nums">
+              <div class="big">@Model.OverallGradePercent.ToString("F0")%</div>
+              <div class="desc">متوسط الأداء العام</div>
+            </div>
+          </div>
+        </div>
+      }
+
+@*             قائمة المعلومات
+ *@          
+ 
+ <ul class="info-list">
+        <li>
+          <span class="ikey"><i class="fa-solid fa-circle-dot" style="color:var(--green);"></i>الحالة</span>
+          <span class="ival">
+            <span class="st-chip @(Model.IsActive ? "on" : "off")">
+              @(Model.IsActive ? "نشط" : "موقوف")
+            </span>
+          </span>
+        </li>
+        <li>
+          <span class="ikey"><i class="fa-solid fa-layer-group" style="color:var(--p);"></i>الدفعة الحالية</span>
+          <span class="ival">@(Model.CurrentBatchName ?? "—")</span>
+        </li>
+        @if (Model.IsStudent && Model.CurrentBatchLecturesCount > 0)
+        {
+          <li>
+            <span class="ikey"><i class="fa-solid fa-video" style="color:var(--sky);"></i>المحاضرات</span>
+            <span class="ival" style="color:var(--sky);">@Model.CurrentBatchLecturesCount محاضرة</span>
+          </li>
+        }
+        <li>
+          <span class="ikey"><i class="fa-solid fa-book-open" style="color:var(--violet);"></i>عدد الدورات</span>
+          <span class="ival" style="color:var(--violet);">@Model.EnrolledCoursesCount دورة</span>
+        </li>
+        @if (Model.LastLoginAt.HasValue)
+        {
+          <li>
+            <span class="ikey"><i class="fa-solid fa-clock" style="color:var(--muted);"></i>آخر دخول</span>
+            <span class="ival">@Model.LastLoginAt.Value.ToString("dd/MM/yyyy")</span>
+          </li>
+        }
+      </ul>
+
+@*       {{!-- أزرار الإجراءات --}}
+ *@    
+ 
+ <div class="side-acts">
+        @{
+            // هل المستخدم الداخل الآن يملك صلاحية تشغيل زر الإمبرسونيشن
+            bool currentUserCanImpersonate = ViewBag.CurrentUserCanImpersonate == true;
+            // هل المستخدم الداخل هو مالك/مبرمج (يدير الصلاحية للآخرين)
+            bool isImpersonationManager    = ViewBag.IsImpersonationManager == true;
+            // هل المستخدم المعروض لديه صلاحية ممنوحة (لعرض Grant/Revoke)
+            bool viewedHasAccess           = ViewBag.HasImpersonationAccess == true;
+        }
+
+        @if (currentUserCanImpersonate)
+        {
+            <form asp-area="" asp-controller="Impersonation" asp-action="StartAs"
+                  method="post"
+                  onsubmit="return confirm('هل أنت متأكد من الدخول بحساب @Html.Raw(Model.FullName)؟');">
+              @Html.AntiForgeryToken()
+              <input type="hidden" name="userId" value="@Model.UserId" />
+              <button type="submit" class="btn-mask">
+                <i class="fa-solid fa-mask"></i> الدخول كمستخدم
+              </button>
+            </form>
+        }
+
+        @if (isImpersonationManager)
+        {
+            <div class="mt-2">
+                @if (!viewedHasAccess)
+                {
+                    <form asp-area="Admin" asp-controller="Users" asp-action="GrantImpersonationAccess" method="post" class="d-inline">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="targetUserId" value="@Model.UserId" />
+                        <button type="submit" class="btn btn-sm btn-outline-success w-100">
+                            <i class="fa-solid fa-user-shield"></i> منح صلاحية الدخول كمستخدم
+                        </button>
+                    </form>
+                }
+                else
+                {
+                    <form asp-area="Admin" asp-controller="Users" asp-action="RevokeImpersonationAccess" method="post" class="d-inline">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="targetUserId" value="@Model.UserId" />
+                        <button type="submit" class="btn btn-sm btn-outline-danger w-100">
+                            <i class="fa-solid fa-user-slash"></i> سحب صلاحية الدخول كمستخدم
+                        </button>
+                    </form>
+                }
+            </div>
+        }
+
+        <div class="icn-btns">
+          <button class="icn-btn teal"
+                  onclick="location.href='@Url.Action("Create","StudentBatchEnrollments",new{area="Admin",studentId=Model.StudentId})'">
+            <i class="fa-solid fa-layer-group"></i>
+            <span>إضافة دفعة</span>
+          </button>
+          <button class="icn-btn orange"
+                  onclick="location.href='/Admin/Users/ResetPassword?userId=@Model.UserId'">
+            <i class="fa-solid fa-key"></i>
+            <span>كلمة السر</span>
+          </button>
+        </div>
+      </div>
+
+    </aside>
+
+    @* {{!-- ════════════════════════════════════════════
+         المحتوى الرئيسي  (10 / 12)
+    ════════════════════════════════════════════ --}} *@
+    <main class="ud-main">
+
+     @*  {{!-- شريط التبويبات --}} *@
+      <nav class="tabs-nav" role="tablist">
+        <button class="tab-btn active" data-tab="overview">
+          <i class="fa-solid fa-gauge-high"></i> نظرة عامة
+        </button>
+        <button class="tab-btn" data-tab="batches">
+          <i class="fa-solid fa-layer-group"></i> الدفعات
+          <span class="tab-bdg">@Model.Batches.Count</span>
+        </button>
+        <button class="tab-btn" data-tab="courses">
+          <i class="fa-solid fa-book-open"></i> الدورات
+          <span class="tab-bdg">@Model.Courses.Count</span>
+        </button>
+        <button class="tab-btn" data-tab="activity">
+          <i class="fa-solid fa-clock-rotate-left"></i> آخر نشاط
+        </button>
+        <button class="tab-btn" data-tab="attendance">
+          <i class="fa-solid fa-calendar-days"></i> الحضور
+          <span class="tab-bdg">@Model.Attendance.Count</span>
+        </button>
+        <button class="tab-btn" data-tab="assignments">
+          <i class="fa-solid fa-file-lines"></i> الواجبات
+          <span class="tab-bdg">@Model.Assignments.Count</span>
+        </button>
+        <button class="tab-btn" data-tab="exams">
+          <i class="fa-solid fa-pen-to-square"></i> الاختبارات
+          <span class="tab-bdg">@Model.Exams.Count</span>
+        </button>
+      </nav>
+
+      <div class="tabs-body">
+
+        @* {{!-- ═══════════ تبويب 1: نظرة عامة ═══════════ --}} *@
+        <div class="tab-pane active" id="tab-overview">
+
+          <div class="stats-row">
+            <div class="stat-c">
+              <div class="stat-ico ico-b"><i class="fa-solid fa-right-to-bracket"></i></div>
+              <div>
+                <div class="stat-v">@Model.TotalLoginCount</div>
+                <div class="stat-l">مرة دخول للمنصة</div>
+              </div>
+            </div>
+            @if (Model.IsStudent)
+            {
+            <div class="stat-c">
+              <div class="stat-ico ico-g"><i class="fa-solid fa-circle-check"></i></div>
+              <div>
+                <div class="stat-v">@Model.CompletedCoursesCount</div>
+                <div class="stat-l">دورة مكتملة</div>
+              </div>
+            </div>
+            <div class="stat-c">
+              <div class="stat-ico ico-v"><i class="fa-solid fa-file-circle-check"></i></div>
+              <div>
+                <div class="stat-v">@Model.SubmittedAssignments</div>
+                <div class="stat-l">واجب مسلَّم</div>
+              </div>
+            </div>
+            <div class="stat-c">
+              <div class="stat-ico ico-a"><i class="fa-solid fa-star-half-stroke"></i></div>
+              <div>
+                <div class="stat-v">@Model.OverallGradePercent.ToString("F0")%</div>
+                <div class="stat-l">التقدير العام</div>
+              </div>
+            </div>
+            }
+          </div>
+
+          <div class="ov-grid">
+
+          @*   {{!-- Timeline آخر النشاطات --}} *@
+            <div>
+              <div class="sec-h"><i class="fa-solid fa-bolt-lightning"></i>آخر النشاطات</div>
+              @if (Model.Assignments.Any() || Model.Exams.Any())
+              {
+                <div class="tl">
+                  @foreach (var hw in Model.Assignments.Take(3))
+                  {
+                    <div class="tl-item">
+                      <div class="tl-dot hw"></div>
+                      <div>
+                        <div class="tl-t">واجب: @hw.Title</div>
+                        <div class="tl-d">
+                          @(hw.SubmittedAt.HasValue
+                            ? hw.SubmittedAt.Value.ToString("dd MMM yyyy")
+                            : (hw.DueDate.HasValue ? "الموعد: " + hw.DueDate.Value.ToString("dd MMM") : "—"))
+                          @if (hw.Score.HasValue) { <text> — درجة: @hw.Score.Value.ToString("F0")%</text> }
+                        </div>
+                      </div>
+                    </div>
+                  }
+                  @foreach (var ex in Model.Exams.Take(2))
+                  {
+                    <div class="tl-item">
+                      <div class="tl-dot exam"></div>
+                      <div>
+                        <div class="tl-t">اختبار: @ex.ExamTitle</div>
+                        <div class="tl-d">
+                          @(ex.TakenAt.HasValue ? ex.TakenAt.Value.ToString("dd MMM yyyy") : "—")
+                          — @ex.ScorePercent.ToString("F0")%
+                        </div>
+                      </div>
+                    </div>
+                  }
+                </div>
+              }
+              else
+              {
+                <p style="font-size:12px;color:var(--muted);text-align:center;padding:20px 0;">
+                  لا توجد نشاطات حديثة
+                </p>
+              }
+            </div>
+
+           @*  {{!-- تقدم الدورات --}} *@
+            <div>
+              <div class="sec-h"><i class="fa-solid fa-chart-line"></i>تقدم الدورات</div>
+              @if (Model.Courses.Any())
+              {
+                <div class="crs-list">
+                  @foreach (var c in Model.Courses.Take(4))
+                  {
+                    int p = (int)Math.Min(c.ProgressPct, 100);
+                    <div class="crs-item">
+                      <div class="crs-th"><i class="fa-solid fa-book"></i></div>
+                      <div style="flex:1;">
+                        <div class="crs-nm">@c.CourseName</div>
+                        @if (!string.IsNullOrEmpty(c.BatchName))
+                        {
+                          <div class="crs-mt">@c.BatchName</div>
+                        }
+                        <div class="pb-row">
+                          <div class="pbar" style="flex:1;">
+                            <div class="pf @PBarClass(p)" style="width:@p%"></div>
+                          </div>
+                          <span class="pb-pct" style="color:@PBarColor(p)">@p%</span>
+                        </div>
+                      </div>
+                      @if (c.IsCompleted)
+                      {
+                        <span class="bdg bg-teal" style="font-size:10px;">✓</span>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+              else
+              {
+                <p style="font-size:12px;color:var(--muted);text-align:center;padding:20px 0;">
+                  لا توجد دورات
+                </p>
+              }
+            </div>
+
+          </div>
+        </div>
+
+       @*  {{!-- ═══════════ تبويب 2: الدفعات ═══════════ --}} *@
+        <div class="tab-pane" id="tab-batches">
+          <div class="sec-h"><i class="fa-solid fa-layer-group"></i>الدفعات المسجل بها</div>
+          @if (Model.Batches.Any())
+          {
+            <div class="tbl-wrap">
+              <table class="dtbl">
+                <thead>
+                  <tr>
+                    <th>#</th><th>اسم الدفعة</th><th>الدورة</th>
+                    <th>تاريخ البدء</th><th>تاريخ الانتهاء</th>
+                    <th>تاريخ التسجيل</th><th>الحالة</th><th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @{ n = 0; }
+                  @foreach (var b in Model.Batches)
+                  {
+                    n++;
+                    <tr>
+                      <td>@n</td>
+                      <td><strong>@b.BatchName</strong></td>
+                      <td>@b.CourseName</td>
+                      <td>@b.StartDate.ToString("dd/MM/yyyy")</td>
+                      <td>@(b.EndDate.HasValue ? b.EndDate.Value.ToString("dd/MM/yyyy") : "—")</td>
+                      <td style="font-size:11px;color:var(--muted)">@b.EnrolledAt.ToString("dd/MM/yyyy")</td>
+                      <td>
+                        @if      (b.IsArchived)       { <span class="bdg bg-gray">مؤرشفة</span> }
+                        else if  (b.Status=="Active") { <span class="bdg bg-green">نشطة ✓</span> }
+                        else                          { <span class="bdg bg-gray">@b.Status</span> }
+                      </td>
+                      <td>
+                        <div class="t-acts">
+                          <a class="t-btn"
+                             asp-area="Admin" asp-controller="Batches"
+                             asp-action="Details" asp-route-id="@b.BatchId">
+                            <i class="fa-solid fa-eye"></i> عرض
+                          </a>
+                          <button class="t-btn rd"
+                                  onclick="doRemoveBatch('@Model.UserId','@b.BatchId')">
+                            <i class="fa-solid fa-user-minus"></i> إزالة
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+          else { <p style="font-size:12px;color:var(--muted);padding:30px;text-align:center;">لا توجد دفعات</p> }
+        </div>
+
+        @* {{!-- ═══════════ تبويب 3: الدورات ═══════════ --}} *@
+        <div class="tab-pane" id="tab-courses">
+          <div class="sec-h"><i class="fa-solid fa-book-open"></i>الدورات الحالية</div>
+          @if (Model.Courses.Any())
+          {
+            <div class="tbl-wrap">
+              <table class="dtbl">
+                <thead>
+                  <tr>
+                    <th>#</th><th>الدورة</th><th>الدفعة</th>
+                    <th>التقدم</th><th>الحالة</th><th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @{ n = 0; }
+                  @foreach (var c in Model.Courses)
+                  {
+                    n++;
+                    int p = (int)Math.Min(c.ProgressPct, 100);
+                    <tr>
+                      <td>@n</td>
+                      <td><strong>@c.CourseName</strong></td>
+                      <td style="font-size:11px;color:var(--muted)">@c.BatchName</td>
+                      <td style="min-width:130px;">
+                        <div class="pb-row">
+                          <div class="pbar" style="width:80px;">
+                            <div class="pf @PBarClass(p)" style="width:@p%"></div>
+                          </div>
+                          <span style="font-size:11px;font-weight:700;color:@PBarColor(p);min-width:28px;">@p%</span>
+                        </div>
+                      </td>
+                      <td>
+                        @if      (c.IsCompleted) { <span class="bdg bg-teal">مكتملة ✓</span> }
+                        else if  (p > 0)         { <span class="bdg bg-p">جارية</span> }
+                        else                     { <span class="bdg bg-gray">لم تبدأ</span> }
+                      </td>
+                      <td>
+                        <a class="t-btn"
+                           asp-area="Admin" asp-controller="Courses"
+                           asp-action="Details" asp-route-id="@c.CourseId">
+                          <i class="fa-solid fa-arrow-up-right-from-square"></i> تفاصيل
+                        </a>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+          else { <p style="font-size:12px;color:var(--muted);padding:30px;text-align:center;">لا توجد دورات</p> }
+        </div>
+
+        @* {{!-- ═══════════ تبويب 4: آخر نشاط ═══════════ --}} *@
+        <div class="tab-pane" id="tab-activity">
+          <div class="sec-h"><i class="fa-solid fa-clock-rotate-left"></i>سجل الدخول والخروج</div>
+          @if (Model.LoginLogs.Any())
+          {
+            <div class="tbl-wrap">
+              <table class="dtbl">
+                <thead>
+                  <tr>
+                    <th>#</th><th>التاريخ</th><th>وقت الدخول</th>
+                    <th>وقت الخروج</th><th>المدة</th>
+                    <th>الجهاز</th><th>الحالة</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @{ n = 0; }
+                  @foreach (var log in Model.LoginLogs)
+                  {
+                    n++;
+                    <tr>
+                      <td>@n</td>
+                      <td>@log.LoginAt.ToString("dd/MM/yyyy")</td>
+                      <td><span style="color:var(--green);font-weight:600;">@log.LoginAt.ToString("hh:mm tt")</span></td>
+                      <td>
+                        @if (log.LogoutAt.HasValue) {
+                          <span style="color:var(--red);font-weight:600;">@log.LogoutAt.Value.ToString("hh:mm tt")</span>
+                        } else {
+                          <span class="bdg bg-green" style="font-size:10px;">جارٍ الآن</span>
+                        }
+                      </td>
+                      <td>
+                        @if (log.Duration.HasValue) {
+                          @($"{(int)log.Duration.Value.TotalHours}س {log.Duration.Value.Minutes}د")
+                        } else { <text>—</text> }
+                      </td>
+                      <td style="font-size:11px;color:var(--muted)">@(log.DeviceInfo ?? "—")</td>
+                      <td>
+                        @if (!log.LogoutAt.HasValue) { <span class="bdg bg-green">نشط</span> }
+                        else                        { <span class="bdg bg-gray">منتهي</span> }
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+          else
+          {
+            <p style="font-size:12px;color:var(--muted);padding:30px;text-align:center;">
+              لا يوجد سجل دخول متاح
+            </p>
+          }
+        </div>
+
+        @* {{!-- ═══════════ تبويب 5: الحضور والانصراف ═══════════ --}} *@
+        <div class="tab-pane" id="tab-attendance">
+
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+            <div class="sec-h" style="margin-bottom:0;flex:1;"><i class="fa-solid fa-calendar-days"></i>ملخص الحضور</div>
+            <a class="t-btn"
+               asp-area="Admin" asp-controller="Attendance" asp-action="Index"
+               style="white-space:nowrap;">
+              <i class="fa-solid fa-chart-pie"></i> تقارير الحضور الكاملة
+            </a>
+          </div>
+
+          <div class="att-sum">
+            <div class="att-c prs"><div class="num">@Model.AttendedCount</div><div class="lbl">حاضر</div></div>
+            <div class="att-c abs"><div class="num">@Model.AbsentCount</div><div class="lbl">غائب</div></div>
+            <div class="att-c lat"><div class="num">@Model.LateCount</div><div class="lbl">متأخر</div></div>
+          </div>
+
+          @{
+            int ttl = Model.AttendedCount + Model.AbsentCount + Model.LateCount;
+            int ap  = ttl > 0 ? (int)Model.AttendancePercent : 0;
+          }
+          @if (ttl > 0)
+          {
+            <div style="margin-bottom:16px;">
+              <div class="sec-h"><i class="fa-solid fa-percent"></i>نسبة الحضور الكلية</div>
+              <div style="display:flex;align-items:center;gap:10px;">
+                <div class="pbar" style="flex:1;height:10px;">
+                  <div class="pf @PBarClass(ap)" style="width:@ap%"></div>
+                </div>
+                <span style="font-weight:700;font-size:15px;color:@PBarColor(ap)">@ap%</span>
+              </div>
+            </div>
+          }
+
+          <div class="sec-h"><i class="fa-solid fa-calendar-days"></i>سجل الحضور التفصيلي</div>
+          @if (Model.Attendance.Any())
+          {
+            <div class="tbl-wrap">
+              <table class="dtbl">
+                <thead>
+                  <tr>
+                    <th>#</th><th>التاريخ</th><th>المحاضرة</th>
+                    <th>وقت الحضور</th><th>وقت الانصراف</th>
+                    <th>الحالة</th><th>ملاحظات</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @{ n = 0; }
+                  @foreach (var a in Model.Attendance)
+                  {
+                    n++;
+                    string ab = a.Status == "حاضر" ? "bg-green" :
+                                a.Status == "متأخر" ? "bg-amber" : "bg-red";
+                    <tr>
+                      <td>@n</td>
+                      <td>@a.Date.ToString("dd/MM/yyyy")</td>
+                      <td><strong>@a.LectureName</strong></td>
+                      <td>@(a.CheckIn.HasValue  ? a.CheckIn.Value.ToString("hh:mm tt")  : "—")</td>
+                      <td>@(a.CheckOut.HasValue ? a.CheckOut.Value.ToString("hh:mm tt") : "—")</td>
+                      <td><span class="bdg @ab">@a.Status</span></td>
+                      <td style="font-size:11px;color:var(--muted)">@(a.Notes ?? "—")</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+          else { <p style="font-size:12px;color:var(--muted);padding:20px;text-align:center;">لا توجد سجلات حضور</p> }
+        </div>
+
+       @*  {{!-- ═══════════ تبويب 6: الواجبات ═══════════ --}} *@
+        <div class="tab-pane" id="tab-assignments">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+            <div class="sec-h" style="margin-bottom:0;flex:1;"><i class="fa-solid fa-file-lines"></i>آخر الواجبات وحالة المتابعة</div>
+            <a class="t-btn"
+               asp-area="Admin" asp-controller="HomeworkManagement" asp-action="Index"
+               style="white-space:nowrap;">
+              <i class="fa-solid fa-list-check"></i> إدارة الواجبات
+            </a>
+          </div>
+          @if (Model.Assignments.Any())
+          {
+            <div class="tbl-wrap">
+              <table class="dtbl">
+                <thead>
+                  <tr>
+                    <th>#</th><th>الواجب</th><th>الموعد النهائي</th>
+                    <th>تاريخ التسليم</th><th>الدرجة</th>
+                    <th>الحالة</th><th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @{ n = 0; }
+                  @foreach (var hw in Model.Assignments)
+                  {
+                    n++;
+                    string hb = hw.Status == "مسلّم" ? "bg-green" :
+                                hw.Status == "متأخر"  ? "bg-red"   : "bg-amber";
+                    <tr>
+                      <td>@n</td>
+                      <td><strong>@hw.Title</strong></td>
+                      <td style="font-size:11px;">@(hw.DueDate.HasValue ? hw.DueDate.Value.ToString("dd/MM/yyyy") : "—")</td>
+                      <td style="font-size:11px;color:var(--muted)">@(hw.SubmittedAt.HasValue ? hw.SubmittedAt.Value.ToString("dd/MM/yyyy") : "—")</td>
+                      <td>
+                        @if (hw.Score.HasValue) {
+                          <strong style="color:@ScoreColor(hw.Score.Value)">@hw.Score.Value.ToString("F0")%</strong>
+                        } else { <span style="color:var(--light)">—</span> }
+                      </td>
+                      <td><span class="bdg @hb">@hw.Status</span></td>
+                      <td>
+                        <div class="t-acts">
+                          <a class="t-btn"
+                             asp-area="Admin" asp-controller="HomeworkManagement"
+                             asp-action="StudentsReport" asp-route-homeworkSetId="@hw.HomeworkSetId">
+                            <i class="fa-solid fa-chart-bar"></i> تقرير
+                          </a>
+                          @if (Model.StudentId.HasValue)
+                          {
+                            <a class="t-btn"
+                               asp-area="Admin" asp-controller="HomeworkManagement"
+                               asp-action="Review"
+                               asp-route-studentId="@Model.StudentId"
+                               asp-route-homeworkSetId="@hw.HomeworkSetId">
+                              <i class="fa-solid fa-eye"></i> مراجعة
+                            </a>
+                          }
+                        </div>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+          else { <p style="font-size:12px;color:var(--muted);padding:30px;text-align:center;">لا توجد واجبات</p> }
+        </div>
+
+       @*  {{!-- ═══════════ تبويب 7: الاختبارات ═══════════ --}} *@
+        <div class="tab-pane" id="tab-exams">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+            <div class="sec-h" style="margin-bottom:0;flex:1;"><i class="fa-solid fa-pen-to-square"></i>آخر الاختبارات وكيفية المتابعة</div>
+            <a class="t-btn"
+               asp-area="Admin" asp-controller="PerformanceIndicatorExams" asp-action="Index"
+               style="white-space:nowrap;">
+              <i class="fa-solid fa-chart-bar"></i> إدارة الاختبارات
+            </a>
+          </div>
+          @if (Model.Exams.Any())
+          {
+            <div class="tbl-wrap">
+              <table class="dtbl">
+                <thead>
+                  <tr>
+                    <th>#</th><th>الاختبار</th><th>التاريخ</th>
+                    <th>الدرجة</th><th>النتيجة</th><th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @{ n = 0; }
+                  @foreach (var ex in Model.Exams)
+                  {
+                    n++;
+                    string eb = ex.ResultClass == "success" ? "bg-green" :
+                                ex.ResultClass == "warning"  ? "bg-amber" : "bg-red";
+                    <tr>
+                      <td>@n</td>
+                      <td><strong>@ex.ExamTitle</strong></td>
+                      <td style="font-size:11px;">@(ex.TakenAt.HasValue ? ex.TakenAt.Value.ToString("dd/MM/yyyy") : "—")</td>
+                      <td>
+                        <strong style="color:@ScoreColor(ex.ScorePercent)">
+                          @ex.ScorePercent.ToString("F0")%
+                        </strong>
+                      </td>
+                      <td><span class="bdg @eb">@ex.Result</span></td>
+                      <td>
+                        <div class="t-acts">
+                          @if (Model.StudentId.HasValue && ex.ExamId > 0)
+                          {
+                            <a class="t-btn"
+                               asp-area="Admin" asp-controller="PerformanceExamReports"
+                               asp-action="StudentExamReport"
+                               asp-route-studentId="@Model.StudentId"
+                               asp-route-examId="@ex.ExamId">
+                              <i class="fa-solid fa-chart-bar"></i> تقرير
+                            </a>
+                          }
+                          @if (ex.ResultClass == "danger") {
+                            <button class="t-btn rd">
+                              <i class="fa-solid fa-rotate"></i> إعادة إلزامية
+                            </button>
+                          }
+                        </div>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+          else { <p style="font-size:12px;color:var(--muted);padding:30px;text-align:center;">لا توجد اختبارات</p> }
+        </div>
+
+      </div>
+      
+      @* {{!-- /tabs-body --}} *@
+    </main>
+
+  </div>
+  
+ @*  {{!-- /ud-grid --}} *@
+</div>
+
+@* {{!-- /ud --}} *@
+
+<script>
+(function () {
+  // ── Tab switching ───────────────────────────────────
+  document.querySelectorAll('.tab-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var t = this.dataset.tab;
+      document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
+      document.querySelectorAll('.tab-pane').forEach(function (p) { p.classList.remove('active'); });
+      this.classList.add('active');
+      var pane = document.getElementById('tab-' + t);
+      if (pane) pane.classList.add('active');
+    });
+  });
+
+  // ── Grade circle animation ──────────────────────────
+  window.addEventListener('load', function () {
+    var fill = document.getElementById('gFill');
+    if (!fill) return;
+    var r    = 38;
+    var circ = 2 * Math.PI * r;
+    var pct  = @Model.OverallGradePercent;
+    var off  = circ * (1 - pct / 100);
+    fill.style.strokeDasharray  = circ.toFixed(2);
+    fill.style.strokeDashoffset = circ.toFixed(2);
+    setTimeout(function () { fill.style.strokeDashoffset = off.toFixed(2); }, 300);
+  });
+
+  // ── Remove from batch ───────────────────────────────
+  window.doRemoveBatch = function (userId, batchId) {
+    if (!confirm('هل تريد إزالة الطالب من هذه الدفعة؟')) return;
+    var f = document.createElement('form');
+    f.method = 'POST';
+    f.action = '/Admin/Users/RemoveFromBatch';
+    f.innerHTML =
+      '<input name="userId"  value="' + userId  + '">' +
+      '<input name="batchId" value="' + batchId + '">' +
+      '@Html.AntiForgeryToken()';
+    document.body.appendChild(f);
+    f.submit();
+  };
+})();
+</script>

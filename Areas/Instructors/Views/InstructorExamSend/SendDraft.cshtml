@@ -1,0 +1,161 @@
+@model QdratNew.ViewModels.Instructor.Exam.SendExamDraftVM
+
+@{
+    ViewData["Title"] = "إرسال الاختبار";
+}
+
+@section Styles {
+    <link href="~/css/instructor/instructor-drafts.css" rel="stylesheet" asp-append-version="true" />
+}
+
+<div class="instructor-page">
+
+    <div class="hw-page-header">
+        <h3 class="hw-page-title">
+            <i class="fas fa-paper-plane"></i>
+            إرسال الاختبار
+        </h3>
+        <a href="@Url.Action("Drafts", "InstructorExamDraft")" class="hw-back-btn ms-auto">
+            <i class="fas fa-arrow-right"></i> رجوع
+        </a>
+    </div>
+
+    <div class="dr-hint">
+        <i class="fa fa-brain"></i>
+        يوصي النظام بإرسال الاختبار للدفعات أولاً ثم تحليل الأداء لاحقاً.
+    </div>
+
+    <div class="draft-form-card mb-4">
+        <div class="draft-form-title">
+            <i class="fas fa-clipboard-list"></i>
+            بيانات الاختبار
+        </div>
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="draft-field-label">اسم الاختبار</label>
+                <input asp-for="ExamTitle" class="form-control" required />
+            </div>
+            <div class="col-md-4">
+                <label class="draft-field-label">بداية الاختبار</label>
+                <input asp-for="StartAt" type="datetime-local" class="form-control" required />
+            </div>
+            <div class="col-md-4">
+                <label class="draft-field-label">نهاية الاختبار</label>
+                <input asp-for="EndAt" type="datetime-local" class="form-control" required />
+            </div>
+            <div class="col-md-4">
+                <label class="draft-field-label">مدة الاختبار (دقائق)</label>
+                <input asp-for="DurationMinutes" type="number" class="form-control" required />
+            </div>
+            <div class="col-md-4">
+                <label class="draft-field-label">نوع التنفيذ</label>
+                <select asp-for="ExamMode" class="form-control">
+                    <option value="online">أونلاين</option>
+                    <option value="lab">حضوري</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="send-type-grid">
+        <div class="send-type" data-target="batchForm">
+            <h5><i class="fas fa-layer-group d-block mb-2 fs-3"></i> دفعات</h5>
+        </div>
+        <div class="send-type" data-target="studentsForm">
+            <h5><i class="fas fa-user d-block mb-2 fs-3"></i> طلاب</h5>
+        </div>
+    </div>
+
+    <form asp-action="SendToBatches" method="post" class="send-form d-none" id="batchForm">
+        <input type="hidden" asp-for="DraftId" />
+        <input type="hidden" asp-for="ExamTitle" />
+        <input type="hidden" asp-for="StartAt" />
+        <input type="hidden" asp-for="EndAt" />
+        <input type="hidden" asp-for="DurationMinutes" />
+        <input type="hidden" asp-for="ExamMode" />
+        <div class="send-panel">
+            <h5><i class="fas fa-layer-group me-2 text-primary"></i> اختيار الدفعات</h5>
+            <div class="row">
+                @foreach (var batch in Model.Batches)
+                {
+                    <div class="col-md-3 mb-2">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="BatchIds" value="@batch.Id" />
+                            <label class="form-check-label">@batch.Name</label>
+                        </div>
+                    </div>
+                }
+            </div>
+            <button class="btn btn-primary mt-3 w-100">
+                <i class="fas fa-paper-plane me-1"></i> إرسال للدفعات
+            </button>
+        </div>
+    </form>
+
+    <form asp-action="SendToStudents" method="post" class="send-form d-none" id="studentsForm">
+        <input type="hidden" asp-for="DraftId" />
+        <input type="hidden" asp-for="ExamTitle" />
+        <input type="hidden" asp-for="StartAt" />
+        <input type="hidden" asp-for="EndAt" />
+        <input type="hidden" asp-for="DurationMinutes" />
+        <input type="hidden" asp-for="ExamMode" />
+        <div class="send-panel">
+            <h5><i class="fas fa-users me-2 text-primary"></i> اختيار الطلاب</h5>
+            <input type="text" id="studentSearch" class="form-control mb-3" placeholder="ابحث عن الطالب..." />
+            <div id="studentsContainer" style="max-height:300px; overflow:auto;"></div>
+            <button class="btn btn-success mt-3 w-100">
+                <i class="fas fa-paper-plane me-1"></i> إرسال للطلاب
+            </button>
+        </div>
+    </form>
+
+</div>
+
+@section Scripts {
+    <script>
+        const cards = document.querySelectorAll('.send-type');
+        const forms = document.querySelectorAll('.send-form');
+
+        cards.forEach(card => {
+            card.addEventListener('click', () => {
+                cards.forEach(c => c.classList.remove('active'));
+                forms.forEach(f => f.classList.add('d-none'));
+                card.classList.add('active');
+                document.getElementById(card.getAttribute('data-target')).classList.remove('d-none');
+            });
+        });
+
+        document.querySelectorAll("form").forEach(form => {
+            form.addEventListener("submit", function () {
+                const get = name => document.querySelector(`[name="${name}"]`).value;
+                form.querySelectorAll('[name="StartAt"]').forEach(e => e.value = get("StartAt"));
+                form.querySelectorAll('[name="EndAt"]').forEach(e => e.value = get("EndAt"));
+                form.querySelectorAll('[name="DurationMinutes"]').forEach(e => e.value = get("DurationMinutes"));
+                form.querySelectorAll('[name="ExamMode"]').forEach(e => e.value = get("ExamMode"));
+                form.querySelectorAll('[name="ExamTitle"]').forEach(e => e.value = get("ExamTitle"));
+                form.querySelectorAll('[name="DraftId"]').forEach(e => e.value = get("DraftId"));
+            });
+        });
+
+        let allStudents = @Html.Raw(Json.Serialize(Model.Students));
+        const container = document.getElementById("studentsContainer");
+        const search = document.getElementById("studentSearch");
+
+        function renderStudents(list) {
+            container.innerHTML = "";
+            list.slice(0, 50).forEach(s => {
+                container.innerHTML += `
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="StudentIds" value="${s.id}" />
+                        <label class="form-check-label">${s.name}</label>
+                    </div>`;
+            });
+        }
+
+        renderStudents(allStudents);
+        search.addEventListener("input", function () {
+            let val = this.value.toLowerCase();
+            renderStudents(allStudents.filter(x => x.name.toLowerCase().includes(val)));
+        });
+    </script>
+}

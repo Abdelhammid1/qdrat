@@ -1,0 +1,1571 @@
+﻿@model QdratNew.Entities.ProfessionalModel
+
+@{
+    ViewData["Title"] = "تفاصيل النموذج";
+
+    var questions = Model.Questions != null
+        ? Model.Questions.OrderBy(x => x.OrderNumber).ToList()
+        : new List<QdratNew.Entities.ProfessionalModelQuestion>();
+
+    var today = DateTime.Today;
+    var questionsCount = questions.Count;
+    var createdBy = string.IsNullOrWhiteSpace(Model.CreatedBy) ? "غير محدد" : Model.CreatedBy;
+    var description = string.IsNullOrWhiteSpace(Model.Description) ? "لا يوجد وصف مسجل لهذا النموذج." : Model.Description;
+
+    var sectionsCount = questions
+        .Where(x => x.Question?.Lesson?.Section != null)
+        .Select(x => x.Question.Lesson.Section.Id)
+        .Distinct()
+        .Count();
+
+    var lessonsCount = questions
+        .Where(x => x.Question?.Lesson != null)
+        .Select(x => x.Question.Lesson.Id)
+        .Distinct()
+        .Count();
+
+    var verbalPassagesCount = questions
+        .Where(x => x.Question?.VerbalPassageId != null)
+        .Select(x => x.Question.VerbalPassageId)
+        .Distinct()
+        .Count();
+
+    var questionsWithOptionsCount = questions
+        .Count(x => x.Question?.Options != null && x.Question.Options.Any());
+
+    string SafeText(string? value, string fallback = "غير محدد")
+    {
+        return string.IsNullOrWhiteSpace(value) ? fallback : value;
+    }
+
+    string StripHtml(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "";
+        }
+
+        return System.Text.RegularExpressions.Regex.Replace(value, "<.*?>", " ").Trim();
+    }
+
+
+    string? GetStringPropertyValue(object? source, params string[] propertyNames)
+    {
+        if (source == null || propertyNames == null || propertyNames.Length == 0)
+        {
+            return null;
+        }
+
+        var sourceType = source.GetType();
+
+        foreach (var propertyName in propertyNames)
+        {
+            var property = sourceType.GetProperty(propertyName);
+
+            if (property == null)
+            {
+                continue;
+            }
+
+            var value = property.GetValue(source, null);
+
+            if (value == null)
+            {
+                continue;
+            }
+
+            var stringValue = value.ToString();
+
+            if (!string.IsNullOrWhiteSpace(stringValue))
+            {
+                return stringValue;
+            }
+        }
+
+        return null;
+    }
+
+    string? GetPassageAudioUrl(object? passage)
+    {
+        return GetStringPropertyValue(
+            passage,
+            "AudioUrl",
+            "AudioFileUrl",
+            "AudioPath",
+            "AudioFilePath",
+            "MediaUrl",
+            "FileUrl",
+            "VoiceUrl"
+        );
+    }
+
+    string ResolvePassageMediaType(QdratNew.Entities.VerbalPassage? passage)
+    {
+        if (passage == null)
+        {
+            return "none";
+        }
+
+        var audioUrl = GetPassageAudioUrl(passage);
+
+        if (!string.IsNullOrWhiteSpace(audioUrl))
+        {
+            return "audio";
+        }
+
+        if (!string.IsNullOrWhiteSpace(passage.Content))
+        {
+            return "text";
+        }
+
+        return "unknown";
+    }
+
+    string ResolvePassageMediaLabel(string mediaType)
+    {
+        return mediaType switch
+        {
+            "audio" => "وسائط صوتية",
+            "text" => "نص",
+            "unknown" => "غير محدد",
+            _ => "—"
+        };
+    }
+
+    string ResolvePassageMediaIcon(string mediaType)
+    {
+        return mediaType switch
+        {
+            "audio" => "fas fa-volume-up",
+            "text" => "fas fa-align-right",
+            "unknown" => "fas fa-question-circle",
+            _ => "fas fa-minus"
+        };
+    }
+
+
+
+    string BuildAvatar(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return "نـ";
+        }
+
+        var cleaned = StripHtml(name).Trim();
+
+        if (string.IsNullOrWhiteSpace(cleaned))
+        {
+            return "نـ";
+        }
+
+        var parts = cleaned.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        if (parts.Length >= 2)
+        {
+            return (parts[0].Substring(0, 1) + parts[1].Substring(0, 1)).ToUpper();
+        }
+
+        return cleaned.Substring(0, Math.Min(2, cleaned.Length)).ToUpper();
+    }
+
+    string BuildRowSearch(QdratNew.Entities.ProfessionalModelQuestion item)
+    {
+        var q = item.Question;
+        var title = StripHtml(q?.Title);
+        var note = SafeText(q?.InternalNote, "");
+        var section = SafeText(q?.Lesson?.Section?.Title, "");
+        var lesson = SafeText(q?.Lesson?.Title, "");
+        var passage = SafeText(q?.VerbalPassage?.Title, "");
+        var mediaType = ResolvePassageMediaType(q?.VerbalPassage);
+        var mediaLabel = ResolvePassageMediaLabel(mediaType);
+
+        return $"{item.OrderNumber} {title} {note} {section} {lesson} {passage} {mediaLabel} {mediaType}".ToLower();
+    }
+
+
+}
+
+<div class="professional-model-details-page" dir="rtl">
+
+    <section class="model-hero">
+        <div class="hero-main">
+            <div class="hero-icon">
+                <i class="fas fa-file-alt"></i>
+            </div>
+
+            <div>
+                <div class="hero-eyebrow">إدارة النماذج الاحترافية</div>
+                <h1>@Model.Title</h1>
+                <p>
+                    تفاصيل النموذج والأسئلة المرتبطة به، مع إمكانية البحث والتصفية والمعاينة والطباعة من نفس الشاشة.
+                </p>
+            </div>
+        </div>
+
+        <div class="hero-actions">
+            <a asp-area="Admin"
+               asp-controller="ProfessionalModels"
+               asp-action="Index"
+               class="hero-btn muted">
+                <i class="fas fa-arrow-right"></i>
+                رجوع
+            </a>
+
+            <a asp-area="Admin"
+               asp-controller="ProfessionalModels"
+               asp-action="AddQuestions"
+               asp-route-id="@Model.Id"
+               class="hero-btn primary">
+                <i class="fas fa-plus-circle"></i>
+                إضافة أسئلة
+            </a>
+        </div>
+    </section>
+
+    <section class="model-meta-card">
+        <div class="meta-main">
+            <div class="meta-title">
+                <i class="fas fa-info-circle"></i>
+                بيانات النموذج
+            </div>
+
+            <div class="meta-description">
+                @Html.Raw(description)
+            </div>
+        </div>
+
+        <div class="meta-side">
+            <div class="meta-item">
+                <span>تاريخ الإنشاء</span>
+                <strong>@Model.CreatedAt.ToString("yyyy/MM/dd HH:mm")</strong>
+            </div>
+
+            <div class="meta-item">
+                <span>تم الإنشاء بواسطة</span>
+                <strong>@createdBy</strong>
+            </div>
+        </div>
+    </section>
+
+    <section class="kpi-grid">
+        <article class="kpi-card blue">
+            <div class="kpi-icon blue">
+                <i class="fas fa-question-circle"></i>
+            </div>
+            <div>
+                <span>عدد الأسئلة</span>
+                <strong>@questionsCount</strong>
+                <small>إجمالي الأسئلة داخل النموذج</small>
+            </div>
+        </article>
+
+        <article class="kpi-card green">
+            <div class="kpi-icon green">
+                <i class="fas fa-layer-group"></i>
+            </div>
+            <div>
+                <span>عدد المحاور</span>
+                <strong>@sectionsCount</strong>
+                <small>محاور مختلفة داخل النموذج</small>
+            </div>
+        </article>
+
+        <article class="kpi-card purple">
+            <div class="kpi-icon purple">
+                <i class="fas fa-bookmark"></i>
+            </div>
+            <div>
+                <span>عدد المؤشرات</span>
+                <strong>@lessonsCount</strong>
+                <small>مؤشرات مرتبطة بالأسئلة</small>
+            </div>
+        </article>
+
+        <article class="kpi-card amber">
+            <div class="kpi-icon amber">
+                <i class="fas fa-align-right"></i>
+            </div>
+            <div>
+                <span>القطع اللفظية</span>
+                <strong>@verbalPassagesCount</strong>
+                <small>قطع مستخدمة داخل النموذج</small>
+            </div>
+        </article>
+    </section>
+
+    <section class="print-actions-card">
+        <div class="print-title">
+            <i class="fas fa-print"></i>
+            خيارات الطباعة
+        </div>
+
+        <div class="print-actions">
+            <a href="@Url.Action("PrintView", new { id = Model.Id })"
+               target="_blank"
+               class="print-btn blue">
+                <i class="fas fa-file"></i>
+                كل سؤال في صفحة
+            </a>
+
+            <a href="@Url.Action("PrintContinuous", new { id = Model.Id })"
+               target="_blank"
+               class="print-btn green">
+                <i class="fas fa-file-alt"></i>
+                طباعة متصلة
+            </a>
+        </div>
+    </section>
+
+    <section class="filter-card">
+        <div class="filter-title">
+            <i class="fas fa-sliders-h"></i>
+            تصفية داخل أسئلة النموذج
+        </div>
+
+        <div class="filter-grid">
+            <div class="field search-field">
+                <label>
+                    <i class="fas fa-search"></i>
+                    بحث سريع
+                </label>
+                <input id="questionSearch"
+                       type="text"
+                       class="form-control-custom"
+                       placeholder="ابحث بنص السؤال أو الكود أو المحور أو المؤشر..." />
+            </div>
+
+            <div class="field">
+                <label>
+                    <i class="fas fa-layer-group"></i>
+                    المحور
+                </label>
+                <select id="sectionFilter" class="form-control-custom">
+                    <option value="">كل المحاور</option>
+                    @foreach (var sec in questions
+                                        .Where(x => x.Question?.Lesson?.Section != null)
+                                        .Select(x => x.Question.Lesson.Section)
+                                        .GroupBy(x => x.Id)
+                                        .Select(g => g.First())
+                                        .OrderBy(x => x.Title))
+                    {
+                        <option value="@sec.Title">@sec.Title</option>
+                    }
+                </select>
+            </div>
+
+            <div class="field">
+                <label>
+                    <i class="fas fa-bookmark"></i>
+                    المؤشر
+                </label>
+                <select id="lessonFilter" class="form-control-custom">
+                    <option value="">كل المؤشرات</option>
+                    @foreach (var lesson in questions
+                                        .Where(x => x.Question?.Lesson != null)
+                                        .Select(x => x.Question.Lesson)
+                                        .GroupBy(x => x.Id)
+                                        .Select(g => g.First())
+                                        .OrderBy(x => x.Title))
+                    {
+                        <option value="@lesson.Title">@lesson.Title</option>
+                    }
+                </select>
+            </div>
+            <div class="field action-field">
+                <button type="button" id="resetQuestionFilters" class="reset-btn">
+                    <i class="fas fa-undo-alt"></i>
+                    إعادة ضبط
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <section class="model-table-card">
+        <div class="table-head">
+            <div>
+                <span>قائمة الأسئلة</span>
+                <h2>الأسئلة المرتبطة بالنموذج</h2>
+            </div>
+
+            <div class="count-badge">
+                المعروض:
+                <strong id="visibleQuestionsCount">@questions.Count</strong>
+                من
+                <strong>@questions.Count</strong>
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <table class="model-table" id="questionsTable">
+                <thead>
+                    <tr>
+                        <th style="width:70px;">الترتيب</th>
+                        <th style="width:34%; text-align:right;">السؤال</th>
+                        <th>الكود الداخلي</th>
+                        <th>المحور</th>
+                        <th>المؤشر</th>
+                        <th>الاختيارات</th>
+                        <th>الإجراءات</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    @foreach (var item in questions)
+                    {
+                        var question = item.Question;
+                        var questionTitle = question?.Title ?? "سؤال بدون نص";
+                        var questionPlainTitle = StripHtml(questionTitle);
+                        var internalNote = SafeText(question?.InternalNote, "—");
+                        var lessonTitle = SafeText(question?.Lesson?.Title);
+                        var sectionTitle = SafeText(question?.Lesson?.Section?.Title);
+                        var passageTitle = SafeText(question?.VerbalPassage?.Title, "—");
+                        var passageMediaType = ResolvePassageMediaType(question?.VerbalPassage);
+                        var passageMediaLabel = ResolvePassageMediaLabel(passageMediaType);
+                        var passageMediaIcon = ResolvePassageMediaIcon(passageMediaType);
+                        var passageAudioUrl = GetPassageAudioUrl(question?.VerbalPassage);
+                        var optionsCount = question?.Options?.Count ?? 0;
+                        var rowSearch = BuildRowSearch(item);
+                        var avatar = BuildAvatar(questionPlainTitle);
+
+                        <tr class="question-row"
+                            data-search="@rowSearch"
+                            data-section="@sectionTitle"
+                            data-lesson="@lessonTitle"
+                            data-media-type="@passageMediaType">
+
+                            <td>
+                                <span class="order-pill">
+                                    @item.OrderNumber
+                                </span>
+                            </td>
+
+                            <td style="text-align:right;">
+                                <div class="question-cell">
+                                    <div class="question-avatar">
+                                        @avatar
+                                    </div>
+
+                                    <div class="question-text">
+                                        <strong title="@questionPlainTitle">@(questionPlainTitle.Length > 20 ? questionPlainTitle.Substring(0, 20) + "…" : (string.IsNullOrEmpty(questionPlainTitle) ? "سؤال بدون نص" : questionPlainTitle))</strong>
+                                        <span>ID: @item.QuestionId</span>
+                                    </div>
+                                </div>
+                            </td>
+
+                            <td>
+                                <span class="note-pill">
+                                    @internalNote
+                                </span>
+                            </td>
+
+                            <td>
+                                <span class="section-pill">
+                                    <i class="fas fa-layer-group"></i>
+                                    @sectionTitle
+                                </span>
+                            </td>
+
+                            <td>
+                                <span class="lesson-pill">
+                                    <i class="fas fa-bookmark"></i>
+                                    @lessonTitle
+                                </span>
+                            </td>
+
+                            <td>
+                                <span class="options-pill">
+                                    <strong>@optionsCount</strong>
+                                    اختيار
+                                </span>
+                            </td>
+
+                            <td>
+                                <div class="row-actions">
+                                    <button type="button"
+                                            class="action-btn view"
+                                            title="معاينة"
+                                            onclick="showQuestionPreview('@item.QuestionId')">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+
+                                    <a asp-area="Admin"
+                                       asp-controller="Questions"
+                                       asp-action="Edit"
+                                       asp-route-id="@item.QuestionId"
+                                       target="_blank"
+                                       class="action-btn edit"
+                                       title="تعديل">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+
+                                    <a asp-area="Admin"
+                                       asp-controller="Questions"
+                                       asp-action="Display"
+                                       asp-route-id="@item.QuestionId"
+                                       target="_blank"
+                                       class="action-btn card-view"
+                                       title="كارت السؤال">
+                                        <i class="fas fa-id-card"></i>
+                                    </a>
+
+                                    <form asp-action="RemoveQuestion"
+                                          method="post"
+                                          class="d-inline"
+                                          onsubmit="return confirm('هل تريد حذف هذا السؤال من النموذج؟');">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@item.Id" />
+                                        <input type="hidden" name="modelId" value="@Model.Id" />
+
+                                        <button type="submit"
+                                                class="action-btn delete"
+                                                title="حذف من النموذج">
+                                            <i class="fas fa-trash-alt"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (!questions.Any())
+        {
+            <div class="empty-box">
+                <i class="fas fa-question-circle"></i>
+                <strong>لا توجد أسئلة داخل النموذج</strong>
+                <span>ابدأ بإضافة أسئلة جديدة للنموذج.</span>
+
+                <a asp-area="Admin"
+                   asp-controller="ProfessionalModels"
+                   asp-action="AddQuestions"
+                   asp-route-id="@Model.Id"
+                   class="empty-action">
+                    <i class="fas fa-plus"></i>
+                    إضافة أسئلة
+                </a>
+            </div>
+        }
+        else
+        {
+            <div id="noFilteredQuestions" class="empty-box d-none">
+                <i class="fas fa-filter"></i>
+                <strong>لا توجد نتائج مطابقة</strong>
+                <span>غيّر البحث أو أعد ضبط الفلاتر.</span>
+            </div>
+        }
+    </section>
+
+    <section class="bottom-actions">
+        <div>
+            <strong>إدارة أسئلة النموذج</strong>
+            <span>يمكنك إضافة أسئلة جديدة أو طباعة النموذج أو الرجوع لقائمة النماذج.</span>
+        </div>
+
+        <div class="bottom-actions-buttons">
+            <a asp-area="Admin"
+               asp-controller="ProfessionalModels"
+               asp-action="Index"
+               class="bottom-btn muted">
+                رجوع
+            </a>
+
+            <a asp-area="Admin"
+               asp-controller="ProfessionalModels"
+               asp-action="AddQuestions"
+               asp-route-id="@Model.Id"
+               class="bottom-btn primary">
+                إضافة أسئلة
+            </a>
+        </div>
+    </section>
+</div>
+
+<div class="modal fade" id="questionPreviewModal" tabindex="-1" dir="rtl">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content text-end border-0 rounded-4 overflow-hidden">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-eye ms-2"></i>
+                    معاينة السؤال
+                </h5>
+
+                <button type="button"
+                        class="btn-close btn-close-white"
+                        data-bs-dismiss="modal">
+                </button>
+            </div>
+
+            <div class="modal-body" id="questionPreviewModalBody">
+                <div class="text-center text-muted p-4">
+                    جاري التحميل...
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .professional-model-details-page {
+        --font: 'Cairo', 'Tahoma', sans-serif;
+        --ink: #0d1117;
+        --ink-3: #374151;
+        --mute: #6b7280;
+        --mute-2: #9ca3af;
+        --mute-3: #d1d5db;
+        --bg: #f4f6fb;
+        --bg-2: #eef1f8;
+        --surface: #ffffff;
+        --border: #e5e8f0;
+        --green: #059669;
+        --green-lt: #d1fae5;
+        --green-dk: #064e3b;
+        --blue: #2563eb;
+        --blue-lt: #dbeafe;
+        --blue-dk: #1e3a8a;
+        --amber: #d97706;
+        --amber-lt: #fef3c7;
+        --amber-dk: #78350f;
+        --red: #dc2626;
+        --red-lt: #fee2e2;
+        --red-dk: #7f1d1d;
+        --purple: #7c3aed;
+        --purple-lt: #ede9fe;
+        --purple-dk: #3b0764;
+        --cyan: #0891b2;
+        --cyan-lt: #cffafe;
+        --radius: 14px;
+        --radius-lg: 22px;
+        --shadow: 0 2px 16px rgba(13, 17, 23, .07);
+        --shadow-sm: 0 1px 6px rgba(13, 17, 23, .05);
+        background: var(--bg);
+        min-height: 100vh;
+        padding: 24px;
+        color: var(--ink);
+        font-family: var(--font);
+    }
+
+        .professional-model-details-page *,
+        .professional-model-details-page *::before,
+        .professional-model-details-page *::after {
+            box-sizing: border-box;
+        }
+
+        .professional-model-details-page a {
+            text-decoration: none;
+        }
+
+    .model-hero {
+        background: linear-gradient(135deg, #0d1117, #172554);
+        color: #fff;
+        border-radius: var(--radius-lg);
+        padding: 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 18px;
+        margin-bottom: 14px;
+        box-shadow: var(--shadow);
+    }
+
+    .hero-main {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+    }
+
+    .hero-icon {
+        width: 58px;
+        height: 58px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, .10);
+        border: 1px solid rgba(255, 255, 255, .12);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        flex-shrink: 0;
+    }
+
+    .hero-eyebrow {
+        color: #93c5fd;
+        font-size: 12px;
+        font-weight: 900;
+        margin-bottom: 4px;
+    }
+
+    .model-hero h1 {
+        margin: 0;
+        font-size: 24px;
+        font-weight: 900;
+    }
+
+    .model-hero p {
+        margin: 6px 0 0;
+        color: rgba(255, 255, 255, .70);
+        font-size: 13px;
+        line-height: 1.7;
+        max-width: 780px;
+    }
+
+    .hero-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .hero-btn {
+        border-radius: 12px;
+        padding: 10px 15px;
+        font-size: 12.5px;
+        font-weight: 900;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        white-space: nowrap;
+        transition: .15s;
+    }
+
+        .hero-btn.primary {
+            background: var(--blue);
+            color: #fff;
+        }
+
+        .hero-btn.muted {
+            background: rgba(255,255,255,.10);
+            color: #fff;
+            border: 1px solid rgba(255,255,255,.16);
+        }
+
+        .hero-btn:hover {
+            transform: translateY(-1px);
+            color: #fff;
+        }
+
+    .model-meta-card,
+    .print-actions-card,
+    .filter-card,
+    .model-table-card,
+    .bottom-actions {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-sm);
+    }
+
+    .model-meta-card {
+        padding: 18px;
+        margin-bottom: 14px;
+        display: grid;
+        grid-template-columns: 1fr 320px;
+        gap: 18px;
+        align-items: stretch;
+    }
+
+    .meta-title,
+    .print-title,
+    .filter-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--ink);
+        font-size: 14px;
+        font-weight: 900;
+        margin-bottom: 12px;
+    }
+
+        .meta-title i,
+        .print-title i,
+        .filter-title i {
+            color: var(--blue);
+        }
+
+    .meta-description {
+        color: var(--ink-3);
+        font-size: 13px;
+        line-height: 1.9;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px;
+        min-height: 72px;
+    }
+
+    .meta-side {
+        display: grid;
+        gap: 10px;
+    }
+
+    .meta-item {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 12px;
+    }
+
+        .meta-item span {
+            display: block;
+            color: var(--mute);
+            font-size: 11px;
+            font-weight: 900;
+            margin-bottom: 5px;
+        }
+
+        .meta-item strong {
+            color: var(--ink);
+            font-size: 13px;
+            font-weight: 900;
+        }
+
+    .kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 14px;
+    }
+
+    .kpi-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 16px;
+        display: flex;
+        gap: 12px;
+        min-height: 124px;
+        box-shadow: var(--shadow-sm);
+        position: relative;
+        overflow: hidden;
+    }
+
+        .kpi-card::after {
+            content: '';
+            position: absolute;
+            right: 14px;
+            left: 14px;
+            bottom: 0;
+            height: 3px;
+            border-radius: 999px 999px 0 0;
+        }
+
+        .kpi-card.blue::after {
+            background: var(--blue);
+        }
+
+        .kpi-card.green::after {
+            background: var(--green);
+        }
+
+        .kpi-card.purple::after {
+            background: var(--purple);
+        }
+
+        .kpi-card.amber::after {
+            background: var(--amber);
+        }
+
+    .kpi-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 13px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        font-size: 17px;
+    }
+
+        .kpi-icon.blue {
+            background: var(--blue-lt);
+            color: var(--blue-dk);
+        }
+
+        .kpi-icon.green {
+            background: var(--green-lt);
+            color: var(--green-dk);
+        }
+
+        .kpi-icon.purple {
+            background: var(--purple-lt);
+            color: var(--purple-dk);
+        }
+
+        .kpi-icon.amber {
+            background: var(--amber-lt);
+            color: var(--amber-dk);
+        }
+
+    .kpi-card span {
+        display: block;
+        color: var(--mute);
+        font-size: 12px;
+        font-weight: 900;
+        margin-bottom: 6px;
+    }
+
+    .kpi-card strong {
+        display: block;
+        color: var(--ink);
+        font-size: 28px;
+        font-weight: 900;
+        line-height: 1;
+    }
+
+    .kpi-card small {
+        display: block;
+        color: var(--mute-2);
+        font-size: 10.5px;
+        font-weight: 700;
+        margin-top: 8px;
+    }
+
+    .print-actions-card {
+        padding: 18px;
+        margin-bottom: 14px;
+    }
+
+    .print-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .print-btn {
+        border-radius: 12px;
+        padding: 10px 14px;
+        font-size: 12px;
+        font-weight: 900;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        border: 1px solid;
+        transition: .15s;
+    }
+
+        .print-btn.blue {
+            background: var(--blue-lt);
+            color: var(--blue-dk);
+            border-color: rgba(37, 99, 235, .18);
+        }
+
+        .print-btn.green {
+            background: var(--green-lt);
+            color: var(--green-dk);
+            border-color: rgba(5, 150, 105, .18);
+        }
+
+        .print-btn:hover {
+            transform: translateY(-1px);
+        }
+
+    .filter-card {
+        padding: 18px;
+        margin-bottom: 14px;
+    }
+
+    .filter-grid {
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr 1fr auto;
+        gap: 12px;
+        align-items: end;
+    }
+
+    .field label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--ink-3);
+        font-size: 11.5px;
+        font-weight: 900;
+        margin-bottom: 6px;
+    }
+
+        .field label i {
+            color: var(--blue);
+        }
+
+    .form-control-custom {
+        width: 100%;
+        min-height: 42px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: #fff;
+        padding: 9px 12px;
+        color: var(--ink);
+        font-size: 12.5px;
+        font-family: var(--font);
+        outline: none;
+        transition: .15s;
+    }
+
+        .form-control-custom:focus {
+            border-color: var(--blue);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, .10);
+        }
+
+    .reset-btn {
+        min-height: 42px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--bg-2);
+        color: var(--ink-3);
+        padding: 0 14px;
+        font-family: var(--font);
+        font-size: 12px;
+        font-weight: 900;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+
+        .reset-btn:hover {
+            background: var(--red-lt);
+            color: var(--red-dk);
+            border-color: rgba(220, 38, 38, .20);
+        }
+
+    .model-table-card {
+        overflow: hidden;
+    }
+
+    .table-head {
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        background: linear-gradient(180deg, #ffffff, #f8fafc);
+    }
+
+        .table-head span {
+            display: block;
+            color: var(--blue);
+            font-size: 11px;
+            font-weight: 900;
+            margin-bottom: 3px;
+        }
+
+        .table-head h2 {
+            margin: 0;
+            color: var(--ink);
+            font-size: 15px;
+            font-weight: 900;
+        }
+
+    .count-badge {
+        background: var(--bg-2);
+        color: var(--ink-3);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 7px 12px;
+        font-size: 11.5px;
+        font-weight: 900;
+        white-space: nowrap;
+    }
+
+        .count-badge strong {
+            color: var(--blue);
+        }
+
+    .table-wrap {
+        width: 100%;
+        overflow-x: auto;
+    }
+
+    .model-table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 1180px;
+    }
+
+        .model-table th {
+            background: var(--bg-2);
+            color: var(--mute);
+            font-size: 11px;
+            font-weight: 900;
+            padding: 11px 16px;
+            border-bottom: 1px solid var(--border);
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .model-table td {
+            color: var(--ink-3);
+            font-size: 12.5px;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        .model-table tbody tr:hover td {
+            background: #f8fafc;
+        }
+
+    .question-cell {
+        display: flex;
+        align-items: flex-start;
+        gap: 11px;
+        min-width: 0;
+    }
+
+    .question-avatar {
+        width: 42px;
+        height: 42px;
+        border-radius: 14px;
+        color: #fff;
+        background: linear-gradient(135deg, #1e3a8a, #2563eb);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 900;
+        flex-shrink: 0;
+    }
+
+    .question-text {
+        min-width: 0;
+    }
+
+        .question-text strong {
+            display: block;
+            color: var(--ink);
+            font-size: 13.5px;
+            font-weight: 900;
+            line-height: 1.9;
+            max-width: 520px;
+        }
+
+        .question-text span {
+            display: block;
+            color: var(--mute);
+            font-size: 10.5px;
+            margin-top: 3px;
+            text-align: right;
+            direction: ltr;
+        }
+
+    .order-pill,
+    .note-pill,
+    .section-pill,
+    .lesson-pill,
+    .passage-pill,
+    .options-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        border-radius: 999px;
+        padding: 5px 9px;
+        font-size: 11px;
+        font-weight: 800;
+        white-space: nowrap;
+        border: 1px solid;
+    }
+
+    .order-pill {
+        background: var(--purple-lt);
+        color: var(--purple-dk);
+        border-color: rgba(124, 58, 237, .18);
+    }
+
+    .note-pill {
+        background: var(--bg-2);
+        color: var(--ink-3);
+        border-color: var(--border);
+        direction: ltr;
+    }
+
+    .section-pill {
+        background: var(--blue-lt);
+        color: var(--blue-dk);
+        border-color: rgba(37, 99, 235, .16);
+    }
+
+    .lesson-pill {
+        background: var(--green-lt);
+        color: var(--green-dk);
+        border-color: rgba(5, 150, 105, .18);
+    }
+
+    .passage-pill {
+        background: var(--cyan-lt);
+        color: #155e75;
+        border-color: rgba(8, 145, 178, .16);
+    }
+
+        .passage-pill.empty {
+            background: var(--bg-2);
+            color: var(--mute);
+            border-color: var(--border);
+        }
+
+    .options-pill {
+        background: var(--amber-lt);
+        color: var(--amber-dk);
+        border-color: rgba(217, 119, 6, .18);
+    }
+
+        .options-pill strong {
+            font-size: 13px;
+            font-weight: 900;
+        }
+
+    .passage-media-box {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        min-width: 180px;
+    }
+
+    .media-type-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        border-radius: 999px;
+        padding: 4px 8px;
+        font-size: 10.5px;
+        font-weight: 900;
+        white-space: nowrap;
+        border: 1px solid;
+    }
+
+        .passage-pill.text,
+        .media-type-pill.text {
+            background: var(--cyan-lt);
+            color: #155e75;
+            border-color: rgba(8, 145, 178, .16);
+        }
+
+        .passage-pill.audio,
+        .media-type-pill.audio {
+            background: var(--purple-lt);
+            color: var(--purple-dk);
+            border-color: rgba(124, 58, 237, .18);
+        }
+
+        .passage-pill.unknown,
+        .media-type-pill.unknown {
+            background: var(--bg-2);
+            color: var(--mute);
+            border-color: var(--border);
+        }
+
+    .passage-audio-player {
+        width: 180px;
+        height: 32px;
+    }
+
+
+
+
+    .row-actions {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+    }
+
+    .action-btn {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        border: 1px solid;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: .15s;
+        font-size: 13px;
+        cursor: pointer;
+    }
+
+        .action-btn.view {
+            background: var(--blue-lt);
+            color: var(--blue-dk);
+            border-color: rgba(37, 99, 235, .18);
+        }
+
+        .action-btn.edit {
+            background: var(--amber-lt);
+            color: var(--amber-dk);
+            border-color: rgba(217, 119, 6, .18);
+        }
+
+        .action-btn.card-view {
+            background: var(--green-lt);
+            color: var(--green-dk);
+            border-color: rgba(5, 150, 105, .18);
+        }
+
+        .action-btn.delete {
+            background: var(--red-lt);
+            color: var(--red-dk);
+            border-color: rgba(220, 38, 38, .18);
+        }
+
+        .action-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
+        }
+
+    .empty-box {
+        padding: 46px 20px;
+        text-align: center;
+        color: var(--mute);
+    }
+
+        .empty-box i {
+            display: block;
+            font-size: 34px;
+            color: var(--mute-2);
+            margin-bottom: 10px;
+        }
+
+        .empty-box strong {
+            display: block;
+            color: var(--ink);
+            font-size: 16px;
+            font-weight: 900;
+            margin-bottom: 4px;
+        }
+
+        .empty-box span {
+            display: block;
+            font-size: 12px;
+        }
+
+    .empty-action {
+        margin-top: 14px;
+        border-radius: 12px;
+        background: var(--blue);
+        color: #fff;
+        padding: 10px 15px;
+        font-size: 12px;
+        font-weight: 900;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+    }
+
+    .bottom-actions {
+        margin-top: 14px;
+        padding: 16px 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+    }
+
+        .bottom-actions strong {
+            display: block;
+            color: var(--ink);
+            font-size: 14px;
+            font-weight: 900;
+            margin-bottom: 3px;
+        }
+
+        .bottom-actions span {
+            display: block;
+            color: var(--mute);
+            font-size: 12px;
+        }
+
+    .bottom-actions-buttons {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .bottom-btn {
+        border-radius: 12px;
+        padding: 10px 16px;
+        font-size: 12px;
+        font-weight: 900;
+        border: 1px solid;
+    }
+
+        .bottom-btn.primary {
+            background: var(--blue);
+            color: #fff;
+            border-color: var(--blue);
+        }
+
+        .bottom-btn.muted {
+            background: var(--bg-2);
+            color: var(--ink-3);
+            border-color: var(--border);
+        }
+
+    .d-none {
+        display: none !important;
+    }
+
+    @@media (max-width: 1200px) {
+        .kpi-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .filter-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .model-meta-card {
+            grid-template-columns: 1fr;
+        }
+
+        .action-field {
+            grid-column: 1 / -1;
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .professional-model-details-page {
+            padding: 14px;
+        }
+
+        .model-hero {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+        .hero-main {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+        .kpi-grid,
+        .filter-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .table-head,
+        .bottom-actions {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+    }
+</style>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const searchInput = document.getElementById('questionSearch');
+            const sectionFilter = document.getElementById('sectionFilter');
+            const lessonFilter = document.getElementById('lessonFilter');
+
+            const resetButton = document.getElementById('resetQuestionFilters');
+            const visibleCount = document.getElementById('visibleQuestionsCount');
+            const noFilteredQuestions = document.getElementById('noFilteredQuestions');
+            const rows = Array.from(document.querySelectorAll('#questionsTable tbody .question-row'));
+
+            function normalize(value) {
+                if (!value) {
+                    return '';
+                }
+
+                return value.toString().trim().toLowerCase();
+            }
+
+            function applyFilters() {
+                const searchValue = normalize(searchInput ? searchInput.value : '');
+                const sectionValue = normalize(sectionFilter ? sectionFilter.value : '');
+                const lessonValue = normalize(lessonFilter ? lessonFilter.value : '');
+                let shown = 0;
+
+                rows.forEach(function (row) {
+                    const rowSearch = normalize(row.getAttribute('data-search'));
+                    const rowSection = normalize(row.getAttribute('data-section'));
+                    const rowLesson = normalize(row.getAttribute('data-lesson'));
+                    const matchSearch = searchValue === '' || rowSearch.indexOf(searchValue) !== -1;
+                    const matchSection = sectionValue === '' || rowSection === sectionValue;
+                    const matchLesson = lessonValue === '' || rowLesson === lessonValue;
+                    const visible = matchSearch && matchSection && matchLesson;
+                    row.style.display = visible ? '' : 'none';
+
+                    if (visible) {
+                        shown++;
+                    }
+                });
+
+                if (visibleCount) {
+                    visibleCount.textContent = shown;
+                }
+
+                if (noFilteredQuestions) {
+                    noFilteredQuestions.classList.toggle('d-none', shown !== 0);
+                }
+            }
+
+            if (searchInput) {
+                searchInput.addEventListener('input', applyFilters);
+            }
+
+            if (sectionFilter) {
+                sectionFilter.addEventListener('change', applyFilters);
+            }
+
+            if (lessonFilter) {
+                lessonFilter.addEventListener('change', applyFilters);
+            }
+
+            if (resetButton) {
+                resetButton.addEventListener('click', function () {
+                    if (searchInput) {
+                        searchInput.value = '';
+                    }
+
+                    if (sectionFilter) {
+                        sectionFilter.value = '';
+                    }
+
+                    if (lessonFilter) {
+                        lessonFilter.value = '';
+                    }
+
+                    applyFilters();
+                });
+            }
+
+            applyFilters();
+        });
+
+        function showQuestionPreview(id) {
+            var modalBody = document.getElementById('questionPreviewModalBody');
+
+            if (modalBody) {
+                modalBody.innerHTML = '<div class="text-center text-muted p-4">جاري تحميل السؤال...</div>';
+            }
+
+            fetch(`/Admin/Questions/Preview/${id}`)
+                .then(function (res) {
+                    if (!res.ok) {
+                        throw new Error('Preview failed');
+                    }
+
+                    return res.text();
+                })
+                .then(function (html) {
+                    modalBody.innerHTML = html;
+
+                    new bootstrap.Modal(
+                        document.getElementById('questionPreviewModal')
+                    ).show();
+                })
+                .catch(function () {
+                    modalBody.innerHTML = '<div class="alert alert-danger mb-0">تعذر تحميل معاينة السؤال.</div>';
+
+                    new bootstrap.Modal(
+                        document.getElementById('questionPreviewModal')
+                    ).show();
+                });
+        }
+    </script>
+}

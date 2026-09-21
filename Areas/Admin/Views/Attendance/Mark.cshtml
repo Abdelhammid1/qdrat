@@ -1,0 +1,129 @@
+﻿@model QdratNew.ViewModels.MarkAttendanceViewModel
+
+@{
+    ViewData["Title"] = "تسجيل الحضور";
+}
+
+<div class="container mt-4">
+
+    <!-- 🟦 عنوان الصفحة -->
+    <div class="text-center mb-4">
+        <h2 class="fw-bold text-primary">
+            <i class="bi bi-check2-square"></i> تسجيل الحضور لمحاضرة
+        </h2>
+        <h4 class="fw-bold text-dark">@Model.LectureTitle</h4>
+        <p class="text-muted">
+            <strong>📅 التاريخ:</strong> @Model.LectureDate.ToString("yyyy/MM/dd") |
+            <strong>📘 الدورة:</strong> @Model.CourseName |
+            <strong>📖 القسم:</strong> @Model.SectionTitle
+        </p>
+    </div>
+
+    <!-- 🟩 نموذج التسجيل -->
+    <form asp-action="Mark" method="post">
+        <input type="hidden" asp-for="LectureId" />
+
+        <div class="table-responsive">
+            <table id="attendanceTable" class="table table-hover align-middle text-center border rounded-3">
+                <thead class="table-dark">
+                    <tr>
+                        <th>ت</th>
+                        <th>اسم الطالب</th>
+                        <th>الفرع</th>
+                        <th>
+                            حضور
+                            <input type="checkbox" id="checkAll" class="form-check-input ms-2" title="تحديد الكل" />
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @for (int i = 0; i < Model.Students.Count; i++)
+                    {
+                        <tr class="student-row @(Model.Students[i].IsPresent ? "table-success" : "")">
+                            <td>@(i + 1)</td>
+                            <td>
+                                <input type="hidden" asp-for="Students[@i].StudentId" />
+                                <span class="fw-bold">@Model.Students[i].FullName</span>
+                            </td>
+                            <td>@Model.Students[i].BranchName</td>
+                            <td>
+                                <input asp-for="Students[@i].IsPresent" type="checkbox" class="form-check-input is-present" />
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 🟨 إحصائيات فورية -->
+        <div class="alert alert-info text-center mt-4" id="statsBox">
+            <strong>إجمالي الطلاب:</strong> <span id="totalCount">@Model.Students.Count</span> |
+            <strong>الحاضرون:</strong> <span id="presentCount">0</span> |
+            <strong>الغياب:</strong> <span id="absentCount">0</span>
+        </div>
+
+        <!-- 🟧 أزرار التحكم -->
+        <div class="text-end mt-4">
+            <div class="text-end mt-4">
+                <button type="submit" class="btn btn-success px-4">
+                    <i class="bi bi-save"></i> حفظ الحضور
+                </button>
+
+                <a asp-action="Lectures" class="btn btn-secondary ms-2">
+                    <i class="bi bi-arrow-right-circle"></i> الرجوع
+                </a>
+
+                <!-- 🧾 زر تحميل تقرير PDF -->
+                <a asp-action="ExportLectureAttendancePdf" asp-route-lectureId="@Model.LectureId"
+                   class="btn btn-danger ms-2">
+                    <i class="bi bi-file-earmark-pdf"></i> تحميل تقرير PDF
+                </a>
+            </div>
+
+
+
+
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const checkAll = document.getElementById("checkAll");
+            const checkboxes = document.querySelectorAll(".is-present");
+            const presentCount = document.getElementById("presentCount");
+            const absentCount = document.getElementById("absentCount");
+            const totalCount = parseInt(document.getElementById("totalCount").innerText);
+
+            // 🔹 حساب الإحصائيات الأولية
+            function updateStats() {
+                let present = 0;
+                checkboxes.forEach(ch => { if (ch.checked) present++; });
+                presentCount.innerText = present;
+                absentCount.innerText = totalCount - present;
+            }
+
+            // 🔹 تحديث لون الصف عند التحديد
+            checkboxes.forEach(ch => {
+                ch.addEventListener("change", e => {
+                    const row = e.target.closest("tr");
+                    row.classList.toggle("table-success", e.target.checked);
+                    updateStats();
+                });
+            });
+
+            // 🔹 زر تحديد الكل
+            checkAll.addEventListener("change", function () {
+                checkboxes.forEach(ch => {
+                    ch.checked = checkAll.checked;
+                    ch.closest("tr").classList.toggle("table-success", ch.checked);
+                });
+                updateStats();
+            });
+
+            // 🔹 تحديث الأرقام أول مرة
+            updateStats();
+        });
+    </script>
+}

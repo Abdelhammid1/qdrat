@@ -1,0 +1,180 @@
+@model QdratNew.ViewModels.Students.BatchStudentsVm
+
+@{
+    ViewData["Title"] = $"طلاب دفعة: {Model.BatchName}";
+    var students = Model.Students;
+    int total    = students.Count;
+}
+
+<link rel="stylesheet" href="~/css/admin-batch-students.css" asp-append-version="true" />
+
+<div class="bs-page" dir="rtl">
+
+    <div class="bs-topbar">
+        <div class="bs-brand">
+            <a asp-area="Admin" asp-controller="Students" asp-action="Index" class="bs-back-btn">
+                <i class="fas fa-arrow-right"></i>
+            </a>
+            <div class="bs-brand-icon"><i class="fas fa-users"></i></div>
+            <div>
+                <div class="bs-brand-title">@Model.BatchName</div>
+                <div class="bs-brand-sub">
+                    <span><i class="fas fa-book"></i> @Model.CourseName</span>
+                    <span class="bs-dot">·</span>
+                    <span><i class="fas fa-building"></i> @Model.BranchName</span>
+                    <span class="bs-dot">·</span>
+                    <span><i class="fas fa-calendar-alt"></i> @Model.StartDate.ToString("yyyy/MM/dd")</span>
+                    @if (Model.EndDate.HasValue)
+                    {
+                        <span class="bs-dot">·</span>
+                        <span><i class="fas fa-flag-checkered"></i> @Model.EndDate.Value.ToString("yyyy/MM/dd")</span>
+                    }
+                </div>
+            </div>
+        </div>
+        <div class="bs-top-stats">
+            <div class="bs-top-stat">
+                <div class="bs-top-stat-val">@total</div>
+                <div class="bs-top-stat-lbl">طالب</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="bs-filter">
+        <div class="bs-search-wrap">
+            <i class="fas fa-search bs-search-ico"></i>
+            <input type="text" id="bsSearch" class="bs-search" placeholder="ابحث بالاسم أو الجوال أو المستوى..." />
+        </div>
+        <div class="bs-filter-count">
+            المعروض: <strong id="bsVisCount">@total</strong> من <strong>@total</strong> طالب
+        </div>
+    </div>
+
+    @if (!students.Any())
+    {
+        <div class="bs-empty">
+            <div class="bs-empty-icon"><i class="fas fa-user-graduate"></i></div>
+            <div class="bs-empty-title">لا يوجد طلاب في هذه الدفعة</div>
+            <div class="bs-empty-sub">سجّل طلاباً في الدفعة من قسم إدارة الطلاب</div>
+        </div>
+    }
+    else
+    {
+        <div class="bs-table-card">
+            <div class="bs-table-head">
+                <div class="bs-table-title"><i class="fas fa-list-ul"></i> قائمة طلاب الدفعة</div>
+                <div class="bs-table-sub">@total طالب مسجّل · انقر «التقرير الكامل» لعرض أداء الطالب</div>
+            </div>
+            <div class="bs-table-wrap">
+                <table class="bs-table" id="bsTable">
+                    <thead>
+                        <tr>
+                            <th class="col-student">الطالب</th>
+                            <th>الحضور</th>
+                            <th>الواجبات</th>
+                            <th>الاختبارات</th>
+                            <th>الأداء</th>
+                            <th>إجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var st in students)
+                        {
+                            var nameParts = (st.FullName ?? "").Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                            string ini = nameParts.Length >= 2 ? nameParts[0].Substring(0,1) + nameParts[1].Substring(0,1)
+                                       : nameParts.Length == 1 && nameParts[0].Length > 0 ? nameParts[0].Substring(0, Math.Min(2, nameParts[0].Length)) : "ط";
+
+                            double ap = st.TotalLectures > 0 ? Math.Round(st.AttendedLectures * 100.0 / st.TotalLectures, 0) : 0;
+                            double hp = st.TotalHomeworks > 0 ? Math.Round(st.SubmittedHomeworks * 100.0 / st.TotalHomeworks, 0) : 0;
+                            double ep = st.TotalExams > 0 ? Math.Round(st.SubmittedExams * 100.0 / st.TotalExams, 0) : 0;
+                            double pf = Math.Round((ap * 0.4) + (hp * 0.3) + (ep * 0.3), 0);
+                            string pfC = pf >= 75 ? "good" : pf >= 50 ? "warn" : "risk";
+                            string ac  = ap >= 75 ? "good" : ap >= 50 ? "warn" : "risk";
+                            string hc  = hp >= 75 ? "good" : hp >= 50 ? "warn" : "risk";
+                            string ec  = ep >= 75 ? "good" : ep >= 50 ? "warn" : "risk";
+                            string srch = $"{st.FullName} {st.PhoneNumber} {st.Level} {st.EnrollmentStatus}".ToLower();
+
+                            <tr class="bs-row" data-search="@srch">
+                                <td class="col-student">
+                                    <div class="bs-student-cell">
+                                        <div class="bs-avatar">@ini</div>
+                                        <div class="bs-student-info">
+                                            <div class="bs-student-name">@(st.FullName ?? "بدون اسم")</div>
+                                            <div class="bs-student-meta">
+                                                @if (!string.IsNullOrWhiteSpace(st.PhoneNumber))
+                                                {<span><i class="fas fa-phone-alt"></i> @st.PhoneNumber</span>}
+                                                @if (!string.IsNullOrWhiteSpace(st.Level))
+                                                {<span><i class="fas fa-layer-group"></i> @st.Level</span>}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="bs-pct-cell">
+                                        <div class="bs-pct-ring bs-ring--@ac">@ap.ToString("0")%</div>
+                                        <div class="bs-pct-detail">@st.AttendedLectures / @st.TotalLectures</div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="bs-pct-cell">
+                                        <div class="bs-pct-ring bs-ring--@hc">@hp.ToString("0")%</div>
+                                        <div class="bs-pct-detail">@st.SubmittedHomeworks / @st.TotalHomeworks</div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="bs-pct-cell">
+                                        <div class="bs-pct-ring bs-ring--@ec">@ep.ToString("0")%</div>
+                                        <div class="bs-pct-detail">@st.SubmittedExams / @st.TotalExams</div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="bs-health bs-health--@pfC">
+                                        <div class="bs-health-val">@pf.ToString("0")%</div>
+                                        <div class="bs-health-bar"><div class="bs-health-fill" style="width:@pf.ToString("0")%"></div></div>
+                                        <div class="bs-health-lbl">@(pf >= 75 ? "جيد" : pf >= 50 ? "متوسط" : "يحتاج متابعة")</div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="bs-actions">
+                                        <a asp-area="Admin" asp-controller="Students" asp-action="GeneralReport"
+                                           asp-route-id="@st.StudentId" class="bs-act-btn bs-act-btn--report">
+                                            <i class="fas fa-chart-bar"></i><span>التقرير الكامل</span>
+                                        </a>
+                                        <a asp-area="Admin" asp-controller="Students" asp-action="Details"
+                                           asp-route-id="@st.StudentId" class="bs-act-btn bs-act-btn--view">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        <a asp-area="Admin" asp-controller="Students" asp-action="Edit"
+                                           asp-route-id="@st.StudentId" class="bs-act-btn bs-act-btn--edit">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var rows = Array.from(document.querySelectorAll('#bsTable tbody .bs-row'));
+        var visEl = document.getElementById('bsVisCount');
+        var searchEl = document.getElementById('bsSearch');
+        function applyFilters() {
+            var q = (searchEl ? searchEl.value : '').trim().toLowerCase();
+            var shown = 0;
+            rows.forEach(function (r) {
+                var ok = q === '' || (r.dataset.search || '').indexOf(q) !== -1;
+                r.style.display = ok ? '' : 'none';
+                if (ok) shown++;
+            });
+            if (visEl) visEl.textContent = shown;
+        }
+        searchEl && searchEl.addEventListener('input', applyFilters);
+    });
+</script>

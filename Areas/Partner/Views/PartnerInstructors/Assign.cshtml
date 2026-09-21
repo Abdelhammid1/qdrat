@@ -1,0 +1,244 @@
+﻿@using QdratNew.Enums
+@using QdratNew.Helpers
+@model QdratNew.ViewModels.Partner.Instructor.InstructorAssignVm
+
+@{
+    ViewData["Title"] = "إدارة ربط المدرب";
+}
+
+<style>
+    .role-card {
+        border: 2px solid #e0e0e0;
+        border-radius: 16px;
+        padding: 20px 10px;
+        text-align: center;
+        cursor: pointer;
+        transition: all .2s ease;
+        background-color: #fff;
+    }
+
+        .role-card:hover {
+            border-color: #0d6efd;
+            transform: translateY(-2px);
+        }
+
+        .role-card.selected {
+            border-color: #0d6efd;
+            background-color: #eef4ff;
+            box-shadow: 0 4px 10px rgba(0,0,0,.05);
+        }
+
+    .role-icon {
+        font-size: 22px;
+        color: #0d6efd;
+    }
+
+    .role-title {
+        font-weight: 600;
+        font-size: 14px;
+    }
+</style>
+
+<div class="container mt-4" dir="rtl">
+
+    <!-- ================== إضافة ربط ================== -->
+    <div class="card shadow-sm border-0 rounded-4 mb-4">
+        <div class="card-body">
+
+            <h4 class="fw-bold mb-4">
+                <i class="fas fa-link text-primary ms-2"></i>
+                إضافة أو تعديل ربط
+            </h4>
+
+            <form asp-action="Assign" method="post">
+
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="InstructorId" />
+
+                <!-- الدفعات -->
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">اختر الدفعات</label>
+
+                    <select asp-for="SelectedBatchIds"
+                            asp-items="Model.Batches"
+                            multiple
+                            class="form-select"
+                            size="6">
+                    </select>
+
+                    <small class="text-muted">
+                        يمكن اختيار أكثر من دفعة بالضغط مع Ctrl
+                    </small>
+                </div>
+
+                <!-- المنهج -->
+                <div class="mb-4">
+                    <label class="form-label fw-semibold">
+                        المنهج (عند اختيار دور التدريس)
+                    </label>
+
+                    <select asp-for="SelectedCurriculumId"
+                            asp-items="Model.Curriculums"
+                            class="form-select">
+                        <option value="">-- اختياري --</option>
+                    </select>
+                </div>
+
+                <!-- الأدوار -->
+                <div class="mb-4">
+                    <label class="form-label fw-bold mb-3">الأدوار</label>
+
+                    <div class="row g-3">
+
+                        @foreach (InstructorBatchRoleType role in Enum.GetValues(typeof(InstructorBatchRoleType)))
+                        {
+                            var isChecked = Model.SelectedRoles.Contains(role);
+                            var displayName = EnumHelper.GetDisplayName(role);
+
+                            string icon = role switch
+                            {
+                                InstructorBatchRoleType.Teaching => "fa-chalkboard-teacher",
+                                InstructorBatchRoleType.Supervisor => "fa-user-shield",
+                                InstructorBatchRoleType.Attendance => "fa-calendar-check",
+                                InstructorBatchRoleType.Reports => "fa-chart-line",
+                                _ => "fa-circle"
+                            };
+
+                            <div class="col-md-3 col-6">
+
+                                <div class="role-card @(isChecked ? "selected" : "")"
+                                     onclick="toggleRole(this)">
+
+                                    <!-- مهم: إرسال القيمة كـ int -->
+                                    <input type="checkbox"
+                                           name="SelectedRoles"
+                                           value="@((int)role)"
+                                           class="d-none"
+                                           @(isChecked ? "checked" : "") />
+
+                                    <div class="role-icon mb-2">
+                                        <i class="fas @icon"></i>
+                                    </div>
+
+                                    <div class="role-title">
+                                        @displayName
+                                    </div>
+
+                                </div>
+
+                            </div>
+                        }
+
+                    </div>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button type="submit"
+                            class="btn btn-primary rounded-pill px-4">
+                        حفظ التعديلات
+                    </button>
+
+                    <a asp-action="Index"
+                       class="btn btn-outline-secondary rounded-pill px-4">
+                        رجوع
+                    </a>
+                </div>
+
+            </form>
+
+        </div>
+    </div>
+
+    <!-- ================== الربط الحالي ================== -->
+    <div class="card shadow-sm border-0 rounded-4">
+        <div class="card-body">
+
+            <h5 class="fw-bold mb-3">
+                <i class="fas fa-list text-success ms-2"></i>
+                الربط الحالي
+            </h5>
+
+            @if (!Model.CurrentAssignments.Any())
+            {
+                <div class="text-muted">
+                    لا يوجد ربط حالي لهذا المدرب
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-bordered text-center align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>الدفعة</th>
+                                <th>المنهج</th>
+                                <th>الدور</th>
+                                <th width="100">إجراء</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in Model.CurrentAssignments)
+                            {
+                                <tr>
+                                    <td>@item.BatchName</td>
+                                    <td>@item.CurriculumName</td>
+                                    <td>@item.RoleName</td>
+                                    <td>
+                                        <form asp-action="RemoveAssignment"
+                                              method="post"
+                                              class="d-inline">
+
+                                            @Html.AntiForgeryToken()
+
+                                            <input type="hidden" name="instructorId" value="@Model.InstructorId" />
+                                            <input type="hidden" name="batchId" value="@item.BatchId" />
+
+                                            @if (item.RoleName == "تدريس")
+                                            {
+                                                <input type="hidden" name="type" value="Teaching" />
+                                                <input type="hidden" name="curriculumId"
+                                                       value="@Model.SelectedCurriculumId" />
+                                            }
+                                            else
+                                            {
+                                                <input type="hidden" name="type" value="@item.RoleName" />
+                                            }
+
+                                            <button type="submit"
+                                                    class="btn btn-sm btn-outline-danger rounded-circle"
+                                                    data-bs-toggle="tooltip"
+                                                    title="حذف الربط">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+
+                                        </form>
+                                    </td>
+                                </tr>
+                            }
+                    </table>
+                </div>
+            }
+
+        </div>
+    </div>
+
+</div>
+
+@section Scripts {
+
+    <script>
+        function toggleRole(card) {
+
+            const checkbox = card.querySelector('input[type="checkbox"]');
+
+            checkbox.checked = !checkbox.checked;
+
+            if (checkbox.checked) {
+                card.classList.add("selected");
+            } else {
+                card.classList.remove("selected");
+            }
+        }
+    </script>
+
+}

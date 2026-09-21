@@ -1,0 +1,2334 @@
+﻿@using QdratNew.ViewModels.StudentBatchEnrollments
+@model StudentBatchEnrollmentDetailsViewModel
+
+@{
+    ViewData["Title"] = "تفاصيل ربط الطالب بالدفعات";
+
+    var relatedBatches = Model.RelatedBatches != null
+        ? Model.RelatedBatches
+        : new List<StudentBatchEnrollmentRelatedBatchVm>();
+
+    var totalBatchLinks = relatedBatches.Count;
+    var otherBatchLinks = relatedBatches.Count(x => !x.IsCurrent);
+
+    var activeBatchLinks = relatedBatches.Count(x =>
+        !string.IsNullOrWhiteSpace(x.Status)
+        && (x.Status == "نشط" || x.Status == "Active"));
+
+    var inactiveBatchLinks = totalBatchLinks - activeBatchLinks;
+
+    var isMultiBatchStudent = totalBatchLinks > 1;
+
+    var isActive = !string.IsNullOrWhiteSpace(Model.Status)
+                   && (Model.Status == "نشط" || Model.Status == "Active");
+
+    var statusCss = ResolveStatusCss(Model.Status);
+    var recentCss = ResolveRecentCss(Model.EnrolledAt);
+    var recentText = ResolveRecentText(Model.EnrolledAt);
+
+    var daysSinceEnrollment = (DateTime.Today - Model.EnrolledAt.Date).Days;
+    if (daysSinceEnrollment < 0)
+    {
+        daysSinceEnrollment = 0;
+    }
+
+    var healthScore = CalculateHealthScore(isActive, totalBatchLinks, activeBatchLinks);
+    var ringCircumference = 251.2;
+    var ringOffset = ringCircumference * (1 - (healthScore / 100.0));
+
+    string SafeText(string? value, string fallback = "غير محدد")
+    {
+        return string.IsNullOrWhiteSpace(value) ? fallback : value;
+    }
+
+    string BuildAvatar(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return "ط";
+        }
+
+        var cleaned = name.Trim();
+        var parts = cleaned.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        if (parts.Length >= 2)
+        {
+            return (parts[0].Substring(0, 1) + parts[1].Substring(0, 1)).ToUpper();
+        }
+
+        return cleaned.Substring(0, Math.Min(2, cleaned.Length)).ToUpper();
+    }
+
+    string ResolveStatusCss(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status))
+        {
+            return "neutral";
+        }
+
+        if (status == "نشط" || status == "Active")
+        {
+            return "active";
+        }
+
+        if (status.Contains("موقوف") || status.Contains("غير") || status.Contains("Inactive"))
+        {
+            return "danger";
+        }
+
+        return "warning";
+    }
+
+    string ResolveRecentCss(DateTime enrolledAt)
+    {
+        if (enrolledAt.Date == DateTime.Today)
+        {
+            return "today";
+        }
+
+        if (enrolledAt.Date >= DateTime.Today.AddDays(-6))
+        {
+            return "week";
+        }
+
+        return "old";
+    }
+
+    string ResolveRecentText(DateTime enrolledAt)
+    {
+        if (enrolledAt.Date == DateTime.Today)
+        {
+            return "تم الربط اليوم";
+        }
+
+        if (enrolledAt.Date >= DateTime.Today.AddDays(-6))
+        {
+            return "تم الربط هذا الأسبوع";
+        }
+
+        return "ربط سابق";
+    }
+
+    int CalculateHealthScore(bool currentIsActive, int linksCount, int activeLinksCount)
+    {
+        var score = currentIsActive ? 82 : 45;
+
+        if (linksCount > 1)
+        {
+            score += 10;
+        }
+
+        if (linksCount > 1 && activeLinksCount == linksCount)
+        {
+            score += 6;
+        }
+
+        if (activeLinksCount == 0 && linksCount > 0)
+        {
+            score -= 20;
+        }
+
+        if (score > 98)
+        {
+            score = 98;
+        }
+
+        if (score < 25)
+        {
+            score = 25;
+        }
+
+        return score;
+    }
+
+    string BuildHealthLabel(int score)
+    {
+        if (score >= 90)
+        {
+            return "مميز";
+        }
+
+        if (score >= 80)
+        {
+            return "مستقر";
+        }
+
+        if (score >= 60)
+        {
+            return "يحتاج متابعة";
+        }
+
+        return "غير مستقر";
+    }
+
+    string BuildHealthCss(int score)
+    {
+        if (score >= 90)
+        {
+            return "vip";
+        }
+
+        if (score >= 80)
+        {
+            return "ex";
+        }
+
+        if (score >= 60)
+        {
+            return "wn";
+        }
+
+        return "dg";
+    }
+}
+
+<div class="enrollment-details-page" dir="rtl">
+
+    <nav class="enrollment-topnav">
+        <div class="nav-brand">
+            <span class="nav-logo">قدرات</span>
+            <div class="nav-sep"></div>
+            <div class="nav-breadcrumb">
+                <a asp-area="Admin" asp-controller="Home" asp-action="Index">لوحة التحكم</a>
+                <span>›</span>
+                <a asp-area="Admin" asp-controller="StudentBatchEnrollments" asp-action="Index">ربط الطلاب بالدفعات</a>
+                <span>›</span>
+                <span class="current">ملف ربط الطالب</span>
+            </div>
+        </div>
+
+        <div class="nav-actions">
+            <a class="nav-btn" asp-area="Admin" asp-controller="StudentBatchEnrollments" asp-action="Index">
+                <i class="fas fa-arrow-right"></i>
+                رجوع
+            </a>
+
+            <a class="nav-btn primary" asp-area="Admin" asp-controller="StudentBatchEnrollments" asp-action="Edit" asp-route-id="@Model.Id">
+                <i class="fas fa-edit"></i>
+                تعديل الربط الحالي
+            </a>
+        </div>
+    </nav>
+
+    <div class="enrollment-page">
+
+        <section class="enrollment-hero enrollment-fade d1 @(isMultiBatchStudent ? "multi-hero" : "")">
+            <div class="hero-content">
+                <div class="hero-left">
+                    <div class="hero-avatar">
+                        @BuildAvatar(Model.StudentName)
+                    </div>
+
+                    <div class="hero-info">
+                        <div class="hero-title-line">
+                            <h1>ملف ارتباط الطالب بالدفعات</h1>
+
+                            @if (isMultiBatchStudent)
+                            {
+                                <span class="vip-badge">
+                                    <i class="fas fa-crown"></i>
+                                    طالب متعدد الدفعات
+                                </span>
+                            }
+                        </div>
+
+                        <div class="hero-meta">
+                            <span class="hero-tag @statusCss">
+                                <i class="fas fa-circle"></i>
+                                الرابط الحالي: @SafeText(Model.Status)
+                            </span>
+
+                            <span class="hero-tag info">
+                                <i class="fas fa-user-graduate"></i>
+                                @SafeText(Model.StudentName, "طالب غير محدد")
+                            </span>
+
+                            <span class="hero-tag neutral">
+                                <i class="fas fa-users"></i>
+                                الدفعة الحالية: @SafeText(Model.BatchName, "دفعة غير محددة")
+                            </span>
+
+                            <span class="hero-tag @(isMultiBatchStudent ? "vip" : "neutral")">
+                                <i class="fas fa-layer-group"></i>
+                                @totalBatchLinks دفعة مرتبطة
+                            </span>
+
+                            <span class="hero-tag @recentCss">
+                                <i class="fas fa-clock"></i>
+                                @recentText
+                            </span>
+                        </div>
+
+                        @if (isMultiBatchStudent)
+                        {
+                            <div class="multi-message">
+                                <i class="fas fa-star"></i>
+                                هذا الطالب لديه اشتراك في أكثر من دفعة، ويجب التعامل معه كطالب عالي القيمة داخل المنصة مع متابعة محتواه وواجباته واختباراته حسب كل دفعة.
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="hero-desc">
+                                هذه الصفحة تعرض علاقة الطالب بالدفعة ككيان تشغيلي مستقل. الربط هو الأساس الذي تُبنى عليه الواجبات، الاختبارات، الحضور، والتحليلات التعليمية داخل المنصة.
+                            </p>
+                        }
+
+                        <div class="hero-actions">
+                            <a class="hbtn outline" asp-area="Admin" asp-controller="StudentBatchEnrollments" asp-action="Index">
+                                <i class="fas fa-list"></i>
+                                قائمة الروابط
+                            </a>
+
+                            <a class="hbtn solid-blue" asp-area="Admin" asp-controller="StudentBatchEnrollments" asp-action="Edit" asp-route-id="@Model.Id">
+                                <i class="fas fa-edit"></i>
+                                تعديل الربط الحالي
+                            </a>
+
+                            <a class="hbtn solid-cyan" asp-area="Admin" asp-controller="Batches" asp-action="Details" asp-route-id="@Model.BatchId">
+                                <i class="fas fa-users"></i>
+                                فتح الدفعة الحالية
+                            </a>
+
+                            <a class="hbtn solid-red" asp-area="Admin" asp-controller="StudentBatchEnrollments" asp-action="Delete" asp-route-id="@Model.Id">
+                                <i class="fas fa-trash-alt"></i>
+                                حذف الربط
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="health-ring-wrap">
+                <div class="health-ring">
+                    <svg viewBox="0 0 100 100" aria-hidden="true">
+                        <circle class="ring-bg" cx="50" cy="50" r="40"></circle>
+                        <circle class="ring-fill"
+                                cx="50"
+                                cy="50"
+                                r="40"
+                                stroke="@(healthScore >= 90 ? "#7c3aed" : healthScore >= 80 ? "#059669" : healthScore >= 60 ? "#d97706" : "#dc2626")"
+                                stroke-dasharray="251.2"
+                                stroke-dashoffset="@ringOffset.ToString("0.##")"></circle>
+                    </svg>
+                    <div class="ring-val">
+                        @healthScore
+                        <small>%</small>
+                    </div>
+                </div>
+
+                <div class="health-label">
+                    قيمة الارتباط
+                    <span class="@BuildHealthCss(healthScore)">@BuildHealthLabel(healthScore)</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="kpi-strip">
+
+            <article class="kpi-card b enrollment-fade d1">
+                <div class="kpi-icon b">
+                    <i class="fas fa-hashtag"></i>
+                </div>
+                <div class="kpi-val">@Model.Id</div>
+                <div class="kpi-label">الرابط الحالي</div>
+                <div class="kpi-delta eq">المعرف التشغيلي للعلاقة المفتوحة</div>
+            </article>
+
+            <article class="kpi-card @(isMultiBatchStudent ? "vip" : "g") enrollment-fade d2">
+                <div class="kpi-icon @(isMultiBatchStudent ? "vip" : "g")">
+                    <i class="fas fa-layer-group"></i>
+                </div>
+                <div class="kpi-val">@totalBatchLinks</div>
+                <div class="kpi-label">دفعات مرتبطة بالطالب</div>
+                <div class="kpi-delta @(isMultiBatchStudent ? "vip" : "eq")">
+                    @(isMultiBatchStudent ? "ميزة اشتراك متعددة" : "دفعة واحدة")
+                </div>
+            </article>
+
+            <article class="kpi-card g enrollment-fade d3">
+                <div class="kpi-icon g">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <div class="kpi-val">@activeBatchLinks</div>
+                <div class="kpi-label">روابط نشطة</div>
+                <div class="kpi-delta @(inactiveBatchLinks == 0 ? "up" : "dn")">
+                    @(inactiveBatchLinks == 0 ? "كل الروابط مستقرة" : inactiveBatchLinks + " روابط تحتاج مراجعة")
+                </div>
+            </article>
+
+            <article class="kpi-card a enrollment-fade d4">
+                <div class="kpi-icon a">
+                    <i class="fas fa-calendar-alt"></i>
+                </div>
+                <div class="kpi-val">@Model.EnrolledAt.ToString("yyyy/MM/dd")</div>
+                <div class="kpi-label">تاريخ الرابط الحالي</div>
+                <div class="kpi-delta eq">@recentText</div>
+            </article>
+
+            <article class="kpi-card p enrollment-fade d5">
+                <div class="kpi-icon p">
+                    <i class="fas fa-hourglass-half"></i>
+                </div>
+                <div class="kpi-val">@daysSinceEnrollment</div>
+                <div class="kpi-label">أيام منذ الربط الحالي</div>
+                <div class="kpi-delta eq">من تاريخ @Model.EnrolledAt.ToString("yyyy/MM/dd")</div>
+            </article>
+
+        </section>
+
+        @if (isMultiBatchStudent)
+        {
+            <section class="student-value-section enrollment-fade d2">
+                <div class="value-left">
+                    <div class="value-icon">
+                        <i class="fas fa-crown"></i>
+                    </div>
+                    <div>
+                        <h2>طالب عالي القيمة داخل المنصة</h2>
+                        <p>
+                            الطالب مشترك في @totalBatchLinks دفعات. هذا يعني أنه يتلقى محتوى وتعليمات واختبارات من أكثر من مسار، لذلك يجب أن تظهر هذه المعلومة بوضوح للأدمن قبل أي تعديل أو حذف لأي ربط.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="value-stats">
+                    <div>
+                        <strong>@totalBatchLinks</strong>
+                        <span>إجمالي الدفعات</span>
+                    </div>
+                    <div>
+                        <strong>@activeBatchLinks</strong>
+                        <span>نشطة</span>
+                    </div>
+                    <div>
+                        <strong>@otherBatchLinks</strong>
+                        <span>غير الرابط الحالي</span>
+                    </div>
+                </div>
+            </section>
+        }
+
+        <section class="section-block enrollment-fade d3">
+            <div class="section-title-row">
+                <div class="section-heading">
+                    <div class="section-accent vip"></div>
+                    <div>
+                        <h2>ملف الاشتراك متعدد الدفعات</h2>
+                        <p>كل الدفعات المرتبط بها الطالب، مع تمييز الرابط الحالي بوضوح.</p>
+                    </div>
+                </div>
+
+                <span class="section-badge @(isMultiBatchStudent ? "vip" : "neutral")">
+                    @totalBatchLinks روابط
+                </span>
+            </div>
+
+            <div class="batch-subscription-grid">
+                @if (relatedBatches.Any())
+                {
+                    foreach (var item in relatedBatches)
+                    {
+                        var itemStatusCss = ResolveStatusCss(item.Status);
+                        var itemRecentCss = ResolveRecentCss(item.EnrolledAt);
+                        var itemRecentText = ResolveRecentText(item.EnrolledAt);
+
+                        <article class="batch-subscription-card @(item.IsCurrent ? "current" : "")">
+                            <div class="batch-card-top">
+                                <div class="batch-icon">
+                                    <i class="fas fa-users"></i>
+                                </div>
+
+                                <div class="batch-title">
+                                    <strong>@SafeText(item.BatchName, "دفعة غير محددة")</strong>
+                                    <span>ربط رقم @item.EnrollmentId</span>
+                                </div>
+
+                                @if (item.IsCurrent)
+                                {
+                                    <span class="current-badge">
+                                        <i class="fas fa-location-dot"></i>
+                                        الرابط المفتوح
+                                    </span>
+                                }
+                            </div>
+
+                            <div class="batch-card-meta">
+                                <span class="status-pill @itemStatusCss">
+                                    <i class="fas fa-circle"></i>
+                                    @SafeText(item.Status)
+                                </span>
+
+                                <span class="recent-pill @itemRecentCss">
+                                    <i class="fas fa-clock"></i>
+                                    @itemRecentText
+                                </span>
+
+                                <span class="date-pill">
+                                    <i class="fas fa-calendar-alt"></i>
+                                    @item.EnrolledAt.ToString("yyyy/MM/dd")
+                                </span>
+                            </div>
+
+                            <div class="batch-card-actions">
+                                <a asp-area="Admin"
+                                   asp-controller="StudentBatchEnrollments"
+                                   asp-action="Details"
+                                   asp-route-id="@item.EnrollmentId"
+                                   class="mini-action view">
+                                    <i class="fas fa-eye"></i>
+                                    تفاصيل الربط
+                                </a>
+
+                                <a asp-area="Admin"
+                                   asp-controller="Batches"
+                                   asp-action="Details"
+                                   asp-route-id="@item.BatchId"
+                                   class="mini-action batch">
+                                    <i class="fas fa-layer-group"></i>
+                                    فتح الدفعة
+                                </a>
+
+                                <a asp-area="Admin"
+                                   asp-controller="StudentBatchEnrollments"
+                                   asp-action="Edit"
+                                   asp-route-id="@item.EnrollmentId"
+                                   class="mini-action edit">
+                                    <i class="fas fa-edit"></i>
+                                    تعديل
+                                </a>
+                            </div>
+                        </article>
+                    }
+                }
+                else
+                {
+                    <div class="empty-related">
+                        لا توجد دفعات مرتبطة بهذا الطالب.
+                    </div>
+                }
+            </div>
+        </section>
+
+        <section class="main-grid">
+
+            <div class="left-stack">
+
+                <section class="dash-card enrollment-fade d4">
+                    <div class="card-head">
+                        <div class="ch-left">
+                            <div class="ch-accent blue"></div>
+                            <div>
+                                <div class="ch-title">الرابط الحالي المفتوح</div>
+                                <div class="ch-sub">العلاقة التي دخل عليها الأدمن الآن</div>
+                            </div>
+                        </div>
+
+                        <span class="section-badge current">Current Link</span>
+                    </div>
+
+                    <div class="relationship-map">
+                        <div class="relation-node student-node">
+                            <div class="node-avatar">@BuildAvatar(Model.StudentName)</div>
+                            <div>
+                                <span>الطالب</span>
+                                <strong>@SafeText(Model.StudentName, "طالب غير محدد")</strong>
+                            </div>
+                        </div>
+
+                        <div class="relation-line">
+                            <div class="line-dot"></div>
+                            <div class="line-text">الرابط الحالي منذ @Model.EnrolledAt.ToString("yyyy/MM/dd")</div>
+                            <div class="line-dot"></div>
+                        </div>
+
+                        <div class="relation-node batch-node">
+                            <div class="node-avatar">
+                                <i class="fas fa-users"></i>
+                            </div>
+                            <div>
+                                <span>الدفعة الحالية</span>
+                                <strong>@SafeText(Model.BatchName, "دفعة غير محددة")</strong>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="dash-card enrollment-fade d5">
+                    <div class="card-head">
+                        <div class="ch-left">
+                            <div class="ch-accent cyan"></div>
+                            <div>
+                                <div class="ch-title">بيانات الرابط الحالي</div>
+                                <div class="ch-sub">البيانات المحفوظة في سجل الربط المفتوح</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="details-grid">
+                        <div class="detail-item">
+                            <span>رقم الربط</span>
+                            <strong>@Model.Id</strong>
+                        </div>
+
+                        <div class="detail-item">
+                            <span>رقم الطالب</span>
+                            <strong>@Model.StudentID</strong>
+                        </div>
+
+                        <div class="detail-item">
+                            <span>رقم الدفعة</span>
+                            <strong>@Model.BatchId</strong>
+                        </div>
+
+                        <div class="detail-item">
+                            <span>اسم الطالب</span>
+                            <strong>@SafeText(Model.StudentName, "طالب غير محدد")</strong>
+                        </div>
+
+                        <div class="detail-item">
+                            <span>اسم الدفعة الحالية</span>
+                            <strong>@SafeText(Model.BatchName, "دفعة غير محددة")</strong>
+                        </div>
+
+                        <div class="detail-item">
+                            <span>تاريخ الربط</span>
+                            <strong>@Model.EnrolledAt.ToString("yyyy/MM/dd HH:mm")</strong>
+                        </div>
+
+                        <div class="detail-item">
+                            <span>حالة الربط</span>
+                            <strong>@SafeText(Model.Status)</strong>
+                        </div>
+
+                        <div class="detail-item">
+                            <span>تصنيف الفترة</span>
+                            <strong>@recentText</strong>
+                        </div>
+
+                        <div class="detail-item">
+                            <span>عدد الدفعات الكلي</span>
+                            <strong>@totalBatchLinks</strong>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="dash-card enrollment-fade d6">
+                    <div class="card-head">
+                        <div class="ch-left">
+                            <div class="ch-accent amber"></div>
+                            <div>
+                                <div class="ch-title">أثر الربط داخل المنصة</div>
+                                <div class="ch-sub">ما الذي يعتمد على صحة علاقة الطالب بالدفعة؟</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="impact-grid">
+                        <div class="impact-item">
+                            <i class="fas fa-calendar-check"></i>
+                            <div>
+                                <strong>الحضور</strong>
+                                <span>تسجيل حضور الطالب داخل محاضرات الدفعة يعتمد على وجود هذا الربط.</span>
+                            </div>
+                        </div>
+
+                        <div class="impact-item">
+                            <i class="fas fa-file-alt"></i>
+                            <div>
+                                <strong>الواجبات</strong>
+                                <span>ظهور الواجبات للطالب يتم بناءً على الدفعات التي يرتبط بها.</span>
+                            </div>
+                        </div>
+
+                        <div class="impact-item">
+                            <i class="fas fa-vial"></i>
+                            <div>
+                                <strong>الاختبارات</strong>
+                                <span>إرسال الاختبارات المخصصة للدفعة يصل إلى الطالب من خلال علاقة الربط.</span>
+                            </div>
+                        </div>
+
+                        <div class="impact-item">
+                            <i class="fas fa-chart-line"></i>
+                            <div>
+                                <strong>التحليلات</strong>
+                                <span>تقارير أداء الطالب داخل كل دفعة تعتمد على صحة واستمرار هذا الربط.</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+
+            <aside class="right-stack">
+
+                <section class="dash-card enrollment-fade d3">
+                    <div class="card-head">
+                        <div class="ch-left">
+                            <div class="ch-accent ink"></div>
+                            <div>
+                                <div class="ch-title">التشخيص التشغيلي</div>
+                                <div class="ch-sub">قراءة مباشرة لحالة الطالب وروابطه</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="diag-section">
+                        @if (isMultiBatchStudent)
+                        {
+                            <div class="diag-item">
+                                <div class="diag-icon vip">
+                                    <i class="fas fa-crown"></i>
+                                </div>
+                                <div>
+                                    <div class="diag-title">طالب متعدد الدفعات</div>
+                                    <div class="diag-body">هذا الطالب مرتبط بأكثر من دفعة. لا تتعامل مع الرابط الحالي بمعزل عن باقي الدفعات.</div>
+                                </div>
+                            </div>
+                        }
+
+                        @if (isActive)
+                        {
+                            <div class="diag-item">
+                                <div class="diag-icon str">
+                                    <i class="fas fa-check-circle"></i>
+                                </div>
+                                <div>
+                                    <div class="diag-title">الرابط الحالي نشط</div>
+                                    <div class="diag-body">العلاقة الحالية تعمل ويمكن الاعتماد عليها في الحضور والواجبات والاختبارات.</div>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="diag-item">
+                                <div class="diag-icon risk">
+                                    <i class="fas fa-exclamation-triangle"></i>
+                                </div>
+                                <div>
+                                    <div class="diag-title">الرابط الحالي يحتاج مراجعة</div>
+                                    <div class="diag-body">حالة الربط ليست نشطة. راجع السبب قبل الاعتماد على هذه العلاقة في العمليات التعليمية.</div>
+                                </div>
+                            </div>
+                        }
+
+                        @if (inactiveBatchLinks > 0)
+                        {
+                            <div class="diag-item">
+                                <div class="diag-icon risk">
+                                    <i class="fas fa-link-slash"></i>
+                                </div>
+                                <div>
+                                    <div class="diag-title">روابط غير نشطة</div>
+                                    <div class="diag-body">يوجد @inactiveBatchLinks روابط غير نشطة لهذا الطالب ضمن دفعاته.</div>
+                                </div>
+                            </div>
+                        }
+
+                        @if (Model.EnrolledAt.Date == DateTime.Today)
+                        {
+                            <div class="diag-item">
+                                <div class="diag-icon opp">
+                                    <i class="fas fa-calendar-day"></i>
+                                </div>
+                                <div>
+                                    <div class="diag-title">ربط جديد اليوم</div>
+                                    <div class="diag-body">تم إنشاء الرابط الحالي اليوم، تأكد من ظهور المحتوى والاختبارات المناسبة.</div>
+                                </div>
+                            </div>
+                        }
+                        else if (Model.EnrolledAt.Date >= DateTime.Today.AddDays(-6))
+                        {
+                            <div class="diag-item">
+                                <div class="diag-icon opp">
+                                    <i class="fas fa-clock"></i>
+                                </div>
+                                <div>
+                                    <div class="diag-title">ربط حديث</div>
+                                    <div class="diag-body">الرابط الحالي تم إنشاؤه خلال آخر 7 أيام. راجع اكتمال ظهور المحتوى التعليمي للطالب.</div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </section>
+
+                <section class="dash-card enrollment-fade d4">
+                    <div class="card-head">
+                        <div class="ch-left">
+                            <div class="ch-accent green"></div>
+                            <div>
+                                <div class="ch-title">حالة الارتباط</div>
+                                <div class="ch-sub">مؤشر مختصر لقيمة واستقرار الربط</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="status-panel">
+                        <div class="status-big @(isMultiBatchStudent ? "vip" : statusCss)">
+                            <i class="fas @(isMultiBatchStudent ? "fa-crown" : "fa-link")"></i>
+                            <strong>@(isMultiBatchStudent ? "طالب متعدد الدفعات" : SafeText(Model.Status))</strong>
+                            <span>
+                                @(isMultiBatchStudent
+                                                                ? "هذا الطالب له أكثر من مسار داخل المنصة"
+                                                                : (isActive ? "العلاقة الحالية تعمل بشكل طبيعي" : "العلاقة الحالية تحتاج مراجعة"))
+                            </span>
+                        </div>
+
+                        <div class="progress-item">
+                            <div class="progress-head">
+                                <span>قيمة الارتباط</span>
+                                <b>@healthScore%</b>
+                            </div>
+                            <div class="progress-track">
+                                <div style="width:@healthScore%;background:@(healthScore >= 90 ? "var(--purple)" : healthScore >= 80 ? "var(--green)" : healthScore >= 60 ? "var(--amber)" : "var(--red)")"></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="dash-card enrollment-fade d5">
+                    <div class="card-head">
+                        <div class="ch-left">
+                            <div class="ch-accent red"></div>
+                            <div>
+                                <div class="ch-title">إجراءات سريعة</div>
+                                <div class="ch-sub">روابط مباشرة للعمليات الأساسية</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="quick-actions">
+                        <a asp-area="Admin" asp-controller="StudentBatchEnrollments" asp-action="Edit" asp-route-id="@Model.Id" class="quick-action edit">
+                            <i class="fas fa-edit"></i>
+                            <span>تعديل الرابط الحالي</span>
+                        </a>
+
+                        <a asp-area="Admin" asp-controller="Batches" asp-action="Details" asp-route-id="@Model.BatchId" class="quick-action batch">
+                            <i class="fas fa-users"></i>
+                            <span>فتح الدفعة الحالية</span>
+                        </a>
+
+                        <a asp-area="Admin" asp-controller="StudentBatchEnrollments" asp-action="Delete" asp-route-id="@Model.Id" class="quick-action delete">
+                            <i class="fas fa-trash-alt"></i>
+                            <span>حذف الرابط الحالي</span>
+                        </a>
+
+                        <a asp-area="Admin" asp-controller="StudentBatchEnrollments" asp-action="Index" class="quick-action back">
+                            <i class="fas fa-list"></i>
+                            <span>كل الروابط</span>
+                        </a>
+                    </div>
+                </section>
+
+            </aside>
+        </section>
+
+    </div>
+</div>
+
+<style>
+    .enrollment-details-page {
+        --font: 'Cairo', 'Tahoma', sans-serif;
+        --ink: #0d1117;
+        --ink-3: #374151;
+        --mute: #6b7280;
+        --mute-2: #9ca3af;
+        --mute-3: #d1d5db;
+        --bg: #f4f6fb;
+        --bg-2: #eef1f8;
+        --surface: #ffffff;
+        --border: #e5e8f0;
+        --green: #059669;
+        --green-lt: #d1fae5;
+        --green-dk: #064e3b;
+        --blue: #2563eb;
+        --blue-lt: #dbeafe;
+        --blue-dk: #1e3a8a;
+        --amber: #d97706;
+        --amber-lt: #fef3c7;
+        --amber-dk: #78350f;
+        --red: #dc2626;
+        --red-lt: #fee2e2;
+        --red-dk: #7f1d1d;
+        --purple: #7c3aed;
+        --purple-lt: #ede9fe;
+        --purple-dk: #3b0764;
+        --cyan: #0891b2;
+        --cyan-lt: #cffafe;
+        --radius: 12px;
+        --radius-lg: 18px;
+        --shadow: 0 2px 16px rgba(13, 17, 23, .07);
+        --shadow-sm: 0 1px 6px rgba(13, 17, 23, .05);
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: var(--font);
+        font-size: 14px;
+        line-height: 1.6;
+    }
+
+        .enrollment-details-page *,
+        .enrollment-details-page *::before,
+        .enrollment-details-page *::after {
+            box-sizing: border-box;
+        }
+
+        .enrollment-details-page a {
+            text-decoration: none;
+        }
+
+    @@keyframes enrollmentFadeUp {
+        from {
+            opacity: 0;
+            transform: translateY(14px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .enrollment-fade {
+        opacity: 1 !important;
+        animation: enrollmentFadeUp .45s ease both;
+    }
+
+    .d1 {
+        animation-delay: .05s;
+    }
+
+    .d2 {
+        animation-delay: .10s;
+    }
+
+    .d3 {
+        animation-delay: .15s;
+    }
+
+    .d4 {
+        animation-delay: .20s;
+    }
+
+    .d5 {
+        animation-delay: .25s;
+    }
+
+    .d6 {
+        animation-delay: .30s;
+    }
+
+    .enrollment-topnav {
+        background: var(--ink);
+        padding: 0 28px;
+        min-height: 54px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        border-bottom: 1px solid rgba(255, 255, 255, .06);
+    }
+
+    .nav-brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+    }
+
+    .nav-logo {
+        font-size: 18px;
+        font-weight: 800;
+        color: #fff;
+        white-space: nowrap;
+    }
+
+    .nav-sep {
+        width: 1px;
+        height: 18px;
+        background: rgba(255, 255, 255, .15);
+        flex-shrink: 0;
+    }
+
+    .nav-breadcrumb {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12.5px;
+        color: rgba(255, 255, 255, .5);
+        flex-wrap: wrap;
+    }
+
+        .nav-breadcrumb a {
+            color: rgba(255, 255, 255, .55);
+        }
+
+        .nav-breadcrumb .current {
+            color: rgba(255, 255, 255, .9);
+            font-weight: 700;
+        }
+
+    .nav-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .nav-btn {
+        font-family: var(--font);
+        font-size: 12px;
+        font-weight: 700;
+        padding: 7px 14px;
+        border-radius: 9px;
+        border: 1px solid rgba(255, 255, 255, .16);
+        background: transparent;
+        color: rgba(255, 255, 255, .75);
+        cursor: pointer;
+        transition: .15s;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+        .nav-btn:hover {
+            background: rgba(255, 255, 255, .08);
+            color: #fff;
+        }
+
+        .nav-btn.primary {
+            background: var(--cyan);
+            color: #fff;
+            border-color: var(--cyan);
+        }
+
+    .enrollment-page {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 28px 28px 60px;
+    }
+
+    .enrollment-hero {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 28px 32px;
+        margin-bottom: 20px;
+        box-shadow: var(--shadow);
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 32px;
+        align-items: center;
+        position: relative;
+        overflow: hidden;
+    }
+
+        .enrollment-hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 420px;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(8, 145, 178, .06));
+            pointer-events: none;
+        }
+
+        .enrollment-hero.multi-hero::before {
+            background: linear-gradient(90deg, transparent, rgba(124, 58, 237, .12));
+        }
+
+    .hero-content {
+        position: relative;
+        z-index: 1;
+        min-width: 0;
+    }
+
+    .hero-left {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        min-width: 0;
+    }
+
+    .hero-avatar {
+        width: 76px;
+        height: 76px;
+        border-radius: 20px;
+        background: linear-gradient(135deg, #0f766e, #0891b2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 26px;
+        font-weight: 800;
+        color: #fff;
+        flex-shrink: 0;
+        box-shadow: 0 8px 24px rgba(8, 145, 178, .25);
+    }
+
+    .multi-hero .hero-avatar {
+        background: linear-gradient(135deg, #3b0764, #7c3aed);
+        box-shadow: 0 8px 24px rgba(124, 58, 237, .30);
+    }
+
+    .hero-title-line {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .hero-info h1 {
+        font-size: 26px;
+        font-weight: 800;
+        color: var(--ink);
+        line-height: 1.2;
+        margin: 0;
+    }
+
+    .vip-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: var(--purple-lt);
+        color: var(--purple-dk);
+        border: 1px solid rgba(124, 58, 237, .22);
+        border-radius: 999px;
+        padding: 5px 11px;
+        font-size: 11px;
+        font-weight: 900;
+    }
+
+    .hero-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+    }
+
+    .hero-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11.5px;
+        padding: 3px 10px;
+        border-radius: 20px;
+        border: 1px solid;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+        .hero-tag.active,
+        .hero-tag.today {
+            background: var(--green-lt);
+            color: var(--green-dk);
+            border-color: rgba(5, 150, 105, .25);
+        }
+
+        .hero-tag.danger {
+            background: var(--red-lt);
+            color: var(--red-dk);
+            border-color: rgba(220, 38, 38, .25);
+        }
+
+        .hero-tag.warning,
+        .hero-tag.week {
+            background: var(--amber-lt);
+            color: var(--amber-dk);
+            border-color: rgba(217, 119, 6, .25);
+        }
+
+        .hero-tag.info {
+            background: var(--blue-lt);
+            color: var(--blue-dk);
+            border-color: rgba(37, 99, 235, .2);
+        }
+
+        .hero-tag.neutral,
+        .hero-tag.old {
+            background: var(--bg-2);
+            color: var(--ink-3);
+            border-color: var(--border);
+        }
+
+        .hero-tag.vip {
+            background: var(--purple-lt);
+            color: var(--purple-dk);
+            border-color: rgba(124, 58, 237, .22);
+        }
+
+    .hero-desc {
+        font-size: 13px;
+        color: var(--mute);
+        margin: 8px 0 0;
+        max-width: 780px;
+        line-height: 1.7;
+    }
+
+    .multi-message {
+        margin-top: 12px;
+        max-width: 860px;
+        background: linear-gradient(135deg, #faf5ff, #eef2ff);
+        border: 1px solid rgba(124, 58, 237, .22);
+        color: var(--purple-dk);
+        border-radius: 14px;
+        padding: 12px 14px;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        font-size: 12.5px;
+        font-weight: 800;
+        line-height: 1.8;
+    }
+
+        .multi-message i {
+            margin-top: 4px;
+            color: var(--purple);
+        }
+
+    .hero-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 14px;
+        flex-wrap: wrap;
+    }
+
+    .hbtn {
+        font-family: var(--font);
+        font-size: 12px;
+        font-weight: 700;
+        padding: 7px 16px;
+        border-radius: 9px;
+        border: 1px solid;
+        cursor: pointer;
+        transition: .15s;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+        .hbtn.outline {
+            background: var(--surface);
+            border-color: var(--border);
+            color: var(--ink-3);
+        }
+
+        .hbtn.solid-blue {
+            background: var(--blue);
+            border-color: var(--blue);
+            color: #fff;
+        }
+
+        .hbtn.solid-cyan {
+            background: var(--cyan);
+            border-color: var(--cyan);
+            color: #fff;
+        }
+
+        .hbtn.solid-red {
+            background: var(--red);
+            border-color: var(--red);
+            color: #fff;
+        }
+
+    .health-ring-wrap {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        min-width: 120px;
+    }
+
+    .health-ring {
+        position: relative;
+        width: 104px;
+        height: 104px;
+    }
+
+        .health-ring svg {
+            transform: rotate(-90deg);
+            width: 100%;
+            height: 100%;
+        }
+
+    .ring-bg {
+        fill: none;
+        stroke: var(--bg-2);
+        stroke-width: 8;
+    }
+
+    .ring-fill {
+        fill: none;
+        stroke-width: 8;
+        stroke-linecap: round;
+        transition: stroke-dashoffset .8s ease;
+    }
+
+    .ring-val {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        font-size: 22px;
+        font-weight: 800;
+        color: var(--ink);
+        line-height: 1;
+    }
+
+        .ring-val small {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--mute);
+        }
+
+    .health-label {
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--mute);
+        text-align: center;
+    }
+
+        .health-label span {
+            display: block;
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+            .health-label span.vip {
+                color: var(--purple);
+            }
+
+            .health-label span.ex {
+                color: var(--green);
+            }
+
+            .health-label span.wn {
+                color: var(--amber);
+            }
+
+            .health-label span.dg {
+                color: var(--red);
+            }
+
+    .kpi-strip {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 18px;
+    }
+
+    .kpi-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 16px 18px;
+        box-shadow: var(--shadow-sm);
+        cursor: default;
+        transition: .2s;
+        position: relative;
+        overflow: hidden;
+        min-height: 132px;
+    }
+
+        .kpi-card::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+        }
+
+        .kpi-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+        }
+
+        .kpi-card.g::after {
+            background: var(--green);
+        }
+
+        .kpi-card.b::after {
+            background: var(--blue);
+        }
+
+        .kpi-card.a::after {
+            background: var(--amber);
+        }
+
+        .kpi-card.p::after {
+            background: var(--purple);
+        }
+
+        .kpi-card.vip::after {
+            background: var(--purple);
+        }
+
+    .kpi-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 9px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 15px;
+        margin-bottom: 10px;
+    }
+
+        .kpi-icon.g {
+            background: var(--green-lt);
+            color: var(--green-dk);
+        }
+
+        .kpi-icon.b {
+            background: var(--blue-lt);
+            color: var(--blue-dk);
+        }
+
+        .kpi-icon.a {
+            background: var(--amber-lt);
+            color: var(--amber-dk);
+        }
+
+        .kpi-icon.p,
+        .kpi-icon.vip {
+            background: var(--purple-lt);
+            color: var(--purple-dk);
+        }
+
+    .kpi-val {
+        font-size: 24px;
+        font-weight: 800;
+        color: var(--ink);
+        letter-spacing: -.5px;
+        line-height: 1.2;
+    }
+
+    .kpi-label {
+        font-size: 11.5px;
+        color: var(--mute);
+        margin-top: 7px;
+        font-weight: 700;
+    }
+
+    .kpi-delta {
+        font-size: 10.5px;
+        margin-top: 6px;
+        font-weight: 700;
+    }
+
+        .kpi-delta.up {
+            color: var(--green);
+        }
+
+        .kpi-delta.dn {
+            color: var(--red);
+        }
+
+        .kpi-delta.eq {
+            color: var(--mute-2);
+        }
+
+        .kpi-delta.vip {
+            color: var(--purple);
+        }
+
+    .student-value-section {
+        background: linear-gradient(135deg, #3b0764, #7c3aed);
+        color: #fff;
+        border-radius: var(--radius-lg);
+        padding: 20px 22px;
+        margin-bottom: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        box-shadow: 0 12px 28px rgba(124, 58, 237, .22);
+    }
+
+    .value-left {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        min-width: 0;
+    }
+
+    .value-icon {
+        width: 54px;
+        height: 54px;
+        border-radius: 17px;
+        background: rgba(255, 255, 255, .12);
+        border: 1px solid rgba(255, 255, 255, .18);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        font-size: 22px;
+    }
+
+    .value-left h2 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 900;
+    }
+
+    .value-left p {
+        margin: 5px 0 0;
+        font-size: 12.5px;
+        line-height: 1.8;
+        color: rgba(255, 255, 255, .78);
+        max-width: 780px;
+    }
+
+    .value-stats {
+        display: flex;
+        gap: 10px;
+        flex-shrink: 0;
+    }
+
+        .value-stats div {
+            min-width: 86px;
+            background: rgba(255, 255, 255, .10);
+            border: 1px solid rgba(255, 255, 255, .16);
+            border-radius: 14px;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .value-stats strong {
+            display: block;
+            font-size: 24px;
+            font-weight: 900;
+            line-height: 1;
+        }
+
+        .value-stats span {
+            display: block;
+            margin-top: 4px;
+            font-size: 10.5px;
+            font-weight: 800;
+            color: rgba(255, 255, 255, .75);
+        }
+
+    .section-block,
+    .dash-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-sm);
+        overflow: hidden;
+    }
+
+    .section-block {
+        margin-bottom: 18px;
+    }
+
+    .section-title-row,
+    .card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 20px 13px;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .section-heading,
+    .ch-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+    }
+
+    .section-accent,
+    .ch-accent {
+        width: 4px;
+        height: 20px;
+        border-radius: 2px;
+        flex-shrink: 0;
+    }
+
+        .section-accent.vip {
+            background: var(--purple);
+        }
+
+        .ch-accent.blue {
+            background: var(--blue);
+        }
+
+        .ch-accent.cyan {
+            background: var(--cyan);
+        }
+
+        .ch-accent.amber {
+            background: var(--amber);
+        }
+
+        .ch-accent.ink {
+            background: var(--ink);
+        }
+
+        .ch-accent.green {
+            background: var(--green);
+        }
+
+        .ch-accent.red {
+            background: var(--red);
+        }
+
+    .section-heading h2,
+    .ch-title {
+        font-size: 13.5px;
+        font-weight: 800;
+        color: var(--ink);
+        margin: 0;
+    }
+
+    .section-heading p,
+    .ch-sub {
+        font-size: 11px;
+        color: var(--mute);
+        margin: 1px 0 0;
+    }
+
+    .section-badge {
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 10.5px;
+        font-weight: 900;
+        white-space: nowrap;
+        border: 1px solid;
+    }
+
+        .section-badge.vip {
+            background: var(--purple-lt);
+            color: var(--purple-dk);
+            border-color: rgba(124, 58, 237, .18);
+        }
+
+        .section-badge.neutral {
+            background: var(--bg-2);
+            color: var(--ink-3);
+            border-color: var(--border);
+        }
+
+        .section-badge.current {
+            background: var(--blue-lt);
+            color: var(--blue-dk);
+            border-color: rgba(37, 99, 235, .18);
+        }
+
+    .batch-subscription-grid {
+        padding: 18px 20px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+    }
+
+    .batch-subscription-card {
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: var(--bg-2);
+        padding: 14px;
+        transition: .15s;
+    }
+
+        .batch-subscription-card:hover {
+            background: #fff;
+            box-shadow: var(--shadow-sm);
+            transform: translateY(-1px);
+        }
+
+        .batch-subscription-card.current {
+            background: linear-gradient(135deg, #eff6ff, #ecfeff);
+            border-color: rgba(8, 145, 178, .25);
+        }
+
+    .batch-card-top {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        min-width: 0;
+    }
+
+    .batch-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 14px;
+        background: linear-gradient(135deg, #0f766e, #0891b2);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .batch-title {
+        flex: 1;
+        min-width: 0;
+    }
+
+        .batch-title strong {
+            display: block;
+            color: var(--ink);
+            font-size: 13.5px;
+            font-weight: 900;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .batch-title span {
+            display: block;
+            color: var(--mute);
+            font-size: 10.5px;
+            margin-top: 2px;
+            font-weight: 800;
+        }
+
+    .current-badge {
+        background: var(--green-lt);
+        color: var(--green-dk);
+        border: 1px solid rgba(5, 150, 105, .18);
+        border-radius: 999px;
+        padding: 3px 8px;
+        font-size: 9.5px;
+        font-weight: 900;
+        white-space: nowrap;
+    }
+
+    .batch-card-meta {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+    }
+
+    .status-pill,
+    .recent-pill,
+    .date-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        border-radius: 999px;
+        padding: 4px 8px;
+        font-size: 10.5px;
+        font-weight: 800;
+        white-space: nowrap;
+        border: 1px solid;
+    }
+
+        .status-pill i {
+            font-size: 7px;
+        }
+
+        .status-pill.active,
+        .recent-pill.today {
+            background: var(--green-lt);
+            color: var(--green-dk);
+            border-color: rgba(5, 150, 105, .18);
+        }
+
+        .status-pill.warning,
+        .recent-pill.week {
+            background: var(--amber-lt);
+            color: var(--amber-dk);
+            border-color: rgba(217, 119, 6, .18);
+        }
+
+        .status-pill.danger {
+            background: var(--red-lt);
+            color: var(--red-dk);
+            border-color: rgba(220, 38, 38, .18);
+        }
+
+        .status-pill.neutral,
+        .recent-pill.old {
+            background: var(--bg-2);
+            color: var(--mute);
+            border-color: var(--border);
+        }
+
+    .date-pill {
+        background: var(--blue-lt);
+        color: var(--blue-dk);
+        border-color: rgba(37, 99, 235, .16);
+    }
+
+    .batch-card-actions {
+        display: flex;
+        gap: 7px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+    }
+
+    .mini-action {
+        border: 1px solid;
+        border-radius: 10px;
+        padding: 7px 10px;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11px;
+        font-weight: 900;
+        transition: .15s;
+    }
+
+        .mini-action.view {
+            background: var(--blue-lt);
+            color: var(--blue-dk);
+            border-color: rgba(37, 99, 235, .18);
+        }
+
+        .mini-action.batch {
+            background: var(--cyan-lt);
+            color: #155e75;
+            border-color: rgba(8, 145, 178, .18);
+        }
+
+        .mini-action.edit {
+            background: var(--amber-lt);
+            color: var(--amber-dk);
+            border-color: rgba(217, 119, 6, .18);
+        }
+
+        .mini-action:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
+        }
+
+    .main-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 380px;
+        gap: 18px;
+    }
+
+    .left-stack,
+    .right-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        min-width: 0;
+    }
+
+    .relationship-map {
+        padding: 24px 20px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 220px minmax(0, 1fr);
+        align-items: center;
+        gap: 18px;
+    }
+
+    .relation-node {
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: var(--bg-2);
+        padding: 18px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+    }
+
+        .relation-node .node-avatar {
+            width: 52px;
+            height: 52px;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-weight: 900;
+            font-size: 17px;
+            flex-shrink: 0;
+        }
+
+    .student-node .node-avatar {
+        background: linear-gradient(135deg, #1e3a8a, #2563eb);
+    }
+
+    .batch-node .node-avatar {
+        background: linear-gradient(135deg, #0f766e, #0891b2);
+    }
+
+    .relation-node span {
+        display: block;
+        color: var(--mute);
+        font-size: 11px;
+        font-weight: 800;
+        margin-bottom: 3px;
+    }
+
+    .relation-node strong {
+        display: block;
+        color: var(--ink);
+        font-size: 15px;
+        font-weight: 900;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .relation-line {
+        height: 2px;
+        background: linear-gradient(90deg, var(--blue), var(--cyan));
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .line-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--cyan);
+        box-shadow: 0 0 0 4px var(--cyan-lt);
+    }
+
+    .line-text {
+        position: absolute;
+        top: -32px;
+        right: 50%;
+        transform: translateX(50%);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 4px 10px;
+        white-space: nowrap;
+        font-size: 10.5px;
+        font-weight: 800;
+        color: var(--ink-3);
+        box-shadow: var(--shadow-sm);
+    }
+
+    .details-grid {
+        padding: 18px 20px;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+    }
+
+    .detail-item {
+        background: var(--bg-2);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 13px;
+        min-width: 0;
+    }
+
+        .detail-item span {
+            display: block;
+            color: var(--mute);
+            font-size: 11px;
+            font-weight: 800;
+            margin-bottom: 4px;
+        }
+
+        .detail-item strong {
+            display: block;
+            color: var(--ink);
+            font-size: 13px;
+            font-weight: 900;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+    .impact-grid {
+        padding: 18px 20px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+    }
+
+    .impact-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        background: var(--bg-2);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px;
+    }
+
+        .impact-item i {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: var(--cyan-lt);
+            color: #155e75;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .impact-item strong {
+            display: block;
+            color: var(--ink);
+            font-size: 12.5px;
+            font-weight: 900;
+            margin-bottom: 2px;
+        }
+
+        .impact-item span {
+            display: block;
+            color: var(--mute);
+            font-size: 11.5px;
+            line-height: 1.7;
+        }
+
+    .diag-section {
+        padding: 14px 18px;
+    }
+
+    .diag-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 11px 0;
+        border-bottom: 1px solid var(--border);
+    }
+
+        .diag-item:last-child {
+            border-bottom: none;
+        }
+
+    .diag-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        flex-shrink: 0;
+        margin-top: 1px;
+    }
+
+        .diag-icon.vip {
+            background: var(--purple-lt);
+            color: var(--purple-dk);
+        }
+
+        .diag-icon.str {
+            background: var(--green-lt);
+            color: var(--green-dk);
+        }
+
+        .diag-icon.opp {
+            background: var(--blue-lt);
+            color: var(--blue-dk);
+        }
+
+        .diag-icon.risk {
+            background: var(--red-lt);
+            color: var(--red-dk);
+        }
+
+    .diag-title {
+        font-size: 12.5px;
+        font-weight: 800;
+        color: var(--ink);
+    }
+
+    .diag-body {
+        font-size: 11.5px;
+        color: var(--mute);
+        line-height: 1.65;
+        margin-top: 2px;
+    }
+
+    .status-panel {
+        padding: 18px;
+    }
+
+    .status-big {
+        border-radius: 16px;
+        padding: 16px;
+        border: 1px solid;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        align-items: flex-start;
+        margin-bottom: 14px;
+    }
+
+        .status-big i {
+            font-size: 22px;
+            margin-bottom: 4px;
+        }
+
+        .status-big strong {
+            font-size: 17px;
+            font-weight: 900;
+        }
+
+        .status-big span {
+            font-size: 12px;
+            color: var(--mute);
+        }
+
+        .status-big.vip {
+            background: var(--purple-lt);
+            color: var(--purple-dk);
+            border-color: rgba(124, 58, 237, .18);
+        }
+
+        .status-big.active {
+            background: var(--green-lt);
+            color: var(--green-dk);
+            border-color: rgba(5, 150, 105, .18);
+        }
+
+        .status-big.warning {
+            background: var(--amber-lt);
+            color: var(--amber-dk);
+            border-color: rgba(217, 119, 6, .18);
+        }
+
+        .status-big.danger {
+            background: var(--red-lt);
+            color: var(--red-dk);
+            border-color: rgba(220, 38, 38, .18);
+        }
+
+        .status-big.neutral {
+            background: var(--bg-2);
+            color: var(--ink-3);
+            border-color: var(--border);
+        }
+
+    .progress-item {
+        margin-top: 10px;
+    }
+
+    .progress-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: 11.5px;
+        margin-bottom: 5px;
+    }
+
+        .progress-head span {
+            font-weight: 800;
+            color: var(--ink-3);
+        }
+
+        .progress-head b {
+            font-weight: 900;
+            color: var(--ink);
+        }
+
+    .progress-track {
+        height: 8px;
+        background: var(--bg-2);
+        border-radius: 999px;
+        overflow: hidden;
+        border: 1px solid var(--border);
+    }
+
+        .progress-track div {
+            height: 100%;
+            border-radius: 999px;
+            transition: width .7s ease;
+        }
+
+    .quick-actions {
+        padding: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .quick-action {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 12px;
+        font-size: 12.5px;
+        font-weight: 900;
+        transition: .15s;
+    }
+
+        .quick-action i {
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .quick-action.edit {
+            background: var(--amber-lt);
+            color: var(--amber-dk);
+            border-color: rgba(217, 119, 6, .18);
+        }
+
+        .quick-action.batch {
+            background: var(--cyan-lt);
+            color: #155e75;
+            border-color: rgba(8, 145, 178, .18);
+        }
+
+        .quick-action.delete {
+            background: var(--red-lt);
+            color: var(--red-dk);
+            border-color: rgba(220, 38, 38, .18);
+        }
+
+        .quick-action.back {
+            background: var(--blue-lt);
+            color: var(--blue-dk);
+            border-color: rgba(37, 99, 235, .18);
+        }
+
+        .quick-action:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
+        }
+
+    .empty-related {
+        grid-column: 1 / -1;
+        text-align: center;
+        padding: 26px;
+        color: var(--mute);
+        font-size: 12px;
+    }
+
+    @@media (max-width: 1200px) {
+        .main-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .relationship-map {
+            grid-template-columns: 1fr;
+        }
+
+        .relation-line {
+            height: 52px;
+            width: 2px;
+            justify-self: center;
+            background: linear-gradient(180deg, var(--blue), var(--cyan));
+        }
+
+        .line-text {
+            top: 50%;
+            right: 18px;
+            transform: translateY(-50%);
+        }
+
+        .batch-subscription-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .student-value-section {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+        .value-stats {
+            width: 100%;
+        }
+
+            .value-stats div {
+                flex: 1;
+            }
+    }
+
+    @@media (max-width: 900px) {
+        .kpi-strip {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .details-grid,
+        .impact-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .enrollment-hero {
+            grid-template-columns: 1fr;
+        }
+
+        .hero-left {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .enrollment-page {
+            padding: 16px;
+        }
+
+        .enrollment-topnav {
+            height: auto;
+            padding: 14px;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .nav-actions {
+            width: 100%;
+        }
+
+        .batch-card-actions {
+            flex-direction: column;
+        }
+
+        .mini-action {
+            justify-content: center;
+        }
+    }
+
+    @@media (max-width: 520px) {
+        .kpi-strip {
+            grid-template-columns: 1fr;
+        }
+
+        .value-stats {
+            flex-direction: column;
+        }
+    }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const progressBars = document.querySelectorAll('.progress-track div');
+
+        progressBars.forEach(function (el) {
+            const target = el.style.width;
+            el.style.width = '0';
+
+            setTimeout(function () {
+                el.style.width = target;
+            }, 250);
+        });
+
+        const ring = document.querySelector('.ring-fill');
+
+        if (ring) {
+            const originalOffset = ring.getAttribute('stroke-dashoffset');
+            ring.setAttribute('stroke-dashoffset', '251.2');
+
+            setTimeout(function () {
+                ring.style.transition = 'stroke-dashoffset .9s ease';
+                ring.setAttribute('stroke-dashoffset', originalOffset);
+            }, 200);
+        }
+    });
+</script>

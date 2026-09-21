@@ -1,0 +1,299 @@
+﻿@model QdratNew.ViewModels.Students.ExamSolveViewModel
+@{
+    ViewData["Title"] = "بدء اختبار تحديد المستوى";
+    Layout = "~/Views/Shared/_QuestionStudentLayout.cshtml";
+}
+@{
+    var isRTL = Model.Question?.IsRTL ?? true;
+
+    var dict = new Dictionary<string, string>
+    {
+        ["اختبار تحديد المستوى"] = "Placement Test",
+        ["الوقت المتبقي"] = "Remaining Time",
+        ["جاري تحميل السؤال التالي..."] = "Loading next question...",
+        ["انتهى الوقت!"] = "Time is up!",
+        ["سيتم إنهاء الاختبار الآن..."] = "The exam will be submitted now..."
+    };
+
+    Func<string, string> TT = key =>
+        isRTL ? key : (dict.ContainsKey(key) ? dict[key] : key);
+}
+
+
+
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger text-center fw-bold">
+        @TempData["ErrorMessage"]
+    </div>
+
+
+
+}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="fw-bold text-qdrat">🧠 @TT("اختبار تحديد المستوى")</h4>
+        <div class="fw-bold text-danger" id="timer">@TT("الوقت المتبقي"): <span id="time-remaining"></span></div>
+    </div>
+
+    <!-- 🟦 Overlay تحميل -->
+    <div id="loadingOverlay" style="display:none; position:fixed; inset:0; background:rgba(255,255,255,0.8);
+        z-index:9999; align-items:center; justify-content:center; flex-direction:column; text-align:center;">
+        <div class="spinner-border text-primary" style="width:3rem;height:3rem;" role="status"></div>
+        <p class="mt-3 text-dark fw-bold">@TT("جاري تحميل السؤال التالي...")</p>
+    </div>
+
+    <!-- 🟩 حاوية الأسئلة -->
+    <div id="question-container">
+        @await Html.PartialAsync("_SolveUnifiedExamPartial", Model)
+    </div>
+</div>
+
+<!-- 🔒 شاشة الحماية عند الخروج من fullscreen -->
+<div id="examLockOverlay">
+    <div class="exam-lock-box text-center">
+        <h2 class="fw-bold mb-3">🚫 لا يمكنك الخروج من وضع الاختبار</h2>
+        <p class="mb-4">اضغط الزر أدناه للعودة إلى وضع الشاشة الكاملة ومتابعة الاختبار.</p>
+        <button id="returnToExamBtn" class="btn btn-primary btn-lg px-4">🔁 العودة للاختبار</button>
+    </div>
+</div>
+
+
+
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+@section Scripts {
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            TranslationGuard.init({
+                attemptType: 4,
+                attemptEntityId: @Model.ExamAssignmentId,
+                antiForgeryToken: '@Antiforgery.GetAndStoreTokens(Context).RequestToken'
+            });
+        });
+    </script>
+
+    <style>
+        #examLockOverlay {
+            position: fixed;
+            inset: 0;
+            z-index: 999999;
+            background: rgba(0, 0, 0, 0.95);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: #fff;
+            font-family: "Cairo", sans-serif;
+        }
+
+        .exam-lock-box {
+            background: rgba(255, 255, 255, 0.08);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 16px;
+            padding: 40px 60px;
+            max-width: 600px;
+            box-shadow: 0 0 25px rgba(255, 255, 255, 0.1);
+        }
+
+        #examLockOverlay h2 {
+            font-size: 1.8rem;
+            color: #ff4444;
+        }
+
+        #examLockOverlay p {
+            font-size: 1.1rem;
+            color: #ddd;
+        }
+
+        #returnToExamBtn {
+            font-size: 1.2rem;
+            border-radius: 50px;
+        }
+    </style>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const overlay = document.getElementById("examLockOverlay");
+            const returnBtn = document.getElementById("returnToExamBtn");
+            const container = document.getElementById("question-container");
+            const timerEl = document.getElementById("time-remaining");
+
+            /* ========== المؤقت الزمني ========== */
+            let remaining = parseInt('@Model.RemainingSeconds') || 0;
+            const endTime = new Date().getTime() + remaining * 1000;
+            function updateTimer() {
+                const diff = Math.floor((endTime - new Date().getTime()) / 1000);
+                if (diff <= 0) {
+                    clearInterval(timerInt);
+                    Swal.fire({
+                        icon: "info",
+                        title: "⏰ انتهى الوقت!",
+                        text: "سيتم إنهاء الاختبار الآن...",
+                        showConfirmButton: false,
+                        timer: 2000
+                    }).then(() => handleForceSubmit(@Model.ExamAssignmentId));
+                    return;
+                }
+                const m = Math.floor(diff / 60), s = diff % 60;
+                timerEl.innerText = `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+            }
+            const timerInt = setInterval(updateTimer, 1000);
+            updateTimer();
+
+            /* ========== دوال القفل ========== */
+            function showLock() {
+                overlay.style.display = "flex";
+                document.body.style.overflow = "hidden";
+            }
+            function hideLock() {
+                overlay.style.display = "none";
+                document.body.style.overflow = "auto";
+            }
+
+            /* ========== التحكم في fullscreen ========== */
+            document.addEventListener("fullscreenchange", () => {
+                if (!document.fullscreenElement) showLock();
+                else hideLock();
+            });
+
+            returnBtn.addEventListener("click", async () => {
+                try {
+                    await document.documentElement.requestFullscreen();
+                    hideLock();
+                } catch (err) {
+                    console.error("فشل العودة للوضع الكامل:", err);
+                }
+            });
+
+            function enableFullScreen() {
+                if (!document.fullscreenElement)
+                    document.documentElement.requestFullscreen();
+                document.removeEventListener("click", enableFullScreen);
+            }
+            document.addEventListener("click", enableFullScreen);
+
+            /* ========== التنقل بين الأسئلة ========== */
+            async function loadNextQuestion(formData) {
+                $("#loadingOverlay").fadeIn(200);
+                const res = await fetch("/Students/PlacementExams/SubmitAnswerFetch", {
+                    method: "POST",
+                    body: formData,
+                    credentials: "include"
+                });
+                const html = await res.text();
+                $("#loadingOverlay").fadeOut(200);
+                if (html.trim().startsWith("<")) {
+                    container.innerHTML = html;
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                    attachNavEvents(); // إعادة تفعيل الأزرار بعد التحديث
+                }
+            }
+
+            function attachNavEvents() {
+                document.querySelectorAll(".exam-nav-button, .review-jump").forEach(btn => {
+                    btn.addEventListener("click", async e => {
+                        e.preventDefault();
+                        const form = document.getElementById("exam-question-form");
+                        if (!form) return;
+                        const fd = new FormData(form);
+                        if (btn.classList.contains("review-jump")) {
+                            fd.append("nav", "goto");
+                            fd.append("target", btn.dataset.target);
+                        } else {
+                            fd.append("nav", btn.dataset.nav);
+                        }
+                        await loadNextQuestion(fd);
+                    });
+                });
+            }
+
+            attachNavEvents(); // أول تفعيل عند تحميل الصفحة
+
+            /* ========== تسليم الاختبار ========== */
+        /* ========== تسليم الاختبار (تحديد المستوى) ========== */
+        document.body.addEventListener("click", async e => {
+            const btn = e.target.closest("#submitExam");
+            if (!btn) return;
+            e.preventDefault();
+
+            const examAssignmentId = @Model.ExamAssignmentId;
+
+            try {
+                const res = await fetch(`/Students/PlacementExams/SubmitFinal?id=${examAssignmentId}`, {
+                    method: "POST",
+                    headers: { "Accept": "application/json" }
+                });
+                const result = await res.json();
+
+                if (!result.success && result.notAnswered > 0) {
+                    const c = await Swal.fire({
+                        icon: "warning",
+                        title: "⚠️ أسئلة غير مجابة",
+                        text: result.message,
+                        showCancelButton: true,
+                        confirmButtonText: "إكمال الحل",
+                        cancelButtonText: "إنهاء الآن"
+                    });
+                    if (!c.isConfirmed) handleForceSubmit(examAssignmentId);
+                    return;
+                }
+
+                if (result.success) {
+                    Swal.fire({
+                        icon: "success",
+                        title: "تم التسليم ✅",
+                        text: "سيتم تحويلك إلى صفحة النتيجة",
+                        showConfirmButton: false,
+                        timer: 2000
+                    }).then(() => {
+                        document.exitFullscreen();
+                        window.location.href = result.redirectUrl;
+                    });
+                } else {
+                    Swal.fire({ icon: "warning", title: "⚠️", text: result.message });
+                }
+            } catch (ex) {
+                Swal.fire({ icon: "error", title: "حدث خطأ", text: ex.message });
+            }
+        });
+
+                 async function handleForceSubmit(id) {
+            const res = await fetch(`/Students/PlacementExams/SubmitFinal?id=${id}&forceSubmit=true`, {
+                method: "POST",
+                headers: { "Accept": "application/json" }
+            });
+            const result = await res.json();
+            if (result.redirectUrl) window.location.href = result.redirectUrl;
+        }
+
+
+            /* ========== حماية النسخ ========== */
+            document.addEventListener("contextmenu", e => e.preventDefault());
+            document.addEventListener("copy", e => e.preventDefault());
+            document.addEventListener("cut", e => e.preventDefault());
+            document.addEventListener("paste", e => e.preventDefault());
+            document.addEventListener("keydown", e => {
+                const ctrl = e.ctrlKey || e.metaKey;
+                if (ctrl && ["c","v","x","s","p","u"].includes(e.key.toLowerCase())) e.preventDefault();
+                if (e.key === "F12" || (ctrl && e.shiftKey && ["I","J"].includes(e.key.toUpperCase()))) e.preventDefault();
+            });
+        });
+    </script>
+}
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,697 @@
+@model QdratNew.ViewModels.Homework.HomeworkResultViewModel
+@using QdratNew.Helpers
+
+@{
+    ViewData["Title"] = "نتيجة الواجب";
+
+    var pct         = Model.ScorePercentage;
+    var wrongCount  = Convert.ToInt32(Model.WrongAnswers ?? 0);
+    var isRTL       = Model.IsRTL;
+    var dir         = isRTL ? "rtl" : "ltr";
+
+    var tone = ResultToneHelper.Build(pct, ResultContext.Homework);
+    bool isExcellent  = tone.Tier == "excellent";
+    bool isGood       = tone.Tier == "strong";
+    bool isAcceptable = tone.Tier == "onTrack";
+    bool isFailed     = tone.IsLowTier;
+    bool isPassed     = !tone.IsLowTier;
+
+    string themeCss = tone.ThemeCss;
+
+    // ── Labels (bilingual) ────────────────────────────────────
+    Func<string, string> T = key =>
+    {
+        if (isRTL) return key;
+        return key switch
+        {
+            "نتيجة الواجب"           => "Homework Result",
+            "رائع! أنت متفوّق حقاً"  => "Outstanding! You're at the top",
+            "أحسنت! نتيجة قوية"      => "Well done! Great result",
+            "على الطريق الصحيح 📈"   => "You're on the right track 📈",
+            "بدايتك من هنا 💪"       => "Your journey starts here 💪",
+            "قيد التقدّم"            => "In progress",
+            "✔ اجتزت بامتياز"        => "✔ Passed with distinction",
+            "✔ اجتزت الاختبار"       => "✔ Passed",
+            "✔ اجتزت الحد"           => "✔ Above the pass mark",
+            "إجمالي الأسئلة"         => "Total Questions",
+            "إجابات صحيحة"           => "Correct",
+            "إجابات خاطئة"           => "Wrong",
+            "الوقت المستغرق"         => "Time Spent",
+            "دقيقة"                  => "min",
+            "النتيجة"                => "Score",
+            "مراجعة الواجب"          => "Review Homework",
+            "العودة للواجبات"        => "Back to Homework",
+            "الأسئلة الخاطئة"        => "Wrong Questions",
+            "إجابتك"                 => "Your Answer",
+            "الإجابة الصحيحة"        => "Correct Answer",
+            "استمر في القمة!"        => "Keep leading!",
+            "خطوة واحدة عن التميّز"   => "One step from excellence",
+            "تقدّمك واضح — أكمل"      => "Your progress is clear — keep going",
+            "خطوتك القادمة أهم من رقم اليوم" => "Your next step matters more than today's number",
+            _                        => key
+        };
+    };
+
+    string heroTitle = T(tone.Title);
+
+    string heroSubtitle = isExcellent
+        ? (isRTL ? tone.Subtitle
+                 : "Your homework performance is exceptional, keep it up!")
+        : isGood
+        ? (isRTL ? tone.Subtitle
+                 : "Strong result! Reviewing mistakes will take you to the top")
+        : isAcceptable
+        ? (isRTL ? tone.Subtitle
+                 : "You have a good base — steady review will move you up fast")
+        : (isRTL ? tone.Subtitle
+                 : "This score is a starting point, not a verdict. We've marked the highest-impact topics — every next attempt raises your number.");
+
+    string motivationMsg = isExcellent
+        ? (isRTL ? "🏆 أداء استثنائي في الواجب! أنت تُثبت كل يوم أنك من المتميزين."
+                 : "🏆 Exceptional performance! You prove every day that you're among the best.")
+        : isGood
+        ? (isRTL ? "💡 واجب قوي! راجع الأسئلة التي أخطأت فيها لتحقيق الكمال."
+                 : "💡 Strong homework! Review your mistakes to achieve perfection.")
+        : isAcceptable
+        ? (isRTL ? "📚 لديك قاعدة جيدة، راجع الدروس ذات الصلة وأعد المحاولة."
+                 : "📚 You have a good base, review the related lessons and try again.")
+        : (isRTL ? tone.MotivationMsg
+                 : "📈 Start with one topic today. Students who began here raised their score on the next attempt — and so will you.");
+
+    // Number formatter (respects IsQuantitative)
+    Func<object, string> Fmt = val =>
+    {
+        var s = Convert.ToString(val) ?? "0";
+        return Model.IsQuantitative ? NumberHelper.ToIndicNumbersSafe(s) : s;
+    };
+}
+
+<!-- ============================================================
+     HOMEWORK RESULT PAGE — same design system as ExamResult
+     ============================================================ -->
+
+<div class="er-root @themeCss" dir="@dir">
+
+    <!-- ─── Hero Banner ─── -->
+    <div class="er-hero">
+        <div class="er-hero__bg-shapes">
+            <span class="shape s1"></span>
+            <span class="shape s2"></span>
+            <span class="shape s3"></span>
+        </div>
+
+        @if (tone.ShowCelebration)
+        {
+            <div class="er-fireworks" id="fireworks" aria-hidden="true"></div>
+        }
+
+        <div class="er-hero__content">
+
+            <!-- Score Ring -->
+            <div class="er-score-ring" role="img" aria-label="@T("النتيجة") @((int)Math.Round(pct))%">
+                <svg viewBox="0 0 120 120" class="er-ring-svg" aria-hidden="true">
+                    <circle class="er-ring-bg" cx="60" cy="60" r="52" />
+                    <circle class="er-ring-fill" cx="60" cy="60" r="52"
+                            data-pct="@pct" />
+                </svg>
+                <div class="er-ring-inner">
+                    <span class="er-ring-pct">@Fmt((int)Math.Round(pct))%</span>
+                    <span class="er-ring-label">@T("النتيجة")</span>
+                </div>
+            </div>
+
+            <!-- Headline -->
+            <div class="er-hero__text">
+                @if (!string.IsNullOrWhiteSpace(Model.LessonTitle) || !string.IsNullOrWhiteSpace(Model.SectionTitle))
+                {
+                    <p class="er-hero__exam-name">
+                        @Model.SectionTitle
+                        @if (!string.IsNullOrWhiteSpace(Model.SectionTitle) && !string.IsNullOrWhiteSpace(Model.LessonTitle))
+                        { <text> — </text> }
+                        @Model.LessonTitle
+                    </p>
+                }
+                <h1 class="er-hero__title">@heroTitle</h1>
+                <p class="er-hero__subtitle">@heroSubtitle</p>
+                <span class="er-badge @tone.BadgeCss">@T(tone.BadgeText)</span>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ─── Stats Grid ─── -->
+    <div class="er-stats @(Model.TimeSpentMinutes > 0 ? "er-stats--4col" : "er-stats--3col")">
+
+        <div class="er-stat er-stat--total">
+            <div class="er-stat__icon">📋</div>
+            <div class="er-stat__num">@Fmt(Model.TotalQuestions)</div>
+            <div class="er-stat__label">@T("إجمالي الأسئلة")</div>
+        </div>
+
+        <div class="er-stat er-stat--correct">
+            <div class="er-stat__icon">✅</div>
+            <div class="er-stat__num">@Fmt(Model.CorrectAnswers)</div>
+            <div class="er-stat__label">@T("إجابات صحيحة")</div>
+        </div>
+
+        <div class="er-stat er-stat--wrong">
+            <div class="er-stat__icon">❌</div>
+            <div class="er-stat__num">@Fmt(wrongCount)</div>
+            <div class="er-stat__label">@T("إجابات خاطئة")</div>
+        </div>
+
+        @if (Model.TimeSpentMinutes > 0)
+        {
+            <div class="er-stat er-stat--time">
+                <div class="er-stat__icon">⏱️</div>
+                <div class="er-stat__num">@Fmt((int)Math.Round(Model.TimeSpentMinutes))</div>
+                <div class="er-stat__label">@T("دقيقة")</div>
+            </div>
+        }
+    </div>
+
+    <!-- ─── Progress Bar ─── -->
+    <div class="er-progress-wrap">
+        <div class="er-progress-bar-track">
+            <div class="er-progress-bar-fill" data-width="@pct">
+                <span class="er-progress-bar-glow"></span>
+            </div>
+        </div>
+        <div class="er-progress-labels">
+            @if (isRTL)
+            {
+                <span>٠٪</span><span>٥٠٪</span><span>١٠٠٪</span>
+            }
+            else
+            {
+                <span>0%</span><span>50%</span><span>100%</span>
+            }
+        </div>
+    </div>
+
+    <!-- ─── Motivation Card ─── -->
+    <div class="er-motivation er-motivation--cheer">
+        <div class="er-motivation__icon">
+            @(tone.Tier == "excellent" ? "🏆" : tone.Tier == "strong" ? "🌟" : tone.Tier == "onTrack" ? "📈" : "🧭")
+        </div>
+        <div class="er-motivation__body">
+            <h3 class="er-motivation__heading">@T(tone.MotivationHeading)</h3>
+            <p class="er-motivation__msg">@motivationMsg</p>
+        </div>
+        @if (tone.IsLowTier)
+        {
+            <div class="er-motivation__quotes">
+                <blockquote>
+                    @if (isRTL)
+                    { <text>التقدّم وليس الكمال — ابدأ بمحور واحد اليوم.</text> }
+                    else
+                    { <text>Progress, not perfection — start with one topic today.</text> }
+                </blockquote>
+            </div>
+        }
+    </div>
+
+    <!-- ─── Wrong Questions ─── -->
+    @{
+        var wrongQuestions = Model.Questions.Where(q => q.IsCorrect != true).ToList();
+    }
+    @if (wrongQuestions.Any())
+    {
+        <div class="er-wrong-section">
+            <div class="er-wrong-header">
+                <span class="er-wrong-header__icon">📝</span>
+                <h2 class="er-wrong-header__title">@T("الأسئلة الخاطئة")</h2>
+                <span class="er-wrong-count">@Fmt(wrongQuestions.Count)</span>
+            </div>
+
+            <div class="er-wrong-list">
+                @foreach (var (item, idx) in wrongQuestions.Select((q, i) => (q, i + 1)))
+                {
+                    <div class="er-wrong-card">
+                        <div class="er-wrong-card__num">@Fmt(idx)</div>
+                        <div class="er-wrong-card__body">
+                            <div class="er-wrong-card__question">
+                                @Html.Raw(Model.IsQuantitative
+                                    ? NumberHelper.ToIndicNumbersSafe(item.QuestionTitle)
+                                    : item.QuestionTitle)
+                            </div>
+                            <div class="er-wrong-card__answers">
+                                <div class="er-answer er-answer--wrong">
+                                    <span class="er-answer__label">@T("إجابتك")</span>
+                                    <span class="er-answer__val">
+                                        @Html.Raw(Model.IsQuantitative
+                                            ? NumberHelper.ToIndicNumbersSafe(item.StudentAnswer ?? "—")
+                                            : (item.StudentAnswer ?? "—"))
+                                    </span>
+                                </div>
+                                <div class="er-answer er-answer--correct">
+                                    <span class="er-answer__label">@T("الإجابة الصحيحة")</span>
+                                    <span class="er-answer__val">
+                                        @Html.Raw(Model.IsQuantitative
+                                            ? NumberHelper.ToIndicNumbersSafe(item.CorrectAnswer ?? "—")
+                                            : (item.CorrectAnswer ?? "—"))
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    <!-- ─── Actions ─── -->
+    <div class="er-actions">
+        <a asp-area="Students"
+           asp-controller="StudentHomeworkResults"
+           asp-action="Review"
+           asp-route-homeworkSetId="@Model.HomeworkSetId"
+           class="er-btn er-btn--primary">
+            <i class="fa-solid fa-list-check"></i>
+            @T("مراجعة الواجب")
+        </a>
+        <a asp-area="Students"
+           asp-controller="StudentHomeworkDashboard"
+           asp-action="Index"
+           class="er-btn er-btn--secondary">
+            <i class="fa-solid fa-arrow-@(isRTL ? "right" : "left")"></i>
+            @T("العودة للواجبات")
+        </a>
+    </div>
+
+</div>
+
+<!-- ============================================================
+     STYLES  (identical design system to ExamResult)
+     ============================================================ -->
+<style>
+    :root {
+        --er-font: 'Cairo', 'Tajawal', system-ui, sans-serif;
+        --er-radius-lg: 24px;
+        --er-radius-md: 16px;
+        --er-radius-sm: 10px;
+        --er-shadow-md: 0 8px 32px rgba(0,0,0,.12);
+        --er-shadow-lg: 0 16px 56px rgba(0,0,0,.18);
+        --er-transition: .35s cubic-bezier(.4,0,.2,1);
+    }
+
+    .theme-excellent {
+        --er-primary:   #f5a623;
+        --er-secondary: #e67e22;
+        --er-hero-from: #1a1a2e;
+        --er-hero-to:   #16213e;
+        --er-ring-color:#f5a623;
+        --er-bar-color: linear-gradient(90deg,#f39c12,#f5a623,#ffef00);
+    }
+    .theme-good {
+        --er-primary:   #27ae60;
+        --er-secondary: #2ecc71;
+        --er-hero-from: #0d3321;
+        --er-hero-to:   #0a2e20;
+        --er-ring-color:#27ae60;
+        --er-bar-color: linear-gradient(90deg,#1abc9c,#27ae60,#2ecc71);
+    }
+    .theme-acceptable {
+        --er-primary:   #2980b9;
+        --er-secondary: #3498db;
+        --er-hero-from: #0b2340;
+        --er-hero-to:   #0d1f3c;
+        --er-ring-color:#3498db;
+        --er-bar-color: linear-gradient(90deg,#2980b9,#3498db,#5dade2);
+    }
+    .theme-failed {
+        --er-primary:   #c0392b;
+        --er-secondary: #e74c3c;
+        --er-hero-from: #2c0b0e;
+        --er-hero-to:   #3b0f0f;
+        --er-ring-color:#e74c3c;
+        --er-bar-color: linear-gradient(90deg,#c0392b,#e74c3c,#f1948a);
+    }
+    .theme-growth {
+        --er-primary:   #7c3aed;
+        --er-secondary: #8b5cf6;
+        --er-hero-from: #1e1b4b;
+        --er-hero-to:   #172554;
+        --er-ring-color:#8b5cf6;
+        --er-bar-color: linear-gradient(90deg,#6366f1,#8b5cf6,#a78bfa);
+    }
+
+    /* ── Root ── */
+    .er-root {
+        font-family: var(--er-font);
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 0 0 56px;
+    }
+
+    /* ── Hero ── */
+    .er-hero {
+        position: relative;
+        background: linear-gradient(135deg, var(--er-hero-from), var(--er-hero-to));
+        border-radius: 0 0 var(--er-radius-lg) var(--er-radius-lg);
+        padding: 60px 32px 48px;
+        overflow: hidden;
+        color: #fff;
+    }
+    .er-hero__bg-shapes { position: absolute; inset: 0; pointer-events: none; }
+    .er-hero__bg-shapes .shape {
+        position: absolute; border-radius: 50%;
+        opacity: .07; background: var(--er-primary);
+    }
+    .shape.s1 { width: 320px; height: 320px; top: -80px; left: -80px; }
+    .shape.s2 { width: 200px; height: 200px; bottom: -60px; right: -40px; }
+    .shape.s3 { width: 120px; height: 120px; top: 40%; left: 50%; }
+
+    .er-hero__content {
+        position: relative; z-index: 1;
+        display: flex; flex-wrap: wrap;
+        align-items: center; gap: 32px;
+    }
+
+    /* ── Ring ── */
+    .er-score-ring {
+        position: relative; width: 160px; height: 160px; flex-shrink: 0; margin: 0 auto;
+        filter: drop-shadow(0 0 18px color-mix(in srgb, var(--er-ring-color) 60%, transparent));
+    }
+    .er-ring-svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+    .er-ring-bg  { fill: none; stroke: rgba(255,255,255,.1); stroke-width: 8; }
+    .er-ring-fill {
+        fill: none; stroke: var(--er-ring-color); stroke-width: 8;
+        stroke-linecap: round; stroke-dasharray: 326.7; stroke-dashoffset: 326.7;
+        transition: stroke-dashoffset 1.6s cubic-bezier(.4,0,.2,1) .4s;
+    }
+    .er-ring-inner {
+        position: absolute; inset: 0;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: 2px;
+    }
+    .er-ring-pct  { font-size: 2.1rem; font-weight: 800; color: #fff; letter-spacing: -1px; line-height: 1; }
+    .er-ring-label { font-size: .8rem; color: rgba(255,255,255,.6); font-weight: 500; }
+
+    /* ── Hero Text ── */
+    .er-hero__text { flex: 1; min-width: 220px; }
+    .er-hero__exam-name { font-size: .9rem; color: rgba(255,255,255,.55); margin: 0 0 8px; font-weight: 500; }
+    .er-hero__title { font-size: clamp(1.6rem,4vw,2.4rem); font-weight: 800; margin: 0 0 10px; line-height: 1.2; }
+    .er-hero__subtitle { font-size: 1rem; color: rgba(255,255,255,.75); margin: 0 0 16px; line-height: 1.7; }
+
+    .er-badge {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 5px 18px; border-radius: 100px;
+        font-weight: 700; font-size: .9rem; letter-spacing: .5px;
+    }
+    .er-badge--pass { background: rgba(46,204,113,.2); color: #2ecc71; border: 1px solid rgba(46,204,113,.4); }
+    .er-badge--fail { background: rgba(231,76,60,.2);  color: #e74c3c; border: 1px solid rgba(231,76,60,.4); }
+    .er-badge--progress { background: rgba(139,92,246,.18); color: #a78bfa; border: 1px solid rgba(139,92,246,.4); }
+
+    /* ── Stats ── */
+    .er-stats { display: grid; gap: 14px; margin: 28px 24px 0; }
+    .er-stats--3col { grid-template-columns: repeat(3,1fr); }
+    .er-stats--4col { grid-template-columns: repeat(4,1fr); }
+
+    .er-stat {
+        background: #fff; border-radius: var(--er-radius-md);
+        padding: 22px 12px 18px; text-align: center;
+        box-shadow: var(--er-shadow-md);
+        transition: transform var(--er-transition), box-shadow var(--er-transition);
+        position: relative; overflow: hidden;
+    }
+    .er-stat::before {
+        content: ''; position: absolute; top: 0; left: 0; right: 0;
+        height: 4px; border-radius: var(--er-radius-md) var(--er-radius-md) 0 0;
+    }
+    .er-stat:hover { transform: translateY(-4px); box-shadow: var(--er-shadow-lg); }
+    .er-stat--total::before   { background: #8e44ad; }
+    .er-stat--correct::before { background: #27ae60; }
+    .er-stat--wrong::before   { background: #e74c3c; }
+    .er-stat--time::before    { background: #f39c12; }
+
+    .er-stat__icon  { font-size: 1.6rem; margin-bottom: 8px; line-height: 1; }
+    .er-stat__num   { font-size: 2rem; font-weight: 800; color: #1a1a2e; line-height: 1; margin-bottom: 4px; }
+    .er-stat__label { font-size: .8rem; color: #6b7280; font-weight: 500; }
+
+    /* ── Progress Bar ── */
+    .er-progress-wrap {
+        margin: 28px 24px 0; background: #fff;
+        border-radius: var(--er-radius-md); padding: 24px 28px;
+        box-shadow: var(--er-shadow-md);
+    }
+    .er-progress-bar-track { height: 14px; background: #f1f3f4; border-radius: 100px; overflow: hidden; }
+    .er-progress-bar-fill {
+        height: 100%; border-radius: 100px;
+        background: var(--er-bar-color);
+        width: 0; transition: width 1.8s cubic-bezier(.4,0,.2,1) .6s;
+        position: relative;
+    }
+    .er-progress-bar-glow {
+        position: absolute; top: 0; right: 0; bottom: 0; width: 40px;
+        background: linear-gradient(90deg,transparent,rgba(255,255,255,.5));
+        animation: barGlow 2s ease-in-out infinite;
+    }
+    @@keyframes barGlow { 0%,100%{opacity:0} 50%{opacity:1} }
+    .er-progress-labels {
+        display: flex; justify-content: space-between;
+        margin-top: 8px; font-size: .78rem; color: #9ca3af; font-weight: 600;
+    }
+
+    /* ── Motivation ── */
+    .er-motivation {
+        margin: 20px 24px 0; border-radius: var(--er-radius-md);
+        padding: 28px 24px; box-shadow: var(--er-shadow-md);
+        display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start;
+    }
+    .er-motivation--cheer { background: linear-gradient(135deg,#f0fdf4,#ecfdf5); border: 1px solid #a7f3d0; }
+    .er-motivation--shock { background: linear-gradient(135deg,#fff7f0,#fff1f0); border: 1px solid #fca5a5; }
+    .er-motivation__icon  { font-size: 3rem; flex-shrink: 0; filter: drop-shadow(0 2px 6px rgba(0,0,0,.15)); }
+    .er-motivation__body  { flex: 1; min-width: 220px; }
+    .er-motivation__heading { font-size: 1.2rem; font-weight: 800; color: #1a1a2e; margin: 0 0 8px; }
+    .er-motivation__msg { font-size: 1rem; color: #374151; margin: 0; line-height: 1.7; }
+    .er-motivation__quotes { width: 100%; border-top: 1px dashed #fca5a5; padding-top: 16px; margin-top: 4px; }
+    .er-motivation__quotes blockquote {
+        font-size: .95rem; color: #6b7280; font-style: italic;
+        margin: 0 0 4px; padding-right: 12px; border-right: 3px solid #e74c3c;
+    }
+    .er-motivation__quotes cite { font-size: .82rem; color: #9ca3af; }
+
+    /* ── Wrong Questions Section ── */
+    .er-wrong-section { margin: 24px 24px 0; }
+    .er-wrong-header {
+        display: flex; align-items: center; gap: 12px;
+        margin-bottom: 18px;
+    }
+    .er-wrong-header__icon { font-size: 1.5rem; }
+    .er-wrong-header__title { font-size: 1.25rem; font-weight: 800; color: #1a1a2e; margin: 0; flex: 1; }
+    .er-wrong-count {
+        background: #fef2f2; color: #e74c3c; border: 1px solid #fca5a5;
+        border-radius: 100px; padding: 3px 14px; font-size: .85rem; font-weight: 700;
+    }
+
+    .er-wrong-list { display: flex; flex-direction: column; gap: 14px; }
+
+    .er-wrong-card {
+        background: #fff; border-radius: var(--er-radius-md);
+        box-shadow: var(--er-shadow-md); padding: 20px 20px 20px 72px;
+        position: relative; overflow: hidden;
+        border-right: 4px solid #e74c3c;
+        transition: transform var(--er-transition), box-shadow var(--er-transition);
+    }
+    .er-wrong-card:hover { transform: translateX(-3px); box-shadow: var(--er-shadow-lg); }
+    .er-wrong-card__num {
+        position: absolute; right: 20px; top: 50%;
+        transform: translateY(-50%);
+        width: 36px; height: 36px; border-radius: 50%;
+        background: #fef2f2; color: #e74c3c;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 800; font-size: .9rem;
+    }
+    .er-wrong-card__question {
+        font-size: .95rem; font-weight: 600; color: #1a1a2e;
+        margin-bottom: 14px; line-height: 1.6;
+    }
+    .er-wrong-card__answers { display: flex; flex-wrap: wrap; gap: 10px; }
+
+    .er-answer {
+        display: flex; align-items: center; gap: 8px;
+        padding: 8px 14px; border-radius: var(--er-radius-sm);
+        font-size: .88rem; flex: 1; min-width: 160px;
+    }
+    .er-answer--wrong   { background: #fef2f2; }
+    .er-answer--correct { background: #f0fdf4; }
+    .er-answer__label   { font-weight: 600; color: #6b7280; white-space: nowrap; }
+    .er-answer--wrong   .er-answer__label  { color: #dc2626; }
+    .er-answer--correct .er-answer__label  { color: #16a34a; }
+    .er-answer__val { font-weight: 700; color: #1a1a2e; }
+    .er-answer--wrong   .er-answer__val { color: #dc2626; }
+    .er-answer--correct .er-answer__val { color: #16a34a; }
+
+    /* ── Actions ── */
+    .er-actions {
+        display: flex; gap: 14px; justify-content: center;
+        flex-wrap: wrap; margin: 32px 24px 0;
+    }
+    .er-btn {
+        display: inline-flex; align-items: center; gap: 10px;
+        padding: 14px 32px; border-radius: 100px;
+        font-family: var(--er-font); font-size: 1rem; font-weight: 700;
+        text-decoration: none; border: none; cursor: pointer;
+        transition: transform var(--er-transition), box-shadow var(--er-transition);
+    }
+    .er-btn:hover { transform: translateY(-2px); }
+    .er-btn--primary {
+        background: var(--er-primary); color: #fff;
+        box-shadow: 0 6px 24px color-mix(in srgb, var(--er-primary) 40%, transparent);
+    }
+    .er-btn--primary:hover { color: #fff; box-shadow: 0 10px 32px color-mix(in srgb, var(--er-primary) 55%, transparent); }
+    .er-btn--secondary {
+        background: #fff; color: #374151;
+        box-shadow: 0 4px 16px rgba(0,0,0,.1);
+        border: 1px solid #e5e7eb;
+    }
+    .er-btn--secondary:hover { color: #374151; box-shadow: 0 8px 24px rgba(0,0,0,.15); }
+
+    /* ── Fireworks ── */
+    .er-fireworks { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+    .fw-particle {
+        position: absolute; width: 8px; height: 8px; border-radius: 50%;
+        animation: fwFly 1.4s ease-out forwards;
+    }
+    @@keyframes fwFly {
+        0%   { transform:translate(0,0) scale(1); opacity:1; }
+        100% { transform:translate(var(--dx),var(--dy)) scale(0); opacity:0; }
+    }
+
+    /* ── Rain ── */
+    .er-rain { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+    .rain-drop {
+        position: absolute; width: 2px; top: -60px; border-radius: 2px;
+        background: linear-gradient(to bottom,transparent,rgba(231,76,60,.4));
+        animation: rainFall linear infinite;
+    }
+    @@keyframes rainFall { to { transform:translateY(300px); opacity:0; } }
+
+    /* ── LTR overrides ── */
+    .ltr-mode .er-wrong-card { border-right: none; border-left: 4px solid #e74c3c; padding: 20px 72px 20px 20px; }
+    .ltr-mode .er-wrong-card__num { right: auto; left: 20px; }
+    .ltr-mode .er-motivation__quotes blockquote { padding-right: 0; padding-left: 12px; border-right: none; border-left: 3px solid #e74c3c; }
+    .ltr-mode .er-wrong-card:hover { transform: translateX(3px); }
+
+    /* ── Responsive ── */
+    @@media (max-width: 640px) {
+        .er-hero { padding: 40px 16px 36px; }
+        .er-hero__content { flex-direction: column; align-items: center; text-align: center; }
+        .er-score-ring { width: 130px; height: 130px; }
+        .er-ring-pct { font-size: 1.7rem; }
+        .er-stats--3col, .er-stats--4col { grid-template-columns: repeat(2,1fr); margin-left: 12px; margin-right: 12px; }
+        .er-progress-wrap, .er-motivation, .er-wrong-section { margin-left: 12px; margin-right: 12px; }
+        .er-actions { margin-left: 12px; margin-right: 12px; }
+        .er-wrong-card { padding: 20px 60px 20px 16px; }
+    }
+
+    /* ── Dark Mode ── */
+    @@media (prefers-color-scheme: dark) {
+        .er-stat { background: #1e2433; }
+        .er-stat__num { color: #f9fafb; }
+        .er-progress-wrap { background: #1e2433; }
+        .er-progress-bar-track { background: #2d3748; }
+        .er-motivation--cheer { background: #0d2318; border-color: #134e2a; }
+        .er-motivation--shock  { background: #2c1010; border-color: #7f1d1d; }
+        .er-motivation__heading { color: #f9fafb; }
+        .er-motivation__msg { color: #d1d5db; }
+        .er-wrong-card { background: #1e2433; }
+        .er-wrong-card__question { color: #f9fafb; }
+        .er-wrong-header__title { color: #f9fafb; }
+        .er-answer--wrong   { background: #2c1010; }
+        .er-answer--correct { background: #0d2318; }
+        .er-answer__val { color: #f9fafb; }
+        .er-btn--secondary { background: #1e2433; color: #d1d5db; border-color: #374151; }
+        .er-btn--secondary:hover { color: #f9fafb; }
+    }
+</style>
+
+<!-- ============================================================
+     SCRIPTS
+     ============================================================ -->
+<script>
+(function () {
+    'use strict';
+
+    // ── Animate ring ──────────────────────────────────────────
+    const ring = document.querySelector('.er-ring-fill');
+    if (ring) {
+        const pct = parseFloat(ring.dataset.pct) || 0;
+        const offset = 326.7 - (pct / 100) * 326.7;
+        requestAnimationFrame(() => { ring.style.strokeDashoffset = offset; });
+    }
+
+    // ── Animate progress bar ──────────────────────────────────
+    const bar = document.querySelector('.er-progress-bar-fill');
+    if (bar) {
+        requestAnimationFrame(() => { bar.style.width = bar.dataset.width + '%'; });
+    }
+
+    // ── Count-up on stat numbers ──────────────────────────────
+    document.querySelectorAll('.er-stat__num').forEach(el => {
+        const raw = el.textContent.replace(/[^\d]/g, '');
+        const target = parseInt(raw) || 0;
+        if (target === 0) return;
+        let current = 0;
+        const step = Math.max(1, Math.floor(target / 40));
+        const timer = setInterval(() => {
+            current = Math.min(current + step, target);
+            el.textContent = current.toLocaleString('ar-SA');
+            if (current >= target) clearInterval(timer);
+        }, 30);
+    });
+
+    // ── Fireworks (excellent) ────────────────────────────────
+    const fireworksEl = document.getElementById('fireworks');
+    if (fireworksEl) {
+        const colors = ['#f5a623','#e74c3c','#3498db','#2ecc71','#9b59b6','#ffef00','#1abc9c'];
+        function burst(x, y) {
+            for (let i = 0; i < 22; i++) {
+                const p = document.createElement('span');
+                p.className = 'fw-particle';
+                const angle = (i / 22) * 2 * Math.PI;
+                const dist  = 60 + Math.random() * 80;
+                p.style.cssText = `left:${x}px;top:${y}px;background:${colors[i % colors.length]};--dx:${Math.cos(angle)*dist}px;--dy:${Math.sin(angle)*dist}px;animation-duration:${1.1+Math.random()*.6}s;animation-delay:${Math.random()*.2}s;`;
+                fireworksEl.appendChild(p);
+                p.addEventListener('animationend', () => p.remove());
+            }
+        }
+        let runs = 0;
+        function fireLoop() {
+            if (runs++ >= 8) return;
+            burst(Math.random() * fireworksEl.offsetWidth, Math.random() * fireworksEl.offsetHeight * .8);
+            setTimeout(fireLoop, 300 + Math.random() * 400);
+        }
+        setTimeout(fireLoop, 600);
+    }
+
+    // ── Rain (failed) ────────────────────────────────────────
+    const rainEl = document.getElementById('rain');
+    if (rainEl) {
+        for (let i = 0; i < 28; i++) {
+            const d = document.createElement('span');
+            d.className = 'rain-drop';
+            d.style.cssText = `left:${Math.random()*100}%;height:${18+Math.random()*30}px;animation-duration:${.7+Math.random()*.8}s;animation-delay:${Math.random()*1.5}s;opacity:${.3+Math.random()*.4};`;
+            rainEl.appendChild(d);
+        }
+    }
+
+    // ── Entrance fade on cards ───────────────────────────────
+    if ('IntersectionObserver' in window) {
+        const io = new IntersectionObserver(entries => {
+            entries.forEach((e, idx) => {
+                if (e.isIntersecting) {
+                    setTimeout(() => { e.target.style.opacity = '1'; }, idx * 90);
+                    io.unobserve(e.target);
+                }
+            });
+        }, { threshold: .15 });
+        document.querySelectorAll('.er-stat, .er-wrong-card').forEach(el => {
+            el.style.opacity = '0';
+            el.style.transition = 'opacity .4s ease, transform .35s cubic-bezier(.4,0,.2,1)';
+            io.observe(el);
+        });
+    }
+})();
+</script>

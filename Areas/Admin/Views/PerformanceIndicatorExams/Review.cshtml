@@ -1,0 +1,1308 @@
+﻿@model QdratNew.ViewModels.Exam.PerformanceExamReviewViewModel
+@using QdratNew.Helpers
+
+@{
+    ViewData["Title"] = "مراجعة اختبار مؤشر الأداء";
+
+    var totalSections = Model.Sections?.Count() ?? 0;
+    var totalQuestions = Model.Sections?.Sum(s => s.Questions.Count()) ?? 0;
+    var examModeText = Model.IsOnline ? "أونلاين" : "حضوري";
+}
+
+@functions {
+    string CleanText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "—";
+        }
+
+        var text = System.Text.RegularExpressions.Regex.Replace(value, "<.*?>", " ");
+        text = System.Net.WebUtility.HtmlDecode(text);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\s+", " ").Trim();
+
+        return string.IsNullOrWhiteSpace(text) ? "—" : text;
+    }
+
+    string SafeHtml(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "—";
+        }
+
+        return NumberHelper.ToIndicNumbersSafe(value);
+    }
+
+    string SafeText(string? value)
+    {
+        return NumberHelper.ToIndicNumbersSafe(CleanText(value));
+    }
+
+    string SafeNumber(object? value)
+    {
+        return NumberHelper.ToIndicNumbersSafe(value?.ToString() ?? "0");
+    }
+
+    string SafeDate(DateTime? value)
+    {
+        return value.HasValue
+            ? NumberHelper.ToIndicNumbersSafe(value.Value.ToString("yyyy/MM/dd HH:mm"))
+            : "—";
+    }
+
+    string GetDifficultyText(double difficultyLevel)
+    {
+        var level = (int)Math.Round(difficultyLevel);
+
+        if (level <= 1)
+        {
+            return "سهل";
+        }
+
+        if (level == 2)
+        {
+            return "متوسط";
+        }
+
+        if (level == 3)
+        {
+            return "صعب";
+        }
+
+        return "صعب جدًا";
+    }
+
+    string GetDifficultyClass(double difficultyLevel)
+    {
+        var level = (int)Math.Round(difficultyLevel);
+
+        if (level <= 1)
+        {
+            return "diff-easy";
+        }
+
+        if (level == 2)
+        {
+            return "diff-medium";
+        }
+
+        if (level == 3)
+        {
+            return "diff-hard";
+        }
+
+        return "diff-very-hard";
+    }
+
+    string GetDifficultyIcon(double difficultyLevel)
+    {
+        var level = (int)Math.Round(difficultyLevel);
+
+        if (level <= 1)
+        {
+            return "bi-check-circle";
+        }
+
+        if (level == 2)
+        {
+            return "bi-exclamation-circle";
+        }
+
+        if (level == 3)
+        {
+            return "bi-fire";
+        }
+
+        return "bi-lightning-charge-fill";
+    }
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet" />
+
+    <style>
+        :root {
+            --q-primary: #4f46e5;
+            --q-primary-lt: #ede9fe;
+            --q-success: #16a34a;
+            --q-success-lt: #dcfce7;
+            --q-danger: #dc2626;
+            --q-danger-lt: #fee2e2;
+            --q-warning: #d97706;
+            --q-warning-lt: #fef3c7;
+            --q-info: #0891b2;
+            --q-info-lt: #cffafe;
+            --q-purple: #7c3aed;
+            --q-purple-lt: #f3e8ff;
+            --q-skip: #6b7280;
+            --q-skip-lt: #f3f4f6;
+            --q-surface: #ffffff;
+            --q-bg: #f5f3ff;
+            --q-border: #e5e7eb;
+            --q-text: #1e1b4b;
+            --q-muted: #6b7280;
+            --q-radius: 16px;
+            --q-shadow: 0 2px 12px rgba(79,70,229,.08);
+            --q-shadow-lg: 0 6px 32px rgba(79,70,229,.13);
+            --q-transition: .2s cubic-bezier(.4,0,.2,1);
+        }
+
+        body {
+            background: var(--q-bg) !important;
+        }
+
+        .qlb-page {
+            direction: rtl;
+            font-family: 'Cairo', 'Tajawal', 'Segoe UI', sans-serif;
+            background: var(--q-bg);
+            padding: 2rem 1rem 4rem;
+            min-height: 100vh;
+        }
+
+        .qlb-shell {
+            max-width: 1320px;
+            margin: 0 auto;
+        }
+
+        .qlb-hero {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 55%, #a855f7 100%);
+            border-radius: var(--q-radius);
+            padding: 2.2rem 2rem;
+            color: #fff;
+            margin-bottom: 2rem;
+            box-shadow: var(--q-shadow-lg);
+            position: relative;
+            overflow: hidden;
+        }
+
+            .qlb-hero::before {
+                content: '';
+                position: absolute;
+                inset: 0;
+                background: radial-gradient(circle at 85% 50%, rgba(255,255,255,.10) 0%, transparent 60%);
+                pointer-events: none;
+            }
+
+        .qlb-hero-inner {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            justify-content: space-between;
+            gap: 1.2rem;
+            align-items: flex-start;
+            flex-wrap: wrap;
+        }
+
+        .qlb-hero-main {
+            min-width: 0;
+            flex: 1;
+        }
+
+        .qlb-hero-icon {
+            width: 56px;
+            height: 56px;
+            background: rgba(255,255,255,.18);
+            border: 1px solid rgba(255,255,255,.25);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.6rem;
+            margin-bottom: .8rem;
+        }
+
+        .qlb-hero h1 {
+            font-size: clamp(1.25rem, 2.8vw, 1.85rem);
+            font-weight: 900;
+            margin: 0 0 .45rem;
+            line-height: 1.4;
+        }
+
+        .qlb-hero-subtitle {
+            font-size: .96rem;
+            opacity: .92;
+            margin: 0;
+            line-height: 1.8;
+        }
+
+        .qlb-hero-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .6rem;
+            margin-top: .95rem;
+        }
+
+        .qlb-hero-pill {
+            background: rgba(255,255,255,.15);
+            border: 1px solid rgba(255,255,255,.22);
+            border-radius: 8px;
+            padding: .32rem .85rem;
+            font-size: .82rem;
+            font-weight: 800;
+            display: inline-flex;
+            align-items: center;
+            gap: .4rem;
+            white-space: nowrap;
+        }
+
+        .qlb-back-btn {
+            background: rgba(255,255,255,.15);
+            border: 1px solid rgba(255,255,255,.25);
+            color: #fff;
+            border-radius: 12px;
+            padding: .65rem 1rem;
+            font-weight: 900;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: .45rem;
+            transition: background .2s, transform .2s;
+        }
+
+            .qlb-back-btn:hover {
+                background: rgba(255,255,255,.24);
+                color: #fff;
+                transform: translateY(-1px);
+                text-decoration: none;
+            }
+
+        .qlb-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .qlb-stat {
+            background: var(--q-surface);
+            border-radius: var(--q-radius);
+            padding: 1.2rem 1rem;
+            box-shadow: var(--q-shadow);
+            border: 1px solid var(--q-border);
+            display: flex;
+            align-items: center;
+            gap: .9rem;
+            transition: transform .2s, box-shadow .2s;
+            min-height: 102px;
+        }
+
+            .qlb-stat:hover {
+                transform: translateY(-2px);
+                box-shadow: var(--q-shadow-lg);
+            }
+
+        .qlb-stat-ico {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+        }
+
+        .ico-blue {
+            background: var(--q-primary-lt);
+            color: var(--q-primary);
+        }
+
+        .ico-green {
+            background: var(--q-success-lt);
+            color: var(--q-success);
+        }
+
+        .ico-amber {
+            background: var(--q-warning-lt);
+            color: var(--q-warning);
+        }
+
+        .ico-cyan {
+            background: var(--q-info-lt);
+            color: var(--q-info);
+        }
+
+        .qlb-stat-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .qlb-stat-lbl {
+            font-size: .75rem;
+            color: var(--q-muted);
+            font-weight: 800;
+            margin-bottom: .28rem;
+        }
+
+        .qlb-stat-val {
+            font-size: 1.45rem;
+            font-weight: 900;
+            color: var(--q-text);
+            line-height: 1.25;
+            word-break: break-word;
+        }
+
+        .qlb-info-card {
+            background: var(--q-surface);
+            border: 1px solid var(--q-border);
+            border-radius: var(--q-radius);
+            box-shadow: var(--q-shadow);
+            padding: 1.15rem;
+            margin-bottom: 2rem;
+        }
+
+        .qlb-info-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: .85rem;
+        }
+
+        .qlb-info-item {
+            background: #fafafa;
+            border: 1px solid var(--q-border);
+            border-radius: 12px;
+            padding: .85rem 1rem;
+            min-height: 74px;
+        }
+
+        .qlb-info-label {
+            color: var(--q-muted);
+            font-size: .75rem;
+            font-weight: 900;
+            margin-bottom: .35rem;
+            display: flex;
+            align-items: center;
+            gap: .35rem;
+        }
+
+        .qlb-info-value {
+            color: var(--q-text);
+            font-size: .9rem;
+            font-weight: 900;
+            line-height: 1.7;
+            word-break: break-word;
+        }
+
+        .qlb-mode-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+            border-radius: 99px;
+            padding: .24rem .75rem;
+            font-size: .78rem;
+            font-weight: 900;
+        }
+
+        .mode-online {
+            background: var(--q-success-lt);
+            color: var(--q-success);
+        }
+
+        .mode-lab {
+            background: var(--q-warning-lt);
+            color: var(--q-warning);
+        }
+
+        .qlb-reference-box {
+            margin-top: .95rem;
+            background: var(--q-warning-lt);
+            border: 1px solid #fcd34d;
+            border-right: 5px solid var(--q-warning);
+            border-radius: 12px;
+            padding: .9rem 1rem;
+            color: #78350f;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .8rem;
+            flex-wrap: wrap;
+        }
+
+        .qlb-reference-title {
+            display: flex;
+            align-items: center;
+            gap: .45rem;
+            font-weight: 900;
+        }
+
+        .qlb-reference-code {
+            font-size: 1.45rem;
+            font-weight: 900;
+            letter-spacing: 2px;
+            background: #fff;
+            border: 1px dashed #d97706;
+            border-radius: 10px;
+            padding: .35rem .85rem;
+            color: #92400e;
+        }
+
+        .qlb-section {
+            margin-bottom: 1.8rem;
+        }
+
+        .qlb-section-head {
+            background: linear-gradient(90deg, var(--q-primary-lt), #ffffff);
+            border: 1px solid var(--q-border);
+            border-right: 5px solid var(--q-primary);
+            border-radius: var(--q-radius);
+            padding: 1rem 1.15rem;
+            margin-bottom: 1rem;
+            box-shadow: var(--q-shadow);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .85rem;
+            flex-wrap: wrap;
+        }
+
+        .qlb-section-title {
+            margin: 0;
+            color: var(--q-text);
+            font-size: 1.02rem;
+            font-weight: 900;
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+        }
+
+        .qlb-section-count {
+            background: var(--q-primary);
+            color: #fff;
+            border-radius: 99px;
+            padding: .25rem .75rem;
+            font-size: .78rem;
+            font-weight: 900;
+            display: inline-flex;
+            align-items: center;
+            gap: .32rem;
+        }
+
+        .qlb-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.25rem;
+        }
+
+        .qlb-card {
+            background: var(--q-surface);
+            border-radius: var(--q-radius);
+            box-shadow: var(--q-shadow);
+            border: 1px solid var(--q-border);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            transition: box-shadow .2s, transform .2s;
+            min-height: 100%;
+        }
+
+            .qlb-card:hover {
+                box-shadow: var(--q-shadow-lg);
+                transform: translateY(-2px);
+            }
+
+        .qlb-card-head {
+            background: linear-gradient(90deg, var(--q-primary-lt), #f5f3ff);
+            border-bottom: 1px solid var(--q-border);
+            padding: .85rem 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: .6rem;
+            flex-wrap: wrap;
+        }
+
+        .qlb-qnum {
+            min-width: 34px;
+            height: 34px;
+            border-radius: 8px;
+            background: var(--q-primary);
+            color: #fff;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: .85rem;
+            font-weight: 900;
+            flex-shrink: 0;
+            padding: 0 .45rem;
+        }
+
+        .qlb-diff-badge {
+            font-size: .78rem;
+            font-weight: 900;
+            padding: .24rem .7rem;
+            border-radius: 99px;
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+        }
+
+        .diff-easy {
+            background: var(--q-success-lt);
+            color: var(--q-success);
+            border: 1px solid #86efac;
+        }
+
+        .diff-medium {
+            background: var(--q-warning-lt);
+            color: var(--q-warning);
+            border: 1px solid #fde68a;
+        }
+
+        .diff-hard {
+            background: var(--q-danger-lt);
+            color: var(--q-danger);
+            border: 1px solid #fecaca;
+        }
+
+        .diff-very-hard {
+            background: var(--q-purple-lt);
+            color: var(--q-purple);
+            border: 1px solid #ddd6fe;
+        }
+
+        .qlb-lesson-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+            font-size: .75rem;
+            color: var(--q-muted);
+            font-weight: 900;
+            margin-right: auto;
+            max-width: 100%;
+        }
+
+            .qlb-lesson-chip span {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+        .qlb-card-body {
+            padding: 1.1rem;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: .9rem;
+        }
+
+        .qlb-qtitle {
+            font-size: .98rem;
+            color: var(--q-text);
+            line-height: 1.9;
+            font-weight: 900;
+            background: #ffffff;
+            border: 1px solid var(--q-border);
+            border-right: 4px solid var(--q-primary);
+            border-radius: 10px;
+            padding: .9rem 1rem;
+            min-height: 96px;
+        }
+
+            .qlb-qtitle strong {
+                font-weight: 900;
+            }
+
+            .qlb-qtitle img {
+                max-height: 85px;
+                max-width: 100%;
+                border-radius: 6px;
+                vertical-align: middle;
+            }
+
+            .qlb-qtitle p {
+                margin: 0;
+            }
+
+        .qlb-answer-box {
+            background: var(--q-success-lt);
+            border: 1px solid #86efac;
+            border-right: 4px solid var(--q-success);
+            border-radius: 10px;
+            padding: .85rem 1rem;
+        }
+
+        .qlb-answer-label {
+            font-size: .76rem;
+            font-weight: 900;
+            color: var(--q-success);
+            margin-bottom: .4rem;
+            display: flex;
+            align-items: center;
+            gap: .35rem;
+        }
+
+        .qlb-answer-text {
+            color: var(--q-text);
+            font-size: .9rem;
+            line-height: 1.75;
+            font-weight: 800;
+            word-break: break-word;
+        }
+
+        .qlb-card-foot {
+            background: #fafafa;
+            border-top: 1px solid var(--q-border);
+            padding: .72rem 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            flex-wrap: wrap;
+        }
+
+        .qlb-foot-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: .32rem;
+            font-size: .76rem;
+            font-weight: 900;
+            padding: .22rem .65rem;
+            border-radius: 99px;
+        }
+
+        .fc-primary {
+            background: var(--q-primary-lt);
+            color: var(--q-primary);
+        }
+
+        .fc-success {
+            background: var(--q-success-lt);
+            color: var(--q-success);
+        }
+
+        .fc-muted {
+            background: var(--q-skip-lt);
+            color: var(--q-skip);
+            border: 1px solid var(--q-border);
+        }
+
+        .qlb-actions {
+            margin-right: auto;
+            display: flex;
+            align-items: center;
+            gap: .45rem;
+            flex-wrap: wrap;
+        }
+
+        .qlb-btn {
+            border-radius: 10px;
+            padding: .45rem .8rem;
+            font-size: .78rem;
+            font-weight: 900;
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+            text-decoration: none;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: transform .15s, box-shadow .15s, background .15s;
+        }
+
+            .qlb-btn:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 4px 14px rgba(15, 23, 42, .09);
+                text-decoration: none;
+            }
+
+        .qlb-btn-info {
+            background: var(--q-info-lt);
+            color: var(--q-info);
+            border-color: #67e8f9;
+        }
+
+        .qlb-btn-purple {
+            background: var(--q-purple-lt);
+            color: var(--q-purple);
+            border-color: #ddd6fe;
+        }
+
+        .qlb-send-panel {
+            position: sticky;
+            bottom: 1rem;
+            z-index: 20;
+            margin-top: 2rem;
+            background: rgba(255, 255, 255, .92);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--q-border);
+            border-radius: var(--q-radius);
+            box-shadow: var(--q-shadow-lg);
+            padding: .9rem;
+        }
+
+        .qlb-send-btn {
+            width: 100%;
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--q-success), #22c55e);
+            color: #fff;
+            font-size: .98rem;
+            font-weight: 900;
+            padding: .85rem 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: .5rem;
+            transition: transform .15s, box-shadow .15s;
+        }
+
+            .qlb-send-btn:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 8px 22px rgba(22, 163, 74, .22);
+            }
+
+        .qlb-empty {
+            border: 1px dashed var(--q-border);
+            background: var(--q-skip-lt);
+            color: var(--q-muted);
+            border-radius: 14px;
+            padding: 1.5rem;
+            text-align: center;
+            font-size: .9rem;
+            font-weight: 900;
+        }
+
+        .qlb-modal .modal-content {
+            background: #ffffff !important;
+            border: 1px solid #cbd5e1;
+            border-radius: var(--q-radius);
+            color: #0f172a;
+            overflow: hidden;
+            box-shadow: 0 24px 70px rgba(15, 23, 42, 0.25);
+        }
+
+        .qlb-modal .modal-header {
+            background: #ffffff;
+            border-bottom: 1px solid #dbe4ef;
+            padding: 16px 22px;
+        }
+
+        .qlb-modal .modal-title {
+            font-size: 15px;
+            font-weight: 900;
+            color: #0f172a;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+            .qlb-modal .modal-title i {
+                color: var(--q-primary);
+            }
+
+        .qlb-modal .modal-body {
+            background: #f8fafc !important;
+            padding: 22px !important;
+            min-height: 240px;
+        }
+
+        .qlb-preview-loading {
+            text-align: center;
+            color: #64748b;
+            font-weight: 900;
+            padding: 42px 20px;
+        }
+
+            .qlb-preview-loading i {
+                display: block;
+                font-size: 30px;
+                margin-bottom: 10px;
+                color: var(--q-primary);
+            }
+
+        #questionPreviewBody p,
+        #questionPreviewBody div,
+        #questionPreviewBody span,
+        #questionPreviewBody label,
+        #questionPreviewBody strong,
+        #questionPreviewBody small,
+        #questionPreviewBody li {
+            color: #0f172a !important;
+            opacity: 1 !important;
+        }
+
+        #questionPreviewBody .card,
+        #questionPreviewBody .question-card,
+        #questionPreviewBody .question-preview-card,
+        #questionPreviewBody .q-card,
+        #questionPreviewBody .preview-box,
+        #questionPreviewBody .question-box {
+            background: #ffffff !important;
+            color: #0f172a !important;
+            border: 1px solid #dbe4ef !important;
+            border-radius: 16px !important;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08) !important;
+            padding: 18px !important;
+        }
+
+        #questionPreviewBody .question-title,
+        #questionPreviewBody .q-title,
+        #questionPreviewBody .question-text,
+        #questionPreviewBody .q-text,
+        #questionPreviewBody .question-content {
+            color: #0f172a !important;
+            font-size: 16px !important;
+            font-weight: 900 !important;
+            line-height: 1.9 !important;
+            opacity: 1 !important;
+        }
+
+        @@media (max-width: 1200px) {
+            .qlb-info-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @@media (max-width: 992px) {
+            .qlb-stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .qlb-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @@media (max-width: 576px) {
+            .qlb-page {
+                padding: 1rem .7rem 3rem;
+            }
+
+            .qlb-hero {
+                padding: 1.5rem 1.1rem;
+            }
+
+            .qlb-stats,
+            .qlb-info-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .qlb-card-foot {
+                align-items: stretch;
+            }
+
+            .qlb-foot-chip,
+            .qlb-actions,
+            .qlb-btn {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .qlb-actions {
+                margin-right: 0;
+            }
+
+            .qlb-lesson-chip {
+                width: 100%;
+                margin-right: 0;
+            }
+
+            .qlb-modal .modal-dialog {
+                margin: 8px;
+            }
+
+            .qlb-modal .modal-body {
+                padding: 14px !important;
+            }
+        }
+    </style>
+}
+
+<div class="qlb-page" dir="rtl">
+    <div class="qlb-shell">
+
+        <!-- Hero -->
+        <div class="qlb-hero">
+            <div class="qlb-hero-inner">
+                <div class="qlb-hero-main">
+                    <div class="qlb-hero-icon">
+                        <i class="bi bi-clipboard-check"></i>
+                    </div>
+
+                    <h1>مراجعة اختبار مؤشر الأداء</h1>
+
+                    <p class="qlb-hero-subtitle">
+                        مراجعة بيانات الاختبار والأسئلة قبل الإرسال النهائي للطلاب، مع إمكانية معاينة السؤال أو استبداله من نفس الصفحة.
+                    </p>
+
+                    <div class="qlb-hero-meta">
+                        <span class="qlb-hero-pill">
+                            <i class="bi bi-journal-text"></i>
+                            @Model.ExamTitle
+                        </span>
+
+                        <span class="qlb-hero-pill">
+                            <i class="bi bi-book"></i>
+                            @Model.CurriculumTitle
+                        </span>
+
+                        <span class="qlb-hero-pill">
+                            <i class="bi bi-key"></i>
+                            الكود: @(string.IsNullOrWhiteSpace(Model.ReferenceCode) ? "—" : SafeNumber(Model.ReferenceCode))
+                        </span>
+                    </div>
+                </div>
+
+                <a asp-action="Index" class="qlb-back-btn">
+                    <i class="bi bi-arrow-right"></i>
+                    رجوع
+                </a>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="qlb-stats">
+            <div class="qlb-stat">
+                <div class="qlb-stat-ico ico-blue">
+                    <i class="bi bi-question-circle"></i>
+                </div>
+                <div class="qlb-stat-content">
+                    <div class="qlb-stat-lbl">إجمالي الأسئلة</div>
+                    <div class="qlb-stat-val">@SafeNumber(totalQuestions)</div>
+                </div>
+            </div>
+
+            <div class="qlb-stat">
+                <div class="qlb-stat-ico ico-green">
+                    <i class="bi bi-diagram-3"></i>
+                </div>
+                <div class="qlb-stat-content">
+                    <div class="qlb-stat-lbl">عدد المحاور</div>
+                    <div class="qlb-stat-val">@SafeNumber(totalSections)</div>
+                </div>
+            </div>
+
+            <div class="qlb-stat">
+                <div class="qlb-stat-ico ico-amber">
+                    <i class="bi bi-laptop"></i>
+                </div>
+                <div class="qlb-stat-content">
+                    <div class="qlb-stat-lbl">نوع الاختبار</div>
+                    <div class="qlb-stat-val">@examModeText</div>
+                </div>
+            </div>
+
+            <div class="qlb-stat">
+                <div class="qlb-stat-ico ico-cyan">
+                    <i class="bi bi-send-check"></i>
+                </div>
+                <div class="qlb-stat-content">
+                    <div class="qlb-stat-lbl">حالة المراجعة</div>
+                    <div class="qlb-stat-val">جاهز للإرسال</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- General Info -->
+        <div class="qlb-info-card">
+            <div class="qlb-info-grid">
+                <div class="qlb-info-item">
+                    <div class="qlb-info-label">
+                        <i class="bi bi-journal-bookmark"></i>
+                        العنوان
+                    </div>
+                    <div class="qlb-info-value">@Model.ExamTitle</div>
+                </div>
+
+                <div class="qlb-info-item">
+                    <div class="qlb-info-label">
+                        <i class="bi bi-book"></i>
+                        المنهج
+                    </div>
+                    <div class="qlb-info-value">@Model.CurriculumTitle</div>
+                </div>
+
+                <div class="qlb-info-item">
+                    <div class="qlb-info-label">
+                        <i class="bi bi-calendar-event"></i>
+                        البداية
+                    </div>
+                    <div class="qlb-info-value">@SafeDate(Model.StartAt)</div>
+                </div>
+
+                <div class="qlb-info-item">
+                    <div class="qlb-info-label">
+                        <i class="bi bi-calendar-x"></i>
+                        النهاية
+                    </div>
+                    <div class="qlb-info-value">@SafeDate(Model.EndAt)</div>
+                </div>
+
+                <div class="qlb-info-item">
+                    <div class="qlb-info-label">
+                        <i class="bi bi-diagram-3"></i>
+                        عدد المحاور
+                    </div>
+                    <div class="qlb-info-value">@SafeNumber(totalSections)</div>
+                </div>
+
+                <div class="qlb-info-item">
+                    <div class="qlb-info-label">
+                        <i class="bi bi-question-circle"></i>
+                        عدد الأسئلة
+                    </div>
+                    <div class="qlb-info-value">@SafeNumber(totalQuestions)</div>
+                </div>
+
+                <div class="qlb-info-item">
+                    <div class="qlb-info-label">
+                        <i class="bi bi-laptop"></i>
+                        نوع الاختبار
+                    </div>
+                    <div class="qlb-info-value">
+                        @if (Model.IsOnline)
+                        {
+                            <span class="qlb-mode-badge mode-online">
+                                <i class="bi bi-wifi"></i>
+                                أونلاين
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="qlb-mode-badge mode-lab">
+                                <i class="bi bi-building"></i>
+                                حضوري
+                            </span>
+                        }
+                    </div>
+                </div>
+
+                <div class="qlb-info-item">
+                    <div class="qlb-info-label">
+                        <i class="bi bi-key"></i>
+                        كود المرجع
+                    </div>
+                    <div class="qlb-info-value">
+                        @(string.IsNullOrWhiteSpace(Model.ReferenceCode) ? "—" : SafeNumber(Model.ReferenceCode))
+                    </div>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(Model.ReferenceCode))
+            {
+                <div class="qlb-reference-box">
+                    <div>
+                        <div class="qlb-reference-title">
+                            <i class="bi bi-key"></i>
+                            الكود المرجعي للاختبار
+                        </div>
+                        <div class="text-muted small mt-1">
+                            يستخدم عند الحاجة لفتح الاختبار أو تتبعه داخل النظام.
+                        </div>
+                    </div>
+
+                    <div class="qlb-reference-code">
+                        @SafeNumber(Model.ReferenceCode)
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- Sections / Questions -->
+        @if (Model.Sections != null && Model.Sections.Any())
+        {
+            @foreach (var sec in Model.Sections)
+            {
+                <div class="qlb-section">
+                    <div class="qlb-section-head">
+                        <h2 class="qlb-section-title">
+                            <i class="bi bi-diagram-3"></i>
+                            @sec.SectionTitle
+                        </h2>
+
+                        <span class="qlb-section-count">
+                            <i class="bi bi-question-circle"></i>
+                            @SafeNumber(sec.Questions.Count()) سؤال
+                        </span>
+                    </div>
+
+                    @if (sec.Questions != null && sec.Questions.Any())
+                    {
+                        <div class="qlb-grid">
+                            @foreach (var q in sec.Questions)
+                            {
+                                var fullTitle = CleanText(q.Title);
+                                var lessonTitle = CleanText(q.LessonTitle);
+                                var correctAnswer = CleanText(q.CorrectAnswer);
+
+                                var difficultyText = GetDifficultyText(q.DifficultyLevel);
+                                var difficultyClass = GetDifficultyClass(q.DifficultyLevel);
+                                var difficultyIcon = GetDifficultyIcon(q.DifficultyLevel);
+
+                                <div class="qlb-card">
+
+                                    <!-- Card Header -->
+                                    <div class="qlb-card-head">
+                                        <div class="qlb-qnum">
+                                            @SafeNumber(q.Order)
+                                        </div>
+
+                                        <span class="qlb-diff-badge @difficultyClass">
+                                            <i class="bi @difficultyIcon"></i>
+                                            @difficultyText
+                                        </span>
+
+                                        <span class="qlb-lesson-chip" title="@lessonTitle">
+                                            <i class="bi bi-bullseye"></i>
+                                            <span>@lessonTitle</span>
+                                        </span>
+                                    </div>
+
+                                    <!-- Card Body -->
+                                    <div class="qlb-card-body">
+
+                                        <!-- Question Text - Bold -->
+                                        <div class="qlb-qtitle" title="@fullTitle">
+                                            <strong>
+                                                @Html.Raw(SafeHtml(q.Title))
+                                            </strong>
+                                        </div>
+
+                                        <!-- Correct Answer -->
+                                        <div class="qlb-answer-box">
+                                            <div class="qlb-answer-label">
+                                                <i class="bi bi-check-circle"></i>
+                                                الإجابة الصحيحة
+                                            </div>
+
+                                            <div class="qlb-answer-text" title="@correctAnswer">
+                                                @Html.Raw(SafeHtml(q.CorrectAnswer))
+                                            </div>
+                                        </div>
+
+                                    </div>
+
+                                    <!-- Card Footer -->
+                                    <div class="qlb-card-foot">
+                                        <span class="qlb-foot-chip fc-primary">
+                                            <i class="bi bi-hash"></i>
+                                            ترتيب السؤال: @SafeNumber(q.Order)
+                                        </span>
+
+                                        <span class="qlb-foot-chip fc-muted">
+                                            <i class="bi bi-bullseye"></i>
+                                            @lessonTitle
+                                        </span>
+
+                                        <div class="qlb-actions">
+                                            <button type="button"
+                                                    class="qlb-btn qlb-btn-info"
+                                                    onclick="previewQuestion('@q.QuestionId')"
+                                                    title="معاينة">
+                                                <i class="bi bi-eye"></i>
+                                                معاينة
+                                            </button>
+
+                                            <a asp-action="ReplaceQuestionPage"
+                                               asp-route-examId="@Model.ExamId"
+                                               asp-route-sectionId="@sec.SectionId"
+                                               asp-route-oldId="@q.QuestionId"
+                                               class="qlb-btn qlb-btn-purple"
+                                               title="استبدال">
+                                                <i class="bi bi-arrow-repeat"></i>
+                                                استبدال
+                                            </a>
+                                        </div>
+                                    </div>
+
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="qlb-empty">
+                            <i class="bi bi-info-circle"></i>
+                            لا توجد أسئلة داخل هذا المحور.
+                        </div>
+                    }
+                </div>
+            }
+        }
+        else
+        {
+            <div class="qlb-empty">
+                <i class="bi bi-info-circle"></i>
+                لا توجد محاور أو أسئلة مرتبطة بهذا الاختبار.
+            </div>
+        }
+
+        <!-- Send -->
+        <form asp-action="ConfirmSendPost" method="post" class="qlb-send-panel">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="examId" value="@Model.ExamId" />
+
+            <button type="submit" class="qlb-send-btn">
+                <i class="bi bi-send-check"></i>
+                تأكيد الإرسال
+            </button>
+        </form>
+
+    </div>
+</div>
+
+<div class="modal fade qlb-modal" id="questionPreviewModal" tabindex="-1" aria-hidden="true" dir="rtl">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content text-end">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-eye"></i>
+                    معاينة السؤال
+                </h5>
+
+                <button type="button"
+                        class="btn-close"
+                        data-bs-dismiss="modal"
+                        aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body" id="questionPreviewBody">
+                <div class="qlb-preview-loading">
+                    <i class="bi bi-hourglass-split"></i>
+                    جارٍ تحميل السؤال...
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function previewQuestion(qid) {
+            const modalEl = document.getElementById('questionPreviewModal');
+            const body = document.getElementById('questionPreviewBody');
+            const modal = new bootstrap.Modal(modalEl);
+
+            body.innerHTML = `
+                <div class="qlb-preview-loading">
+                    <i class="bi bi-hourglass-split"></i>
+                    جارٍ تحميل السؤال...
+                </div>`;
+
+            modal.show();
+
+            fetch(`/Admin/PerformanceIndicatorExams/PreviewPerformanceQuestion?id=${qid}`)
+                .then(async response => {
+                    if (!response.ok) {
+                        throw new Error("PREVIEW_FAILED");
+                    }
+
+                    const html = await response.text();
+
+                    if (html.includes("System.InvalidOperationException") || html.includes("DeveloperExceptionPage")) {
+                        throw new Error("SERVER_EXCEPTION");
+                    }
+
+                    return html;
+                })
+                .then(html => {
+                    body.innerHTML = html;
+                })
+                .catch(() => {
+                    body.innerHTML = `
+                        <div class="qlb-preview-loading">
+                            <i class="bi bi-exclamation-triangle text-danger"></i>
+                            تعذر تحميل معاينة السؤال.
+                        </div>`;
+                });
+        }
+    </script>
+}

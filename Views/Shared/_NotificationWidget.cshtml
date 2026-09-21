@@ -1,0 +1,113 @@
+﻿@using QdratNew.Entities
+@inject QdratNew.Data.ApplicationDbContext DbContext
+@using Microsoft.EntityFrameworkCore
+
+@{
+    var studentId = ViewData["StudentId"] as int? ?? 0;
+    var recentNotifications = new List<Notification>();
+    var unreadCount = 0;
+
+    if (studentId > 0)
+    {
+        recentNotifications = await DbContext.Notifications
+            .Where(n => n.StudentID == studentId)
+            .OrderByDescending(n => n.SentAt)
+            .Take(5)
+            .ToListAsync();
+
+        unreadCount = recentNotifications.Count(n => !n.IsRead);
+    }
+}
+
+@if (studentId > 0)
+{
+    <div class="notif-icon-container">
+        <i class="fas fa-bell fa-lg text-dark" id="notifToggle" style="cursor:pointer;"></i>
+        @if (unreadCount > 0)
+        {
+            <span class="notif-badge">@unreadCount</span>
+        }
+
+        <div id="notifDropdown" class="notif-dropdown d-none">
+            @if (recentNotifications.Any())
+            {
+                @foreach (var n in recentNotifications)
+                {
+                    <div class="notif-item @(n.IsRead ? "" : "fw-bold")">
+                        📢 @n.Message
+                        <br />
+                        <small class="text-muted">@n.SentAt.ToString("g")</small>
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="notif-item text-center text-muted">لا توجد إشعارات</div>
+            }
+        </div>
+    </div>
+}
+
+<style>
+    .notif-icon-container {
+        position: relative;
+        display: inline-block;
+    }
+
+    .notif-badge {
+        position: absolute;
+        top: -6px;
+        right: -6px;
+        background: red;
+        color: white;
+        font-size: 0.7rem;
+        padding: 2px 6px;
+        border-radius: 50%;
+    }
+
+    .notif-dropdown {
+        position: absolute;
+        top: 40px;
+        right: 0;
+        background: #fff;
+        color: #000;
+        width: 280px;
+        border-radius: 10px;
+        box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        z-index: 9999;
+    }
+
+    .notif-item {
+        padding: 10px;
+        border-bottom: 1px solid #eee;
+        font-size: 0.9rem;
+        cursor: default;
+    }
+
+        .notif-item:last-child {
+            border-bottom: none;
+        }
+
+        .notif-item.fw-bold {
+            background-color: #f9f9f9;
+        }
+</style>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const toggle = document.getElementById("notifToggle");
+        const dropdown = document.getElementById("notifDropdown");
+
+        if (toggle && dropdown) {
+            toggle.addEventListener("click", function () {
+                dropdown.classList.toggle("d-none");
+            });
+
+            document.addEventListener("click", function (e) {
+                if (!toggle.contains(e.target) && !dropdown.contains(e.target)) {
+                    dropdown.classList.add("d-none");
+                }
+            });
+        }
+    });
+</script>

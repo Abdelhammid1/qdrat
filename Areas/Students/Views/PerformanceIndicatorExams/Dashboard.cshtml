@@ -1,0 +1,447 @@
+﻿@model QdratNew.ViewModels.PerformanceIndicator.PerformanceIndicatorDashboardVm
+
+@{
+    ViewData["Title"] = "لوحة اختبارات مؤشر الأداء";
+
+    var exams = Model?.Exams?.ToList() ?? new();
+
+    var total = Model?.TotalExams ?? exams.Count;
+    var completed = Model?.CompletedExams ?? exams.Count(x => x.IsCompleted);
+    var required = exams.Count(x => !x.IsCompleted);
+    var averageScore = Convert.ToDouble(Model?.AverageScore ?? 0);
+
+    var excellent = exams.Count(x => x.IsCompleted && Convert.ToDouble(x.ScorePercent) >= 85);
+    var good = exams.Count(x => x.IsCompleted && Convert.ToDouble(x.ScorePercent) >= 60 && Convert.ToDouble(x.ScorePercent) < 85);
+    var weak = exams.Count(x => x.IsCompleted && Convert.ToDouble(x.ScorePercent) < 60);
+
+    var latestCreatedAt = exams.Any()
+        ? exams.Max(x => x.CreatedAt)
+        : (DateTime?)null;
+}
+
+@section Styles {
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link href="~/css/student/performance-indicator-dashboard.css" rel="stylesheet" asp-append-version="true" />
+}
+
+
+<div class="pi-switcher">
+    @await Component.InvokeAsync("StudentCourseSwitcher")
+</div>
+
+<div class="pi-page">
+
+    <!-- HERO -->
+    <div class="pi-hero fu">
+        <div class="pi-hero-inner">
+            <div class="pi-hero-ico">
+                <i class="fa-solid fa-chart-line"></i>
+            </div>
+
+            <div class="pi-hero-text">
+                <h1>لوحة اختبارات مؤشر الأداء</h1>
+                <p>
+                    تابع نتائج اختبارات مؤشر الأداء، اكتشف المحاور الضعيفة، وافتح تقاريرك التفصيلية وخطتك العلاجية بناءً على نتائجك الفعلية.
+                </p>
+            </div>
+
+            <div class="pi-search">
+                <span class="pi-search-ico">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                </span>
+                <input type="text"
+                       id="pi-search-input"
+                       placeholder="ابحث عن اختبار مؤشر أداء…"
+                       oninput="applyPiFilters()">
+            </div>
+        </div>
+
+        <div class="pi-hero-stats">
+            <span class="pi-hstat">
+                <span class="pi-hstat-dot" style="background:#2e9e9e"></span>
+                إجمالي الاختبارات: @total
+            </span>
+
+            <span class="pi-hstat">
+                <span class="pi-hstat-dot" style="background:#22c55e"></span>
+                مكتملة: @completed
+            </span>
+
+            <span class="pi-hstat">
+                <span class="pi-hstat-dot" style="background:#f59e0b"></span>
+                مطلوبة: @required
+            </span>
+
+            <span class="pi-hstat">
+                <span class="pi-hstat-dot" style="background:#3b82f6"></span>
+                متوسط الأداء: @averageScore.ToString("F1")%
+            </span>
+
+            <span class="pi-hstat">
+                <span class="pi-hstat-dot" style="background:#8b5cf6"></span>
+                ممتاز: @excellent
+            </span>
+
+            <span class="pi-hstat">
+                <span class="pi-hstat-dot" style="background:#ef4444"></span>
+                يحتاج تحسين: @weak
+            </span>
+
+            @if (latestCreatedAt.HasValue)
+            {
+                <span class="pi-hstat">
+                    <span class="pi-hstat-dot" style="background:#ffffff"></span>
+                    آخر تحديث: @latestCreatedAt.Value.ToString("yyyy/MM/dd")
+                </span>
+            }
+        </div>
+    </div>
+
+    <!-- TOOLBAR -->
+    <div class="pi-toolbar fu d1">
+        <button type="button"
+                class="pi-filter-btn active"
+                data-filter="all"
+                onclick="setPiFilter(this)">
+            <i class="fa-solid fa-layer-group" style="font-size:.75rem"></i>
+            الكل <span class="fbadge">@total</span>
+        </button>
+
+        <button type="button"
+                class="pi-filter-btn"
+                data-filter="required"
+                onclick="setPiFilter(this)">
+            <i class="fa-solid fa-play" style="font-size:.75rem"></i>
+            مطلوب <span class="fbadge">@required</span>
+        </button>
+
+        <button type="button"
+                class="pi-filter-btn"
+                data-filter="completed"
+                onclick="setPiFilter(this)">
+            <i class="fa-solid fa-circle-check" style="font-size:.75rem"></i>
+            مكتمل <span class="fbadge">@completed</span>
+        </button>
+
+        <button type="button"
+                class="pi-filter-btn"
+                data-filter="excellent"
+                onclick="setPiFilter(this)">
+            <i class="fa-solid fa-trophy" style="font-size:.75rem"></i>
+            ممتاز <span class="fbadge">@excellent</span>
+        </button>
+
+        <button type="button"
+                class="pi-filter-btn"
+                data-filter="weak"
+                onclick="setPiFilter(this)">
+            <i class="fa-solid fa-arrow-trend-down" style="font-size:.75rem"></i>
+            يحتاج تحسين <span class="fbadge">@weak</span>
+        </button>
+
+        <div class="pi-sort">
+            <label for="pi-sort-sel">
+                <i class="fa-solid fa-arrow-up-wide-short" style="font-size:.75rem"></i>
+                ترتيب:
+            </label>
+
+            <select id="pi-sort-sel" onchange="applyPiFilters()">
+                <option value="date-desc">الأحدث أولًا</option>
+                <option value="date-asc">الأقدم أولًا</option>
+                <option value="score-desc">الأعلى درجة</option>
+                <option value="score-asc">الأدنى درجة</option>
+                <option value="title-asc">العنوان تصاعديًا</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="pi-shell">
+
+        <!-- INFO PANEL -->
+        <div class="pi-info-panel fu d2">
+            <div class="pi-info-head">
+                <div class="pi-info-icon">
+                    <i class="fa-solid fa-brain"></i>
+                </div>
+                <h2 class="pi-info-title">كيف تخدمك هذه اللوحة؟</h2>
+            </div>
+
+            <p class="pi-info-text">
+                تتيح لك هذه اللوحة متابعة نتائج اختبارات مؤشر الأداء بشكل شامل، وتحديد المحاور ضعيفة الأداء التي تحتاج إلى تحسين عاجل، مع دعم التوصيات والخطة العلاجية الذكية بناءً على نتائجك الفعلية.
+            </p>
+
+            <div class="pi-feature-grid">
+                <div class="pi-feature">
+                    <i class="fa-solid fa-check"></i>
+                    <span>إظهار مدى إتقانك للمحاور الأساسية في المنهج.</span>
+                </div>
+
+                <div class="pi-feature">
+                    <i class="fa-solid fa-check"></i>
+                    <span>تحديد المحاور الضعيفة التي تحتاج إلى تحسين.</span>
+                </div>
+
+                <div class="pi-feature">
+                    <i class="fa-solid fa-check"></i>
+                    <span>تحديث النتائج عند أداء أي اختبار جديد.</span>
+                </div>
+
+                <div class="pi-feature">
+                    <i class="fa-solid fa-check"></i>
+                    <span>دعم الخطة العلاجية الذكية بناءً على نتائجك.</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- SCORE CARDS -->
+        <div class="pi-score-grid fu d2">
+            <div class="pi-score-card">
+                <div class="pi-score-icon score-total">
+                    <i class="fa-solid fa-list-check"></i>
+                </div>
+                <div>
+                    <div class="pi-score-title">إجمالي الاختبارات</div>
+                    <div class="pi-score-value">@total</div>
+                    <div class="pi-score-note">كل اختبارات مؤشر الأداء المسجلة</div>
+                </div>
+            </div>
+
+            <div class="pi-score-card">
+                <div class="pi-score-icon score-completed">
+                    <i class="fa-solid fa-circle-check"></i>
+                </div>
+                <div>
+                    <div class="pi-score-title">الاختبارات المكتملة</div>
+                    <div class="pi-score-value">@completed</div>
+                    <div class="pi-score-note">اختبارات تم الانتهاء منها</div>
+                </div>
+            </div>
+
+            <div class="pi-score-card">
+                <div class="pi-score-icon score-average">
+                    <i class="fa-solid fa-chart-line"></i>
+                </div>
+                <div>
+                    <div class="pi-score-title">متوسط الأداء</div>
+                    <div class="pi-score-value">@averageScore.ToString("F1")%</div>
+                    <div class="pi-score-note">متوسط نتائج الاختبارات المكتملة</div>
+                </div>
+            </div>
+
+            <div class="pi-score-card">
+                <div class="pi-score-icon score-required">
+                    <i class="fa-solid fa-clock"></i>
+                </div>
+                <div>
+                    <div class="pi-score-title">اختبارات مطلوبة</div>
+                    <div class="pi-score-value">@required</div>
+                    <div class="pi-score-note">اختبارات لم يتم حلها بعد</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- EXAMS -->
+        <div class="pi-results-label fu d2">
+            يُعرض <b id="pi-count-shown">@total</b> من إجمالي @total اختبار مؤشر أداء
+        </div>
+
+        <div class="pi-grid" id="pi-grid">
+
+            @if (exams.Any())
+            {
+                foreach (var e in exams)
+                {
+                    var rawScore = Convert.ToDouble(e.ScorePercent);
+                    var score = Math.Round(rawScore, 1);
+                    var scoreW = (int)Math.Round(score);
+
+                    scoreW = scoreW < 0 ? 0 : scoreW > 100 ? 100 : scoreW;
+
+                    var scoreLevel = score >= 85
+                        ? "excellent"
+                        : score >= 60
+                            ? "good"
+                            : "weak";
+
+                    var statusKey = e.IsCompleted
+                        ? scoreLevel
+                        : "required";
+
+                    var filterKey = e.IsCompleted
+                        ? scoreLevel
+                        : "required";
+
+                    var statusText = e.IsCompleted
+                        ? (score >= 85 ? "ممتاز" : score >= 60 ? "جيد" : "يحتاج تحسين")
+                        : e.StatusText;
+
+                    var icon = e.IsCompleted
+                        ? "fa-circle-check"
+                        : "fa-circle-play";
+
+                    var stripeClass = e.IsCompleted
+                        ? $"stripe-{scoreLevel}"
+                        : "stripe-required";
+
+                    var iconClass = e.IsCompleted
+                        ? $"ico-{scoreLevel}"
+                        : "ico-required";
+
+                    var statusClass = e.IsCompleted
+                        ? $"st-{scoreLevel}"
+                        : "st-required";
+
+                    var fillClass = e.IsCompleted
+                        ? $"fill-{scoreLevel}"
+                        : "fill-required";
+
+                    var scoreColor = score >= 85
+                        ? "#22c55e"
+                        : score >= 60
+                            ? "#3b82f6"
+                            : "#ef4444";
+
+                    <div class="pi-card"
+                         data-status="@(e.IsCompleted ? "completed" : "required")"
+                         data-level="@filterKey"
+                         data-title="@((e.Title ?? string.Empty).ToLower())"
+                         data-score="@score"
+                         data-date="@e.CreatedAt.ToString("yyyyMMdd")">
+
+                        <div class="pi-card-stripe @stripeClass"></div>
+
+                        <div class="pi-card-body">
+
+                            <div class="pi-card-top">
+                                <div class="pi-card-ico @iconClass">
+                                    <i class="fa-solid @icon"></i>
+                                </div>
+
+                                <div style="flex:1;min-width:0">
+                                    <div class="pi-card-title">@e.Title</div>
+
+                                    <div class="pi-card-meta">
+                                        <span class="pi-tag">
+                                            <i class="fa-solid fa-book"></i>
+                                            @e.Curriculum
+                                        </span>
+
+                                        <span class="pi-tag">
+                                            <i class="fa-regular fa-calendar"></i>
+                                            @e.CreatedAt.ToString("yyyy/MM/dd")
+                                        </span>
+
+                                        <span class="pi-status @statusClass">
+                                            @statusText
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="pi-info-box">
+                                <div class="pi-info-grid">
+                                    <div>
+                                        <span class="pi-info-label">المنهج</span>
+                                        <span class="pi-info-value">@e.Curriculum</span>
+                                    </div>
+
+                                    <div>
+                                        <span class="pi-info-label">تاريخ الإرسال</span>
+                                        <span class="pi-info-value">@e.CreatedAt.ToString("yyyy/MM/dd")</span>
+                                    </div>
+
+                                    <div>
+                                        <span class="pi-info-label">الحالة</span>
+                                        <span class="pi-info-value">@e.StatusText</span>
+                                    </div>
+
+                                    <div>
+                                        <span class="pi-info-label">نوع الاختبار</span>
+                                        <span class="pi-info-value">مؤشر أداء</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="pi-score-box">
+                                <div class="pi-score-row">
+                                    <span class="pi-score-lbl">النتيجة</span>
+
+                                    @if (e.IsCompleted)
+                                    {
+                                        <span class="pi-score-val" style="color:@scoreColor">@score.ToString("F1")%</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="pi-score-val" style="color:var(--ink3)">—</span>
+                                    }
+                                </div>
+
+                                <div class="pi-score-bar">
+                                    <div class="pi-score-fill @fillClass" style="width:@(e.IsCompleted ? scoreW : 100)%"></div>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <div class="pi-card-foot">
+                            @if (!e.IsCompleted)
+                            {
+                                <a asp-action="VerifyReferenceCode"
+                                   asp-route-id="@e.ExamId"
+                                   class="pi-btn btn-start">
+                                    <i class="fa-solid fa-play"></i>
+                                    بدء الاختبار
+                                </a>
+                            }
+                            else
+                            {
+                                <a asp-action="Result"
+                                   asp-route-id="@e.ExamId"
+                                   class="pi-btn btn-result">
+                                    <i class="fa-solid fa-chart-pie"></i>
+                                    النتيجة
+                                </a>
+
+                                <a asp-area="Students"
+                                   asp-controller="PerformanceIndicatorExams"
+                                   asp-action="Report"
+                                   asp-route-examId="@e.ExamId"
+                                   class="pi-btn btn-report">
+                                    <i class="fa-solid fa-file-lines"></i>
+                                    تقرير الأداء
+                                </a>
+                            }
+                        </div>
+
+                    </div>
+                }
+            }
+
+        </div>
+
+        <div class="pi-empty" id="pi-empty" style="display:@(total == 0 ? "block" : "none")">
+            <div class="pi-empty-ico">📭</div>
+            <h3>لا توجد اختبارات مؤشر أداء حاليًا</h3>
+            <p>عند إرسال اختبار مؤشر أداء جديد لك سيظهر هنا مباشرة.</p>
+        </div>
+
+        <!-- TIP -->
+        <div class="pi-tip">
+            <div class="pi-tip-icon">
+                <i class="fa-solid fa-lightbulb"></i>
+            </div>
+
+            <div>
+                <h3>توصية تحليلية</h3>
+                <p>
+                    ركز على المحاور التي تقل عن <b>60%</b> في اختبارات مؤشر الأداء الأخيرة، لأنها تمثل أولويات الخطة العلاجية وتحسين المستوى.
+                </p>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script src="~/js/performance-indicator-dashboard.js" asp-append-version="true"></script>

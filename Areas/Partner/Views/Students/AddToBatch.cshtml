@@ -1,0 +1,129 @@
+﻿@model QdratNew.ViewModels.Partner.AddStudentToBatchViewModel
+
+@{
+    ViewData["Title"] = "إلحاق الطالب بدفعة أخرى";
+}
+
+<div class="container-fluid">
+    <div class="row justify-content-center">
+        <div class="col-lg-7 col-md-9">
+
+            <div class="card shadow-sm border-0 mt-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        إلحاق الطالب بدفعة جديدة
+                    </h5>
+                </div>
+
+                <div class="card-body">
+
+                    <form asp-action="AddToBatch" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" asp-for="StudentId" />
+
+                        <!-- اختيار الدورة -->
+                        <div class="mb-3">
+                            <label asp-for="CourseId" class="form-label fw-semibold">
+                                الدورة التدريبية
+                            </label>
+                            <select asp-for="CourseId"
+                                    asp-items="Model.Courses"
+                                    class="form-select"
+                                    id="courseSelect">
+                                <option value="">-- اختر الدورة --</option>
+                            </select>
+                            <span asp-validation-for="CourseId" class="text-danger"></span>
+                        </div>
+
+                        <!-- اختيار الدفعة -->
+                        <div class="mb-3">
+                            <label asp-for="BatchId" class="form-label fw-semibold">
+                                الدفعة
+                            </label>
+                            <select asp-for="BatchId"
+                                    class="form-select"
+                                    id="batchSelect"
+                                    disabled>
+                                <option value="">-- اختر الدفعة --</option>
+                            </select>
+                            <span asp-validation-for="BatchId" class="text-danger"></span>
+                        </div>
+
+                        <!-- تنبيه توضيحي -->
+                        <div class="alert alert-info small">
+                            <i class="bi bi-info-circle"></i>
+                            سيتم إلحاق الطالب بهذه الدفعة دون إزالة الدفعات السابقة.
+                        </div>
+
+                        <!-- أزرار التحكم -->
+                        <div class="d-flex justify-content-between mt-4">
+                            <a asp-action="Details"
+                               asp-route-id="@Model.StudentId"
+                               class="btn btn-outline-secondary">
+                                رجوع
+                            </a>
+
+                            <button type="submit"
+                                    class="btn btn-success"
+                                    id="submitBtn"
+                                    disabled>
+                                تأكيد الإلحاق
+                            </button>
+                        </div>
+
+                    </form>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+
+    <script>
+        const courseSelect = document.getElementById('courseSelect');
+        const batchSelect = document.getElementById('batchSelect');
+        const submitBtn = document.getElementById('submitBtn');
+
+        courseSelect.addEventListener('change', function () {
+            const courseId = this.value;
+
+            batchSelect.innerHTML = '<option value="">جاري تحميل الدفعات...</option>';
+            batchSelect.disabled = true;
+            submitBtn.disabled = true;
+
+            if (!courseId) {
+                batchSelect.innerHTML = '<option value="">-- اختر الدفعة --</option>';
+                return;
+            }
+
+            fetch(`/Partner/Students/GetPartnerBatchesByCourse?courseId=${courseId}`)
+                .then(res => res.json())
+                .then(data => {
+                    batchSelect.innerHTML = '<option value="">-- اختر الدفعة --</option>';
+
+                    if (data.length === 0) {
+                        batchSelect.innerHTML =
+                            '<option value="">لا توجد دفعات متاحة</option>';
+                        return;
+                    }
+
+                    data.forEach(b => {
+                        const option = document.createElement('option');
+                        option.value = b.id;
+                        option.textContent = b.name;
+                        batchSelect.appendChild(option);
+                    });
+
+                    batchSelect.disabled = false;
+                });
+        });
+
+        batchSelect.addEventListener('change', function () {
+            submitBtn.disabled = !this.value;
+        });
+    </script>
+}

@@ -1,0 +1,539 @@
+@model QdratNew.ViewModels.Lecture.LectureDetailsViewModel
+
+@{
+    ViewData["Title"] = "تفاصيل المحاضرة";
+
+    var isToday  = Model.Date.Date == DateTime.Today;
+    var isPast   = Model.Date.Date < DateTime.Today;
+    var isFuture = Model.Date.Date > DateTime.Today;
+
+    string statusClass = Model.IsCompleted  ? "badge-completed"
+                       : Model.IsStarted    ? "badge-live"
+                       : isToday            ? "badge-today"
+                       : isPast             ? "badge-past"
+                       : "badge-upcoming";
+
+    string statusText = Model.IsCompleted  ? "منتهية"
+                      : Model.IsStarted    ? "جارية الآن"
+                      : isToday            ? "اليوم"
+                      : isPast             ? "مضت"
+                      : "قادمة";
+
+    int lateCount = Model.AttendanceRecords.Count(r => r.IsLateArrival);
+}
+
+@section Styles {
+<style>
+    :root {
+        --ld-primary:   #1a56db;
+        --ld-primary-dk:#1240a8;
+        --ld-success:   #059669;
+        --ld-danger:    #dc2626;
+        --ld-warning:   #d97706;
+        --ld-info:      #0891b2;
+        --ld-surface:   #ffffff;
+        --ld-bg:        #f1f5f9;
+        --ld-border:    #e2e8f0;
+        --ld-text:      #0f172a;
+        --ld-muted:     #64748b;
+        --ld-radius:    14px;
+        --ld-radius-sm: 8px;
+        --ld-shadow:    0 4px 16px rgba(15,23,42,.08);
+        --ld-shadow-sm: 0 1px 4px rgba(15,23,42,.06);
+    }
+
+    body { background: var(--ld-bg); font-family: 'Cairo', sans-serif; direction: rtl; }
+
+    /* ── Header ── */
+    .ld-header {
+        background: linear-gradient(135deg, var(--ld-primary) 0%, var(--ld-primary-dk) 100%);
+        border-radius: var(--ld-radius);
+        padding: 24px 28px;
+        color: #fff;
+        margin-bottom: 24px;
+        position: relative;
+        overflow: hidden;
+        box-shadow: 0 8px 24px rgba(26,86,219,.25);
+    }
+    .ld-header::before {
+        content: '';
+        position: absolute;
+        left: -60px; top: -60px;
+        width: 200px; height: 200px;
+        background: rgba(255,255,255,.06);
+        border-radius: 50%;
+    }
+    .ld-header-title { font-size: 22px; font-weight: 800; margin: 0; }
+    .ld-header-sub   { font-size: 14px; opacity: .8; margin-top: 4px; }
+    .ld-btn-back {
+        background: rgba(255,255,255,.15);
+        border: 1px solid rgba(255,255,255,.3);
+        color: #fff;
+        border-radius: var(--ld-radius-sm);
+        padding: 8px 16px;
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 600;
+        transition: background .2s;
+    }
+    .ld-btn-back:hover { background: rgba(255,255,255,.25); color: #fff; }
+    .ld-btn-edit {
+        background: #fff;
+        color: var(--ld-primary);
+        border: none;
+        border-radius: var(--ld-radius-sm);
+        padding: 8px 18px;
+        font-size: 13px;
+        font-weight: 700;
+        text-decoration: none;
+        transition: opacity .2s;
+    }
+    .ld-btn-edit:hover { opacity: .9; color: var(--ld-primary); }
+
+    /* ── Status badges ── */
+    .lecture-badge {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 4px 13px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 700;
+    }
+    .badge-completed { background: #d1fae5; color: #065f46; }
+    .badge-live      { background: #fee2e2; color: #991b1b; animation: pulse 1.5s infinite; }
+    .badge-today     { background: #fef3c7; color: #92400e; }
+    .badge-past      { background: #f1f5f9; color: #64748b; }
+    .badge-upcoming  { background: #dbeafe; color: #1e40af; }
+
+    @@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+
+    /* ── Cards ── */
+    .ld-card {
+        background: var(--ld-surface);
+        border-radius: var(--ld-radius);
+        box-shadow: var(--ld-shadow-sm);
+        border: 1px solid var(--ld-border);
+        margin-bottom: 20px;
+        overflow: hidden;
+    }
+    .ld-card-header {
+        padding: 13px 20px;
+        border-bottom: 1px solid var(--ld-border);
+        font-weight: 700;
+        font-size: 15px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: #fafbff;
+    }
+    .ld-card-header .hicon {
+        width: 30px; height: 30px;
+        border-radius: 7px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 13px;
+    }
+    .ld-card-body { padding: 20px; }
+
+    /* ── Info grid ── */
+    .info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px,1fr)); gap: 16px; }
+    .info-item { display: flex; flex-direction: column; gap: 3px; }
+    .info-label { font-size: 11px; color: var(--ld-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+    .info-value { font-size: 15px; font-weight: 700; color: var(--ld-text); }
+
+    /* ── Stat cards ── */
+    .stat-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 14px; margin-bottom: 20px; }
+    .stat-card {
+        background: var(--ld-surface);
+        border-radius: var(--ld-radius);
+        border: 1px solid var(--ld-border);
+        padding: 16px;
+        text-align: center;
+        box-shadow: var(--ld-shadow-sm);
+    }
+    .stat-card .stat-num   { font-size: 30px; font-weight: 900; line-height: 1; }
+    .stat-card .stat-label { font-size: 12px; color: var(--ld-muted); margin-top: 4px; font-weight: 600; }
+    .stat-card.blue .stat-num  { color: var(--ld-primary); }
+    .stat-card.green .stat-num { color: var(--ld-success); }
+    .stat-card.red .stat-num   { color: var(--ld-danger); }
+    .stat-card.amber .stat-num { color: var(--ld-warning); }
+
+    /* ── Progress ── */
+    .att-progress { background:#e2e8f0; border-radius:20px; height:10px; overflow:hidden; margin:0 0 16px; }
+    .att-progress-bar { height:100%; background:linear-gradient(90deg,var(--ld-success),#34d399); border-radius:20px; }
+
+    /* ── Table ── */
+    .att-table { width:100%; border-collapse:collapse; font-size:14px; }
+    .att-table th {
+        background:#f8fafc; padding:10px 14px;
+        text-align:right; font-weight:700; color:var(--ld-muted);
+        border-bottom:2px solid var(--ld-border);
+        font-size:11px; text-transform:uppercase; letter-spacing:.4px;
+    }
+    .att-table td { padding:10px 14px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+    .att-table tr:hover td { background:#f8fafc; }
+    .att-table tr:last-child td { border-bottom:none; }
+
+    .badge-present { background:#d1fae5; color:#065f46; padding:3px 10px; border-radius:12px; font-size:12px; font-weight:700; }
+    .badge-absent  { background:#fee2e2; color:#991b1b; padding:3px 10px; border-radius:12px; font-size:12px; font-weight:700; }
+    .badge-late    { background:#fef3c7; color:#92400e; padding:3px 10px; border-radius:12px; font-size:12px; font-weight:700; }
+
+    /* ── Timing ── */
+    .timing-row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+    .timing-block {
+        display:flex; flex-direction:column; align-items:center;
+        background:#f8fafc; border:1px solid var(--ld-border);
+        border-radius:10px; padding:12px 18px; min-width:100px;
+    }
+    .timing-block .t-label { font-size:11px; color:var(--ld-muted); font-weight:600; }
+    .timing-block .t-value { font-size:20px; font-weight:800; color:var(--ld-text); }
+    .timing-arrow { font-size:18px; color:var(--ld-muted); align-self:center; }
+
+    /* ── Lesson chips ── */
+    .lessons-chips { display:flex; flex-wrap:wrap; gap:8px; }
+    .lesson-chip {
+        background:#eff6ff; color:var(--ld-primary);
+        border:1px solid #bfdbfe; border-radius:20px;
+        padding:4px 14px; font-size:13px; font-weight:600;
+    }
+
+    /* ── Empty ── */
+    .empty-state { text-align:center; padding:48px 20px; color:var(--ld-muted); }
+    .empty-state i { font-size:48px; opacity:.2; display:block; margin-bottom:12px; }
+
+    @@media (max-width:576px) {
+        .ld-header { padding:16px; }
+        .ld-header-title { font-size:18px; }
+        .info-grid { grid-template-columns:1fr 1fr; }
+    }
+</style>
+}
+
+<div class="container-fluid py-3" dir="rtl">
+
+    @* ════ Header ════ *@
+    <div class="ld-header">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+            <div>
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <span class="lecture-badge @statusClass">
+                        @if (Model.IsStarted && !Model.IsCompleted)
+                        {
+                            <i class="fas fa-circle" style="font-size:8px;"></i>
+                        }
+                        @statusText
+                    </span>
+                    <span style="opacity:.65;font-size:13px;">@Model.Date.ToString("dddd، d MMMM yyyy", new System.Globalization.CultureInfo("ar-SA"))</span>
+                </div>
+                <h1 class="ld-header-title">@Model.Title</h1>
+                <div class="ld-header-sub">@Model.BatchName · @Model.CourseName</div>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <a asp-area="Admin" asp-controller="Lectures" asp-action="Edit" asp-route-id="@Model.Id"
+                   class="ld-btn-edit"><i class="fas fa-edit me-1"></i> تعديل</a>
+                <a asp-area="Admin" asp-controller="Lectures" asp-action="Lectures" asp-route-batchId="@Model.BatchId"
+                   class="ld-btn-back"><i class="fas fa-arrow-right me-1"></i> محاضرات الدفعة</a>
+                <a asp-area="Admin" asp-controller="Lectures" asp-action="Index"
+                   class="ld-btn-back"><i class="fas fa-th-large me-1"></i> الكل</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+
+        @* ════ العمود الرئيسي ════ *@
+        <div class="col-lg-8">
+
+            @* معلومات أساسية *@
+            <div class="ld-card">
+                <div class="ld-card-header">
+                    <div class="hicon" style="background:#eff6ff;color:var(--ld-primary);"><i class="fas fa-info-circle"></i></div>
+                    معلومات المحاضرة
+                </div>
+                <div class="ld-card-body">
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <span class="info-label">المحاضر</span>
+                            <span class="info-value"><i class="fas fa-chalkboard-teacher me-1" style="color:var(--ld-primary);opacity:.7;"></i>@Model.InstructorName</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">المحور</span>
+                            <span class="info-value"><i class="fas fa-layer-group me-1" style="color:var(--ld-info);opacity:.7;"></i>@Model.SectionTitle</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">الدورة</span>
+                            <span class="info-value"><i class="fas fa-graduation-cap me-1" style="color:var(--ld-success);opacity:.7;"></i>@Model.CourseName</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">الدفعة</span>
+                            <span class="info-value"><i class="fas fa-users me-1" style="color:var(--ld-warning);opacity:.7;"></i>@Model.BatchName</span>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(Model.Location) && Model.Location != "—")
+                        {
+                            <div class="info-item">
+                                <span class="info-label">الموقع / القاعة</span>
+                                <span class="info-value"><i class="fas fa-map-marker-alt me-1" style="color:var(--ld-danger);opacity:.7;"></i>@Model.Location</span>
+                            </div>
+                        }
+                        <div class="info-item">
+                            <span class="info-label">التاريخ</span>
+                            <span class="info-value">@Model.Date.ToString("d/M/yyyy")</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @* توقيت *@
+            <div class="ld-card">
+                <div class="ld-card-header">
+                    <div class="hicon" style="background:#fef3c7;color:#92400e;"><i class="fas fa-clock"></i></div>
+                    التوقيت
+                </div>
+                <div class="ld-card-body">
+                    <div class="info-label mb-2">الوقت المجدول</div>
+                    <div class="timing-row mb-3">
+                        @if (Model.ScheduledTime.HasValue)
+                        {
+                            <div class="timing-block">
+                                <span class="t-label">البداية</span>
+                                <span class="t-value">@Model.ScheduledTime.Value.ToString(@"hh\:mm")</span>
+                            </div>
+                            <span class="timing-arrow">←</span>
+                        }
+                        @if (Model.ScheduledEndTime.HasValue)
+                        {
+                            <div class="timing-block">
+                                <span class="t-label">النهاية</span>
+                                <span class="t-value">@Model.ScheduledEndTime.Value.ToString(@"hh\:mm")</span>
+                            </div>
+                        }
+                        @if (Model.DurationMinutes.HasValue && Model.DurationMinutes.Value > 0)
+                        {
+                            <div class="timing-block" style="background:#f0fdf4;border-color:#bbf7d0;">
+                                <span class="t-label">المدة</span>
+                                <span class="t-value" style="color:var(--ld-success);">@Model.DurationMinutes د</span>
+                            </div>
+                        }
+                        @if (!Model.ScheduledTime.HasValue && !Model.ScheduledEndTime.HasValue)
+                        {
+                            <span style="color:var(--ld-muted);font-size:14px;">لم يُحدد وقت مجدول</span>
+                        }
+                    </div>
+                    @if (Model.ActualStartTime.HasValue)
+                    {
+                        <div class="pt-3" style="border-top:1px dashed var(--ld-border);">
+                            <div class="info-label mb-2">التوقيت الفعلي</div>
+                            <div class="timing-row">
+                                <div class="timing-block" style="background:#f0fdf4;border-color:#bbf7d0;">
+                                    <span class="t-label">بدأت</span>
+                                    <span class="t-value" style="color:var(--ld-success);">@Model.ActualStartTime.Value.ToString("hh:mm")</span>
+                                </div>
+                                @if (Model.ActualEndTime.HasValue)
+                                {
+                                    int realDur = (int)(Model.ActualEndTime.Value - Model.ActualStartTime.Value).TotalMinutes;
+                                    <span class="timing-arrow">←</span>
+                                    <div class="timing-block" style="background:#fff1f2;border-color:#fecdd3;">
+                                        <span class="t-label">انتهت</span>
+                                        <span class="t-value" style="color:var(--ld-danger);">@Model.ActualEndTime.Value.ToString("hh:mm")</span>
+                                    </div>
+                                 
+                                    <div class="timing-block" style="background:#eff6ff;border-color:#bfdbfe;">
+                                        <span class="t-label">المدة الفعلية</span>
+                                        <span class="t-value" style="color:var(--ld-primary);">@realDur د</span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @* سجل الحضور *@
+            <div class="ld-card">
+                <div class="ld-card-header">
+                    <div class="hicon" style="background:#f0fdf4;color:var(--ld-success);"><i class="fas fa-user-check"></i></div>
+                    سجل الحضور
+                    @if (Model.AttendanceRecords.Any())
+                    {
+                        <span class="ms-auto" style="font-size:13px;color:var(--ld-muted);font-weight:400;">
+                            @Model.AttendanceRate% نسبة الحضور
+                        </span>
+                    }
+                </div>
+                <div class="ld-card-body" style="padding-bottom:0;">
+                    @if (Model.AttendanceRecords.Any())
+                    {
+                        <div class="att-progress">
+                            <div class="att-progress-bar" style="width:@Model.AttendanceRate%"></div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="att-table">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>الطالب</th>
+                                        <th>الهوية</th>
+                                        <th>الحضور</th>
+                                        <th>وقت الوصول</th>
+                                        <th>ملاحظات</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @{ int rowNum = 0; }
+                                    @foreach (var row in Model.AttendanceRecords)
+                                    {
+                                        rowNum++;
+                                        <tr>
+                                            <td style="color:var(--ld-muted);font-size:12px;">@rowNum</td>
+                                            <td style="font-weight:600;">@row.StudentName</td>
+                                            <td style="font-family:monospace;font-size:13px;color:var(--ld-muted);">@row.NationalId</td>
+                                            <td>
+                                                @if (row.IsPresent)
+                                                {
+                                                    <span class="badge-present">حاضر</span>
+                                                    @if (row.IsLateArrival)
+                                                    {
+                                                        <span class="badge-late ms-1">متأخر</span>
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge-absent">غائب</span>
+                                                }
+                                            </td>
+                                            <td style="font-family:monospace;font-size:13px;">
+                                                @(row.ActualArrivalTime.HasValue
+                                                    ? row.ActualArrivalTime.Value.ToString(@"hh\:mm")
+                                                    : "—")
+                                            </td>
+                                            <td style="font-size:13px;color:var(--ld-muted);">
+                                                @(string.IsNullOrWhiteSpace(row.Notes) ? "—" : row.Notes)
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                        <div style="padding:12px 20px;background:#f8fafc;border-top:1px solid var(--ld-border);font-size:12px;color:var(--ld-muted);">
+                            إجمالي @Model.AttendanceRecords.Count سجل · @Model.PresentCount حاضر · @Model.AbsentCount غائب
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="empty-state">
+                            <i class="fas fa-clipboard-list"></i>
+                            <div style="font-size:15px;font-weight:600;">لم يُسجَّل حضور لهذه المحاضرة</div>
+                            <div style="font-size:13px;margin-top:6px;color:var(--ld-muted);">يمكن تسجيل الحضور عند بدء المحاضرة</div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+        </div>
+
+        @* ════ العمود الجانبي ════ *@
+        <div class="col-lg-4">
+
+            @* إحصائيات *@
+            <div class="stat-grid">
+                <div class="stat-card blue">
+                    <div class="stat-num">@Model.TotalStudents</div>
+                    <div class="stat-label">إجمالي الطلاب</div>
+                </div>
+                <div class="stat-card green">
+                    <div class="stat-num">@Model.PresentCount</div>
+                    <div class="stat-label">حضروا</div>
+                </div>
+                <div class="stat-card red">
+                    <div class="stat-num">@Model.AbsentCount</div>
+                    <div class="stat-label">غابوا</div>
+                </div>
+                <div class="stat-card amber">
+                    <div class="stat-num">@lateCount</div>
+                    <div class="stat-label">متأخرون</div>
+                </div>
+            </div>
+
+            @* المؤشرات *@
+            @if (Model.LessonTitles.Any())
+            {
+                <div class="ld-card">
+                    <div class="ld-card-header">
+                        <div class="hicon" style="background:#ede9fe;color:#7c3aed;"><i class="fas fa-book-open"></i></div>
+                        المؤشرات التعليمية
+                    </div>
+                    <div class="ld-card-body">
+                        <div class="lessons-chips">
+                            @foreach (var title in Model.LessonTitles)
+                            {
+                                <span class="lesson-chip">@title</span>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+
+            @* حالة التنفيذ *@
+            <div class="ld-card">
+                <div class="ld-card-header">
+                    <div class="hicon" style="background:#f0fdf4;color:var(--ld-success);"><i class="fas fa-signal"></i></div>
+                    حالة التنفيذ
+                </div>
+                <div class="ld-card-body">
+                    <div class="d-flex flex-column gap-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span style="font-size:13px;color:var(--ld-muted);">الحالة الحالية</span>
+                            <span class="lecture-badge @statusClass">@statusText</span>
+                        </div>
+                        @if (Model.ActualStartTime.HasValue)
+                        {
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span style="font-size:13px;color:var(--ld-muted);">وقت البدء</span>
+                                <span style="font-weight:700;font-size:13px;">@Model.ActualStartTime.Value.ToString("h:mm tt")</span>
+                            </div>
+                        }
+                        @if (Model.ActualEndTime.HasValue)
+                        {
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span style="font-size:13px;color:var(--ld-muted);">وقت الانتهاء</span>
+                                <span style="font-weight:700;font-size:13px;">@Model.ActualEndTime.Value.ToString("h:mm tt")</span>
+                            </div>
+                        }
+                        @if (!Model.IsStarted)
+                        {
+                            <div style="background:#f8fafc;border:1px dashed var(--ld-border);border-radius:8px;padding:12px;text-align:center;color:var(--ld-muted);font-size:13px;">
+                                لم تبدأ المحاضرة بعد
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            @* إجراءات *@
+            <div class="ld-card">
+                <div class="ld-card-header">
+                    <div class="hicon" style="background:#fff1f2;color:var(--ld-danger);"><i class="fas fa-bolt"></i></div>
+                    إجراءات سريعة
+                </div>
+                <div class="ld-card-body d-flex flex-column gap-2">
+                    <a asp-area="Admin" asp-controller="Lectures" asp-action="Edit" asp-route-id="@Model.Id"
+                       class="btn btn-outline-primary btn-sm w-100 text-end">
+                        <i class="fas fa-edit me-1"></i> تعديل المحاضرة
+                    </a>
+                    <a asp-area="Admin" asp-controller="Lectures" asp-action="Create" asp-route-batchId="@Model.BatchId"
+                       class="btn btn-outline-success btn-sm w-100 text-end">
+                        <i class="fas fa-plus me-1"></i> إضافة محاضرة جديدة
+                    </a>
+                    <a asp-area="Admin" asp-controller="Lectures" asp-action="Lectures" asp-route-batchId="@Model.BatchId"
+                       class="btn btn-outline-secondary btn-sm w-100 text-end">
+                        <i class="fas fa-list me-1"></i> محاضرات الدفعة
+                    </a>
+                    <a asp-area="Admin" asp-controller="Lectures" asp-action="Delete" asp-route-id="@Model.Id"
+                       class="btn btn-outline-danger btn-sm w-100 text-end"
+                       onclick="return confirm('هل أنت متأكد من حذف هذه المحاضرة؟')">
+                        <i class="fas fa-trash me-1"></i> حذف
+                    </a>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>

@@ -1,0 +1,119 @@
+﻿@model List<QdratNew.ViewModels.Reports.IndicatorPerformanceReportViewModel>
+
+@{
+    ViewData["Title"] = "📊 تقرير قياس مؤشر الأداء للدفعة";
+    var stats = (ValueTuple<int, int, int, int>)ViewData["Stats"];
+    var batchId = ViewData["BatchId"];
+    string currentFilter = ViewData["CurrentFilter"]?.ToString() ?? "";
+}
+
+<link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+
+<div class="container-fluid py-4" dir="rtl">
+    <h3 class="fw-bold text-primary mb-4">
+        <i class="fas fa-chart-line"></i> تقرير قياس مؤشر الأداء للدفعة
+    </h3>
+
+    <!-- 🔹 كروت الإحصائيات -->
+    <div class="row text-center mb-4">
+        <div class="col-md-3 col-6">
+            <div class="card shadow-sm border-0 bg-light">
+                <div class="card-body">
+                    <h6 class="text-muted">عدد الطلاب الكلي</h6>
+                    <h3 class="fw-bold text-primary">@stats.Item1</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card shadow-sm border-0 bg-success-subtle">
+                <div class="card-body">
+                    <h6 class="text-muted">الطلاب الناجحون</h6>
+                    <h3 class="fw-bold text-success">@stats.Item2</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card shadow-sm border-0 bg-danger-subtle">
+                <div class="card-body">
+                    <h6 class="text-muted">الطلاب الراسبون</h6>
+                    <h3 class="fw-bold text-danger">@stats.Item3</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card shadow-sm border-0 bg-warning-subtle">
+                <div class="card-body">
+                    <h6 class="text-muted">بخطط علاجية</h6>
+                    <h3 class="fw-bold text-warning">@stats.Item4</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🔹 الفلاتر -->
+    <div class="mb-3 d-flex flex-wrap gap-2">
+        <a asp-action="BatchReport" asp-route-batchId="@batchId" class="btn btn-outline-primary @(currentFilter == "" ? "active" : "")">الكل</a>
+        <a asp-action="BatchReport" asp-route-batchId="@batchId" asp-route-filter="passed" class="btn btn-outline-success @(currentFilter == "passed" ? "active" : "")">الناجحون</a>
+        <a asp-action="BatchReport" asp-route-batchId="@batchId" asp-route-filter="failed" class="btn btn-outline-danger @(currentFilter == "failed" ? "active" : "")">الراسبون</a>
+        <a asp-action="BatchReport" asp-route-batchId="@batchId" asp-route-filter="remedial" class="btn btn-outline-warning @(currentFilter == "remedial" ? "active" : "")">بخطط علاجية</a>
+        <a asp-action="ExportToPdf" asp-route-batchId="@batchId" class="btn btn-dark ms-auto">
+            <i class="fas fa-file-pdf"></i> تصدير PDF
+        </a>
+    </div>
+
+    <!-- 🔹 الجدول -->
+    <div class="table-responsive">
+        <table id="reportTable" class="table table-bordered table-hover align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>الطالب</th>
+                    <th>المحور</th>
+                    <th>النسبة</th>
+                    <th>النتيجة</th>
+                    <th>السبب</th>
+                    <th>الخطة العلاجية</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Model)
+                {
+                    var color = item.IsPassed ? "table-success" : "table-danger";
+                    <tr class="@color">
+                        <td>@item.StudentName</td>
+                        <td>@item.SectionTitle</td>
+                        <td>@item.ScorePercent %</td>
+                        <td>@(item.IsPassed ? "✅ ناجح" : "❌ راسب")</td>
+                        <td>@item.FailureReason</td>
+                        <td>
+                            @if (item.HasRemedialPlan)
+                            {
+                                <a asp-area="Admin" asp-controller="RemedialPlans" asp-action="Details" asp-route-id="@item.RemedialPlanTitle"
+                                   class="btn btn-sm btn-outline-success">
+                                    <i class="fas fa-eye"></i> عرض
+                                </a>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">لا توجد</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            $('#reportTable').DataTable({
+                language: { url: "//cdn.datatables.net/plug-ins/1.13.4/i18n/ar.json" },
+                pageLength: 25,
+                order: [[0, "asc"]]
+            });
+        });
+    </script>
+}

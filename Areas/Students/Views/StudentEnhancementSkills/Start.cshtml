@@ -1,0 +1,141 @@
+@model QdratNew.ViewModels.EnhancementSkills.EnhancementSolveViewModel
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
+@{
+    ViewData["Title"] = "حل المهارة التعزيزية";
+}
+
+<meta name="google" content="notranslate" />
+@await Html.PartialAsync("_TranslationGuardOverlay")
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger text-center fw-bold">@TempData["ErrorMessage"]</div>
+}
+
+<div id="question-container">
+    @await Html.PartialAsync("_SolveEnhancementQuestionPartial", Model)
+</div>
+
+@section Scripts {
+<script src="~/js/translation-guard.js"></script>
+<script>
+    TranslationGuard.init({
+        attemptType: 3,
+        attemptEntityId: @Model.SetId,
+        antiForgeryToken: '@Antiforgery.GetAndStoreTokens(Context).RequestToken'
+    });
+</script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+/* =====================================================
+   TIMER
+===================================================== */
+let _startTime = Date.now();
+function getTimeTakenSeconds() { return Math.floor((Date.now() - _startTime) / 1000); }
+function resetQuestionTimer()  { _startTime = Date.now(); }
+
+/* =====================================================
+   إعادة تفعيل الاختيارات بعد كل injection للـ partial
+===================================================== */
+function attachOptionListeners() {
+    document.querySelectorAll('#question-container .eq-opt').forEach(label => {
+        label.addEventListener('click', function () {
+            document.querySelectorAll('#question-container .eq-opt')
+                    .forEach(l => l.classList.remove('selected'));
+            this.classList.add('selected');
+            const radio = this.querySelector('input[type="radio"]');
+            if (radio) radio.checked = true;
+        });
+    });
+}
+attachOptionListeners();
+
+/* =====================================================
+   تسليم نهائي
+===================================================== */
+function finalSubmit() {
+    const form = document.querySelector('#question-container form');
+    if (!form) return;
+
+    Swal.fire({
+        title: 'تسليم نهائي؟',
+        text: 'لن تتمكن من التعديل بعد التسليم.',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'نعم، سلّم',
+        cancelButtonText: 'إلغاء',
+        confirmButtonColor: '#22c55e',
+        cancelButtonColor: '#6b7280'
+    }).then(async result => {
+        if (!result.isConfirmed) return;
+
+        const fd = new FormData(form);
+        fd.append('timeTakenSeconds', getTimeTakenSeconds());
+
+        const res = await fetch(
+            `/Students/StudentEnhancementSkills/SubmitFinal?id=${form.dataset.setId}`,
+            { method: 'POST', body: fd, credentials: 'include' }
+        );
+
+        if (res.redirected) { window.location.href = res.url; }
+        else if (res.ok)    { window.location.reload(); }
+    });
+}
+
+/* =====================================================
+   معالج التنقل
+===================================================== */
+let _isNavigating = false;
+
+document.addEventListener('click', async function (e) {
+    const btn = e.target.closest('.enhancement-nav-button');
+    if (!btn) return;
+    e.preventDefault();
+
+    const nav = btn.dataset.nav;
+
+    if (nav === 'submit') { finalSubmit(); return; }
+
+    if (_isNavigating) return;
+    _isNavigating = true;
+
+    const form = document.querySelector('#question-container form');
+    if (!form) { _isNavigating = false; return; }
+
+    const setId     = form.dataset.setId;
+    const currentId = form.dataset.currentQuestionId;
+
+    // تعطيل الأزرار
+    document.querySelectorAll('#question-container .enhancement-nav-button')
+            .forEach(b => { b.disabled = true; b.style.opacity = '0.5'; });
+
+    try {
+        // نفس أسلوب الواجبات: id و q في الـ query string، البقية في FormData
+        const fd = new FormData(form);
+        fd.append('nav', nav);
+        fd.append('timeTakenSeconds', getTimeTakenSeconds());
+
+        const res = await fetch(
+            `/Students/StudentEnhancementSkills/SubmitAnswerFetch?id=${setId}&q=${currentId}`,
+            { method: 'POST', body: fd, credentials: 'include' }
+        );
+
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+
+        const html = await res.text();
+        document.getElementById('question-container').innerHTML = html;
+        attachOptionListeners();
+        resetQuestionTimer();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    } catch (err) {
+        console.error('Enhancement nav error:', err);
+        Swal.fire('⚠️', 'حدث خطأ أثناء التنقل بين الأسئلة، يرجى المحاولة مرة أخرى.', 'warning');
+        document.querySelectorAll('#question-container .enhancement-nav-button')
+                .forEach(b => { b.disabled = false; b.style.opacity = ''; });
+    } finally {
+        _isNavigating = false;
+    }
+});
+</script>
+}

@@ -1,0 +1,958 @@
+@model QdratNew.ViewModels.Question.QuestionBankDashboardViewModel
+@using System.Text.Json
+@{
+    ViewData["Title"] = "لوحة بنك الأسئلة";
+
+    var palette = new[] { "#6366f1", "#10b981", "#f59e0b", "#ef4444", "#3b82f6", "#8b5cf6", "#14b8a6", "#f97316" };
+    var statusLabels   = Model.StatusCards.Select(x => x.Title).ToList();
+    var statusValues   = Model.StatusCards.Select(x => x.Count).ToList();
+    var diffLabels     = Model.DifficultyStats.Select(x => x.Label).ToList();
+    var diffValues     = Model.DifficultyStats.Select(x => x.Value).ToList();
+    var covLabels      = Model.CurriculumCoverageStats.Select(x => x.Label).ToList();
+    var covValues      = Model.CurriculumCoverageStats.Select(x => x.Value).ToList();
+
+    int totalApproved = Model.StatusCards.FirstOrDefault(c => c.Color == "#198754" || c.Title.Contains("معتمد"))?.Count ?? 0;
+    int approvedPct   = Model.TotalQuestions > 0 ? (int)Math.Round(totalApproved * 100.0 / Model.TotalQuestions) : 0;
+}
+
+@section Styles {
+<style>
+/* ─── tokens ──────────────────────────────────────────────────────────── */
+:root {
+    --qb-bg:        #f0f4ff;
+    --qb-surface:   #ffffff;
+    --qb-border:    #e2e8f0;
+    --qb-text:      #0f172a;
+    --qb-muted:     #64748b;
+    --qb-accent1:   #6366f1;
+    --qb-accent2:   #10b981;
+    --qb-accent3:   #f59e0b;
+    --qb-accent4:   #ef4444;
+    --qb-radius:    14px;
+    --qb-shadow-sm: 0 1px 3px rgba(15,23,42,.06), 0 1px 2px rgba(15,23,42,.04);
+    --qb-shadow-md: 0 4px 16px rgba(15,23,42,.08), 0 2px 6px rgba(15,23,42,.04);
+    --qb-shadow-lg: 0 12px 40px rgba(15,23,42,.12);
+}
+@@media (prefers-color-scheme: dark) {
+    :root {
+        --qb-bg:      #0b0f1a;
+        --qb-surface: #131929;
+        --qb-border:  #1e2a3a;
+        --qb-text:    #f1f5f9;
+        --qb-muted:   #94a3b8;
+    }
+}
+
+/* ─── layout ──────────────────────────────────────────────────────────── */
+.qb {
+    background: var(--qb-bg);
+    min-height: calc(100vh - 80px);
+    font-family: 'Cairo', 'Segoe UI', sans-serif;
+    direction: rtl;
+}
+
+/* ─── hero ────────────────────────────────────────────────────────────── */
+.qb-hero {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 45%, #1e1b4b 100%);
+    border-radius: var(--qb-radius);
+    padding: 32px;
+    color: #fff;
+    isolation: isolate;
+}
+.qb-hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background:
+        radial-gradient(circle at 15% 50%, rgba(99,102,241,.25) 0%, transparent 55%),
+        radial-gradient(circle at 80% 20%, rgba(16,185,129,.18) 0%, transparent 50%),
+        radial-gradient(circle at 70% 80%, rgba(245,158,11,.12) 0%, transparent 45%);
+    z-index: -1;
+}
+.qb-hero__orb {
+    position: absolute;
+    width: 300px; height: 300px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,.06);
+    top: -60px; left: -60px;
+    pointer-events: none;
+}
+.qb-hero__orb2 {
+    width: 200px; height: 200px;
+    bottom: -80px; right: 40px;
+    top: auto; left: auto;
+}
+.qb-hero__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(99,102,241,.25);
+    border: 1px solid rgba(99,102,241,.4);
+    border-radius: 50px;
+    padding: 4px 14px;
+    font-size: 12px;
+    letter-spacing: .3px;
+    margin-bottom: 14px;
+}
+.qb-hero__num {
+    font-size: clamp(2.4rem, 5vw, 3.4rem);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -1px;
+}
+.qb-hero__sub { opacity: .75; font-size: 15px; margin-top: 8px; }
+.qb-hero__stat {
+    background: rgba(255,255,255,.07);
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 10px;
+    padding: 16px 18px;
+    backdrop-filter: blur(12px);
+    transition: background .2s;
+}
+.qb-hero__stat:hover { background: rgba(255,255,255,.12); }
+.qb-hero__stat-val { font-size: 1.6rem; font-weight: 700; }
+.qb-hero__stat-lbl { font-size: 12px; opacity: .7; margin-top: 2px; }
+
+/* ─── progress ring ───────────────────────────────────────────────────── */
+.qb-ring {
+    position: relative;
+    width: 80px; height: 80px;
+    flex-shrink: 0;
+}
+.qb-ring svg { transform: rotate(-90deg); }
+.qb-ring__bg  { fill: none; stroke: rgba(255,255,255,.1); stroke-width: 5; }
+.qb-ring__arc { fill: none; stroke: #10b981; stroke-width: 5; stroke-linecap: round;
+                stroke-dasharray: 220; stroke-dashoffset: @(220 - 220 * approvedPct / 100); transition: stroke-dashoffset 1.2s ease; }
+.qb-ring__label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.qb-ring__pct { font-size: 1.1rem; font-weight: 700; }
+.qb-ring__sub { font-size: 10px; opacity: .65; }
+
+/* ─── stat cards ──────────────────────────────────────────────────────── */
+.qb-card {
+    background: var(--qb-surface);
+    border: 1px solid var(--qb-border);
+    border-radius: var(--qb-radius);
+    padding: 20px;
+    transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+    text-decoration: none;
+    color: var(--qb-text);
+    display: block;
+    position: relative;
+    overflow: hidden;
+}
+.qb-card::after {
+    content: '';
+    position: absolute;
+    top: 0; right: 0;
+    width: 3px; height: 100%;
+    background: var(--card-color, #6366f1);
+    border-radius: 0 var(--qb-radius) var(--qb-radius) 0;
+    opacity: 0;
+    transition: opacity .2s;
+}
+.qb-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--qb-shadow-lg);
+    border-color: var(--card-color, #6366f1);
+    color: var(--qb-text);
+}
+.qb-card:hover::after { opacity: 1; }
+.qb-card__icon {
+    width: 48px; height: 48px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 12px;
+    font-size: 18px;
+    color: #fff;
+    background: var(--card-color, #6366f1);
+    flex-shrink: 0;
+}
+.qb-card__glow {
+    position: absolute;
+    width: 120px; height: 120px;
+    border-radius: 50%;
+    background: var(--card-color, #6366f1);
+    opacity: .06;
+    top: -40px; left: -40px;
+    pointer-events: none;
+    transition: opacity .2s;
+}
+.qb-card:hover .qb-card__glow { opacity: .1; }
+.qb-card__val { font-size: 2rem; font-weight: 800; line-height: 1; margin: 8px 0 4px; }
+.qb-card__lbl { font-size: 12.5px; color: var(--qb-muted); font-weight: 500; }
+.qb-card__desc { font-size: 12px; color: var(--qb-muted); margin-top: 4px; }
+.qb-card__bar {
+    height: 3px;
+    border-radius: 2px;
+    background: var(--qb-border);
+    margin-top: 14px;
+    overflow: hidden;
+}
+.qb-card__bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--card-color, #6366f1);
+    width: var(--fill, 0%);
+    transition: width 1.2s cubic-bezier(.16,1,.3,1);
+}
+
+/* ─── section title ───────────────────────────────────────────────────── */
+.qb-section-title {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--qb-muted);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.qb-section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--qb-border);
+}
+
+/* ─── chart panels ────────────────────────────────────────────────────── */
+.qb-panel {
+    background: var(--qb-surface);
+    border: 1px solid var(--qb-border);
+    border-radius: var(--qb-radius);
+    box-shadow: var(--qb-shadow-sm);
+    overflow: hidden;
+}
+.qb-panel__head {
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid var(--qb-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.qb-panel__title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--qb-text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.qb-panel__icon {
+    width: 30px; height: 30px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+    color: #fff;
+}
+.qb-panel__body { padding: 20px; }
+.qb-chart { min-height: 260px; max-height: 300px; }
+
+/* chart center label for doughnut */
+.qb-doughnut-wrap { position: relative; }
+.qb-doughnut-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    padding-bottom: 30px;
+}
+.qb-doughnut-center__val { font-size: 1.8rem; font-weight: 800; color: var(--qb-text); }
+.qb-doughnut-center__lbl { font-size: 11px; color: var(--qb-muted); }
+
+/* ─── curriculum accordion ────────────────────────────────────────────── */
+.qb-curr {
+    background: var(--qb-surface);
+    border: 1px solid var(--qb-border);
+    border-radius: var(--qb-radius);
+    box-shadow: var(--qb-shadow-sm);
+    overflow: hidden;
+    transition: box-shadow .2s;
+}
+.qb-curr:hover { box-shadow: var(--qb-shadow-md); }
+.qb-curr__toggle {
+    width: 100%;
+    background: transparent;
+    border: none;
+    padding: 18px 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    cursor: pointer;
+    color: var(--qb-text);
+    text-align: right;
+    transition: background .15s;
+}
+.qb-curr__toggle:hover { background: rgba(99,102,241,.04); }
+.qb-curr__toggle[aria-expanded="true"] .qb-curr__chevron { transform: rotate(180deg); }
+.qb-curr__chevron { transition: transform .25s; color: var(--qb-muted); flex-shrink: 0; }
+.qb-curr__icon {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    color: #fff;
+    flex-shrink: 0;
+}
+.qb-curr__meta { flex: 1; }
+.qb-curr__name { font-size: 15px; font-weight: 700; }
+.qb-curr__summary { font-size: 12px; color: var(--qb-muted); margin-top: 2px; }
+.qb-curr__badges { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.qb-badge {
+    padding: 3px 10px;
+    border-radius: 50px;
+    font-size: 11.5px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.qb-badge--green  { background: #d1fae5; color: #065f46; }
+.qb-badge--amber  { background: #fef3c7; color: #92400e; }
+.qb-badge--red    { background: #fee2e2; color: #991b1b; }
+.qb-badge--blue   { background: #dbeafe; color: #1e40af; }
+.qb-badge--purple { background: #ede9fe; color: #5b21b6; }
+
+/* ─── table ───────────────────────────────────────────────────────────── */
+.qb-table { width: 100%; border-collapse: collapse; }
+.qb-table th {
+    background: #f8fafc;
+    color: var(--qb-muted);
+    font-size: 11.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--qb-border);
+    white-space: nowrap;
+}
+.qb-table td {
+    padding: 12px 16px;
+    font-size: 13.5px;
+    border-bottom: 1px solid var(--qb-border);
+    color: var(--qb-text);
+    vertical-align: middle;
+}
+.qb-table tbody tr { transition: background .12s; cursor: pointer; }
+.qb-table tbody tr:hover { background: rgba(99,102,241,.04); }
+.qb-table tbody tr:last-child td { border-bottom: none; }
+.qb-table .num { font-weight: 700; }
+
+/* difficulty mini-bars */
+.diff-bars { display: flex; gap: 3px; align-items: flex-end; height: 20px; }
+.diff-bar {
+    flex: 1;
+    border-radius: 2px 2px 0 0;
+    min-height: 4px;
+    transition: height .3s;
+}
+
+/* fill bar */
+.qb-fill { background: var(--qb-border); border-radius: 4px; overflow: hidden; height: 6px; min-width: 100px; }
+.qb-fill__inner { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #6366f1, #10b981); transition: width 1s ease; }
+
+/* ─── top-action bar ──────────────────────────────────────────────────── */
+.qb-topbar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+}
+.qb-topbar__title { font-size: 1.35rem; font-weight: 800; color: var(--qb-text); }
+.qb-topbar__sub { font-size: 13px; color: var(--qb-muted); margin-top: 2px; }
+
+/* ─── button ──────────────────────────────────────────────────────────── */
+.qb-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 18px;
+    border-radius: 8px;
+    font-size: 13.5px;
+    font-weight: 600;
+    border: 1.5px solid transparent;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all .18s;
+}
+.qb-btn--outline {
+    border-color: var(--qb-border);
+    color: var(--qb-text);
+    background: var(--qb-surface);
+}
+.qb-btn--outline:hover { border-color: var(--qb-accent1); color: var(--qb-accent1); }
+.qb-btn--primary {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: #fff;
+}
+.qb-btn--primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(16,185,129,.35); color: #fff; }
+
+/* ─── animated counter ────────────────────────────────────────────────── */
+@@keyframes countUp {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.qb-counter { animation: countUp .5s ease both; }
+
+/* ─── responsive ──────────────────────────────────────────────────────── */
+@@media (max-width: 767px) {
+    .qb-hero { padding: 20px; }
+    .qb-hero__num { font-size: 2rem; }
+    .qb-panel__body { padding: 14px; }
+}
+</style>
+}
+
+<div class="qb container-fluid py-4">
+
+    @* ░░ TOP BAR ░░ *@
+    <div class="qb-topbar">
+        <div>
+            <div class="qb-topbar__title">
+                <i class="fas fa-chart-pie" style="color:#6366f1; margin-left:8px;"></i>
+                لوحة إدارة بنك الأسئلة
+            </div>
+            <div class="qb-topbar__sub">تحليل الجودة · الجاهزية · التغذية · مستويات الصعوبة</div>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a asp-action="Index" class="qb-btn qb-btn--outline">
+                <i class="fas fa-database"></i> بنك الأسئلة
+            </a>
+            <a asp-action="ApproveReadyQuestions" class="qb-btn qb-btn--primary">
+                <i class="fas fa-check-double"></i> اعتماد الجاهز
+            </a>
+        </div>
+    </div>
+
+    @*  *@
+    <div class="qb-hero mb-4">
+        <div class="qb-hero__orb"></div>
+        <div class="qb-hero__orb qb-hero__orb2"></div>
+
+        <div class="row g-4 align-items-center">
+            <div class="col-lg-7">
+                <div class="qb-hero__badge">
+                    <i class="fas fa-circle-dot" style="color:#10b981;font-size:8px;"></i>
+                    المؤشر العام للبنك
+                </div>
+                <div class="qb-hero__num qb-counter" data-target="@Model.TotalQuestions">@Model.TotalQuestions</div>
+                <div style="font-size:1.1rem; opacity:.7; margin-top:4px;">سؤال في بنك الأسئلة</div>
+                <div class="qb-hero__sub">
+                    <i class="fas fa-layer-group me-1"></i> @Model.TotalSections محور
+                    &nbsp;·&nbsp;
+                    <i class="fas fa-bookmark me-1"></i> @Model.TotalLessons مؤشر نشط
+                    &nbsp;·&nbsp;
+                    <i class="fas fa-divide me-1"></i> متوسط @Model.AverageQuestionsPerLesson سؤال/مؤشر
+                </div>
+            </div>
+            <div class="col-lg-5">
+                <div class="row g-3">
+                    <div class="col-6">
+                        <div class="qb-hero__stat d-flex align-items-center gap-3">
+                            <div class="qb-ring">
+                                <svg viewBox="0 0 80 80" width="80" height="80">
+                                    <circle class="qb-ring__bg" cx="40" cy="40" r="35"/>
+                                    <circle class="qb-ring__arc" cx="40" cy="40" r="35" id="approvedRing"/>
+                                </svg>
+                                <div class="qb-ring__label" style="color:#fff;">
+                                    <div class="qb-ring__pct">@approvedPct%</div>
+                                    <div class="qb-ring__sub">معتمد</div>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="qb-hero__stat-val">@(Model.StatusCards.FirstOrDefault(c => c.Title.Contains("معتمد"))?.Count ?? 0)</div>
+                                <div class="qb-hero__stat-lbl">سؤال معتمد</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="qb-hero__stat">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <i class="fas fa-clone" style="color:#f59e0b;"></i>
+                                <span style="font-size:12px; opacity:.7;">متشابهات محتملة</span>
+                            </div>
+                            <div class="qb-hero__stat-val">@Model.SimilarQuestionsCount</div>
+                            <div class="qb-hero__stat-lbl">من آخر @Model.SimilarQuestionsSampleSize سؤال</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="qb-hero__stat">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <i class="fas fa-book" style="color:#3b82f6;"></i>
+                                <span style="font-size:12px; opacity:.7;">تغطية المناهج</span>
+                            </div>
+                            <div class="qb-hero__stat-val">@Model.QuestionBankStatsByCurriculum.Count</div>
+                            <div class="qb-hero__stat-lbl">قسم/منهج في البنك</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="qb-hero__stat">
+                            <div class="d-flex align-items-center gap-2 mb-1">
+                                <i class="fas fa-star" style="color:#8b5cf6;"></i>
+                                <span style="font-size:12px; opacity:.7;">جودة البنك</span>
+                            </div>
+                            <div class="qb-hero__stat-val">@approvedPct%</div>
+                            <div class="qb-hero__stat-lbl">نسبة الاعتماد</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @*  *@
+    <div class="qb-section-title">
+        <i class="fas fa-chart-bar" style="color:#6366f1;"></i>
+        حالة الأسئلة
+    </div>
+    <div class="row g-3 mb-4">
+        @{
+            var cardColors = new[] { "#6366f1","#10b981","#f59e0b","#ef4444","#3b82f6","#8b5cf6","#14b8a6","#f97316" };
+            int cardIdx = 0;
+        }
+        @foreach (var card in Model.StatusCards)
+        {
+            var fillPct = Model.TotalQuestions > 0 ? (int)Math.Round(card.Count * 100.0 / Model.TotalQuestions) : 0;
+            var cc = cardColors[cardIdx % cardColors.Length];
+            cardIdx++;
+            <div class="col-12 col-sm-6 col-xl-4">
+                <a href="@card.Url" class="qb-card h-100" style="--card-color:@cc">
+                    <div class="qb-card__glow"></div>
+                    <div class="d-flex align-items-start justify-content-between gap-3">
+                        <div style="flex:1;">
+                            <div class="qb-card__lbl">@card.Title</div>
+                            <div class="qb-card__val qb-counter" data-target="@card.Count">@card.Count</div>
+                            <div class="qb-card__desc">@card.Description</div>
+                        </div>
+                        <div class="qb-card__icon">
+                            <i class="fas @card.Icon"></i>
+                        </div>
+                    </div>
+                    <div class="qb-card__bar">
+                        <div class="qb-card__bar-fill" style="--fill:@fillPct%"></div>
+                    </div>
+                    <div style="font-size:11px; color:var(--qb-muted); margin-top:5px;">@fillPct% من الإجمالي</div>
+                </a>
+            </div>
+        }
+    </div>
+
+    @*  *@
+    <div class="qb-section-title">
+        <i class="fas fa-chart-area" style="color:#10b981;"></i>
+        التحليلات البيانية
+    </div>
+    <div class="row g-3 mb-4">
+
+        @*  *@
+        <div class="col-xl-4 col-lg-6">
+            <div class="qb-panel h-100">
+                <div class="qb-panel__head">
+                    <div class="qb-panel__title">
+                        <div class="qb-panel__icon" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);">
+                            <i class="fas fa-chart-pie"></i>
+                        </div>
+                        توزيع حالات الأسئلة
+                    </div>
+                    <span class="qb-badge qb-badge--purple">@Model.TotalQuestions سؤال</span>
+                </div>
+                <div class="qb-panel__body">
+                    <div class="qb-doughnut-wrap">
+                        <canvas id="statusChart" class="qb-chart"></canvas>
+                        <div class="qb-doughnut-center">
+                            <div class="qb-doughnut-center__val">@Model.TotalQuestions</div>
+                            <div class="qb-doughnut-center__lbl">إجمالي</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @*  *@
+        <div class="col-xl-4 col-lg-6">
+            <div class="qb-panel h-100">
+                <div class="qb-panel__head">
+                    <div class="qb-panel__title">
+                        <div class="qb-panel__icon" style="background:linear-gradient(135deg,#10b981,#059669);">
+                            <i class="fas fa-signal"></i>
+                        </div>
+                        مستويات الصعوبة
+                    </div>
+                    <span class="qb-badge qb-badge--green">@Model.DifficultyStats.Count مستوى</span>
+                </div>
+                <div class="qb-panel__body">
+                    <canvas id="difficultyChart" class="qb-chart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        @*  *@
+        <div class="col-xl-4 col-lg-12">
+            <div class="qb-panel h-100">
+                <div class="qb-panel__head">
+                    <div class="qb-panel__title">
+                        <div class="qb-panel__icon" style="background:linear-gradient(135deg,#f59e0b,#d97706);">
+                            <i class="fas fa-layer-group"></i>
+                        </div>
+                        تغذية الأقسام
+                    </div>
+                    <span class="qb-badge qb-badge--amber">@Model.CurriculumCoverageStats.Count قسم</span>
+                </div>
+                <div class="qb-panel__body">
+                    <canvas id="curriculumChart" class="qb-chart"></canvas>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    @*  *@
+    <div class="qb-section-title">
+        <i class="fas fa-book-open" style="color:#ef4444;"></i>
+        تفاصيل المناهج والمحاور
+    </div>
+
+    @{
+        var currColors = new[] {
+            "linear-gradient(135deg,#ef4444,#dc2626)",
+            "linear-gradient(135deg,#3b82f6,#2563eb)",
+            "linear-gradient(135deg,#10b981,#059669)",
+            "linear-gradient(135deg,#8b5cf6,#7c3aed)",
+            "linear-gradient(135deg,#f59e0b,#d97706)",
+            "linear-gradient(135deg,#14b8a6,#0d9488)",
+            "linear-gradient(135deg,#f97316,#ea580c)",
+            "linear-gradient(135deg,#6366f1,#4f46e5)"
+        };
+        int cIdx = 0;
+    }
+
+    @foreach (var curriculum in Model.QuestionBankStatsByCurriculum)
+    {
+        var collapseId   = $"curr-{curriculum.CurriculumId}";
+        var avg          = curriculum.LessonsCount == 0 ? 0 : (int)Math.Round((double)curriculum.QuestionsCount / curriculum.LessonsCount);
+        var approvePct   = curriculum.QuestionsCount == 0 ? 0 : (int)Math.Round(curriculum.ApprovedCount * 100.0 / curriculum.QuestionsCount);
+        var currGrad     = currColors[cIdx % currColors.Length];
+        cIdx++;
+
+        <div class="qb-curr mb-3">
+            <button class="qb-curr__toggle"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#@collapseId"
+                    aria-expanded="true"
+                    aria-controls="@collapseId">
+
+                <div class="qb-curr__icon" style="background:@currGrad;">
+                    <i class="fas fa-book-open"></i>
+                </div>
+
+                <div class="qb-curr__meta">
+                    <div class="qb-curr__name">@curriculum.CurriculumTitle</div>
+                    <div class="qb-curr__summary">
+                        @curriculum.QuestionsCount سؤال &nbsp;·&nbsp;
+                        @curriculum.LessonsCount مؤشر &nbsp;·&nbsp;
+                        متوسط @avg سؤال/مؤشر
+                    </div>
+                </div>
+
+                <div class="qb-curr__badges d-none d-md-flex">
+                    <span class="qb-badge qb-badge--green"><i class="fas fa-check"></i> @curriculum.ApprovedCount معتمد</span>
+                    <span class="qb-badge qb-badge--amber"><i class="fas fa-clock"></i> @curriculum.PendingReviewCount مراجعة</span>
+                    <span class="qb-badge qb-badge--red"><i class="fas fa-exclamation"></i> @curriculum.MissingAnswersCount ناقص</span>
+                    @if (curriculum.RejectedCount > 0) {
+                        <span class="qb-badge qb-badge--blue"><i class="fas fa-times"></i> @curriculum.RejectedCount مرفوض</span>
+                    }
+                    <span class="qb-badge qb-badge--purple">@approvePct% اعتماد</span>
+                </div>
+
+                <i class="fas fa-chevron-down qb-curr__chevron"></i>
+            </button>
+
+            <div id="@collapseId" class="collapse show">
+                @*  *@
+                <div style="padding:0 20px 4px; background:rgba(99,102,241,.03);">
+                    <div style="font-size:11px; color:var(--qb-muted); margin-bottom:4px;">
+                        نسبة الاعتماد: @approvePct%
+                    </div>
+                    <div class="qb-fill" style="height:4px;">
+                        <div class="qb-fill__inner" style="width:@approvePct%"></div>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="qb-table">
+                        <thead>
+                            <tr>
+                                <th>المحور</th>
+                                <th style="text-align:center;">المؤشرات</th>
+                                <th style="text-align:center;">الأسئلة</th>
+                                <th style="text-align:center;">معتمد</th>
+                                <th style="text-align:center;">مراجعة</th>
+                                <th style="text-align:center;">بدون إجابة</th>
+                                <th style="text-align:center;">مرفوض</th>
+                                <th style="text-align:center;">الصعوبة</th>
+                                <th style="min-width:130px;">التغذية</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var sec in curriculum.Sections)
+                            {
+                                var rowUrl  = Url.Action("ListBySection", "Questions", new { area = "Admin", curriculumId = sec.CurriculumId, sectionId = sec.SectionId });
+                                var fill    = sec.LessonsCount == 0 ? 0 : Math.Min(100, (int)Math.Round((double)sec.QuestionsCount / Math.Max(1, sec.LessonsCount * 5) * 100));
+                                var maxDiff = new[] { sec.EasyCount, sec.MediumCount, sec.HardCount, sec.VeryHardCount }.Max();
+                                var getH    = (int v) => maxDiff == 0 ? 4 : Math.Max(4, (int)(v * 18.0 / maxDiff));
+
+                                <tr onclick="location.href='@rowUrl'">
+                                    <td class="fw-semibold" style="max-width:200px; word-break:break-word;">@sec.SectionTitle</td>
+                                    <td style="text-align:center;" class="num">@sec.LessonsCount</td>
+                                    <td style="text-align:center;" class="num">@sec.QuestionsCount</td>
+                                    <td style="text-align:center;">
+                                        <span class="qb-badge qb-badge--green">@sec.ApprovedCount</span>
+                                    </td>
+                                    <td style="text-align:center;">
+                                        <span class="qb-badge qb-badge--amber">@sec.PendingReviewCount</span>
+                                    </td>
+                                    <td style="text-align:center;">
+                                        @if (sec.MissingAnswersCount > 0) {
+                                            <span class="qb-badge qb-badge--red">@sec.MissingAnswersCount</span>
+                                        } else {
+                                            <span style="color:#94a3b8;">—</span>
+                                        }
+                                    </td>
+                                    <td style="text-align:center;">
+                                        @if (sec.RejectedCount > 0) {
+                                            <span class="qb-badge qb-badge--blue">@sec.RejectedCount</span>
+                                        } else {
+                                            <span style="color:#94a3b8;">—</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <div class="diff-bars" title="سهل: @sec.EasyCount | متوسط: @sec.MediumCount | صعب: @sec.HardCount | صعب جداً: @sec.VeryHardCount">
+                                            <div class="diff-bar" style="background:#10b981; height:@(getH(sec.EasyCount))px;" title="سهل @sec.EasyCount"></div>
+                                            <div class="diff-bar" style="background:#3b82f6; height:@(getH(sec.MediumCount))px;" title="متوسط @sec.MediumCount"></div>
+                                            <div class="diff-bar" style="background:#f59e0b; height:@(getH(sec.HardCount))px;" title="صعب @sec.HardCount"></div>
+                                            <div class="diff-bar" style="background:#ef4444; height:@(getH(sec.VeryHardCount))px;" title="صعب جداً @sec.VeryHardCount"></div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="qb-fill">
+                                            <div class="qb-fill__inner" style="width:@fill%"></div>
+                                        </div>
+                                        <div style="font-size:10.5px; color:var(--qb-muted); margin-top:3px;">@fill%</div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+
+</div>
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    /* ── data ──────────────────────────────────────────────────── */
+    const palette      = @Html.Raw(JsonSerializer.Serialize(palette));
+    const statusLabels = @Html.Raw(JsonSerializer.Serialize(statusLabels));
+    const statusValues = @Html.Raw(JsonSerializer.Serialize(statusValues));
+    const diffLabels   = @Html.Raw(JsonSerializer.Serialize(diffLabels));
+    const diffValues   = @Html.Raw(JsonSerializer.Serialize(diffValues));
+    const covLabels    = @Html.Raw(JsonSerializer.Serialize(covLabels));
+    const covValues    = @Html.Raw(JsonSerializer.Serialize(covValues));
+
+    /* ── chart defaults ────────────────────────────────────────── */
+    Chart.defaults.font.family = "'Cairo','Segoe UI',sans-serif";
+    Chart.defaults.color       = '#64748b';
+
+    /* gradient helper */
+    function mkGrad(ctx, colors) {
+        const g = ctx.createLinearGradient(0, 0, 0, 300);
+        g.addColorStop(0, colors[0]);
+        g.addColorStop(1, colors[1]);
+        return g;
+    }
+
+    /* ── doughnut: حالة الأسئلة ────────────────────────────────── */
+    (function () {
+        const ctx = document.getElementById('statusChart');
+        if (!ctx) return;
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: statusLabels,
+                datasets: [{
+                    data: statusValues,
+                    backgroundColor: palette,
+                    borderWidth: 3,
+                    borderColor: '#fff',
+                    hoverOffset: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '68%',
+                animation: { animateRotate: true, duration: 900 },
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            padding: 14,
+                            boxWidth: 12,
+                            boxHeight: 12,
+                            borderRadius: 4,
+                            usePointStyle: true,
+                            pointStyle: 'rectRounded'
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => ` ${ctx.label}: ${ctx.parsed.toLocaleString('ar')}`
+                        }
+                    }
+                }
+            }
+        });
+    })();
+
+    /* ── bar: مستوى الصعوبة ────────────────────────────────────── */
+    (function () {
+        const ctx = document.getElementById('difficultyChart');
+        if (!ctx) return;
+
+        const gradients = [
+            ['#10b981','#6ee7b7'],
+            ['#3b82f6','#93c5fd'],
+            ['#f59e0b','#fcd34d'],
+            ['#ef4444','#fca5a5']
+        ];
+
+        const bgColors = diffLabels.map((_, i) => {
+            const gc = gradients[i % gradients.length];
+            return gc[0];
+        });
+
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: diffLabels,
+                datasets: [{
+                    label: 'عدد الأسئلة',
+                    data: diffValues,
+                    backgroundColor: bgColors,
+                    borderRadius: 8,
+                    borderSkipped: false,
+                    barThickness: 44
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 900, easing: 'easeOutQuart' },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { precision: 0, stepSize: 1 },
+                        grid: { color: 'rgba(0,0,0,.05)' }
+                    },
+                    x: { grid: { display: false } }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => ` ${ctx.parsed.y.toLocaleString('ar')} سؤال`
+                        }
+                    }
+                }
+            }
+        });
+    })();
+
+    /* ── horizontal bar: تغذية الأقسام ────────────────────────── */
+    (function () {
+        const ctx = document.getElementById('curriculumChart');
+        if (!ctx) return;
+
+        const max = Math.max(...covValues, 1);
+        const bgColors = covValues.map(v => {
+            const ratio = v / max;
+            if (ratio > .75) return '#6366f1';
+            if (ratio > .5)  return '#3b82f6';
+            if (ratio > .25) return '#10b981';
+            return '#f59e0b';
+        });
+
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: covLabels,
+                datasets: [{
+                    label: 'الأسئلة',
+                    data: covValues,
+                    backgroundColor: bgColors,
+                    borderRadius: 6,
+                    borderSkipped: false,
+                    barThickness: 22
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: 'y',
+                animation: { duration: 900, easing: 'easeOutQuart' },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        ticks: { precision: 0 },
+                        grid: { color: 'rgba(0,0,0,.05)' }
+                    },
+                    y: { grid: { display: false } }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => ` ${ctx.parsed.x.toLocaleString('ar')} سؤال`
+                        }
+                    }
+                }
+            }
+        });
+    })();
+
+    /* ── animated counters ─────────────────────────────────────── */
+    function animateCounter(el) {
+        const target = parseInt(el.dataset.target, 10);
+        if (isNaN(target)) return;
+        let start = 0;
+        const duration = 900;
+        const step = 16;
+        const inc = target / (duration / step);
+        const timer = setInterval(() => {
+            start = Math.min(start + inc, target);
+            el.textContent = Math.round(start).toLocaleString('ar');
+            if (start >= target) clearInterval(timer);
+        }, step);
+    }
+    document.querySelectorAll('.qb-counter').forEach(animateCounter);
+
+    /* ── accordion chevron sync ────────────────────────────────── */
+    document.querySelectorAll('[data-bs-toggle="collapse"]').forEach(btn => {
+        const target = document.querySelector(btn.dataset.bsTarget);
+        if (!target) return;
+        target.addEventListener('shown.bs.collapse',  () => btn.setAttribute('aria-expanded','true'));
+        target.addEventListener('hidden.bs.collapse', () => btn.setAttribute('aria-expanded','false'));
+    });
+
+})();
+</script>
+}

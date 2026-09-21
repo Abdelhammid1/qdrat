@@ -1,0 +1,76 @@
+﻿@model List<QdratNew.ViewModels.Dashboard.BatchExamItem>
+
+@if (Model == null || !Model.Any())
+{
+    <div class="alert alert-light text-center mt-2">
+        ⚠️ لا توجد اختبارات لهذه الدفعة بعد.
+    </div>
+}
+else
+{
+    <table class="table table-bordered table-hover align-middle text-center mt-3">
+        <thead class="table-light">
+            <tr>
+                <th>عنوان الاختبار</th>
+                <th>المنهج</th>
+                <th>الطلاب المختبرون</th>
+                <th>الطلاب الراسبون</th>
+                <th>تاريخ الإنشاء</th>
+                <th>الخيارات</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var e in Model)
+            {
+                var dangerRow = e.FailedCount > 0 ? "table-warning" : "";
+                <tr class="@dangerRow">
+                    <td>@e.ExamTitle</td>
+                    <td>@e.CurriculumTitle</td>
+                    <td>@e.StudentsCount</td>
+                    <td class="text-danger fw-bold">@e.FailedCount</td>
+                    <td>@e.CreatedAt.ToString("yyyy/MM/dd")</td>
+                    <td class="d-flex justify-content-center gap-2">
+
+                        <!-- 🔹 زر تحليل الاختبار -->
+                        <button class="btn btn-outline-primary btn-sm view-exam" data-exam="@e.ExamId">
+                            <i class="bi bi-bar-chart"></i> تحليل
+                        </button>
+
+                        <!-- 🟢 زر تقرير الدفعة -->
+                        <a asp-area="Admin"
+                           asp-controller="PerformanceExamReports"
+                           asp-action="BatchReport"
+                           asp-route-batchId="@e.BatchId"
+                           asp-route-examId="@e.ExamId"
+                           class="btn btn-outline-success btn-sm">
+                            <i class="bi bi-file-earmark-bar-graph"></i> تقرير الدفعة
+                        </a>
+
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+<script>
+    // 🔹 عند الضغط على زر تحليل الاختبار
+    $(document).on("click", ".view-exam", function () {
+        const examId = $(this).data("exam");
+        $("#batchModalBody").html("⏳ جارٍ تحميل التحليل...");
+        $("#batchModal").modal("show");
+
+        $.get(`/Admin/PerformanceDashboard/ExamReport?examId=${examId}`, function (data) {
+            $("#batchModalBody").html(data);
+        });
+    });
+
+    // 🎯 توحيد وظيفة زر "تحليل"
+    $(document).on('click', '.view-exam', function () {
+        var examId = $(this).data('exam');
+        $("#batchModalBody").html('<div class="text-center p-4">⏳ جارٍ تحميل التحليل...</div>');
+        $.get('/Admin/PerformanceDashboard/ExamAnalytics', { examId: examId }, function (data) {
+            $("#batchModalBody").html(data);
+        });
+    });
+</script>

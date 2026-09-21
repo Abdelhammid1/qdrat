@@ -1,0 +1,312 @@
+﻿@model IEnumerable<QdratNew.Entities.Project>
+
+@{
+    ViewData["Title"] = "إدارة البرامج";
+
+    var projectsList = Model != null
+        ? Model.ToList()
+        : new List<QdratNew.Entities.Project>();
+
+    var totalProjects = projectsList.Count;
+    var activeProjects = projectsList.Count(x => x.IsActive);
+    var inactiveProjects = totalProjects - activeProjects;
+
+    var branchesCount = projectsList
+        .Where(x => x.Branch != null && !string.IsNullOrWhiteSpace(x.Branch.Name))
+        .Select(x => x.Branch.Name)
+        .Distinct()
+        .Count();
+
+    var citiesCount = projectsList
+        .Where(x => x.Branch != null && !string.IsNullOrWhiteSpace(x.Branch.State))
+        .Select(x => x.Branch.State)
+        .Distinct()
+        .Count();
+}
+
+@section Styles {
+    <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+    <link href="https://cdn.datatables.net/buttons/2.4.1/css/buttons.bootstrap5.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet" />
+    <link href="~/css/admin-unified-pages.css" rel="stylesheet" />
+  
+}
+
+<div class="projects-page">
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="projects-alert">
+            <i class="bi bi-check-circle-fill"></i>
+            @TempData["SuccessMessage"]
+        </div>
+    }
+
+    <div class="projects-topbar">
+        <div class="projects-brand">
+            <div class="projects-brand-icon">
+                <i class="bi bi-kanban-fill"></i>
+            </div>
+
+            <div>
+                <div class="projects-brand-title">إدارة البرامج</div>
+                <div class="projects-brand-sub">
+                    إدارة البرامج وربطها بالفروع والمدن ومتابعة حالة التشغيل.
+                </div>
+            </div>
+        </div>
+
+        <div class="top-actions">
+            <a href="/Admin/Projects/Dashboard" class="btn-secondary-action">
+                <i class="bi bi-bar-chart-line"></i>
+                لوحة تحكم البرامج
+            </a>
+
+            <a asp-action="Create" class="btn-main-action">
+                <i class="bi bi-plus-circle"></i>
+                إضافة برنامج جديد
+            </a>
+        </div>
+    </div>
+
+    <div class="projects-kpis">
+
+        <div class="kpi-card kpi-blue">
+            <div class="kpi-ico ico-blue">
+                <i class="bi bi-kanban"></i>
+            </div>
+            <div>
+                <div class="kpi-label">إجمالي البرامج</div>
+                <div class="kpi-val">@totalProjects</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-emerald">
+            <div class="kpi-ico ico-emerald">
+                <i class="bi bi-check-circle"></i>
+            </div>
+            <div>
+                <div class="kpi-label">برامج نشطة</div>
+                <div class="kpi-val">@activeProjects</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-amber">
+            <div class="kpi-ico ico-amber">
+                <i class="bi bi-x-circle"></i>
+            </div>
+            <div>
+                <div class="kpi-label">غير نشطة</div>
+                <div class="kpi-val">@inactiveProjects</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-violet">
+            <div class="kpi-ico ico-violet">
+                <i class="bi bi-geo-alt"></i>
+            </div>
+            <div>
+                <div class="kpi-label">المدن</div>
+                <div class="kpi-val">@citiesCount</div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="projects-table-card">
+
+        <div class="projects-table-topbar">
+            <div class="table-section-title">
+                <i class="bi bi-table"></i>
+                قائمة البرامج
+            </div>
+
+            <div class="projects-table-search-wrap">
+                <i class="bi bi-search"></i>
+                <input type="text"
+                       id="projectsSearch"
+                       placeholder="ابحث في اسم البرنامج أو المدينة أو الفرع أو الحالة..." />
+            </div>
+
+            <div class="projects-count-badge">
+                إجمالي: <strong>@totalProjects</strong> برنامج
+            </div>
+        </div>
+
+        @if (!projectsList.Any())
+        {
+            <div class="projects-empty">
+                <i class="bi bi-inbox"></i>
+                <div class="projects-empty-title">لا توجد برامج مسجلة</div>
+                <div class="projects-empty-sub">يمكنك إضافة برنامج جديد من أعلى الصفحة</div>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive-safe">
+                <table id="projectsTable">
+                    <thead>
+                        <tr>
+                            <th style="text-align:right; width:26%">البرامج</th>
+                            <th style="width:16%">المدينة</th>
+                            <th style="width:16%">تاريخ البداية</th>
+                            <th style="width:14%">الحالة</th>
+                            <th style="width:16%">الفرع</th>
+                            <th style="width:12%">العمليات</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @foreach (var item in projectsList)
+                        {
+                            var cityText = item.Branch != null && !string.IsNullOrWhiteSpace(item.Branch.State)
+                            ? item.Branch.State
+                            : "غير محدد";
+
+                            var branchText = item.Branch != null && !string.IsNullOrWhiteSpace(item.Branch.Name)
+                            ? item.Branch.Name
+                            : "غير محدد";
+
+                            <tr>
+                                <td style="text-align:right">
+                                    <div class="project-title-cell">
+                                        <div class="project-avatar">
+                                            <i class="bi bi-kanban"></i>
+                                        </div>
+                                        <span class="project-item-name">@item.Name</span>
+                                    </div>
+                                </td>
+
+                                <td>
+                                    <span class="city-chip @(cityText == "غير محدد" ? "empty-chip" : "")">
+                                        <i class="bi bi-geo-alt"></i>
+                                        @cityText
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="date-chip">
+                                        <i class="bi bi-calendar-event"></i>
+                                        @(item.StartDate.HasValue? item.StartDate.Value.ToString("yyyy-MM-dd") : "غير متوفر")
+                                    </span>
+                                </td>
+
+                                <td>
+                                    @if (item.IsActive)
+                                    {
+                                        <span class="status-pill sp-active">
+                                            <i class="bi bi-check-circle"></i>
+                                            نشط
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="status-pill sp-inactive">
+                                            <i class="bi bi-x-circle"></i>
+                                            غير نشط
+                                        </span>
+                                    }
+                                </td>
+
+                                <td>
+                                    <span class="branch-chip @(branchText == "غير محدد" ? "empty-chip" : "")">
+                                        <i class="bi bi-building"></i>
+                                        @branchText
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <div class="projects-act-row">
+
+                                        <a asp-action="Edit"
+                                           asp-route-id="@item.Id"
+                                           class="act-btn act-edit"
+                                           aria-label="تعديل">
+                                            <i class="bi bi-pencil-square"></i>
+                                            <span class="act-text">تعديل</span>
+                                        </a>
+
+                                        <a asp-action="Details"
+                                           asp-route-id="@item.Id"
+                                           class="act-btn act-view"
+                                           aria-label="تفاصيل">
+                                            <i class="bi bi-info-circle"></i>
+                                            <span class="act-text">تفاصيل</span>
+                                        </a>
+
+                                        <a asp-action="Delete"
+                                           asp-route-id="@item.Id"
+                                           class="act-btn act-delete"
+                                           aria-label="حذف">
+                                            <i class="bi bi-trash"></i>
+                                            <span class="act-text">حذف</span>
+                                        </a>
+
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+    </div>
+
+</div>
+
+@section Scripts {
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.flash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.0/jszip.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js"></script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            var tableElement = document.getElementById('projectsTable');
+
+            if (tableElement) {
+                var table = $('#projectsTable').DataTable({
+                    language: {
+                        url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json"
+                    },
+                    pageLength: 10,
+                    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "الكل"]],
+                    order: [[2, "desc"]],
+                    responsive: true,
+                    stateSave: true,
+                    dom: 'Brtip',
+                    buttons: [
+                        {
+                            extend: 'copy',
+                            text: '<i class="bi bi-copy"></i> نسخ',
+                            className: 'btn btn-secondary'
+                        },
+                        {
+                            extend: 'excel',
+                            text: '<i class="bi bi-file-earmark-excel"></i> Excel',
+                            className: 'btn btn-success'
+                        },
+                        {
+                            extend: 'print',
+                            text: '<i class="bi bi-printer"></i> طباعة',
+                            className: 'btn btn-primary'
+                        }
+                    ],
+                    columnDefs: [
+                        { orderable: false, targets: [5] }
+                    ]
+                });
+
+                $('#projectsSearch').on('input', function () {
+                    table.search(this.value).draw();
+                });
+            }
+        });
+    </script>
+}

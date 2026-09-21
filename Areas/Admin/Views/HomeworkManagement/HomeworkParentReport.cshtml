@@ -1,0 +1,1722 @@
+@model QdratNew.ViewModels.Homework.HomeworkAnalyticsViewModel
+@using Newtonsoft.Json
+@using System.Linq
+@using System.Net
+@using System.Text.RegularExpressions
+
+@{
+    ViewData["Title"] = "تقرير الواجب المتقدم";
+    Layout = null;
+    var rec = Model.Recommendation;
+
+
+
+    string CleanHtmlText(string? value, int maxLength = 0)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "—";
+        }
+
+        var decoded = WebUtility.HtmlDecode(value);
+
+        decoded = Regex.Replace(decoded, @"<br\s*/?>", " ", RegexOptions.IgnoreCase);
+        decoded = Regex.Replace(decoded, @"</p\s*>", " ", RegexOptions.IgnoreCase);
+        decoded = Regex.Replace(decoded, @"<[^>]+>", string.Empty, RegexOptions.IgnoreCase);
+        decoded = Regex.Replace(decoded, @"\s+", " ").Trim();
+
+        if (string.IsNullOrWhiteSpace(decoded))
+        {
+            return "—";
+        }
+
+        if (maxLength > 0 && decoded.Length > maxLength)
+        {
+            return decoded.Substring(0, maxLength) + "…";
+        }
+
+        return decoded;
+    }
+
+
+
+    // ── حساب السلوك المشبوه ──────────────────────────────────────────
+    var suspiciousFastCorrect = Model.Questions
+        .Where(q => q.IsCorrect && q.TimeTakenSeconds > 0 && q.TimeTakenSeconds < 4)
+        .ToList();
+
+    var avgTimeSec = Model.TotalQuestions > 0
+        ? Model.Questions.Where(q => q.TimeTakenSeconds > 0).Select(q => q.TimeTakenSeconds).DefaultIfEmpty(0).Average()
+        : 0;
+
+    // درجة الخطر: 0-10
+    int riskScore = 0;
+    if (suspiciousFastCorrect.Count >= 3) riskScore += 3;
+    if (suspiciousFastCorrect.Count >= 6) riskScore += 2;
+    if (avgTimeSec > 0 && avgTimeSec < 5) riskScore += 2;
+    if (Model.ScorePercentage > 85 && avgTimeSec < 8) riskScore += 2;
+    if (Model.SkippedCount == 0 && Model.ScorePercentage == 100) riskScore += 1;
+
+    string riskLevel = riskScore >= 6 ? "عالي" : riskScore >= 3 ? "متوسط" : "منخفض";
+    string riskClass = riskScore >= 6 ? "danger" : riskScore >= 3 ? "warning" : "safe";
+    string riskIcon = riskScore >= 6 ? "fa-triangle-exclamation" : riskScore >= 3 ? "fa-circle-exclamation" : "fa-circle-check";
+
+    // ── مؤشر المستوى ──────────────────────────────────────────────────
+    string perfLevel = Model.ScorePercentage >= 85 ? "ممتاز"
+                      : Model.ScorePercentage >= 70 ? "جيد جداً"
+                      : Model.ScorePercentage >= 55 ? "جيد"
+                      : Model.ScorePercentage >= 40 ? "مقبول"
+                      : "يحتاج مراجعة";
+    string perfColor = Model.ScorePercentage >= 85 ? "#10B981"
+                      : Model.ScorePercentage >= 70 ? "#0EA5E9"
+                      : Model.ScorePercentage >= 55 ? "#F59E0B"
+                      : "#EF4444";
+
+    // ── تصنيف السرعة ──────────────────────────────────────────────────
+    string speedLabel = avgTimeSec < 6 ? "سريع جداً"
+                      : avgTimeSec < 15 ? "سريع"
+                      : avgTimeSec < 30 ? "معتدل"
+                      : "بطيء";
+    string speedIcon = avgTimeSec < 6 ? "fa-bolt"
+                      : avgTimeSec < 15 ? "fa-forward"
+                      : avgTimeSec < 30 ? "fa-gauge-simple-high"
+                      : "fa-snail";
+
+    // ── بيانات الشارت ──────────────────────────────────────────────────
+    var sectionLabels = JsonConvert.SerializeObject(Model.SectionsPerformance.Select(s => s.SectionTitle));
+    var sectionScores = JsonConvert.SerializeObject(Model.SectionsPerformance.Select(s => s.Accuracy));
+    var lessonLabels = JsonConvert.SerializeObject(Model.LessonsPerformance.Select(l => l.LessonTitle));
+    var lessonScores = JsonConvert.SerializeObject(Model.LessonsPerformance.Select(l => l.SuccessRate));
+    var lessonTimes = JsonConvert.SerializeObject(Model.LessonsPerformance.Select(l => l.TimeSpentMinutes));
+    var qTimes = JsonConvert.SerializeObject(Model.Questions.Select((q, i) => new { x = i + 1, y = Math.Round(q.TimeTakenSeconds, 1), c = q.IsCorrect }));
+}
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"]</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+    <style>
+        @@font-face {
+            font-family: 'ZA-Roots';
+            src: url('/fonts/ZA-roots.woff2') format('woff2'),
+                 url('/fonts/ZA-roots.woff') format('woff'),
+                 url('/fonts/ZA-roots.TTF') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+            font-display: swap;
+        }
+        @@font-face {
+            font-family: 'ZA-roots';
+            src: url('/fonts/ZA-roots.woff2') format('woff2'),
+                 url('/fonts/ZA-roots.woff') format('woff'),
+                 url('/fonts/ZA-roots.TTF') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+            font-display: swap;
+        }
+        :root {
+            --clr-primary: #4F46E5;
+            --clr-primary-d: #3730A3;
+            --clr-success: #10B981;
+            --clr-danger: #EF4444;
+            --clr-warning: #F59E0B;
+            --clr-info: #0EA5E9;
+            --clr-bg: #F1F5F9;
+            --clr-surface: #FFFFFF;
+            --clr-border: #E2E8F0;
+            --clr-text: #1E293B;
+            --clr-muted: #64748B;
+            --radius: 16px;
+            --shadow-sm: 0 2px 8px rgba(0,0,0,.06);
+            --shadow-md: 0 4px 20px rgba(0,0,0,.10);
+            --shadow-lg: 0 8px 40px rgba(0,0,0,.14);
+            --font: 'Cairo', sans-serif;
+        }
+
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: var(--font);
+            background: var(--clr-bg);
+            color: var(--clr-text);
+            min-height: 100vh;
+            direction: rtl;
+        }
+
+        /* ── HERO HEADER ── */
+        .hero {
+            background: linear-gradient(135deg, #1E1B4B 0%, #312E81 40%, #4F46E5 100%);
+            color: #fff;
+            padding: 32px 0 80px;
+            position: relative;
+            overflow: hidden;
+        }
+
+            .hero::before {
+                content: '';
+                position: absolute;
+                inset: 0;
+                background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            }
+
+        .hero-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 24px;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero-info h1 {
+            font-size: clamp(1.5rem, 4vw, 2.2rem);
+            font-weight: 900;
+            letter-spacing: -.5px;
+            margin-bottom: 8px;
+        }
+
+        .hero-info .meta-pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .meta-pill {
+            background: rgba(255,255,255,.15);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,.25);
+            border-radius: 50px;
+            padding: 5px 14px;
+            font-size: .82rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* ── SCORE GAUGE ── */
+        .score-gauge-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .score-gauge {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: conic-gradient(
+            @Html.Raw(perfColor) calc( @Model.ScorePercentage * 1%), rgba(255,255,255,.15) 0 );
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            box-shadow: 0 0 0 6px rgba(255,255,255,.15), 0 0 0 12px rgba(255,255,255,.08);
+        }
+
+            .score-gauge::after {
+                content: '';
+                position: absolute;
+                inset: 14px;
+                border-radius: 50%;
+                background: #312E81;
+            }
+
+        .score-gauge-inner {
+            position: relative;
+            z-index: 2;
+            text-align: center;
+        }
+
+            .score-gauge-inner .num {
+                font-size: 2rem;
+                font-weight: 900;
+                line-height: 1;
+            }
+
+            .score-gauge-inner .lbl {
+                font-size: .72rem;
+                opacity: .8;
+            }
+
+        .perf-badge {
+            background: @Html.Raw(perfColor);
+            color: #fff;
+            padding: 4px 16px;
+            border-radius: 50px;
+            font-size: .82rem;
+            font-weight: 700;
+        }
+
+        /* ── CONTENT WRAPPER ── */
+        .content {
+            max-width: 1200px;
+            margin: -48px auto 40px;
+            padding: 0 24px;
+            position: relative;
+            z-index: 2;
+        }
+
+        /* ── CARD ── */
+        .card {
+            background: var(--clr-surface);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--clr-border);
+            padding: 24px;
+            overflow: hidden;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            padding-bottom: 14px;
+            border-bottom: 2px solid var(--clr-bg);
+        }
+
+            .card-header .icon {
+                width: 36px;
+                height: 36px;
+                border-radius: 10px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 1rem;
+                flex-shrink: 0;
+            }
+
+            .card-header h2 {
+                font-size: 1rem;
+                font-weight: 700;
+                color: var(--clr-text);
+            }
+
+        /* ── KPI CARDS ── */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .kpi-card {
+            background: var(--clr-surface);
+            border-radius: var(--radius);
+            padding: 20px;
+            border: 1px solid var(--clr-border);
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            position: relative;
+            overflow: hidden;
+            transition: transform .2s, box-shadow .2s;
+        }
+
+            .kpi-card:hover {
+                transform: translateY(-2px);
+                box-shadow: var(--shadow-md);
+            }
+
+            .kpi-card::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                right: 0;
+                width: 4px;
+                height: 100%;
+                background: var(--accent);
+            }
+
+            .kpi-card .kpi-icon {
+                width: 42px;
+                height: 42px;
+                border-radius: 12px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 1.2rem;
+                background: color-mix(in srgb, var(--accent) 12%, transparent);
+                color: var(--accent);
+            }
+
+            .kpi-card .kpi-value {
+                font-size: 1.9rem;
+                font-weight: 900;
+                color: var(--accent);
+                line-height: 1;
+            }
+
+            .kpi-card .kpi-label {
+                font-size: .78rem;
+                color: var(--clr-muted);
+                font-weight: 500;
+            }
+
+        /* ── CHARTS GRID ── */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
+            .charts-grid .full {
+                grid-column: 1 / -1;
+            }
+
+        @@media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+
+                .charts-grid .full {
+                    grid-column: 1;
+                }
+        }
+
+        .chart-canvas-wrap {
+            position: relative;
+            width: 100%;
+        }
+
+        /* ── INDICATORS TABLE ── */
+        .indicators-table-wrap {
+            overflow-x: auto;
+        }
+
+        .indicators-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: .875rem;
+        }
+
+            .indicators-table thead tr {
+                background: linear-gradient(135deg, #4F46E5, #7C3AED);
+                color: #fff;
+            }
+
+            .indicators-table th {
+                padding: 12px 14px;
+                font-weight: 600;
+                text-align: center;
+                white-space: nowrap;
+            }
+
+            .indicators-table tbody tr {
+                border-bottom: 1px solid var(--clr-border);
+                transition: background .15s;
+            }
+
+                .indicators-table tbody tr:hover {
+                    background: #F8FAFF;
+                }
+
+            .indicators-table td {
+                padding: 12px 14px;
+                text-align: center;
+                vertical-align: middle;
+            }
+
+        .td-title {
+            text-align: right;
+            font-weight: 600;
+            color: var(--clr-text);
+        }
+
+        .progress-bar-wrap {
+            background: var(--clr-bg);
+            border-radius: 50px;
+            height: 8px;
+            overflow: hidden;
+            width: 100%;
+            min-width: 80px;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            border-radius: 50px;
+            transition: width .6s ease;
+        }
+
+        .badge-score {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 50px;
+            font-size: .78rem;
+            font-weight: 700;
+        }
+
+        .badge-success {
+            background: #D1FAE5;
+            color: #065F46;
+        }
+
+        .badge-warning {
+            background: #FEF3C7;
+            color: #92400E;
+        }
+
+        .badge-danger {
+            background: #FEE2E2;
+            color: #991B1B;
+        }
+
+        .btn-review {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-size: .8rem;
+            font-weight: 600;
+            text-decoration: none;
+            border: 1.5px solid #4F46E5;
+            color: #4F46E5;
+            background: transparent;
+            transition: all .2s;
+            cursor: pointer;
+        }
+
+            .btn-review:hover {
+                background: #4F46E5;
+                color: #fff;
+            }
+
+        /* ── SUSPICIOUS BEHAVIOR ── */
+        .risk-header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 18px 20px;
+            border-radius: 12px;
+            margin-bottom: 16px;
+        }
+
+            .risk-header.danger {
+                background: #FEF2F2;
+                border: 2px solid #FCA5A5;
+            }
+
+            .risk-header.warning {
+                background: #FFFBEB;
+                border: 2px solid #FCD34D;
+            }
+
+            .risk-header.safe {
+                background: #ECFDF5;
+                border: 2px solid #6EE7B7;
+            }
+
+        .risk-icon {
+            font-size: 2rem;
+        }
+
+            .risk-icon.danger {
+                color: #DC2626;
+            }
+
+            .risk-icon.warning {
+                color: #D97706;
+            }
+
+            .risk-icon.safe {
+                color: #059669;
+            }
+
+        .risk-level-pill {
+            display: inline-block;
+            padding: 3px 12px;
+            border-radius: 50px;
+            font-size: .78rem;
+            font-weight: 700;
+        }
+
+            .risk-level-pill.danger {
+                background: #DC2626;
+                color: #fff;
+            }
+
+            .risk-level-pill.warning {
+                background: #D97706;
+                color: #fff;
+            }
+
+            .risk-level-pill.safe {
+                background: #059669;
+                color: #fff;
+            }
+
+        .suspicion-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 12px;
+        }
+
+        .suspicion-item {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            padding: 14px;
+            border-radius: 12px;
+            border: 1px solid var(--clr-border);
+            background: var(--clr-surface);
+        }
+
+        .sus-icon-wrap {
+            width: 38px;
+            height: 38px;
+            flex-shrink: 0;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+        }
+
+        .sus-title {
+            font-size: .82rem;
+            font-weight: 700;
+            color: var(--clr-text);
+            margin-bottom: 2px;
+        }
+
+        .sus-desc {
+            font-size: .75rem;
+            color: var(--clr-muted);
+            line-height: 1.5;
+        }
+
+        /* ── FAST QUESTIONS TABLE ── */
+        .fast-q-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: .82rem;
+        }
+
+            .fast-q-table th {
+                background: #F8FAFC;
+                padding: 10px 12px;
+                text-align: center;
+                color: var(--clr-muted);
+                font-weight: 600;
+                border-bottom: 1px solid var(--clr-border);
+            }
+
+            .fast-q-table td {
+                padding: 10px 12px;
+                text-align: center;
+                border-bottom: 1px solid var(--clr-border);
+            }
+
+                .fast-q-table td:first-child {
+                    text-align: right;
+                }
+
+        .time-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 10px;
+            border-radius: 50px;
+            font-size: .76rem;
+            font-weight: 700;
+            background: #FEF2F2;
+            color: #DC2626;
+        }
+
+        /* ── RECOMMENDATION ── */
+        .rec-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 14px;
+        }
+
+        .rec-item {
+            display: flex;
+            gap: 14px;
+            align-items: flex-start;
+            padding: 16px;
+            border-radius: 12px;
+            border: 1px solid #E0E7FF;
+            background: linear-gradient(135deg, #F5F3FF 0%, #EEF2FF 100%);
+            transition: box-shadow .2s;
+        }
+
+            .rec-item:hover {
+                box-shadow: var(--shadow-md);
+            }
+
+        .rec-num {
+            width: 32px;
+            height: 32px;
+            flex-shrink: 0;
+            border-radius: 50%;
+            background: var(--clr-primary);
+            color: #fff;
+            font-weight: 800;
+            font-size: .88rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .rec-text {
+            font-size: .85rem;
+            color: #374151;
+            line-height: 1.7;
+        }
+
+        .final-advice {
+            background: linear-gradient(135deg, #10B981, #0EA5E9);
+            color: #fff;
+            border-radius: 12px;
+            padding: 16px 24px;
+            font-weight: 600;
+            font-size: .95rem;
+            text-align: center;
+            margin-top: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        /* ── ACTION BUTTONS ── */
+        .action-bar {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 32px;
+            padding: 24px;
+        }
+
+        .btn-primary {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 28px;
+            border-radius: 10px;
+            font-size: .9rem;
+            font-weight: 700;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            transition: all .2s;
+        }
+
+            .btn-primary.main {
+                background: var(--clr-primary);
+                color: #fff;
+            }
+
+                .btn-primary.main:hover {
+                    background: var(--clr-primary-d);
+                    transform: translateY(-1px);
+                    box-shadow: 0 4px 16px rgba(79,70,229,.4);
+                }
+
+            .btn-primary.ghost {
+                background: var(--clr-surface);
+                color: var(--clr-text);
+                border: 1.5px solid var(--clr-border);
+            }
+
+                .btn-primary.ghost:hover {
+                    border-color: var(--clr-primary);
+                    color: var(--clr-primary);
+                }
+
+        /* ── SECTION DIVIDER ── */
+        .section-gap {
+            margin-bottom: 24px;
+        }
+
+        /* ── PRINT ── */
+        @@media print {
+            .no-print {
+                display: none !important;
+            }
+
+            body {
+                background: #fff;
+            }
+
+            .hero {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+
+            .card {
+                box-shadow: none;
+                border: 1px solid #ddd;
+            }
+        }
+
+        /* ── DARK MODE ── */
+        @@media print {
+            @@page {
+                size: A4 portrait;
+                margin: 12mm 10mm;
+            }
+
+            html,
+            body {
+                width: auto !important;
+                min-height: auto !important;
+                overflow: visible !important;
+            }
+
+            .no-print {
+                display: none !important;
+            }
+
+            body {
+                background: #fff !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+
+            .hero {
+                padding: 18px 0 18px !important;
+                margin-bottom: 10mm !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+                overflow: visible !important;
+                break-after: avoid-page;
+                page-break-after: avoid;
+            }
+
+            .hero-inner {
+                display: flex !important;
+                align-items: center !important;
+                justify-content: space-between !important;
+                gap: 18px !important;
+                flex-wrap: nowrap !important;
+            }
+
+            .content {
+                max-width: 100% !important;
+                margin: 0 auto !important;
+                padding: 0 !important;
+                clear: both !important;
+                position: static !important;
+                z-index: auto !important;
+                transform: none !important;
+            }
+
+            .card {
+                box-shadow: none !important;
+                border: 1px solid #ddd !important;
+                break-inside: avoid-page;
+                page-break-inside: avoid;
+                overflow: visible !important;
+                margin-bottom: 12px !important;
+            }
+
+            .card-header,
+            h1, h2, h3, h4, h5 {
+                break-after: avoid-page;
+                page-break-after: avoid;
+            }
+
+            .kpi-card,
+            .chart-canvas-wrap,
+            .suspicion-item,
+            .rec-item,
+            .risk-header,
+            .score-gauge-wrap {
+                break-inside: avoid-page;
+                page-break-inside: avoid;
+            }
+
+            .kpi-grid {
+                display: grid !important;
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 10px !important;
+                margin-top: 0 !important;
+                margin-bottom: 12px !important;
+                break-before: avoid-page;
+                page-break-before: avoid;
+            }
+
+            .charts-grid {
+                display: block !important;
+            }
+
+            .charts-grid .card {
+                width: 100% !important;
+                margin-bottom: 10px !important;
+            }
+
+            .kpi-card {
+                width: auto !important;
+                min-width: 0 !important;
+                min-height: 74px !important;
+                padding: 12px 14px !important;
+                margin-bottom: 0 !important;
+            }
+
+            .kpi-card .kpi-icon {
+                width: 30px !important;
+                height: 30px !important;
+                border-radius: 9px !important;
+                font-size: .82rem !important;
+            }
+
+            .kpi-card .kpi-value {
+                font-size: 1.35rem !important;
+                line-height: 1.15 !important;
+                word-break: break-word !important;
+            }
+
+            .kpi-card .kpi-label {
+                font-size: .68rem !important;
+                line-height: 1.35 !important;
+            }
+
+            .chart-canvas-wrap {
+                height: 190px !important;
+                max-height: 190px !important;
+            }
+
+            .chart-canvas-wrap canvas {
+                max-width: 100% !important;
+                max-height: 185px !important;
+            }
+
+            .section-gap {
+                margin-bottom: 14px !important;
+            }
+
+            .indicators-table-wrap,
+            .fast-q-table {
+                overflow: visible !important;
+            }
+
+            table {
+                width: 100% !important;
+                border-collapse: collapse !important;
+                break-inside: auto;
+                page-break-inside: auto;
+            }
+
+            thead {
+                display: table-header-group;
+            }
+
+            tfoot {
+                display: table-footer-group;
+            }
+
+            tr {
+                break-inside: avoid-page;
+                page-break-inside: avoid;
+            }
+
+            th,
+            td {
+                font-size: 10px !important;
+                padding: 6px !important;
+                line-height: 1.45 !important;
+            }
+
+            .fast-q-table td:first-child,
+            .td-title {
+                max-width: none !important;
+                white-space: normal !important;
+            }
+
+            .fade-up,
+            .delay-1,
+            .delay-2,
+            .delay-3,
+            .delay-4 {
+                animation: none !important;
+                opacity: 1 !important;
+                transform: none !important;
+            }
+        }
+
+        @@media (prefers-color-scheme: dark) {
+            :root {
+                --clr-bg: #0F172A;
+                --clr-surface: #1E293B;
+                --clr-border: #334155;
+                --clr-text: #F1F5F9;
+                --clr-muted: #94A3B8;
+            }
+
+            .indicators-table tbody tr:hover {
+                background: #1e2d45;
+            }
+
+            .rec-item {
+                background: linear-gradient(135deg, #1e1b4b 0%, #1e2749 100%);
+                border-color: #312e81;
+            }
+
+            .rec-text {
+                color: #CBD5E1;
+            }
+
+            .suspicion-item {
+                background: #1e293b;
+                border-color: #334155;
+            }
+        }
+
+        /* ── ANIMATIONS ── */
+        @@keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .fade-up {
+            animation: fadeUp .5s ease forwards;
+        }
+
+        .delay-1 {
+            animation-delay: .1s;
+            opacity: 0;
+        }
+
+        .delay-2 {
+            animation-delay: .2s;
+            opacity: 0;
+        }
+
+        .delay-3 {
+            animation-delay: .3s;
+            opacity: 0;
+        }
+
+        .delay-4 {
+            animation-delay: .4s;
+            opacity: 0;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- HERO                                                        -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <div class="hero">
+        <div class="hero-inner">
+            <div class="hero-info">
+                <div style="font-size:.82rem; opacity:.7; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+                    <i class="fa-solid fa-file-lines"></i> تقرير أداء الواجب
+                </div>
+                <h1>تقرير الواجب المتقدم</h1>
+                <p style="opacity:.8; font-size:.95rem; margin-bottom:12px;">تحليل شامل لأداء الطالب وسلوكه خلال الواجب</p>
+                <div class="meta-pills">
+                    <span class="meta-pill"><i class="fa-solid fa-user-graduate"></i> @Model.StudentName</span>
+                    <span class="meta-pill"><i class="fa-solid fa-users"></i> @Model.BatchName</span>
+                    <span class="meta-pill"><i class="fa-solid fa-clock"></i> @Model.TimeSpentMinutes دقيقة</span>
+                    <span class="meta-pill"><i class="fa-solid fa-list-check"></i> @Model.TotalQuestions سؤال</span>
+                </div>
+            </div>
+            <div class="score-gauge-wrap">
+                <div class="score-gauge">
+                    <div class="score-gauge-inner">
+                        <div class="num">@Math.Round(Model.ScorePercentage)%</div>
+                        <div class="lbl">النسبة</div>
+                    </div>
+                </div>
+                <span class="perf-badge">@perfLevel</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- CONTENT                                                     -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <div class="content">
+
+        <!-- ── KPI CARDS ── -->
+        <div class="kpi-grid section-gap fade-up">
+            <div class="kpi-card" style="--accent:#10B981">
+                <div class="kpi-icon"><i class="fa-solid fa-circle-check"></i></div>
+                <div class="kpi-value">@Model.CorrectCount</div>
+                <div class="kpi-label">إجابات صحيحة</div>
+            </div>
+            <div class="kpi-card" style="--accent:#EF4444">
+                <div class="kpi-icon"><i class="fa-solid fa-circle-xmark"></i></div>
+                <div class="kpi-value">@Model.WrongCount</div>
+                <div class="kpi-label">إجابات خاطئة</div>
+            </div>
+            <div class="kpi-card" style="--accent:#F59E0B">
+                <div class="kpi-icon"><i class="fa-solid fa-circle-minus"></i></div>
+                <div class="kpi-value">@Model.SkippedCount</div>
+                <div class="kpi-label">أسئلة متروكة</div>
+            </div>
+            <div class="kpi-card" style="--accent:#0EA5E9">
+                <div class="kpi-icon"><i class="fa-solid fa-timer"></i></div>
+                <div class="kpi-value">@Math.Round(avgTimeSec, 1)<span style="font-size:1rem">ث</span></div>
+                <div class="kpi-label">متوسط وقت السؤال</div>
+            </div>
+            <div class="kpi-card" style="--accent:#8B5CF6">
+                <div class="kpi-icon"><i class="fa-solid fa-gauge-high"></i></div>
+                <div class="kpi-value">@Math.Round(Model.ScorePercentage)%</div>
+                <div class="kpi-label">النسبة الكلية</div>
+            </div>
+            <div class="kpi-card" style="--accent:#EC4899">
+                <div class="kpi-icon"><i class="fa-solid fa-@speedIcon"></i></div>
+                <div class="kpi-value" style="font-size:1.4rem">@speedLabel</div>
+                <div class="kpi-label">تصنيف السرعة</div>
+            </div>
+        </div>
+
+        <!-- ── CHARTS ── -->
+        <div class="charts-grid section-gap">
+
+            <!-- دونات: توزيع الإجابات -->
+            <div class="card fade-up delay-1">
+                <div class="card-header">
+                    <div class="icon" style="background:#EEF2FF; color:#4F46E5"><i class="fa-solid fa-chart-pie"></i></div>
+                    <h2>توزيع الإجابات</h2>
+                </div>
+                <div class="chart-canvas-wrap" style="height:240px">
+                    <canvas id="pieChart"></canvas>
+                </div>
+            </div>
+
+            <!-- شريطي: أداء المحاور -->
+            <div class="card fade-up delay-2">
+                <div class="card-header">
+                    <div class="icon" style="background:#ECFDF5; color:#10B981"><i class="fa-solid fa-chart-bar"></i></div>
+                    <h2>الأداء حسب المحاور</h2>
+                </div>
+                <div class="chart-canvas-wrap" style="height:240px">
+                    <canvas id="sectionBar"></canvas>
+                </div>
+            </div>
+
+            <!-- خطي: وقت الإجابة لكل سؤال -->
+            <div class="card full fade-up delay-3">
+                <div class="card-header">
+                    <div class="icon" style="background:#FFF7ED; color:#F59E0B"><i class="fa-solid fa-chart-line"></i></div>
+                    <h2>زمن الإجابة لكل سؤال</h2>
+                    <span style="margin-right: auto; font-size:.75rem; color:var(--clr-muted)">
+                        الخط الأحمر المنقط = عتبة الإجابة السريعة (4 ثواني)
+                    </span>
+                </div>
+                <div class="chart-canvas-wrap" style="height:200px">
+                    <canvas id="timeLineChart"></canvas>
+                </div>
+            </div>
+
+            @if (Model.LessonsPerformance?.Any() == true)
+            {
+                <!-- رادار: أداء المؤشرات -->
+                <div class="card fade-up delay-4">
+                    <div class="card-header">
+                        <div class="icon" style="background:#FDF2F8; color:#EC4899"><i class="fa-solid fa-spider-web"></i></div>
+                        <h2>مستوى المؤشرات (رادار)</h2>
+                    </div>
+                    <div class="chart-canvas-wrap" style="height:280px">
+                        <canvas id="radarChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- وقت المؤشر -->
+                <div class="card fade-up delay-4">
+                    <div class="card-header">
+                        <div class="icon" style="background:#ECFDF5; color:#10B981"><i class="fa-solid fa-hourglass-half"></i></div>
+                        <h2>الوقت المستغرق في كل مؤشر</h2>
+                    </div>
+                    <div class="chart-canvas-wrap" style="height:280px">
+                        <canvas id="lessonTimeBar"></canvas>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- ── INDICATORS TABLE ── -->
+        @if (Model.LessonsPerformance?.Any() == true)
+        {
+            <div class="card section-gap fade-up">
+                <div class="card-header">
+                    <div class="icon" style="background:#EEF2FF; color:#4F46E5"><i class="fa-solid fa-table-list"></i></div>
+                    <h2>جدول مؤشرات الأداء التفصيلي</h2>
+                </div>
+                <div class="indicators-table-wrap">
+                    <table class="indicators-table">
+                        <thead>
+                            <tr>
+                                <th style="text-align:right">المؤشر</th>
+                                <th>الأسئلة</th>
+                                <th>صحيح</th>
+                                <th>خاطئ</th>
+                                <th>متروك</th>
+                                <th>نسبة الإتقان</th>
+                                <th>الوقت (د)</th>
+                                <th>المستوى</th>
+                                <th class="no-print">عرض الأسئلة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var l in Model.LessonsPerformance)
+                            {
+                                var sc = l.SuccessRate >= 85 ? "badge-success"
+                                : l.SuccessRate >= 55 ? "badge-warning"
+                                : "badge-danger";
+                                var bar = l.SuccessRate >= 85 ? "#10B981"
+                                : l.SuccessRate >= 55 ? "#F59E0B"
+                                : "#EF4444";
+                                var lev = l.SuccessRate >= 85 ? "ممتاز"
+                                : l.SuccessRate >= 70 ? "جيد جداً"
+                                : l.SuccessRate >= 55 ? "جيد"
+                                : l.SuccessRate >= 40 ? "مقبول"
+                                : "قيد التطوير";
+                                <tr>
+                                    <td class="td-title">@l.LessonTitle</td>
+                                    <td>@l.TotalQuestions</td>
+                                    <td style="color:#10B981; font-weight:700">@l.CorrectCount</td>
+                                    <td style="color:#EF4444; font-weight:700">@l.WrongCount</td>
+                                    <td style="color:#F59E0B; font-weight:700">@l.SkippedCount</td>
+                                    <td>
+                                        <div style="display:flex; align-items:center; gap:8px; min-width:120px">
+                                            <div class="progress-bar-wrap" style="flex:1">
+                                                <div class="progress-bar-fill" style="width:@l.SuccessRate%; background:@bar"></div>
+                                            </div>
+                                            <span class="badge-score @sc">@l.SuccessRate%</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        @if (l.TimeSpentMinutes > 0)
+                                        {
+                                            <span>@Math.Round(l.TimeSpentMinutes, 1)</span>
+                                        }
+                                        else
+                                        {
+                                            <span style="color:var(--clr-muted)">—</span>
+                                        }
+                                    </td>
+                                    <td><span class="badge-score @sc">@lev</span></td>
+                                    <td class="no-print">
+                                        <a asp-area="Admin"
+                                           asp-controller="HomeworkManagement"
+                                           asp-action="ReviewLesson"
+                                           asp-route-homeworkSetId="@Model.HomeworkSetId"
+                                           asp-route-lessonId="@l.LessonId"
+                                           asp-route-studentId="@Model.StudentId"
+                                           class="btn-review">
+                                            <i class="fa-solid fa-eye"></i> عرض
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+
+        <!-- ── SUSPICIOUS BEHAVIOR ── -->
+        <div class="card section-gap fade-up">
+            <div class="card-header">
+                <div class="icon" style="background:#FEF2F2; color:#DC2626"><i class="fa-solid fa-shield-halved"></i></div>
+                <h2>تحليل السلوك وكشف التحايل</h2>
+            </div>
+
+            <!-- Risk Header -->
+            <div class="risk-header @riskClass">
+                <i class="risk-icon @riskClass fa-solid @riskIcon"></i>
+                <div>
+                    <div style="font-weight:800; font-size:1rem; margin-bottom:4px">
+                        مستوى المخاطر:
+                        <span class="risk-level-pill @riskClass">@riskLevel</span>
+                    </div>
+                    <div style="font-size:.83rem; color:var(--clr-muted)">
+                        درجة الخطر: @riskScore / 10 — بناءً على تحليل توقيتات الإجابة ونسب الأداء
+                    </div>
+                </div>
+            </div>
+
+            <!-- Indicators -->
+            <div class="suspicion-list">
+                <!-- سرعة الإجابة -->
+                @{
+                    var fastColor = suspiciousFastCorrect.Count >= 5 ? "#DC2626" : suspiciousFastCorrect.Count >= 2 ? "#D97706" : "#059669";
+                    var fastBg = suspiciousFastCorrect.Count >= 5 ? "#FEF2F2" : suspiciousFastCorrect.Count >= 2 ? "#FFFBEB" : "#ECFDF5";
+                    var fastIcon = suspiciousFastCorrect.Count >= 5 ? "fa-triangle-exclamation" : suspiciousFastCorrect.Count >= 2 ? "fa-circle-exclamation" : "fa-circle-check";
+                }
+                <div class="suspicion-item">
+                    <div class="sus-icon-wrap" style="background:@fastBg; color:@fastColor">
+                        <i class="fa-solid @fastIcon"></i>
+                    </div>
+                    <div>
+                        <div class="sus-title">إجابات سريعة صحيحة</div>
+                        <div class="sus-desc">
+                            عدد الأسئلة المجاب عليها بأقل من 4 ثواني وصحيحة:
+                            <strong style="color:@fastColor">@suspiciousFastCorrect.Count</strong>
+                            @if (suspiciousFastCorrect.Count >= 5)
+                            {
+                                <text> — مشبوه جداً</text>
+                            }
+                            else if (suspiciousFastCorrect.Count >= 2)
+                            {
+                                <text> — يستحق المراجعة</text>
+                            }
+                            else
+                            {
+                                <text> — طبيعي</text>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <!-- متوسط الوقت -->
+                @{
+                    var avgColor = avgTimeSec < 5 ? "#DC2626" : avgTimeSec < 10 ? "#D97706" : "#059669";
+                    var avgBg = avgTimeSec < 5 ? "#FEF2F2" : avgTimeSec < 10 ? "#FFFBEB" : "#ECFDF5";
+                    var avgIco = avgTimeSec < 5 ? "fa-triangle-exclamation" : avgTimeSec < 10 ? "fa-circle-exclamation" : "fa-circle-check";
+                }
+                <div class="suspicion-item">
+                    <div class="sus-icon-wrap" style="background:@avgBg; color:@avgColor">
+                        <i class="fa-solid @avgIco"></i>
+                    </div>
+                    <div>
+                        <div class="sus-title">متوسط وقت الإجابة</div>
+                        <div class="sus-desc">
+                            @Math.Round(avgTimeSec, 1) ثانية للسؤال —
+                            @if (avgTimeSec < 5)
+                            {
+                                <text><strong style="color:#DC2626">سريع جداً: محتاج مراجعة</strong></text>
+                            }
+                            else if (avgTimeSec < 10)
+                            {
+
+                                <text>سريع نسبياً</text>
+                            }
+                            else
+                            {
+
+                                <text>وقت طبيعي</text>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <!-- التوافق بين الدرجة والوقت -->
+                @{
+                    bool scoreTimeMismatch = Model.ScorePercentage > 80 && avgTimeSec < 8 && Model.TotalQuestions > 5;
+                    var stColor = scoreTimeMismatch ? "#D97706" : "#059669";
+                    var stBg = scoreTimeMismatch ? "#FFFBEB" : "#ECFDF5";
+                    var stIco = scoreTimeMismatch ? "fa-circle-exclamation" : "fa-circle-check";
+                }
+                <div class="suspicion-item">
+                    <div class="sus-icon-wrap" style="background:@stBg; color:@stColor">
+                        <i class="fa-solid @stIco"></i>
+                    </div>
+                    <div>
+                        <div class="sus-title">التوافق بين الدرجة والوقت</div>
+                        <div class="sus-desc">
+                            درجة @Math.Round(Model.ScorePercentage)% في وقت متوسط @Math.Round(avgTimeSec, 1)ث —
+                            @if (scoreTimeMismatch)
+                            {
+                                <text><strong style="color:#D97706">غير متوافق</strong></text>
+                            }
+                            else
+                            {
+
+                                <text>متوافق طبيعياً</text>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <!-- الأسئلة المتروكة -->
+                @{
+                    bool skipSuspect = Model.SkippedCount == 0 && Model.ScorePercentage >= 95;
+                    var skipColor = skipSuspect ? "#D97706" : "#059669";
+                    var skipBg = skipSuspect ? "#FFFBEB" : "#ECFDF5";
+                }
+                <div class="suspicion-item">
+                    <div class="sus-icon-wrap" style="background:@skipBg; color:@skipColor">
+                        <i class="fa-solid @(skipSuspect ? "fa-circle-exclamation" : "fa-circle-check")"></i>
+                    </div>
+                    <div>
+                        <div class="sus-title">الأسئلة المتروكة</div>
+                        <div class="sus-desc">
+                            @Model.SkippedCount سؤال متروك —
+                            @if (skipSuspect)
+                            {
+                                <text><strong style="color:#D97706">لا توجد أسئلة متروكة مع درجة مرتفعة جداً</strong></text>
+                            }
+                            else
+                            {
+
+                                <text>طبيعي</text>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fast Questions Detail Table -->
+            @if (suspiciousFastCorrect.Any())
+            {
+                <div style="margin-top:20px">
+                    <div style="font-weight:700; color:var(--clr-text); margin-bottom:10px; font-size:.9rem;">
+                        <i class="fa-solid fa-bolt" style="color:#EF4444; margin-left:6px"></i>
+                        الأسئلة المجاب عليها بسرعة مشبوهة (أقل من 4 ثواني — صحيحة)
+                    </div>
+                    <div style="overflow-x:auto">
+                        <table class="fast-q-table">
+                            <thead>
+                                <tr>
+                                    <th style="text-align:right">السؤال</th>
+                                    <th>وقت الإجابة</th>
+                                    <th>إجابة الطالب</th>
+                                    <th>حالة</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var fq in suspiciousFastCorrect.Take(10))
+                                {
+                                    <tr>
+                                        <td style="text-align:right; max-width:300px">
+                                            @CleanHtmlText(fq.QuestionTitle, 60)
+                                        </td>
+                                        <td>
+                                            <span class="time-chip">
+                                                <i class="fa-solid fa-bolt"></i>
+                                                @Math.Round(fq.TimeTakenSeconds, 1) ث
+                                            </span>
+                                        </td>
+                                        <td>
+                                            @CleanHtmlText(fq.StudentAnswer)
+                                        </td>
+                                        <td>
+                                            <span class="badge-score badge-success">
+                                                <i class="fa-solid fa-check"></i> صحيح
+                                            </span>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- ── RECOMMENDATIONS ── -->
+        @if (rec != null)
+        {
+            <div class="card section-gap fade-up">
+                <div class="card-header">
+                    <div class="icon" style="background:#ECFDF5; color:#10B981"><i class="fa-solid fa-lightbulb"></i></div>
+                    <h2>التوصيات والخطة التطويرية</h2>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(rec.PerformanceSummary))
+                {
+                    <div style="background:#F0FDF4; border:1px solid #6EE7B7; border-radius:10px; padding:14px 18px; margin-bottom:16px; font-size:.9rem; color:#065F46">
+                        <i class="fa-solid fa-chart-simple" style="margin-left:8px"></i> @rec.PerformanceSummary
+                    </div>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(rec.TimeNote))
+                {
+                    <div style="background:#FFF7ED; border:1px solid #FCD34D; border-radius:10px; padding:14px 18px; margin-bottom:16px; font-size:.9rem; color:#92400E">
+                        <i class="fa-solid fa-stopwatch" style="margin-left:8px"></i> @rec.TimeNote
+                    </div>
+                }
+
+                @if (rec.LessonTips?.Any() == true)
+                {
+                    <div class="rec-grid">
+                        @for (int i = 0; i < rec.LessonTips.Count; i++)
+                        {
+                            <div class="rec-item">
+                                <div class="rec-num">@(i + 1)</div>
+                                <div class="rec-text">@Html.Raw(rec.LessonTips[i])</div>
+                            </div>
+                        }
+                    </div>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(rec.FinalAdvice))
+                {
+                    <div class="final-advice">
+                        <i class="fa-solid fa-star"></i>
+                        @rec.FinalAdvice
+                    </div>
+                }
+            </div>
+        }
+
+        <!-- ── SECTIONS PERFORMANCE SUMMARY ── -->
+        @if (Model.SectionsPerformance?.Any() == true)
+        {
+            <div class="card section-gap fade-up">
+                <div class="card-header">
+                    <div class="icon" style="background:#EDE9FE; color:#7C3AED"><i class="fa-solid fa-layer-group"></i></div>
+                    <h2>ملخص أداء المحاور</h2>
+                </div>
+                <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:14px;">
+                    @foreach (var sec in Model.SectionsPerformance)
+                    {
+                        var sColor = sec.Accuracy >= 85 ? "#10B981" : sec.Accuracy >= 55 ? "#F59E0B" : "#EF4444";
+                        var sBg = sec.Accuracy >= 85 ? "#ECFDF5" : sec.Accuracy >= 55 ? "#FFFBEB" : "#FEF2F2";
+                        <div style="background:@sBg; border-radius:12px; padding:16px; border:1px solid color-mix(in srgb, @sColor 30%, transparent)">
+                            <div style="font-weight:700; font-size:.9rem; color:var(--clr-text); margin-bottom:8px">@sec.SectionTitle</div>
+                            <div style="font-size:1.8rem; font-weight:900; color:@sColor">@sec.Accuracy%</div>
+                            <div class="progress-bar-wrap" style="margin-top:8px">
+                                <div class="progress-bar-fill" style="width:@sec.Accuracy%; background:@sColor"></div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        <!-- ── ACTION BAR ── -->
+        <div class="action-bar no-print">
+            <button onclick="window.print()" class="btn-primary main">
+                <i class="fa-solid fa-print"></i> طباعة / PDF
+            </button>
+            <a asp-area="Admin"
+               asp-controller="HomeworkManagement"
+               asp-action="Index"
+               class="btn-primary ghost">
+                <i class="fa-solid fa-arrow-right"></i> العودة للواجبات
+            </a>
+        </div>
+
+    </div><!-- /content -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <!-- SCRIPTS                                                     -->
+    <!-- ═══════════════════════════════════════════════════════════ -->
+    <script>
+        (function () {
+            const palette = {
+                green:  '#10B981', red: '#EF4444', amber: '#F59E0B',
+                blue:   '#0EA5E9', indigo: '#4F46E5', purple: '#7C3AED',
+                pink:   '#EC4899', slate: '#64748B'
+            };
+
+            // ── 1. دونات: توزيع الإجابات ─────────────────────────────
+            new Chart(document.getElementById('pieChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['صحيحة', 'خاطئة', 'متروكة'],
+                    datasets: [{
+                        data: [@Model.CorrectCount, @Model.WrongCount, @Model.SkippedCount],
+                        backgroundColor: [palette.green, palette.red, palette.amber],
+                        borderWidth: 2, borderColor: '#fff',
+                        hoverOffset: 8
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { font: { family: 'Cairo', size: 12 }, padding: 16 } },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => ` ${ctx.label}: ${ctx.parsed} سؤال`
+                            }
+                        }
+                    },
+                    cutout: '65%'
+                }
+            });
+
+            // ── 2. شريطي: أداء المحاور ───────────────────────────────
+            const secLabels  = @Html.Raw(sectionLabels);
+            const secScores  = @Html.Raw(sectionScores);
+            const secColors  = secScores.map(s => s >= 85 ? palette.green : s >= 55 ? palette.amber : palette.red);
+
+            new Chart(document.getElementById('sectionBar'), {
+                type: 'bar',
+                data: {
+                    labels: secLabels,
+                    datasets: [{
+                        label: 'نسبة الإتقان %',
+                        data: secScores,
+                        backgroundColor: secColors,
+                        borderRadius: 8,
+                        borderSkipped: false
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' }, grid: { color: '#F1F5F9' } },
+                        y: { ticks: { font: { family: 'Cairo', size: 11 } } }
+                    }
+                }
+            });
+
+            // ── 3. خطي: وقت الإجابة ─────────────────────────────────
+            const qData = @Html.Raw(qTimes);
+            const qColors = qData.map(d => d.c ? palette.green : palette.red);
+
+            new Chart(document.getElementById('timeLineChart'), {
+                type: 'bar',
+                data: {
+                    labels: qData.map(d => 'س' + d.x),
+                    datasets: [
+                        {
+                            type: 'scatter',
+                            label: 'وقت الإجابة (ث)',
+                            data: qData.map(d => d.y),
+                            backgroundColor: qColors,
+                            borderColor: qColors,
+                            pointRadius: 6,
+                            pointHoverRadius: 8,
+                            order: 1
+                        },
+                        {
+                            type: 'bar',
+                            label: 'الوقت بالثواني',
+                            data: qData.map(d => d.y),
+                            backgroundColor: qData.map(d => d.c
+                                ? 'rgba(16,185,129,.25)'
+                                : 'rgba(239,68,68,.25)'),
+                            borderColor: qColors,
+                            borderWidth: 1,
+                            borderRadius: 4,
+                            order: 2
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        annotation: {},
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => ` ${ctx.parsed.y} ثانية`
+                            }
+                        }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, title: { display: true, text: 'ثواني', font: { family: 'Cairo' } }, grid: { color: '#F1F5F9' } },
+                        x: { ticks: { font: { family: 'Cairo', size: 10 } } }
+                    }
+                },
+                plugins: [{
+                    id: 'threshold',
+                    afterDraw(chart) {
+                        const { ctx, chartArea: { left, right }, scales: { y } } = chart;
+                        const yPos = y.getPixelForValue(4);
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.strokeStyle = '#EF4444';
+                        ctx.lineWidth   = 2;
+                        ctx.setLineDash([6, 4]);
+                        ctx.moveTo(left, yPos);
+                        ctx.lineTo(right, yPos);
+                        ctx.stroke();
+                        ctx.restore();
+                    }
+                }]
+            });
+
+            // ── 4. رادار: مستوى المؤشرات ────────────────────────────
+            const radarEl = document.getElementById('radarChart');
+            if (radarEl) {
+                new Chart(radarEl, {
+                    type: 'radar',
+                    data: {
+                        labels: @Html.Raw(lessonLabels),
+                        datasets: [{
+                            label: 'نسبة الإتقان',
+                            data: @Html.Raw(lessonScores),
+                            backgroundColor: 'rgba(79,70,229,.15)',
+                            borderColor: palette.indigo,
+                            borderWidth: 2,
+                            pointBackgroundColor: palette.indigo,
+                            pointRadius: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        scales: {
+                            r: {
+                                min: 0, max: 100,
+                                ticks: { stepSize: 25, font: { family: 'Cairo', size: 10 } },
+                                grid: { color: '#E2E8F0' },
+                                pointLabels: { font: { family: 'Cairo', size: 11 } }
+                            }
+                        },
+                        plugins: { legend: { display: false } }
+                    }
+                });
+            }
+
+            // ── 5. شريطي: وقت المؤشرات ──────────────────────────────
+            const ltEl = document.getElementById('lessonTimeBar');
+            if (ltEl) {
+                new Chart(ltEl, {
+                    type: 'bar',
+                    data: {
+                        labels: @Html.Raw(lessonLabels),
+                        datasets: [{
+                            label: 'الوقت (دقيقة)',
+                            data: @Html.Raw(lessonTimes),
+                            backgroundColor: 'rgba(16,185,129,.7)',
+                            borderColor: palette.green,
+                            borderWidth: 1,
+                            borderRadius: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: { display: true, text: 'دقيقة', font: { family: 'Cairo' } },
+                                grid: { color: '#F1F5F9' }
+                            },
+                            x: { ticks: { font: { family: 'Cairo', size: 10 } } }
+                        }
+                    }
+                });
+            }
+
+        })();
+    </script>
+
+</body>
+</html>

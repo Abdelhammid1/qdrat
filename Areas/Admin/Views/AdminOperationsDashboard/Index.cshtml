@@ -1,0 +1,2373 @@
+@model QdratNew.ViewModels.Dashboard.AdminOperationsDashboardViewModel
+@using System.Text.Json
+
+@{
+    ViewData["Title"] = "لوحة عمليات المنصة";
+
+    var dashboardBaseUrl      = "/Admin/AdminOperationsDashboard";
+    var activeStudentsUrl     = dashboardBaseUrl + "/ActiveStudents";
+    var runningLecturesUrl    = dashboardBaseUrl + "/RunningLectures";
+    var openExamsUrl          = dashboardBaseUrl + "/OpenExams";
+    var todayAttendanceUrl    = dashboardBaseUrl + "/TodayAttendance";
+    var closingHomeworksUrl   = dashboardBaseUrl + "/ClosingHomeworks";
+    var batchHealthUrl        = dashboardBaseUrl + "/BatchHealth";
+    var instructorActivityUrl = dashboardBaseUrl + "/InstructorActivity";
+    var smartAlertsUrl        = dashboardBaseUrl + "/SmartAlerts";
+    var pulseUrl              = dashboardBaseUrl + "/Pulse";
+
+    var urgentCount   = Model.SmartAlerts.Count(a => a.IsUrgent);
+    var mainBatches   = Model.BatchPerformanceMatrix.Where(b => !b.IsPartner).ToList();
+    var partnerBatches= Model.BatchPerformanceMatrix.Where(b =>  b.IsPartner).ToList();
+    const int BatchPageSize = 5;
+
+    /* ── Donut: نسبتان متجانستان (%) ── */
+    var attendancePresent = Model.Kpis.AttendancePercentToday;
+    var attendanceAbsent  = Math.Round(Math.Max(0, 100.0 - Model.Kpis.AttendancePercentToday), 2);
+    var absentCount       = Model.Kpis.AbsentAllDayStudentsCount;
+    var lowLecCount       = Model.Kpis.LowAttendanceLecturesToday;
+
+    /* ── Chart Data — JSON serialization to avoid HTML encoding ── */
+    var jsonOpts = new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
+    var jsBatchNames  = JsonSerializer.Serialize(Model.BatchPerformanceMatrix.Select(b => b.BatchName).ToList(),   jsonOpts);
+    var jsBatchAttend = JsonSerializer.Serialize(Model.BatchPerformanceMatrix.Select(b => b.AttendancePercentToday).ToList(),      jsonOpts);
+    var jsBatchHw     = JsonSerializer.Serialize(Model.BatchPerformanceMatrix.Select(b => b.HomeworkSubmissionPercent).ToList(),   jsonOpts);
+    var jsBatchExam   = JsonSerializer.Serialize(Model.BatchPerformanceMatrix.Select(b => b.ExamAverageScore).ToList(),            jsonOpts);
+
+    var jsInstrNames  = JsonSerializer.Serialize(Model.InstructorPerformance.Select(i => i.InstructorName).ToList(), jsonOpts);
+    var jsInstrScores = JsonSerializer.Serialize(Model.InstructorPerformance.Select(i => i.ActivityScore).ToList(),  jsonOpts);
+    var jsInstrIds    = JsonSerializer.Serialize(Model.InstructorPerformance.Select(i => i.InstructorId).ToList(),   jsonOpts);
+    var jsBatchIds    = JsonSerializer.Serialize(Model.BatchPerformanceMatrix.Select(b => b.BatchId).ToList(),       jsonOpts);
+
+    var jsCalDays      = JsonSerializer.Serialize(Model.PredictiveCalendar.Select(d => d.DayName).ToList(),             jsonOpts);
+    var jsCalLectures  = JsonSerializer.Serialize(Model.PredictiveCalendar.Select(d => d.LecturesCount).ToList(),       jsonOpts);
+    var jsCalExams     = JsonSerializer.Serialize(Model.PredictiveCalendar.Select(d => d.ExamsCount).ToList(),          jsonOpts);
+    var jsCalHomeworks = JsonSerializer.Serialize(Model.PredictiveCalendar.Select(d => d.HomeworksClosingCount).ToList(),jsonOpts);
+}
+
+@section Styles {
+<style>
+    /* ── Override layout padding for this full-bleed page ── */
+    #qdratMain {
+        padding: 0 !important;
+        background: #f0f4ff !important;
+    }
+
+    /* ═══════════════════════════════
+       Design Tokens
+    ═══════════════════════════════ */
+    :root {
+        --clr-bg:       #f0f4ff;
+        --clr-surface:  rgba(255,255,255,0.75);
+        --clr-surface2: rgba(255,255,255,0.55);
+        --clr-border:   rgba(148,163,184,0.18);
+        --clr-primary:  #4f46e5;
+        --clr-primary2: #818cf8;
+        --clr-success:  #10b981;
+        --clr-warning:  #f59e0b;
+        --clr-danger:   #f43f5e;
+        --clr-info:     #06b6d4;
+        --clr-purple:   #8b5cf6;
+        --clr-dark:     #0f172a;
+        --clr-text:     #1e293b;
+        --clr-muted:    #64748b;
+        --clr-subtle:   #94a3b8;
+
+        --radius-sm: 12px;
+        --radius-md: 20px;
+        --radius-lg: 28px;
+        --radius-xl: 36px;
+
+        --shadow-sm: 0 4px 16px rgba(79,70,229,0.07);
+        --shadow-md: 0 12px 32px rgba(79,70,229,0.10);
+        --shadow-lg: 0 24px 56px rgba(79,70,229,0.14);
+
+        --font: "Cairo", "IBM Plex Sans Arabic", "Tajawal", system-ui, sans-serif;
+
+        --nav-h: 70px;
+    }
+
+    /* ═══════════════════════════════
+       Reset & Base
+    ═══════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    .qd-ops {
+        font-family: var(--font);
+        direction: rtl;
+        min-height: 100vh;
+        background: var(--clr-bg);
+        position: relative;
+        color: var(--clr-text);
+        /* overflow-x intentionally removed — breaks position:sticky on .qd-topnav */
+    }
+
+    /* Aurora mesh — absolute so it stays within the content area */
+    .qd-ops::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        min-height: 100%;
+        background:
+            radial-gradient(ellipse 80% 40% at 20% 5%,   rgba(99,102,241,.14) 0%, transparent 55%),
+            radial-gradient(ellipse 60% 50% at 85% 20%,  rgba(139,92,246,.11) 0%, transparent 50%),
+            radial-gradient(ellipse 70% 60% at 50% 85%,  rgba(16,185,129,.09) 0%, transparent 55%);
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    .qd-ops > * { position: relative; z-index: 1; }
+
+    /* ═══════════════════════════════
+       Top Navigation
+    ═══════════════════════════════ */
+    .qd-topnav {
+        position: sticky;
+        top: 0;
+        z-index: 90;           /* below layout topbar (z:1040) but above page content */
+        height: var(--nav-h);
+        background: rgba(255,255,255,0.96);
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+        border-bottom: 2px solid rgba(79,70,229,.12);
+        box-shadow: 0 4px 24px rgba(79,70,229,.09);
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 0 28px;
+    }
+
+    .nav-brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex: 0 0 auto;
+        text-decoration: none;
+    }
+
+    .nav-brand-icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 14px;
+        background: linear-gradient(135deg, var(--clr-primary), var(--clr-purple));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        box-shadow: 0 8px 20px rgba(79,70,229,.30);
+    }
+
+    .nav-brand-text strong {
+        display: block;
+        font-size: 15px;
+        font-weight: 800;
+        color: var(--clr-dark);
+        line-height: 1;
+    }
+
+    .nav-brand-text small {
+        font-size: 11px;
+        color: var(--clr-muted);
+        font-weight: 600;
+    }
+
+    .nav-live-badge {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        background: rgba(16,185,129,.10);
+        border: 1px solid rgba(16,185,129,.25);
+        border-radius: 999px;
+        padding: 6px 14px;
+        font-size: 12px;
+        font-weight: 800;
+        color: var(--clr-success);
+        flex: 0 0 auto;
+    }
+
+    .live-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--clr-success);
+        box-shadow: 0 0 0 0 rgba(16,185,129,.4);
+        animation: livePulse 2s ease-in-out infinite;
+        flex: 0 0 auto;
+    }
+
+    @@keyframes livePulse {
+        0%   { box-shadow: 0 0 0 0 rgba(16,185,129,.4); }
+        70%  { box-shadow: 0 0 0 8px rgba(16,185,129,0); }
+        100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); }
+    }
+
+    .nav-tabs {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex: 1;
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+
+    .nav-tabs::-webkit-scrollbar { display: none; }
+
+    .nav-tab {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 9px 16px;
+        border-radius: var(--radius-sm);
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--clr-muted);
+        text-decoration: none;
+        white-space: nowrap;
+        transition: all .2s ease;
+        border: 1px solid transparent;
+        cursor: pointer;
+        background: none;
+    }
+
+    .nav-tab:hover,
+    .nav-tab.active {
+        background: rgba(79,70,229,.08);
+        color: var(--clr-primary);
+        border-color: rgba(79,70,229,.18);
+    }
+
+    .nav-tab .tab-icon { font-size: 16px; }
+
+    .nav-tab .tab-count {
+        background: var(--clr-danger);
+        color: #fff;
+        font-size: 10px;
+        font-weight: 900;
+        padding: 2px 6px;
+        border-radius: 999px;
+    }
+
+    .nav-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex: 0 0 auto;
+    }
+
+    .nav-btn {
+        border: 0;
+        border-radius: var(--radius-sm);
+        padding: 9px 18px;
+        font-size: 13px;
+        font-weight: 800;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        transition: all .2s ease;
+        font-family: var(--font);
+    }
+
+    .nav-btn-ghost {
+        background: rgba(148,163,184,.12);
+        color: var(--clr-text);
+    }
+
+    .nav-btn-ghost:hover {
+        background: rgba(148,163,184,.22);
+    }
+
+    .nav-btn-primary {
+        background: linear-gradient(135deg, var(--clr-primary), var(--clr-purple));
+        color: #fff;
+        box-shadow: 0 8px 20px rgba(79,70,229,.28);
+    }
+
+    .nav-btn-primary:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 12px 28px rgba(79,70,229,.36);
+    }
+
+    .nav-time {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--clr-muted);
+        background: rgba(148,163,184,.10);
+        padding: 8px 14px;
+        border-radius: var(--radius-sm);
+        white-space: nowrap;
+    }
+
+    /* ═══════════════════════════════
+       Workspace
+    ═══════════════════════════════ */
+    .qd-workspace {
+        padding: 28px;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+        max-width: 1800px;
+        margin: 0 auto;
+    }
+
+    /* ═══════════════════════════════
+       KPI Strip
+    ═══════════════════════════════ */
+    .kpi-strip {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 16px;
+    }
+
+    .kpi-card {
+        background: var(--clr-surface);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid var(--clr-border);
+        border-radius: var(--radius-lg);
+        padding: 22px 20px 18px;
+        text-decoration: none;
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        position: relative;
+        overflow: hidden;
+        transition: transform .22s ease, box-shadow .22s ease;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .kpi-card:hover {
+        transform: translateY(-4px);
+        box-shadow: var(--shadow-lg);
+    }
+
+    /* Colored top stripe */
+    .kpi-card::before {
+        content: "";
+        position: absolute;
+        top: 0; right: 0; left: 0;
+        height: 4px;
+        border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    }
+
+    .kpi-card.c-blue::before   { background: linear-gradient(90deg, var(--clr-primary), var(--clr-primary2)); }
+    .kpi-card.c-green::before  { background: linear-gradient(90deg, var(--clr-success), #34d399); }
+    .kpi-card.c-purple::before { background: linear-gradient(90deg, var(--clr-purple), #c084fc); }
+    .kpi-card.c-amber::before  { background: linear-gradient(90deg, var(--clr-warning), #fcd34d); }
+    .kpi-card.c-rose::before   { background: linear-gradient(90deg, var(--clr-danger), #fb7185); }
+
+    .kpi-icon-wrap {
+        width: 44px;
+        height: 44px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 22px;
+        margin-bottom: 14px;
+        flex: 0 0 auto;
+    }
+
+    .kpi-card.c-blue   .kpi-icon-wrap { background: rgba(79,70,229,.10); }
+    .kpi-card.c-green  .kpi-icon-wrap { background: rgba(16,185,129,.10); }
+    .kpi-card.c-purple .kpi-icon-wrap { background: rgba(139,92,246,.10); }
+    .kpi-card.c-amber  .kpi-icon-wrap { background: rgba(245,158,11,.10); }
+    .kpi-card.c-rose   .kpi-icon-wrap { background: rgba(244,63,94,.10); }
+
+    .kpi-label {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--clr-muted);
+        margin-bottom: 6px;
+        display: block;
+    }
+
+    .kpi-value {
+        font-size: 38px;
+        font-weight: 900;
+        color: var(--clr-dark);
+        line-height: 1;
+        margin-bottom: 8px;
+        display: block;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .kpi-trend {
+        font-size: 11.5px;
+        font-weight: 700;
+        color: var(--clr-muted);
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .kpi-cta {
+        margin-top: 14px;
+        font-size: 12px;
+        font-weight: 900;
+        color: var(--clr-primary);
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    /* ═══════════════════════════════
+       Charts Row (Bento)
+    ═══════════════════════════════ */
+    .charts-bento {
+        display: grid;
+        grid-template-columns: 320px 1fr 1fr;
+        gap: 16px;
+    }
+
+    .glass-card {
+        background: var(--clr-surface);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid var(--clr-border);
+        border-radius: var(--radius-lg);
+        padding: 22px;
+        box-shadow: var(--shadow-sm);
+        transition: box-shadow .22s ease;
+    }
+
+    .glass-card:hover {
+        box-shadow: var(--shadow-md);
+    }
+
+    .card-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 18px;
+    }
+
+    .card-badge {
+        font-size: 10px;
+        font-weight: 900;
+        padding: 4px 10px;
+        border-radius: 999px;
+        letter-spacing: .03em;
+        text-transform: uppercase;
+    }
+
+    .badge-live  { background: rgba(16,185,129,.12); color: var(--clr-success); }
+    .badge-today { background: rgba(79,70,229,.10);  color: var(--clr-primary); }
+    .badge-week  { background: rgba(245,158,11,.12); color: var(--clr-warning); }
+
+    .card-title {
+        font-size: 17px;
+        font-weight: 900;
+        color: var(--clr-dark);
+        line-height: 1.3;
+        margin: 0;
+    }
+
+    .card-sub {
+        font-size: 12px;
+        color: var(--clr-muted);
+        margin-top: 4px;
+        display: block;
+    }
+
+    .card-link {
+        font-size: 12px;
+        font-weight: 800;
+        color: var(--clr-primary);
+        text-decoration: none;
+        white-space: nowrap;
+        flex: 0 0 auto;
+    }
+
+    .card-link:hover { text-decoration: underline; }
+
+    /* ═══════════════════════════════
+       Chart Wrappers
+    ═══════════════════════════════ */
+    .chart-donut-wrap {
+        position: relative;
+        width: 180px;
+        height: 180px;
+        margin: 0 auto 16px;
+    }
+
+    .donut-center {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+    }
+
+    .donut-center strong {
+        font-size: 28px;
+        font-weight: 900;
+        color: var(--clr-dark);
+        line-height: 1;
+    }
+
+    .donut-center span {
+        font-size: 11px;
+        color: var(--clr-muted);
+        font-weight: 700;
+    }
+
+    .donut-legend {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .donut-legend-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--clr-text);
+    }
+
+    .legend-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        flex: 0 0 auto;
+    }
+
+    .legend-val {
+        margin-right: auto;
+        margin-left: 0;
+        font-size: 13px;
+        font-weight: 900;
+        color: var(--clr-dark);
+    }
+
+    .chart-area-wrap {
+        height: 200px;
+        position: relative;
+    }
+
+    .chart-bar-wrap {
+        height: 200px;
+        position: relative;
+    }
+
+    /* ═══════════════════════════════
+       Operations Grid
+    ═══════════════════════════════ */
+    .ops-grid {
+        display: grid;
+        grid-template-columns: 1fr 380px;
+        gap: 16px;
+    }
+
+    /* Live Attendance Table */
+    .live-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .live-table thead th {
+        font-size: 11px;
+        font-weight: 800;
+        color: var(--clr-muted);
+        text-align: right;
+        padding: 0 12px 12px;
+        border-bottom: 1px solid var(--clr-border);
+        white-space: nowrap;
+    }
+
+    .live-table tbody tr {
+        border-bottom: 1px solid rgba(148,163,184,.10);
+        transition: background .15s ease;
+    }
+
+    .live-table tbody tr:last-child { border-bottom: 0; }
+
+    .live-table tbody tr:hover {
+        background: rgba(79,70,229,.03);
+    }
+
+    .live-table td {
+        padding: 12px;
+        font-size: 13px;
+        color: var(--clr-text);
+        vertical-align: middle;
+    }
+
+    .live-batch-name {
+        font-weight: 900;
+        color: var(--clr-dark);
+        display: block;
+        font-size: 13px;
+    }
+
+    .live-lecture-name {
+        font-size: 11px;
+        color: var(--clr-muted);
+        display: block;
+        margin-top: 2px;
+    }
+
+    .attend-bar-wrap {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .attend-bar {
+        flex: 1;
+        height: 6px;
+        background: rgba(148,163,184,.18);
+        border-radius: 999px;
+        overflow: hidden;
+    }
+
+    .attend-bar-fill {
+        height: 100%;
+        border-radius: 999px;
+        transition: width .4s ease;
+    }
+
+    .fill-green  { background: var(--clr-success); }
+    .fill-amber  { background: var(--clr-warning); }
+    .fill-red    { background: var(--clr-danger);  }
+
+    .attend-pct {
+        font-size: 12px;
+        font-weight: 900;
+        min-width: 38px;
+        text-align: left;
+    }
+
+    .urgency-badge {
+        font-size: 10px;
+        font-weight: 900;
+        padding: 3px 8px;
+        border-radius: 999px;
+        white-space: nowrap;
+    }
+
+    .urgency-badge.normal   { background: rgba(16,185,129,.10);  color: var(--clr-success); }
+    .urgency-badge.warning  { background: rgba(245,158,11,.12);  color: var(--clr-warning); }
+    .urgency-badge.critical { background: rgba(244,63,94,.12);   color: var(--clr-danger);  }
+
+    .tbl-action-btn {
+        border: 0;
+        border-radius: var(--radius-sm);
+        padding: 7px 12px;
+        font-size: 11px;
+        font-weight: 800;
+        cursor: pointer;
+        font-family: var(--font);
+        transition: all .18s ease;
+    }
+
+    .tbl-action-btn.details {
+        background: rgba(79,70,229,.10);
+        color: var(--clr-primary);
+        text-decoration: none;
+        display: inline-block;
+    }
+
+    .tbl-action-btn.alert-btn {
+        background: rgba(244,63,94,.10);
+        color: var(--clr-danger);
+    }
+
+    .tbl-action-btn.alert-btn:disabled {
+        background: rgba(148,163,184,.10);
+        color: var(--clr-subtle);
+        cursor: not-allowed;
+    }
+
+    /* ═══════════════════════════════
+       Smart Alerts Panel
+    ═══════════════════════════════ */
+    .alerts-panel {
+        background: linear-gradient(160deg, #0f172a 0%, #1e1b4b 100%);
+        border-radius: var(--radius-lg);
+        padding: 22px;
+        border: 1px solid rgba(99,102,241,.20);
+        box-shadow: 0 20px 48px rgba(15,23,42,.20);
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+    }
+
+    .alerts-panel .card-title { color: #fff; }
+    .alerts-panel .card-sub   { color: #94a3b8; }
+
+    .alert-scroll {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        max-height: 400px;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255,255,255,.12) transparent;
+    }
+
+    .alert-item {
+        border-radius: var(--radius-md);
+        padding: 14px;
+        border: 1px solid rgba(255,255,255,.06);
+        background: rgba(255,255,255,.04);
+        transition: background .2s ease;
+    }
+
+    .alert-item:hover { background: rgba(255,255,255,.07); }
+
+    .alert-item.danger  { border-color: rgba(244,63,94,.30);  background: rgba(244,63,94,.10); }
+    .alert-item.warning { border-color: rgba(245,158,11,.28); background: rgba(245,158,11,.09); }
+    .alert-item.info    { border-color: rgba(6,182,212,.22);  background: rgba(6,182,212,.07); }
+
+    .alert-row1 {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+
+    .alert-ctx {
+        font-size: 10px;
+        font-weight: 900;
+        padding: 3px 8px;
+        border-radius: 999px;
+        background: rgba(255,255,255,.08);
+        color: #94a3b8;
+    }
+
+    .urgent-tag {
+        font-size: 10px;
+        font-weight: 900;
+        background: var(--clr-danger);
+        color: #fff;
+        padding: 3px 8px;
+        border-radius: 999px;
+    }
+
+    .alert-title {
+        font-size: 13px;
+        font-weight: 900;
+        color: #fff;
+        margin-bottom: 5px;
+        display: block;
+    }
+
+    .alert-msg {
+        font-size: 11.5px;
+        color: #94a3b8;
+        line-height: 1.7;
+        display: block;
+        margin-bottom: 10px;
+    }
+
+    .alert-cta {
+        font-size: 12px;
+        font-weight: 800;
+        color: #93c5fd;
+        text-decoration: none;
+    }
+
+    .alert-cta:hover { color: #bfdbfe; text-decoration: underline; }
+
+    /* ═══════════════════════════════
+       Bottom Row: Batch + Instructors
+    ═══════════════════════════════ */
+    .bottom-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+    }
+
+    /* Batch Health — Compact List */
+    .batch-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 4px;
+    }
+
+    .batch-row {
+        display: grid;
+        grid-template-columns: 1fr 52px;
+        gap: 10px;
+        align-items: center;
+        border-radius: var(--radius-sm);
+        padding: 10px 14px;
+        border: 1px solid var(--clr-border);
+        background: rgba(255,255,255,.55);
+        text-decoration: none;
+        transition: all .18s ease;
+    }
+
+    .batch-row:hover {
+        box-shadow: var(--shadow-sm);
+        border-color: rgba(79,70,229,.25);
+        background: rgba(255,255,255,.80);
+    }
+
+    .batch-row.health-good    { border-right: 3px solid var(--clr-success); }
+    .batch-row.health-warning { border-right: 3px solid var(--clr-warning); background: rgba(245,158,11,.04); }
+    .batch-row.health-danger  { border-right: 3px solid var(--clr-danger);  background: rgba(244,63,94,.04);  }
+
+    .batch-row-main {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        min-width: 0;
+    }
+
+    .batch-row-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .batch-name {
+        font-size: 13px;
+        font-weight: 900;
+        color: var(--clr-dark);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .health-pill {
+        font-size: 10px;
+        font-weight: 800;
+        padding: 2px 8px;
+        border-radius: 999px;
+        white-space: nowrap;
+        flex: 0 0 auto;
+    }
+
+    .health-good    .health-pill { background: rgba(16,185,129,.12); color: var(--clr-success); }
+    .health-warning .health-pill { background: rgba(245,158,11,.14); color: var(--clr-warning); }
+    .health-danger  .health-pill { background: rgba(244,63,94,.12);  color: var(--clr-danger);  }
+
+    /* Inline 3-bar progress */
+    .batch-bars {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 4px;
+    }
+
+    .batch-bar-item {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .batch-bar-label {
+        font-size: 9px;
+        font-weight: 700;
+        color: var(--clr-subtle);
+    }
+
+    .batch-bar-track {
+        height: 4px;
+        border-radius: 999px;
+        background: rgba(148,163,184,.18);
+        overflow: hidden;
+    }
+
+    .batch-bar-fill { height: 100%; border-radius: 999px; }
+    .fill-attend { background: var(--clr-success); }
+    .fill-hw     { background: var(--clr-primary); }
+    .fill-exam   { background: var(--clr-warning); }
+
+    /* Score badge on the right */
+    .batch-score {
+        text-align: center;
+        flex: 0 0 auto;
+    }
+
+    .batch-score-num {
+        display: block;
+        font-size: 18px;
+        font-weight: 900;
+        color: var(--clr-dark);
+        line-height: 1;
+    }
+
+    .batch-score-lbl {
+        font-size: 9px;
+        font-weight: 700;
+        color: var(--clr-muted);
+    }
+
+    .metric-pill {
+        font-size: 10px;
+        font-weight: 700;
+        background: rgba(148,163,184,.12);
+        color: var(--clr-muted);
+        padding: 3px 8px;
+        border-radius: 999px;
+    }
+
+    /* ── Batch Pagination ── */
+    .batch-pagination {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        margin-top: 12px;
+    }
+
+    .batch-page-btn {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        border: 1px solid var(--clr-border);
+        background: rgba(255,255,255,.6);
+        font-size: 12px;
+        font-weight: 800;
+        color: var(--clr-muted);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all .18s ease;
+        font-family: var(--font);
+    }
+
+    .batch-page-btn.active {
+        background: var(--clr-primary);
+        border-color: var(--clr-primary);
+        color: #fff;
+        box-shadow: 0 4px 12px rgba(79,70,229,.28);
+    }
+
+    .batch-page-btn:hover:not(.active) {
+        background: rgba(79,70,229,.08);
+        border-color: rgba(79,70,229,.22);
+        color: var(--clr-primary);
+    }
+
+    .batch-page-info {
+        font-size: 11px;
+        color: var(--clr-muted);
+        font-weight: 700;
+    }
+
+    /* ── Partner Batches Collapsible Card ── */
+    .partner-toggle-card {
+        border-radius: var(--radius-md);
+        border: 1px dashed rgba(245,158,11,.40);
+        background: rgba(245,158,11,.04);
+        overflow: hidden;
+        transition: all .25s ease;
+    }
+
+    .partner-toggle-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        cursor: pointer;
+        user-select: none;
+        gap: 10px;
+    }
+
+    .partner-toggle-header:hover {
+        background: rgba(245,158,11,.06);
+    }
+
+    .partner-toggle-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .partner-badge {
+        font-size: 10px;
+        font-weight: 900;
+        background: rgba(245,158,11,.15);
+        color: var(--clr-warning);
+        padding: 3px 9px;
+        border-radius: 999px;
+        border: 1px solid rgba(245,158,11,.25);
+    }
+
+    .partner-toggle-label {
+        font-size: 13px;
+        font-weight: 800;
+        color: var(--clr-dark);
+    }
+
+    .partner-count-badge {
+        font-size: 10px;
+        font-weight: 900;
+        background: rgba(245,158,11,.12);
+        color: var(--clr-warning);
+        padding: 2px 8px;
+        border-radius: 999px;
+    }
+
+    .partner-chevron {
+        font-size: 12px;
+        color: var(--clr-muted);
+        transition: transform .22s ease;
+        flex: 0 0 auto;
+    }
+
+    .partner-toggle-card.open .partner-chevron { transform: rotate(180deg); }
+
+    .partner-body {
+        display: none;
+        padding: 0 16px 12px;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .partner-toggle-card.open .partner-body { display: flex; }
+
+    /* ── Instructor Scorecards — compact ── */
+    .instructors-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-top: 4px;
+    }
+
+    .instr-card {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 12px;
+        border-radius: var(--radius-sm);
+        background: rgba(255,255,255,.55);
+        border: 1px solid var(--clr-border);
+        text-decoration: none;
+        color: inherit;
+        transition: all .18s ease;
+    }
+
+    .instr-card:hover {
+        background: rgba(79,70,229,.04);
+        border-color: rgba(79,70,229,.20);
+        transform: translateX(-1px);
+    }
+
+    .instr-avatar {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, var(--clr-primary), var(--clr-purple));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        font-weight: 900;
+        color: #fff;
+        flex: 0 0 auto;
+    }
+
+    .instr-body { flex: 1; min-width: 0; }
+
+    .instr-name {
+        font-size: 13px;
+        font-weight: 900;
+        color: var(--clr-dark);
+        display: block;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        line-height: 1.2;
+    }
+
+    .instr-score-bar {
+        width: 100%;
+        height: 3px;
+        background: rgba(148,163,184,.18);
+        border-radius: 999px;
+        overflow: hidden;
+        margin-top: 4px;
+    }
+
+    .instr-score-fill {
+        height: 100%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, var(--clr-primary), var(--clr-purple));
+    }
+
+    .instr-score-wrap {
+        flex: 0 0 auto;
+        text-align: center;
+        min-width: 44px;
+    }
+
+    .instr-score {
+        font-size: 17px;
+        font-weight: 900;
+        color: var(--clr-dark);
+        line-height: 1;
+        display: block;
+    }
+
+    .instr-score-label {
+        font-size: 9px;
+        color: var(--clr-muted);
+        font-weight: 700;
+    }
+
+    .instr-stats {
+        display: flex;
+        gap: 8px;
+        flex: 0 0 auto;
+    }
+
+    .instr-stat {
+        text-align: center;
+        min-width: 28px;
+    }
+
+    .instr-stat strong {
+        display: block;
+        font-size: 13px;
+        font-weight: 900;
+        color: var(--clr-dark);
+        line-height: 1;
+    }
+
+    .instr-stat span {
+        font-size: 9px;
+        color: var(--clr-muted);
+        font-weight: 700;
+    }
+
+    .instr-status {
+        font-size: 10px;
+        color: var(--clr-muted);
+        display: block;
+        margin-top: 1px;
+    }
+
+    /* ═══════════════════════════════
+       Timeline + Calendar Row
+    ═══════════════════════════════ */
+    .last-row {
+        display: grid;
+        grid-template-columns: 1fr 340px;
+        gap: 16px;
+    }
+
+    /* Lecture Timeline */
+    .timeline-header {
+        display: flex;
+        gap: 0;
+        margin-bottom: 12px;
+        border-radius: var(--radius-sm);
+        overflow: hidden;
+        background: rgba(148,163,184,.10);
+    }
+
+    .timeline-hour {
+        flex: 1;
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--clr-muted);
+        text-align: center;
+        padding: 6px 0;
+    }
+
+    .timeline-body {
+        position: relative;
+        height: 210px;
+        background: rgba(255,255,255,.4);
+        border: 1px dashed rgba(148,163,184,.30);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+    }
+
+    .tl-lane {
+        position: absolute;
+        top: 0; bottom: 0;
+        width: 1px;
+        background: rgba(148,163,184,.15);
+    }
+
+    .tl-chip {
+        position: absolute;
+        border-radius: 10px;
+        padding: 8px 10px;
+        overflow: hidden;
+        text-decoration: none;
+        border: 1px solid rgba(15,23,42,.06);
+        box-shadow: 0 4px 12px rgba(15,23,42,.08);
+        min-height: 72px;
+        transition: transform .18s ease, box-shadow .18s ease;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .tl-chip:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(15,23,42,.14);
+    }
+
+    .tl-chip span { font-size: 10px; font-weight: 800; opacity: .75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tl-chip strong { font-size: 12px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tl-chip small  { font-size: 10px; opacity: .65; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .tl-chip.scheduled   { background: #f1f5f9; color: #475569; }
+    .tl-chip.running     { background: #d1fae5; color: #065f46; border-color: rgba(16,185,129,.25); }
+    .tl-chip.running-low { background: #fef3c7; color: #92400e; border-color: rgba(245,158,11,.25); }
+    .tl-chip.critical    { background: #fee2e2; color: #991b1b; border-color: rgba(244,63,94,.25); }
+    .tl-chip.completed   { background: #ede9fe; color: #4c1d95; border-color: rgba(139,92,246,.20); }
+
+    .tl-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 12px;
+    }
+
+    .tl-legend-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        color: var(--clr-muted);
+        font-weight: 700;
+    }
+
+    .tl-legend-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex: 0 0 auto;
+    }
+
+    /* Predictive Calendar */
+    .cal-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .cal-day {
+        padding: 12px 14px;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--clr-border);
+        background: rgba(255,255,255,.55);
+        transition: all .18s ease;
+    }
+
+    .cal-day.warning {
+        background: rgba(245,158,11,.06);
+        border-color: rgba(245,158,11,.28);
+    }
+
+    .cal-day:hover { box-shadow: var(--shadow-sm); }
+
+    .cal-row1 {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+    }
+
+    .cal-dayname {
+        font-size: 13px;
+        font-weight: 900;
+        color: var(--clr-dark);
+    }
+
+    .cal-date {
+        font-size: 11px;
+        color: var(--clr-muted);
+    }
+
+    .cal-chips {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    .cal-chip {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 3px 9px;
+        border-radius: 999px;
+        text-decoration: none;
+    }
+
+    .cal-chip.lec { background: rgba(79,70,229,.10);  color: var(--clr-primary); }
+    .cal-chip.exam { background: rgba(244,63,94,.10); color: var(--clr-danger); }
+    .cal-chip.hw   { background: rgba(245,158,11,.10); color: var(--clr-warning); }
+
+    .cal-warn {
+        font-size: 11px;
+        font-weight: 800;
+        color: #92400e;
+        margin-top: 6px;
+        display: block;
+    }
+
+    /* ═══════════════════════════════
+       Empty States
+    ═══════════════════════════════ */
+    .empty-state {
+        text-align: center;
+        padding: 32px;
+        color: var(--clr-muted);
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    .empty-state-dark {
+        text-align: center;
+        padding: 28px;
+        color: #475569;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    /* ═══════════════════════════════
+       Animations
+    ═══════════════════════════════ */
+    @@keyframes fadeSlideUp {
+        from { opacity: 0; transform: translateY(18px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .anim-up {
+        animation: fadeSlideUp .45s ease both;
+    }
+
+    .anim-up:nth-child(1) { animation-delay: .05s; }
+    .anim-up:nth-child(2) { animation-delay: .10s; }
+    .anim-up:nth-child(3) { animation-delay: .15s; }
+    .anim-up:nth-child(4) { animation-delay: .20s; }
+    .anim-up:nth-child(5) { animation-delay: .25s; }
+
+    /* ═══════════════════════════════
+       Responsive
+    ═══════════════════════════════ */
+    @@media (max-width: 1400px) {
+        .kpi-strip { grid-template-columns: repeat(3, 1fr); }
+        .charts-bento { grid-template-columns: 300px 1fr; }
+        .charts-bento .glass-card:last-child { grid-column: 1 / -1; }
+    }
+
+    @@media (max-width: 1200px) {
+        .ops-grid { grid-template-columns: 1fr; }
+        .bottom-row { grid-template-columns: 1fr; }
+        .last-row { grid-template-columns: 1fr; }
+    }
+
+    @@media (max-width: 900px) {
+        .charts-bento { grid-template-columns: 1fr; }
+        .kpi-strip { grid-template-columns: repeat(2, 1fr); }
+        .qd-workspace { padding: 16px; gap: 16px; }
+        .nav-tabs { display: none; }
+    }
+
+    @@media (max-width: 640px) {
+        .kpi-strip { grid-template-columns: 1fr; }
+        .qd-topnav { padding: 0 16px; }
+    }
+
+    /* Dark mode */
+    @@media (prefers-color-scheme: dark) {
+        :root {
+            --clr-bg:      #0d1117;
+            --clr-surface: rgba(22,27,34,0.80);
+            --clr-surface2:rgba(22,27,34,0.60);
+            --clr-border:  rgba(48,54,61,0.60);
+            --clr-text:    #e6edf3;
+            --clr-dark:    #f0f6fc;
+            --clr-muted:   #8b949e;
+            --clr-subtle:  #6e7681;
+        }
+    }
+</style>
+}
+
+<div class="qd-ops" dir="rtl">
+
+    <!-- ══ Top Navigation ══ -->
+    <header class="qd-topnav">
+        <a class="nav-brand" href="/Admin">
+            <div class="nav-brand-icon">🎓</div>
+            <div class="nav-brand-text">
+                <strong>معهد قدرات للتدريب</strong>
+                <small>لوحة الادمن</small>
+            </div>
+        </a>
+
+        <div class="nav-live-badge">
+            <span class="live-dot"></span>
+            <span>مباشر الآن</span>
+        </div>
+
+        <nav class="nav-tabs" role="tablist" aria-label="أقسام اللوحة">
+            <button class="nav-tab active" data-section="kpiZone" onclick="qdScrollTo('kpiZone')" role="tab">
+                <span class="tab-icon">📊</span> المؤشرات
+            </button>
+            <button class="nav-tab" data-section="chartsZone" onclick="qdScrollTo('chartsZone')" role="tab">
+                <span class="tab-icon">📈</span> الرسوم البيانية
+            </button>
+            <button class="nav-tab" data-section="liveZone" onclick="qdScrollTo('liveZone')" role="tab">
+                <span class="tab-icon">🔴</span> الحضور الحي
+                @if (Model.LiveAttendance.Any(x => x.UrgencyCssClass == "critical")) {
+                    <span class="tab-count">!</span>
+                }
+            </button>
+            <button class="nav-tab" data-section="batchZone" onclick="qdScrollTo('batchZone')" role="tab">
+                <span class="tab-icon">🏫</span> الدفعات
+            </button>
+            <button class="nav-tab" data-section="instructorZone" onclick="qdScrollTo('instructorZone')" role="tab">
+                <span class="tab-icon">👨‍🏫</span> المدربون
+            </button>
+            <button class="nav-tab" data-section="timelineZone" onclick="qdScrollTo('timelineZone')" role="tab">
+                <span class="tab-icon">🗓</span> المحاضرات
+            </button>
+            <a class="nav-tab" href="@smartAlertsUrl">
+                <span class="tab-icon">🔔</span> التنبيهات
+                @if (urgentCount > 0) {
+                    <span class="tab-count">@urgentCount</span>
+                }
+            </a>
+        </nav>
+
+        <div class="nav-actions">
+            <span class="nav-time" id="navClock">@Model.GeneratedAt.ToString("HH:mm:ss")</span>
+            <button class="nav-btn nav-btn-ghost" type="button" onclick="window.location.reload()">⟳ تحديث</button>
+            <a class="nav-btn nav-btn-primary" href="/Admin/Notifications/Create">+ إشعار</a>
+        </div>
+    </header>
+
+    <!-- ══ Workspace ══ -->
+    <main class="qd-workspace">
+
+        <!-- ── KPI Strip ── -->
+        <section id="kpiZone" aria-label="مؤشرات الأداء الرئيسية">
+            <div class="kpi-strip">
+
+                <a class="kpi-card c-blue anim-up" href="@activeStudentsUrl">
+                    <div class="kpi-icon-wrap">👥</div>
+                    <span class="kpi-label">طلاب نشطون اليوم</span>
+                    <span class="kpi-value" id="kpi-active">@Model.Kpis.ActiveStudentsToday</span>
+                    <span class="kpi-trend" id="kpi-active-trend">@Model.Kpis.ActiveStudentsTrendText</span>
+                    <span class="kpi-cta">عرض التفاصيل ←</span>
+                </a>
+
+                <a class="kpi-card c-green anim-up" href="@runningLecturesUrl">
+                    <div class="kpi-icon-wrap">🎙</div>
+                    <span class="kpi-label">محاضرات جارية الآن</span>
+                    <span class="kpi-value" id="kpi-lectures">@Model.Kpis.RunningLecturesNow</span>
+                    <span class="kpi-trend" id="kpi-lectures-trend">@Model.Kpis.RunningLecturesTrendText</span>
+                    <span class="kpi-cta">عرض التفاصيل ←</span>
+                </a>
+
+                <a class="kpi-card c-purple anim-up" href="@openExamsUrl">
+                    <div class="kpi-icon-wrap">📝</div>
+                    <span class="kpi-label">اختبارات مفتوحة الآن</span>
+                    <span class="kpi-value" id="kpi-exams">@Model.Kpis.OpenExamsNow</span>
+                    <span class="kpi-trend" id="kpi-exams-trend">@Model.Kpis.OpenExamsTrendText</span>
+                    <span class="kpi-cta">عرض التفاصيل ←</span>
+                </a>
+
+                <a class="kpi-card c-amber anim-up" href="@todayAttendanceUrl">
+                    <div class="kpi-icon-wrap">✅</div>
+                    <span class="kpi-label">نسبة الحضور اليوم</span>
+                    <span class="kpi-value" id="kpi-attend">@Model.Kpis.AttendancePercentToday.ToString("0.#")%</span>
+                    <span class="kpi-trend" id="kpi-attend-trend">@Model.Kpis.AttendanceTrendText</span>
+                    <span class="kpi-cta">عرض التفاصيل ←</span>
+                </a>
+
+                <a class="kpi-card c-rose anim-up" href="@closingHomeworksUrl">
+                    <div class="kpi-icon-wrap">⏰</div>
+                    <span class="kpi-label">واجبات تغلق خلال 24 ساعة</span>
+                    <span class="kpi-value" id="kpi-hw">@Model.Kpis.HomeworksClosingWithin24Hours</span>
+                    <span class="kpi-trend" id="kpi-hw-trend">@Model.Kpis.HomeworksClosingTrendText</span>
+                    <span class="kpi-cta">عرض التفاصيل ←</span>
+                </a>
+
+            </div>
+        </section>
+
+        <!-- ── Charts Bento ── -->
+        <section id="chartsZone" aria-label="الرسوم البيانية">
+            <div class="charts-bento">
+
+                <!-- Chart 1: Attendance Donut -->
+                <div class="glass-card">
+                    <div class="card-head">
+                        <div>
+                            <span class="card-badge badge-today">اليوم</span>
+                            <h2 class="card-title" style="margin-top:8px">توزيع الحضور</h2>
+                            <span class="card-sub">نسبة الحضور والغياب</span>
+                        </div>
+                        <a href="@todayAttendanceUrl" class="card-link">تفاصيل ←</a>
+                    </div>
+                    <div class="chart-donut-wrap">
+                        <canvas id="attendanceDonut"></canvas>
+                        <div class="donut-center">
+                            <strong>@Model.Kpis.AttendancePercentToday.ToString("0")%</strong>
+                            <span>حضور</span>
+                        </div>
+                    </div>
+                    <div class="donut-legend">
+                        <div class="donut-legend-item">
+                            <span class="legend-dot" style="background:#10b981"></span>
+                            <span>نسبة الحضور</span>
+                            <span class="legend-val">@Model.Kpis.AttendancePercentToday.ToString("0.#")%</span>
+                        </div>
+                        <div class="donut-legend-item">
+                            <span class="legend-dot" style="background:#f43f5e"></span>
+                            <span>نسبة الغياب</span>
+                            <span class="legend-val">@attendanceAbsent.ToString("0.#")%</span>
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+                        <span style="font-size:11px;font-weight:700;background:rgba(244,63,94,.08);color:#f43f5e;padding:4px 10px;border-radius:999px">
+                            @absentCount غائب كلي
+                        </span>
+                        <span style="font-size:11px;font-weight:700;background:rgba(245,158,11,.08);color:#f59e0b;padding:4px 10px;border-radius:999px">
+                            @lowLecCount محاضرة منخفضة
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Chart 2: Batch Health Bar -->
+                <div class="glass-card">
+                    <div class="card-head">
+                        <div>
+                            <span class="card-badge badge-today">اليوم</span>
+                            <h2 class="card-title" style="margin-top:8px">صحة الدفعات</h2>
+                            <span class="card-sub">مقارنة مؤشرات الأداء بين الدفعات</span>
+                        </div>
+                        <a href="@batchHealthUrl" class="card-link">تفاصيل ←</a>
+                    </div>
+                    <div class="chart-bar-wrap">
+                        <canvas id="batchChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Chart 3: Predictive Load Area -->
+                <div class="glass-card">
+                    <div class="card-head">
+                        <div>
+                            <span class="card-badge badge-week">الأسبوع القادم</span>
+                            <h2 class="card-title" style="margin-top:8px">التوقع الأسبوعي</h2>
+                            <span class="card-sub">المحاضرات والاختبارات والواجبات</span>
+                        </div>
+                    </div>
+                    <div class="chart-area-wrap">
+                        <canvas id="calChart"></canvas>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ── Operations: Live + Alerts ── -->
+        <section id="liveZone">
+            <div class="ops-grid">
+
+                <!-- Live Attendance Table -->
+                <div class="glass-card">
+                    <div class="card-head">
+                        <div>
+                            <span class="card-badge badge-live">🔴 مباشر</span>
+                            <h2 class="card-title" style="margin-top:8px">الحضور المباشر والإجراءات</h2>
+                            <span class="card-sub">يتحدث تلقائياً كل 10 ثوانٍ</span>
+                        </div>
+                        <a href="@todayAttendanceUrl" class="card-link">عرض الكل ←</a>
+                    </div>
+
+                    <div id="liveAttendBody">
+                        @if (Model.LiveAttendance.Any()) {
+                            <table class="live-table">
+                                <thead>
+                                    <tr>
+                                        <th>الدفعة / المحاضرة</th>
+                                        <th>المدرب</th>
+                                        <th>الحضور</th>
+                                        <th>الحالة</th>
+                                        <th>الإجراء</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var row in Model.LiveAttendance) {
+                                        var pct = row.AttendancePercent;
+                                        var fillClass = pct >= 70 ? "fill-green" : pct >= 40 ? "fill-amber" : "fill-red";
+                                        <tr>
+                                            <td>
+                                                <a href="/Admin/Lectures/Details/@row.LectureId" style="text-decoration:none">
+                                                    <span class="live-batch-name">@row.BatchName</span>
+                                                    <span class="live-lecture-name">@row.LectureTitle</span>
+                                                </a>
+                                            </td>
+                                            <td style="font-weight:700; font-size:13px">@row.InstructorName</td>
+                                            <td>
+                                                <div class="attend-bar-wrap">
+                                                    <div class="attend-bar">
+                                                        <div class="attend-bar-fill @fillClass" style="width:@pct.ToString("0.##")%"></div>
+                                                    </div>
+                                                    <span class="attend-pct">@row.ConnectedStudents/@row.TotalStudents</span>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span class="urgency-badge @row.UrgencyCssClass">@row.StatusText</span>
+                                            </td>
+                                            <td>
+                                                <div style="display:flex;gap:6px;align-items:center">
+                                                    <a class="tbl-action-btn details" href="/Admin/Lectures/Details/@row.LectureId">تفاصيل</a>
+                                                    <button class="tbl-action-btn alert-btn"
+                                                            type="button"
+                                                            data-lecture-id="@row.LectureId"
+                                                            data-batch-name="@row.BatchName"
+                                                            data-instructor-name="@row.InstructorName"
+                                                            @(row.CanWarnInstructor ? "" : "disabled")>
+                                                        @row.ActionText
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        } else {
+                            <div class="empty-state">لا توجد محاضرات جارية أو قريبة الآن</div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Smart Alerts Panel -->
+                <div class="alerts-panel" id="alertsZone">
+                    <div class="card-head" style="margin-bottom:16px">
+                        <div>
+                            <span class="card-badge" style="background:rgba(244,63,94,.18);color:#fb7185">
+                                @(urgentCount > 0 ? urgentCount + " عاجلة" : "التنبيهات")
+                            </span>
+                            <h2 class="card-title" style="margin-top:8px">التنبيهات الذكية</h2>
+                            <span class="card-sub" style="color:#94a3b8">قرارات مقترحة بناء على البيانات</span>
+                        </div>
+                        <a href="@smartAlertsUrl" class="card-link" style="color:#93c5fd">عرض الكل ←</a>
+                    </div>
+
+                    <div class="alert-scroll" id="smartAlertsBox">
+                        @if (Model.SmartAlerts.Any()) {
+                            foreach (var alert in Model.SmartAlerts) {
+                                var alertUrl = string.IsNullOrWhiteSpace(alert.TargetUrl) || alert.TargetUrl == "#"
+                                    ? smartAlertsUrl : alert.TargetUrl;
+                                <div class="alert-item @alert.Level">
+                                    <div class="alert-row1">
+                                        <span class="alert-ctx">@alert.ContextLabel</span>
+                                        @if (alert.IsUrgent) { <span class="urgent-tag">عاجل</span> }
+                                    </div>
+                                    <span class="alert-title">@alert.Title</span>
+                                    <span class="alert-msg">@alert.Message</span>
+                                    <a class="alert-cta" href="@alertUrl">@alert.SuggestedActionText ←</a>
+                                </div>
+                            }
+                        } else {
+                            <div class="empty-state-dark">لا توجد تنبيهات حرجة الآن ✓</div>
+                        }
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ── Bottom: Batches + Instructors ── -->
+        <section id="batchZone">
+            <div class="bottom-row">
+
+                <!-- Batch Health — paginated main + collapsible partner -->
+                <div class="glass-card">
+                    <div class="card-head">
+                        <div>
+                            <span class="card-badge badge-today">آخر 30 يوم</span>
+                            <h2 class="card-title" style="margin-top:8px">صحة الدفعات النشطة</h2>
+                            <span class="card-sub">غير مؤرشفة · نشطة في الـ 30 يوم الماضية
+                                @if (mainBatches.Any()) {
+                                    <span> · @mainBatches.Count دفعة</span>
+                                }
+                            </span>
+                        </div>
+                        <a href="@batchHealthUrl" class="card-link">عرض الكل ←</a>
+                    </div>
+
+                    @if (mainBatches.Any()) {
+                        <div class="batch-list" id="batchPageList">
+                            @{ int bIdx = 0; }
+                            @foreach (var row in mainBatches) {
+                                var hs = (int)Math.Round(row.HealthScore);
+                                var at = Math.Min(100, row.AttendancePercentToday);
+                                var hw = Math.Min(100, row.HomeworkSubmissionPercent);
+                                var ex = Math.Min(100, row.ExamAverageScore);
+                                <a class="batch-row @row.HealthCssClass"
+                                   href="@batchHealthUrl?batchId=@row.BatchId"
+                                   data-batch-idx="@bIdx">
+                                    <div class="batch-row-main">
+                                        <div class="batch-row-title">
+                                            <span class="batch-name">@row.BatchName</span>
+                                            <span class="health-pill">@row.HealthStatusText</span>
+                                        </div>
+                                        <div class="batch-bars">
+                                            <div class="batch-bar-item">
+                                                <span class="batch-bar-label">حضور @at.ToString("0")%</span>
+                                                <div class="batch-bar-track"><div class="batch-bar-fill fill-attend" style="width:@at.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></div></div>
+                                            </div>
+                                            <div class="batch-bar-item">
+                                                <span class="batch-bar-label">واجبات @hw.ToString("0")%</span>
+                                                <div class="batch-bar-track"><div class="batch-bar-fill fill-hw" style="width:@hw.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></div></div>
+                                            </div>
+                                            <div class="batch-bar-item">
+                                                <span class="batch-bar-label">اختبارات @ex.ToString("0")%</span>
+                                                <div class="batch-bar-track"><div class="batch-bar-fill fill-exam" style="width:@ex.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></div></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="batch-score">
+                                        <span class="batch-score-num">@hs</span>
+                                        <span class="batch-score-lbl">/ 100</span>
+                                    </div>
+                                </a>
+                                bIdx++;
+                            }
+                        </div>
+
+                        @if (mainBatches.Count > BatchPageSize) {
+                            <div class="batch-pagination" id="batchPagination">
+                                <!-- built by JS -->
+                            </div>
+                        }
+                    } else {
+                        <div class="empty-state">لا توجد دفعات نشطة في الـ 30 يوم الماضية</div>
+                    }
+
+                    <!-- Partner Batches — Collapsible -->
+                    @if (partnerBatches.Any()) {
+                        <div class="partner-toggle-card" id="partnerCard" style="margin-top:12px">
+                            <div class="partner-toggle-header" onclick="togglePartnerCard()">
+                                <div class="partner-toggle-left">
+                                    <span class="partner-badge">شركاء</span>
+                                    <span class="partner-toggle-label">دفعات الشركاء</span>
+                                    <span class="partner-count-badge">@partnerBatches.Count دفعة</span>
+                                </div>
+                                <span class="partner-chevron">▼</span>
+                            </div>
+                            <div class="partner-body" id="partnerBody">
+                                @foreach (var row in partnerBatches) {
+                                    var hs2 = (int)Math.Round(row.HealthScore);
+                                    var at2 = Math.Min(100, row.AttendancePercentToday);
+                                    var hw2 = Math.Min(100, row.HomeworkSubmissionPercent);
+                                    var ex2 = Math.Min(100, row.ExamAverageScore);
+                                    <a class="batch-row @row.HealthCssClass" href="@batchHealthUrl?batchId=@row.BatchId">
+                                        <div class="batch-row-main">
+                                            <div class="batch-row-title">
+                                                <span class="batch-name">@row.BatchName</span>
+                                                <span class="health-pill">@row.HealthStatusText</span>
+                                            </div>
+                                            <div class="batch-bars">
+                                                <div class="batch-bar-item">
+                                                    <span class="batch-bar-label">حضور @at2.ToString("0")%</span>
+                                                    <div class="batch-bar-track"><div class="batch-bar-fill fill-attend" style="width:@at2.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></div></div>
+                                                </div>
+                                                <div class="batch-bar-item">
+                                                    <span class="batch-bar-label">واجبات @hw2.ToString("0")%</span>
+                                                    <div class="batch-bar-track"><div class="batch-bar-fill fill-hw" style="width:@hw2.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></div></div>
+                                                </div>
+                                                <div class="batch-bar-item">
+                                                    <span class="batch-bar-label">اختبارات @ex2.ToString("0")%</span>
+                                                    <div class="batch-bar-track"><div class="batch-bar-fill fill-exam" style="width:@ex2.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></div></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="batch-score">
+                                            <span class="batch-score-num">@hs2</span>
+                                            <span class="batch-score-lbl">/ 100</span>
+                                        </div>
+                                    </a>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <!-- Instructors — compact chart + list -->
+                <div class="glass-card" id="instructorZone">
+                    <div class="card-head">
+                        <div>
+                            <span class="card-badge badge-week">الأسبوع</span>
+                            <h2 class="card-title" style="margin-top:8px">نشاط المدربين</h2>
+                        </div>
+                        <a href="@instructorActivityUrl" class="card-link">عرض الكل ←</a>
+                    </div>
+
+                    @if (Model.InstructorPerformance.Any()) {
+                        <!-- Chart 4: compact bar -->
+                        <div style="height:@(Math.Max(80, Model.InstructorPerformance.Count * 28))px;position:relative;margin-bottom:14px">
+                            <canvas id="instrChart"></canvas>
+                        </div>
+
+                        <div class="instructors-grid">
+                            @foreach (var row in Model.InstructorPerformance) {
+                                var initials = row.InstructorName.Length > 0 ? row.InstructorName[0].ToString() : "م";
+                                <a class="instr-card @row.StatusCssClass" href="@instructorActivityUrl?instructorId=@row.InstructorId">
+                                    <div class="instr-avatar">@initials</div>
+                                    <div class="instr-body">
+                                        <span class="instr-name">@row.InstructorName</span>
+                                        <div class="instr-score-bar">
+                                            <div class="instr-score-fill" style="width:@row.ActivityScore.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></div>
+                                        </div>
+                                    </div>
+                                    <div class="instr-stats">
+                                        <div class="instr-stat">
+                                            <strong>@row.LecturesThisWeek</strong>
+                                            <span>محاضرة</span>
+                                        </div>
+                                        <div class="instr-stat">
+                                            <strong>@row.HomeworksThisWeek</strong>
+                                            <span>واجب</span>
+                                        </div>
+                                        <div class="instr-stat">
+                                            <strong>@row.ExamsThisWeek</strong>
+                                            <span>اختبار</span>
+                                        </div>
+                                    </div>
+                                    <div class="instr-score-wrap">
+                                        <span class="instr-score">@row.ActivityScore.ToString("0")</span>
+                                        <span class="instr-score-label">نقطة</span>
+                                    </div>
+                                </a>
+                            }
+                        </div>
+                    } else {
+                        <div class="empty-state">لا توجد بيانات مدربين لهذا الأسبوع</div>
+                    }
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ── Timeline + Calendar ── -->
+        <section id="timelineZone">
+            <div class="last-row">
+
+                <!-- Lecture Timeline -->
+                <div class="glass-card">
+                    <div class="card-head">
+                        <div>
+                            <span class="card-badge badge-today">اليوم</span>
+                            <h2 class="card-title" style="margin-top:8px">خريطة المحاضرات الزمنية</h2>
+                            <span class="card-sub">06:00 → 24:00 · نافذة المحاضرة ساعتان</span>
+                        </div>
+                        <a href="@runningLecturesUrl" class="card-link">تفاصيل ←</a>
+                    </div>
+
+                    <div class="timeline-header">
+                        <span class="timeline-hour">06:00</span>
+                        <span class="timeline-hour">09:00</span>
+                        <span class="timeline-hour">12:00</span>
+                        <span class="timeline-hour">15:00</span>
+                        <span class="timeline-hour">18:00</span>
+                        <span class="timeline-hour">21:00</span>
+                        <span class="timeline-hour">24:00</span>
+                    </div>
+
+                    <div class="timeline-body">
+                        @for (int h = 1; h <= 6; h++) {
+                            var lanePos = (h / 6.0 * 100).ToString("0.##");
+                            <div class="tl-lane" style="right:@lanePos%"></div>
+                        }
+
+                        @if (Model.LectureTimeline.Any()) {
+                            var rowIdx = 0;
+                            foreach (var item in Model.LectureTimeline) {
+                                var ns = item.StartMinuteOfDay - 360;
+                                if (ns < 0) ns = 0;
+                                var leftPct = Math.Round((ns / 1080.0) * 100, 2);
+                                var widthPct = Math.Round((item.DurationMinutes / 1080.0) * 100, 2);
+                                if (widthPct < 7) widthPct = 7;
+                                var topVal = rowIdx % 2 == 0 ? 10 : 112;
+                                rowIdx++;
+                                <a class="tl-chip @item.StatusCode"
+                                   style="right:@leftPct%;top:@(topVal)px;width:@widthPct%;"
+                                   href="/Admin/Lectures/Details/@item.LectureId"
+                                   title="@item.Title — @item.BatchName">
+                                    <span>@item.StatusText</span>
+                                    <strong>@item.BatchName</strong>
+                                    <small>@item.PresentStudents/@item.TotalStudents طالب · @item.AttendancePercent.ToString("0")%</small>
+                                </a>
+                            }
+                        } else {
+                            <div class="empty-state" style="padding-top:70px">لا توجد محاضرات اليوم</div>
+                        }
+                    </div>
+
+                    <div class="tl-legend">
+                        <div class="tl-legend-item"><span class="tl-legend-dot" style="background:#94a3b8"></span>مقررة</div>
+                        <div class="tl-legend-item"><span class="tl-legend-dot" style="background:#10b981"></span>جارية</div>
+                        <div class="tl-legend-item"><span class="tl-legend-dot" style="background:#f59e0b"></span>منخفضة</div>
+                        <div class="tl-legend-item"><span class="tl-legend-dot" style="background:#f43f5e"></span>طارئة</div>
+                        <div class="tl-legend-item"><span class="tl-legend-dot" style="background:#8b5cf6"></span>مكتملة</div>
+                    </div>
+                </div>
+
+                <!-- Predictive Calendar -->
+                <div class="glass-card">
+                    <div class="card-head">
+                        <div>
+                            <span class="card-badge badge-week">الأسبوع القادم</span>
+                            <h2 class="card-title" style="margin-top:8px">التقويم التنبؤي</h2>
+                        </div>
+                    </div>
+
+                    <div class="cal-list">
+                        @foreach (var day in Model.PredictiveCalendar) {
+                            <div class="cal-day @(day.HasDensityWarning ? "warning" : "")">
+                                <div class="cal-row1">
+                                    <span class="cal-dayname">@day.DayName</span>
+                                    <span class="cal-date">@day.Date.ToString("MM/dd")</span>
+                                </div>
+                                <div class="cal-chips">
+                                    @if (day.LecturesCount > 0) {
+                                        <a class="cal-chip lec" href="@runningLecturesUrl">@day.LecturesCount محاضرة</a>
+                                    }
+                                    @if (day.ExamsCount > 0) {
+                                        <a class="cal-chip exam" href="@openExamsUrl">@day.ExamsCount اختبار</a>
+                                    }
+                                    @if (day.HomeworksClosingCount > 0) {
+                                        <a class="cal-chip hw" href="@closingHomeworksUrl">@day.HomeworksClosingCount واجب</a>
+                                    }
+                                </div>
+                                @if (day.HasDensityWarning) {
+                                    <span class="cal-warn">⚠ @day.WarningText</span>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    'use strict';
+
+    /* ══ Chart.js Global Defaults ══ */
+    if (typeof Chart !== 'undefined') {
+        Chart.defaults.font.family = "'Cairo','IBM Plex Sans Arabic','Tajawal',system-ui,sans-serif";
+        Chart.defaults.font.size   = 12;
+        Chart.defaults.color       = '#64748b';
+    }
+
+    /* ══ Scroll helper ══ */
+    window.qdScrollTo = function (id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const main = document.getElementById('qdratMain');
+        const offset = el.getBoundingClientRect().top + (main ? main.scrollTop : window.scrollY) - 80;
+        (main || window).scrollTo({ top: offset, behavior: 'smooth' });
+    };
+
+    /* ══ Live Clock ══ */
+    function tickClock() {
+        const el = document.getElementById('navClock');
+        if (!el) return;
+        const n = new Date();
+        el.textContent = [n.getHours(), n.getMinutes(), n.getSeconds()]
+            .map(v => String(v).padStart(2,'0')).join(':');
+    }
+    setInterval(tickClock, 1000);
+
+    /* ══ Scroll-spy: highlight active nav tab ══ */
+    (function () {
+        const sectionMap = {
+            kpiZone:        0,
+            chartsZone:     1,
+            liveZone:       2,
+            batchZone:      3,
+            instructorZone: 4,
+            timelineZone:   5
+        };
+        const tabs = document.querySelectorAll('.nav-tab[data-section]');
+        if (!tabs.length) return;
+
+        const scrollRoot = document.getElementById('qdratMain') || window;
+
+        function onScroll() {
+            let active = null;
+            for (const [id] of Object.entries(sectionMap)) {
+                const el = document.getElementById(id);
+                if (!el) continue;
+                const rect = el.getBoundingClientRect();
+                if (rect.top <= 120) active = id;
+            }
+            tabs.forEach(function(t) {
+                const match = t.getAttribute('data-section') === active;
+                t.classList.toggle('active', match);
+            });
+        }
+
+        scrollRoot.addEventListener('scroll', onScroll, { passive: true });
+        onScroll();
+    })();
+
+    /* ══ Chart 1: Attendance Donut — 2 consistent % values from DB ══ */
+    (function () {
+        const ctx = document.getElementById('attendanceDonut');
+        if (!ctx || typeof Chart === 'undefined') return;
+        const present = @attendancePresent.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+        const absent  = @attendanceAbsent.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+        const donutUrls = ['@todayAttendanceUrl', '@todayAttendanceUrl'];
+        const donutChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['نسبة الحضور', 'نسبة الغياب'],
+                datasets: [{
+                    data: [present, absent],
+                    backgroundColor: ['#10b981', '#f43f5e'],
+                    borderColor: 'rgba(255,255,255,0.8)',
+                    borderWidth: 3,
+                    hoverOffset: 8
+                }]
+            },
+            options: {
+                cutout: '72%',
+                responsive: true,
+                maintainAspectRatio: true,
+                onClick: function(event, elements) {
+                    if (elements.length > 0) {
+                        window.location.href = donutUrls[elements[0].index] || donutUrls[0];
+                    }
+                },
+                onHover: function(event, elements) {
+                    event.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        rtl: true,
+                        callbacks: { label: c => ' ' + c.label + ': ' + c.raw + '%' }
+                    }
+                }
+            }
+        });
+    })();
+
+    /* ══ Chart 2: Batch Health Grouped Bar — real DB data via JsonSerializer ══ */
+    (function () {
+        const ctx = document.getElementById('batchChart');
+        if (!ctx || typeof Chart === 'undefined') return;
+        const labels    = @Html.Raw(jsBatchNames);
+        const attend    = @Html.Raw(jsBatchAttend);
+        const hw        = @Html.Raw(jsBatchHw);
+        const exam      = @Html.Raw(jsBatchExam);
+        const batchIds  = @Html.Raw(jsBatchIds);
+        const batchBase = '@batchHealthUrl';
+        if (!labels.length) return;
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    { label: 'حضور',    data: attend, backgroundColor: 'rgba(16,185,129,.80)', borderRadius: 6 },
+                    { label: 'واجبات',  data: hw,     backgroundColor: 'rgba(79,70,229,.75)',  borderRadius: 6 },
+                    { label: 'اختبارات',data: exam,   backgroundColor: 'rgba(245,158,11,.80)', borderRadius: 6 }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                indexAxis: 'y',
+                onClick: function(event, elements) {
+                    if (elements.length > 0) {
+                        const batchId = batchIds[elements[0].index];
+                        if (batchId) window.location.href = batchBase + '?batchId=' + batchId;
+                    }
+                },
+                onHover: function(event, elements) {
+                    event.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+                },
+                plugins: {
+                    legend: { position: 'bottom', align: 'start', rtl: true },
+                    tooltip: { rtl: true, callbacks: { label: c => ' ' + c.dataset.label + ': ' + c.raw + '%' } }
+                },
+                scales: {
+                    x: { min: 0, max: 100, grid: { color: 'rgba(148,163,184,.12)' }, ticks: { callback: v => v + '%' } },
+                    y: { grid: { display: false } }
+                }
+            }
+        });
+    })();
+
+    /* ══ Chart 3: Predictive Calendar Area — real DB data ══ */
+    (function () {
+        const ctx = document.getElementById('calChart');
+        if (!ctx || typeof Chart === 'undefined') return;
+        const labels    = @Html.Raw(jsCalDays);
+        const lectures  = @Html.Raw(jsCalLectures);
+        const exams     = @Html.Raw(jsCalExams);
+        const homeworks = @Html.Raw(jsCalHomeworks);
+        if (!labels.length) return;
+        const calDsUrls = ['@runningLecturesUrl', '@openExamsUrl', '@closingHomeworksUrl'];
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    { label: 'محاضرات',    data: lectures,  borderColor: '#4f46e5', backgroundColor: 'rgba(79,70,229,.10)',  fill: true, tension: 0.4, pointRadius: 6, pointHoverRadius: 9, pointBackgroundColor: '#4f46e5' },
+                    { label: 'اختبارات',   data: exams,     borderColor: '#f43f5e', backgroundColor: 'rgba(244,63,94,.08)',  fill: true, tension: 0.4, pointRadius: 6, pointHoverRadius: 9, pointBackgroundColor: '#f43f5e' },
+                    { label: 'واجبات تغلق', data: homeworks, borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,.08)', fill: true, tension: 0.4, pointRadius: 6, pointHoverRadius: 9, pointBackgroundColor: '#f59e0b' }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                onClick: function(event, elements) {
+                    if (elements.length > 0) {
+                        const url = calDsUrls[elements[0].datasetIndex];
+                        if (url) window.location.href = url;
+                    }
+                },
+                onHover: function(event, elements) {
+                    event.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+                },
+                plugins: {
+                    legend: { position: 'bottom', align: 'start', rtl: true },
+                    tooltip: { rtl: true }
+                },
+                scales: {
+                    x: { grid: { color: 'rgba(148,163,184,.10)' } },
+                    y: { beginAtZero: true, grid: { color: 'rgba(148,163,184,.10)' }, ticks: { stepSize: 1 } }
+                }
+            }
+        });
+    })();
+
+    /* ══ Chart 4: Instructor Activity Bar — real DB data ══ */
+    (function () {
+        const ctx = document.getElementById('instrChart');
+        if (!ctx || typeof Chart === 'undefined') return;
+        const labels   = @Html.Raw(jsInstrNames);
+        const scores   = @Html.Raw(jsInstrScores);
+        const instrIds = @Html.Raw(jsInstrIds);
+        const instrBase = '@instructorActivityUrl';
+        if (!labels.length) return;
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'درجة النشاط',
+                    data: scores,
+                    backgroundColor: labels.map((_, i) => `hsl(${245 + i * 28}, 68%, ${54 + i * 2}%)`),
+                    borderRadius: 8,
+                    borderSkipped: false
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                indexAxis: 'y',
+                onClick: function(event, elements) {
+                    if (elements.length > 0) {
+                        const instrId = instrIds[elements[0].index];
+                        if (instrId) window.location.href = instrBase + '?instructorId=' + instrId;
+                    }
+                },
+                onHover: function(event, elements) {
+                    event.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { rtl: true, callbacks: { label: c => ' ' + c.raw + ' نقطة' } }
+                },
+                scales: {
+                    x: { min: 0, max: 100, grid: { color: 'rgba(148,163,184,.10)' }, ticks: { callback: v => v + '%' } },
+                    y: { grid: { display: false } }
+                }
+            }
+        });
+    })();
+
+    /* ══ XSS-safe HTML escape ══ */
+    function esc(v) {
+        if (v == null) return '';
+        return String(v)
+            .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+            .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+    }
+
+    /* ══ Build Live Attendance Table ══ */
+    function buildLiveTable(rows) {
+        const wrap = document.getElementById('liveAttendBody');
+        if (!wrap) return;
+        if (!rows || rows.length === 0) {
+            wrap.innerHTML = '<div class="empty-state">لا توجد محاضرات جارية أو قريبة الآن</div>';
+            return;
+        }
+        let html = '<table class="live-table"><thead><tr>'
+            + '<th>الدفعة / المحاضرة</th><th>المدرب</th><th>الحضور</th><th>الحالة</th><th>الإجراء</th>'
+            + '</tr></thead><tbody>';
+        rows.forEach(function(row) {
+            const pct = Number(row.attendancePercent) || 0;
+            const fillCls = pct >= 70 ? 'fill-green' : pct >= 40 ? 'fill-amber' : 'fill-red';
+            const url = '/Admin/Lectures/Details/' + encodeURIComponent(row.lectureId);
+            const dis = row.canWarnInstructor ? '' : ' disabled';
+            html += '<tr>'
+                + '<td><a href="' + url + '" style="text-decoration:none">'
+                    + '<span class="live-batch-name">'   + esc(row.batchName)    + '</span>'
+                    + '<span class="live-lecture-name">' + esc(row.lectureTitle) + '</span>'
+                + '</a></td>'
+                + '<td style="font-weight:700;font-size:13px">' + esc(row.instructorName) + '</td>'
+                + '<td><div class="attend-bar-wrap">'
+                    + '<div class="attend-bar"><div class="attend-bar-fill ' + fillCls + '" style="width:' + pct.toFixed(1) + '%"></div></div>'
+                    + '<span class="attend-pct">' + row.connectedStudents + '/' + row.totalStudents + '</span>'
+                + '</div></td>'
+                + '<td><span class="urgency-badge ' + esc(row.urgencyCssClass) + '">' + esc(row.statusText) + '</span></td>'
+                + '<td><div style="display:flex;gap:6px;align-items:center">'
+                    + '<a class="tbl-action-btn details" href="' + url + '">تفاصيل</a>'
+                    + '<button class="tbl-action-btn alert-btn" type="button"'
+                    + ' data-lecture-id="' + esc(row.lectureId) + '"'
+                    + ' data-batch-name="' + esc(row.batchName) + '"'
+                    + ' data-instructor-name="' + esc(row.instructorName) + '"'
+                    + dis + '>' + esc(row.actionText) + '</button>'
+                + '</div></td></tr>';
+        });
+        html += '</tbody></table>';
+        wrap.innerHTML = html;
+    }
+
+    /* ══ Build Smart Alerts ══ */
+    function buildAlerts(alerts) {
+        const box = document.getElementById('smartAlertsBox');
+        if (!box) return;
+        if (!alerts || alerts.length === 0) {
+            box.innerHTML = '<div class="empty-state-dark">لا توجد تنبيهات حرجة الآن ✓</div>';
+            return;
+        }
+        const fallback = '@smartAlertsUrl';
+        let html = '';
+        alerts.forEach(function(a) {
+            const url = (a.targetUrl && a.targetUrl !== '#') ? a.targetUrl : fallback;
+            const urgTag = a.isUrgent ? '<span class="urgent-tag">عاجل</span>' : '';
+            html += '<div class="alert-item ' + esc(a.level) + '">'
+                + '<div class="alert-row1"><span class="alert-ctx">' + esc(a.contextLabel) + '</span>' + urgTag + '</div>'
+                + '<span class="alert-title">' + esc(a.title)   + '</span>'
+                + '<span class="alert-msg">'   + esc(a.message) + '</span>'
+                + '<a class="alert-cta" href="' + esc(url) + '">' + esc(a.suggestedActionText) + ' ←</a>'
+                + '</div>';
+        });
+        box.innerHTML = html;
+    }
+
+    /* ══ Pulse Refresh (every 10s) ══ */
+    async function refreshPulse() {
+        try {
+            const res = await fetch('@pulseUrl', {
+                method: 'GET',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                cache: 'no-store'
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            if (!data || !data.kpis) return;
+
+            const k = data.kpis;
+            const setEl = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
+
+            setEl('kpi-active',         k.activeStudentsToday);
+            setEl('kpi-active-trend',   k.activeStudentsTrendText);
+            setEl('kpi-lectures',       k.runningLecturesNow);
+            setEl('kpi-lectures-trend', k.runningLecturesTrendText);
+            setEl('kpi-exams',          k.openExamsNow);
+            setEl('kpi-exams-trend',    k.openExamsTrendText);
+            setEl('kpi-attend',         Number(k.attendancePercentToday).toFixed(1) + '%');
+            setEl('kpi-attend-trend',   k.attendanceTrendText);
+            setEl('kpi-hw',             k.homeworksClosingWithin24Hours);
+            setEl('kpi-hw-trend',       k.homeworksClosingTrendText);
+
+            buildLiveTable(data.liveAttendance);
+            buildAlerts(data.smartAlerts);
+        } catch (err) {
+            console.warn('[Pulse] refresh failed', err);
+        }
+    }
+
+    /* ══ Instructor warning button ══ */
+    document.addEventListener('click', function(e) {
+        const btn = e.target.closest('.alert-btn');
+        if (!btn || btn.disabled) return;
+        const batch      = btn.getAttribute('data-batch-name')      || '';
+        const instructor = btn.getAttribute('data-instructor-name') || '';
+        window.location.href = '/Admin/Notifications/Create'
+            + '?title='   + encodeURIComponent('تنبيه حضور منخفض')
+            + '&content=' + encodeURIComponent('يرجى متابعة حضور دفعة ' + batch + ' مع ' + instructor + '.');
+    });
+
+    /* ══ Batch Pagination ══ */
+    (function () {
+        const PAGE_SIZE = @BatchPageSize;
+        const list = document.getElementById('batchPageList');
+        const pager = document.getElementById('batchPagination');
+        if (!list || !pager) return;
+
+        const rows = Array.from(list.querySelectorAll('[data-batch-idx]'));
+        const total = rows.length;
+        const pages = Math.ceil(total / PAGE_SIZE);
+        if (pages <= 1) return;
+
+        let currentPage = 0;
+
+        function showPage(p) {
+            currentPage = p;
+            rows.forEach(function(r) {
+                const idx = parseInt(r.getAttribute('data-batch-idx'), 10);
+                r.style.display = (idx >= p * PAGE_SIZE && idx < (p + 1) * PAGE_SIZE) ? '' : 'none';
+            });
+            renderPager();
+        }
+
+        function renderPager() {
+            let html = '';
+            if (currentPage > 0) {
+                html += '<button class="batch-page-btn" onclick="qdBatchPage(' + (currentPage - 1) + ')">‹</button>';
+            }
+            for (let i = 0; i < pages; i++) {
+                html += '<button class="batch-page-btn' + (i === currentPage ? ' active' : '') + '" onclick="qdBatchPage(' + i + ')">' + (i + 1) + '</button>';
+            }
+            if (currentPage < pages - 1) {
+                html += '<button class="batch-page-btn" onclick="qdBatchPage(' + (currentPage + 1) + ')">›</button>';
+            }
+            const from = currentPage * PAGE_SIZE + 1;
+            const to   = Math.min((currentPage + 1) * PAGE_SIZE, total);
+            html += '<span class="batch-page-info">' + from + '–' + to + ' من ' + total + '</span>';
+            pager.innerHTML = html;
+        }
+
+        window.qdBatchPage = showPage;
+        showPage(0);
+    })();
+
+    /* ══ Partner Card Toggle ══ */
+    window.togglePartnerCard = function () {
+        const card = document.getElementById('partnerCard');
+        if (card) card.classList.toggle('open');
+    };
+
+    /* ══ Init ══ */
+    refreshPulse();
+    setInterval(refreshPulse, 10000);
+    tickClock();
+
+})();
+</script>
+}

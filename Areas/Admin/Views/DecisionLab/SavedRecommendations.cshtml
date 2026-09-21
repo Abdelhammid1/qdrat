@@ -1,0 +1,759 @@
+@model IReadOnlyList<QdratNew.Entities.DecisionRecommendation>
+<link rel="stylesheet" href="~/css/decision-analytics-ui.css" asp-append-version="true" />
+
+@{
+    int total    = Model.Count;
+    int pending  = Model.Count(x => x.Status == "Pending" || x.Status == "PendingReview");
+    int approved = Model.Count(x => x.Status == "Approved");
+    int rejected = Model.Count(x => x.Status == "Rejected");
+
+    var statusGroups = Model
+        .GroupBy(x => x.Status)
+        .Select(g => new { label = g.Key, count = g.Count() })
+        .OrderByDescending(g => g.count)
+        .ToList();
+
+    var typeGroups = Model
+        .GroupBy(x => x.RecommendationType)
+        .Select(g => new { type = g.Key, count = g.Count() })
+        .OrderByDescending(g => g.count)
+        .Take(7)
+        .ToList();
+
+    string StatusColor(string s) => s switch {
+        "Pending"       => "#0891b2",
+        "PendingReview" => "#0891b2",
+        "Approved"      => "#16a34a",
+        "Rejected"      => "#dc2626",
+        "Completed"     => "#7c3aed",
+        _ => "#6b7280"
+    };
+    string StatusBg(string s) => s switch {
+        "Pending"       => "#cffafe",
+        "PendingReview" => "#cffafe",
+        "Approved"      => "#dcfce7",
+        "Rejected"      => "#fee2e2",
+        "Completed"     => "#ede9fe",
+        _ => "#f3f4f6"
+    };
+    string StatusAr(string s) => s switch {
+        "Pending"       => "بانتظار المراجعة",
+        "PendingReview" => "بانتظار المراجعة",
+        "Approved"      => "معتمد",
+        "Rejected"      => "مرفوض",
+        "Completed"     => "مكتمل",
+        "Cancelled"     => "ملغى",
+        _ => s
+    };
+    string StatusIcon(string s) => s switch {
+        "Pending"       => "fa-clock",
+        "PendingReview" => "fa-clock",
+        "Approved"      => "fa-circle-check",
+        "Rejected"      => "fa-circle-xmark",
+        "Completed"     => "fa-check-double",
+        _ => "fa-circle"
+    };
+    string TypeAr(string t) => t switch {
+        "DataReview"        => "مراجعة البيانات",
+        "AttendanceFollowUp"=> "متابعة الحضور",
+        "HomeworkSupport"   => "دعم الواجبات",
+        "ShortRemedialExam" => "اختبار تشخيصي",
+        "InstructorGuidance"=> "توجيه المعلم",
+        "MixedIntervention" => "تدخل مختلط",
+        "MonitorOnly"       => "مراقبة فقط",
+        _ => t
+    };
+    string TypeIcon(string t) => t switch {
+        "DataReview"        => "fa-database",
+        "AttendanceFollowUp"=> "fa-user-clock",
+        "HomeworkSupport"   => "fa-clipboard-list",
+        "ShortRemedialExam" => "fa-file-pen",
+        "InstructorGuidance"=> "fa-chalkboard-user",
+        "MixedIntervention" => "fa-layer-group",
+        "MonitorOnly"       => "fa-eye",
+        _ => "fa-circle-info"
+    };
+    string TypeColor(string t) => t switch {
+        "DataReview"        => "#0891b2",
+        "AttendanceFollowUp"=> "#d97706",
+        "HomeworkSupport"   => "#1e40af",
+        "ShortRemedialExam" => "#7c3aed",
+        "InstructorGuidance"=> "#16a34a",
+        "MixedIntervention" => "#dc2626",
+        "MonitorOnly"       => "#6b7280",
+        _ => "#6b7280"
+    };
+
+    var donutLabels = statusGroups.Select(g => StatusAr(g.label)).ToArray();
+    var donutData   = statusGroups.Select(g => g.count).ToArray();
+    var donutColors = statusGroups.Select(g => StatusColor(g.label)).ToArray();
+
+    var barLabels = typeGroups.Select(g => TypeAr(g.type)).ToArray();
+    var barData   = typeGroups.Select(g => g.count).ToArray();
+    var barColors = typeGroups.Select(g => TypeColor(g.type)).ToArray();
+}
+
+<div class="qd-page" dir="rtl">
+
+    <!-- ═══════════ HEADER ═══════════ -->
+    <section class="dl-header">
+        <div style="position:relative;z-index:1">
+            <div class="dl-eyebrow mb-1">
+                <i class="fas fa-brain me-1"></i>DecisionLab · التوصيات المحفوظة
+            </div>
+            <h1 class="mb-1">التوصيات المحفوظة</h1>
+            <p class="mb-0">
+                آخر @total توصية — تابع حالة كل توصية وراجعها قبل الاعتماد والتنفيذ
+            </p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap align-items-center" style="position:relative;z-index:1">
+            <a class="btn btn-light btn-sm"
+               asp-area="Admin" asp-controller="Analytics" asp-action="AdvancedDashboard">
+                <i class="fas fa-chart-line me-1"></i>مراجعة Analytics
+            </a>
+            <a class="btn btn-outline-light btn-sm"
+               asp-area="Admin" asp-controller="DecisionLab" asp-action="Index">
+                <i class="fas fa-arrow-right me-1"></i>رجوع
+            </a>
+        </div>
+    </section>
+
+    <!-- ═══════════ KPI STRIP ═══════════ -->
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-md-3">
+            <div class="sr-kpi">
+                <div class="sr-kpi-icon" style="background:#ede9fe;color:#7c3aed">
+                    <i class="fas fa-layer-group fa-lg"></i>
+                </div>
+                <div class="sr-kpi-val">@total</div>
+                <div class="sr-kpi-lbl">إجمالي التوصيات</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="sr-kpi sr-kpi-pending">
+                <div class="sr-kpi-icon" style="background:#cffafe;color:#0891b2">
+                    <i class="fas fa-clock fa-lg"></i>
+                </div>
+                <div class="sr-kpi-val" style="color:#0891b2">@pending</div>
+                <div class="sr-kpi-lbl">بانتظار المراجعة</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="sr-kpi sr-kpi-approved">
+                <div class="sr-kpi-icon" style="background:#dcfce7;color:#16a34a">
+                    <i class="fas fa-circle-check fa-lg"></i>
+                </div>
+                <div class="sr-kpi-val" style="color:#16a34a">@approved</div>
+                <div class="sr-kpi-lbl">معتمدة</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="sr-kpi sr-kpi-rejected">
+                <div class="sr-kpi-icon" style="background:#fee2e2;color:#dc2626">
+                    <i class="fas fa-circle-xmark fa-lg"></i>
+                </div>
+                <div class="sr-kpi-val" style="color:#dc2626">@rejected</div>
+                <div class="sr-kpi-lbl">مرفوضة</div>
+            </div>
+        </div>
+    </div>
+
+    @if (total > 0)
+    {
+        <!-- ═══════════ CHARTS ROW ═══════════ -->
+        <div class="row g-3 mb-3">
+
+            <!-- Donut: Status Distribution -->
+            <div class="col-lg-4">
+                <div class="dl-recommendation d-flex flex-column align-items-center gap-3">
+                    <div class="sr-chart-title w-100">توزيع حالات التوصيات</div>
+                    <div style="position:relative;width:180px;height:180px;flex-shrink:0">
+                        <canvas id="statusDonutChart" width="180" height="180"></canvas>
+                    </div>
+                    <div class="sr-legend w-100">
+                        @foreach (var g in statusGroups)
+                        {
+                            <div class="sr-legend-row">
+                                <span class="sr-legend-dot" style="background:@StatusColor(g.label)"></span>
+                                <span class="sr-legend-lbl">@StatusAr(g.label)</span>
+                                <strong class="sr-legend-val">@g.count</strong>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Type Distribution: CSS bars (no Chart.js) -->
+            <div class="col-lg-8">
+                <div class="dl-recommendation d-flex flex-column gap-3">
+                    <div class="sr-chart-title">توزيع أنواع التدخل</div>
+                    @{
+                        int maxTypeCount = typeGroups.Count > 0 ? typeGroups.Max(g => g.count) : 1;
+                    }
+                    <div class="sr-typebars">
+                        @foreach (var g in typeGroups)
+                        {
+                            int pct = maxTypeCount > 0 ? (int)Math.Round((double)g.count / maxTypeCount * 100) : 0;
+                            string tc = TypeColor(g.type);
+                            <div class="sr-typebar-item">
+                                <div class="sr-typebar-header">
+                                    <div class="sr-typebar-meta">
+                                        <span class="sr-typebar-icon" style="background:@(tc)18;color:@tc">
+                                            <i class="fas @TypeIcon(g.type)"></i>
+                                        </span>
+                                        <span class="sr-typebar-name">@TypeAr(g.type)</span>
+                                    </div>
+                                    <strong class="sr-typebar-count" style="color:@tc">@g.count</strong>
+                                </div>
+                                <div class="sr-typebar-track">
+                                    <div class="sr-typebar-fill" style="width:@pct%;background:@tc"></div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══════════ FILTER BAR ═══════════ -->
+        <div class="sr-filter-bar mb-3">
+            <div class="sr-filter-status" role="group">
+                <button class="sr-filter-btn sr-filter-active" data-filter-status="all">
+                    <i class="fas fa-layer-group me-1"></i>الكل
+                    <span class="sr-filter-count" id="fc-all">@total</span>
+                </button>
+                <button class="sr-filter-btn" data-filter-status="pending">
+                    <i class="fas fa-clock me-1"></i>معلق
+                    <span class="sr-filter-count" id="fc-pending">@pending</span>
+                </button>
+                <button class="sr-filter-btn" data-filter-status="approved">
+                    <i class="fas fa-circle-check me-1"></i>معتمد
+                    <span class="sr-filter-count" id="fc-approved">@approved</span>
+                </button>
+                <button class="sr-filter-btn" data-filter-status="rejected">
+                    <i class="fas fa-circle-xmark me-1"></i>مرفوض
+                    <span class="sr-filter-count" id="fc-rejected">@rejected</span>
+                </button>
+            </div>
+            <div class="sr-filter-search">
+                <i class="fas fa-search sr-search-icon"></i>
+                <input type="text" id="srSearchInput" class="sr-search-input"
+                       placeholder="بحث في الدفعة أو الملخص..." autocomplete="off" />
+            </div>
+        </div>
+
+        <!-- ═══════════ TABLE ═══════════ -->
+        <div class="dl-recommendation p-0 overflow-hidden">
+            <div class="sr-table-head">
+                <div class="sr-table-title">
+                    <i class="fas fa-list-check me-2 text-primary"></i>قائمة التوصيات
+                </div>
+                <span class="sr-count-badge" id="srVisibleCount">@total سجل</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle qd-table sr-table mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width:44px">#</th>
+                            <th>التاريخ</th>
+                            <th>نوع التدخل</th>
+                            <th>الملخص</th>
+                            <th>الدفعة</th>
+                            <th>الحالة</th>
+                            <th style="width:110px">تفاصيل</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model)
+                        {
+                            var rowStatus = (item.Status == "Pending" || item.Status == "PendingReview") ? "pending"
+                                          : item.Status == "Approved" ? "approved"
+                                          : item.Status == "Rejected" ? "rejected"
+                                          : "other";
+                            <tr class="sr-row"
+                                data-status="@rowStatus"
+                                data-batch="@(item.BatchId?.ToString() ?? "")"
+                                data-summary="@item.Summary.ToLower()">
+                                <td class="sr-id-cell">@item.Id</td>
+                                <td class="sr-date-cell">
+                                    <div class="sr-date-main">@item.CreatedAt.ToString("yyyy/MM/dd")</div>
+                                    <div class="sr-date-time">@item.CreatedAt.ToString("HH:mm")</div>
+                                </td>
+                                <td>
+                                    <div class="sr-type-cell">
+                                        <span class="sr-type-icon" style="background:@(TypeColor(item.RecommendationType) + "20");color:@TypeColor(item.RecommendationType)">
+                                            <i class="fas @TypeIcon(item.RecommendationType)"></i>
+                                        </span>
+                                        <div>
+                                            <div class="sr-type-name">@TypeAr(item.RecommendationType)</div>
+                                            <code class="sr-type-code">@item.RecommendationType</code>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="sr-summary-cell" title="@item.Summary">
+                                    @(item.Summary.Length > 80 ? item.Summary[..77] + "..." : item.Summary)
+                                </td>
+                                <td>
+                                    @if (item.BatchId.HasValue)
+                                    {
+                                        <a asp-area="Admin"
+                                           asp-controller="Analytics"
+                                           asp-action="BatchPerformanceDetails"
+                                           asp-route-batchId="@item.BatchId.Value"
+                                           asp-route-curriculumId="@item.CurriculumId"
+                                           class="sr-batch-link">
+                                            <i class="fas fa-users me-1"></i>@item.BatchId.Value
+                                        </a>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">—</span>
+                                    }
+                                </td>
+                                <td>
+                                    <span class="sr-status-badge"
+                                          style="background:@StatusBg(item.Status);color:@StatusColor(item.Status)">
+                                        <i class="fas @StatusIcon(item.Status) me-1"></i>@StatusAr(item.Status)
+                                    </span>
+                                </td>
+                                <td>
+                                    <a class="btn btn-sm sr-details-btn"
+                                       asp-area="Admin"
+                                       asp-controller="DecisionLab"
+                                       asp-action="RecommendationDetails"
+                                       asp-route-id="@item.Id">
+                                        <i class="fas fa-eye me-1"></i>عرض
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="dl-empty">
+            <i class="fas fa-inbox fa-3x mb-3 d-block"></i>
+            لا توجد توصيات محفوظة حتى الآن.
+        </div>
+    }
+
+</div>
+
+<!-- ═══════════ FILTER JS ═══════════ -->
+<script>
+(function () {
+    var activeStatus = 'all';
+    var searchText   = '';
+
+    var rows         = document.querySelectorAll('.sr-row');
+    var countBadge   = document.getElementById('srVisibleCount');
+    var searchInput  = document.getElementById('srSearchInput');
+    var filterBtns   = document.querySelectorAll('.sr-filter-btn');
+
+    function applyFilter() {
+        var visible = 0;
+        rows.forEach(function (row) {
+            var status  = row.dataset.status  || '';
+            var batch   = row.dataset.batch   || '';
+            var summary = row.dataset.summary || '';
+
+            var statusOk = activeStatus === 'all' || status === activeStatus;
+            var textOk   = searchText === ''
+                || batch.includes(searchText)
+                || summary.includes(searchText);
+
+            var show = statusOk && textOk;
+            row.style.display = show ? '' : 'none';
+            if (show) visible++;
+        });
+        if (countBadge) countBadge.textContent = visible + ' سجل';
+    }
+
+    filterBtns.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            filterBtns.forEach(function (b) { b.classList.remove('sr-filter-active'); });
+            btn.classList.add('sr-filter-active');
+            activeStatus = btn.dataset.filterStatus;
+            applyFilter();
+        });
+    });
+
+    if (searchInput) {
+        searchInput.addEventListener('input', function () {
+            searchText = searchInput.value.trim().toLowerCase();
+            applyFilter();
+        });
+    }
+})();
+</script>
+
+<!-- ═══════════ CHARTS JS ═══════════ -->
+@if (total > 0)
+{
+    <script>
+        (function () {
+            if (typeof Chart === 'undefined') return;
+
+            // ── Donut: Status ──
+            const donutCtx = document.getElementById('statusDonutChart');
+            if (donutCtx) {
+                new Chart(donutCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(donutLabels)),
+                        datasets: [{
+                            data: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(donutData)),
+                            backgroundColor: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(donutColors)),
+                            borderWidth: 3,
+                            borderColor: '#fff',
+                            hoverBorderWidth: 0
+                        }]
+                    },
+                    options: {
+                        responsive: false,
+                        cutout: '68%',
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                rtl: true,
+                                callbacks: {
+                                    label: ctx => ` ${ctx.label}: ${ctx.raw} توصية`
+                                }
+                            }
+                        },
+                        animation: { duration: 800, easing: 'easeInOutQuart' }
+                    }
+                });
+            }
+
+        })();
+    </script>
+}
+
+<style>
+    /* ── KPI Cards ── */
+    .sr-kpi {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 16px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.05);
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    .sr-kpi-pending  { border-top: 3px solid #0891b2; }
+    .sr-kpi-approved { border-top: 3px solid #16a34a; }
+    .sr-kpi-rejected { border-top: 3px solid #dc2626; }
+    .sr-kpi-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .sr-kpi-val {
+        font-size: 36px;
+        font-weight: 900;
+        color: #111827;
+        line-height: 1;
+    }
+    .sr-kpi-lbl {
+        font-size: 13px;
+        font-weight: 800;
+        color: #6b7280;
+    }
+
+    /* ── Charts ── */
+    .sr-chart-title {
+        font-size: 15px;
+        font-weight: 900;
+        color: #111827;
+    }
+    .sr-legend { display: flex; flex-direction: column; gap: 8px; }
+    .sr-legend-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 13px;
+        font-weight: 700;
+    }
+    .sr-legend-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+    .sr-legend-lbl { flex: 1; color: #374151; }
+    .sr-legend-val { color: #111827; font-weight: 900; }
+
+    /* ── Type Bars (stacked layout — RTL-safe) ── */
+    .sr-typebars { display: flex; flex-direction: column; gap: 14px; }
+
+    .sr-typebar-item { display: block; }
+
+    .sr-typebar-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 6px;
+    }
+    .sr-typebar-meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+    }
+    .sr-typebar-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 7px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        font-size: 12px;
+    }
+    .sr-typebar-name {
+        font-size: 13px;
+        font-weight: 800;
+        color: #374151;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .sr-typebar-count {
+        font-size: 15px;
+        font-weight: 900;
+        flex-shrink: 0;
+        margin-inline-start: 8px;
+    }
+    .sr-typebar-track {
+        width: 100%;
+        height: 8px;
+        background: #f3f4f6;
+        border-radius: 999px;
+        overflow: hidden;
+    }
+    .sr-typebar-fill {
+        height: 100%;
+        border-radius: 999px;
+        transition: width .9s cubic-bezier(.4,0,.2,1);
+    }
+
+    /* ── Table ── */
+    .sr-table-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 20px;
+        border-bottom: 1px solid #f3f4f6;
+    }
+    .sr-table-title {
+        font-size: 15px;
+        font-weight: 900;
+        color: #111827;
+    }
+    .sr-count-badge {
+        background: #f3f4f6;
+        border-radius: 999px;
+        color: #6b7280;
+        font-size: 12px;
+        font-weight: 900;
+        padding: 4px 12px;
+    }
+    .sr-table thead th {
+        background: #f8fafc !important;
+        font-size: 12px !important;
+        font-weight: 900 !important;
+        color: #6b7280 !important;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        padding: 12px 16px !important;
+        border-bottom: 1px solid #e5e7eb !important;
+    }
+    .sr-table tbody td {
+        padding: 14px 16px !important;
+        vertical-align: middle !important;
+        border-bottom: 1px solid #f9fafb !important;
+    }
+    .sr-row { transition: background .15s; }
+    .sr-row:hover td { background: #f8fafc !important; }
+
+    .sr-id-cell {
+        font-size: 12px;
+        font-weight: 900;
+        color: #9ca3af;
+    }
+    .sr-date-main {
+        font-size: 13px;
+        font-weight: 900;
+        color: #374151;
+    }
+    .sr-date-time {
+        font-size: 11px;
+        color: #9ca3af;
+        font-weight: 700;
+    }
+
+    .sr-type-cell { display: flex; align-items: center; gap: 10px; }
+    .sr-type-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        font-size: 14px;
+    }
+    .sr-type-name {
+        font-size: 13px;
+        font-weight: 900;
+        color: #111827;
+    }
+    .sr-type-code {
+        font-size: 10px;
+        color: #9ca3af;
+        background: #f3f4f6;
+        padding: 1px 5px;
+        border-radius: 3px;
+    }
+
+    .sr-summary-cell {
+        font-size: 13px;
+        font-weight: 700;
+        color: #4b5563;
+        max-width: 300px;
+    }
+
+    .sr-batch-link {
+        font-size: 13px;
+        font-weight: 900;
+        color: #1e40af;
+        text-decoration: none;
+        background: #dbeafe;
+        border-radius: 999px;
+        padding: 3px 10px;
+        white-space: nowrap;
+        transition: background .15s;
+    }
+    .sr-batch-link:hover { background: #bfdbfe; color: #1e3a8a; }
+
+    .sr-status-badge {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 900;
+        padding: 4px 10px;
+        white-space: nowrap;
+    }
+
+    .sr-details-btn {
+        background: #f3f4f6;
+        color: #374151;
+        font-weight: 900;
+        font-size: 12px;
+        border-radius: 8px !important;
+        padding: 6px 12px;
+        transition: background .15s, color .15s;
+    }
+    .sr-details-btn:hover {
+        background: #1e40af;
+        color: #fff;
+    }
+
+    /* ── Filter Bar ── */
+    .sr-filter-bar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        padding: 12px 16px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.04);
+    }
+    .sr-filter-status {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+    .sr-filter-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #f3f4f6;
+        border: 1.5px solid transparent;
+        border-radius: 999px;
+        color: #374151;
+        font-size: 13px;
+        font-weight: 800;
+        padding: 5px 14px;
+        cursor: pointer;
+        transition: background .15s, border-color .15s, color .15s;
+    }
+    .sr-filter-btn:hover {
+        background: #e5e7eb;
+    }
+    .sr-filter-btn.sr-filter-active {
+        background: #dbeafe;
+        border-color: #3b82f6;
+        color: #1e40af;
+    }
+    .sr-filter-count {
+        background: rgba(0,0,0,.08);
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 900;
+        padding: 1px 6px;
+    }
+    .sr-filter-btn.sr-filter-active .sr-filter-count {
+        background: #bfdbfe;
+        color: #1e3a8a;
+    }
+    .sr-filter-search {
+        flex: 1;
+        min-width: 200px;
+        position: relative;
+    }
+    .sr-search-icon {
+        position: absolute;
+        top: 50%;
+        right: 12px;
+        transform: translateY(-50%);
+        color: #9ca3af;
+        font-size: 13px;
+        pointer-events: none;
+    }
+    .sr-search-input {
+        width: 100%;
+        background: #f8fafc;
+        border: 1.5px solid #e5e7eb;
+        border-radius: 999px;
+        color: #111827;
+        font-size: 13px;
+        font-weight: 700;
+        padding: 7px 36px 7px 16px;
+        outline: none;
+        transition: border-color .15s;
+        font-family: inherit;
+    }
+    .sr-search-input:focus {
+        border-color: #3b82f6;
+        background: #fff;
+    }
+    .sr-search-input::placeholder { color: #9ca3af; font-weight: 600; }
+
+    @@media (max-width: 768px) {
+        .sr-summary-cell { max-width: 160px; }
+        .sr-type-code { display: none; }
+        .sr-filter-search { min-width: 100%; }
+    }
+</style>

@@ -1,0 +1,347 @@
+@model QdratNew.ViewModels.EnhancementSkills.CreateEnhancementSetViewModel
+
+@{
+    ViewData["Title"] = "إنشاء مجموعة تعزيزية";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h4 class="fw-bold mb-0 text-primary">
+            <i class="fas fa-brain me-2"></i> إنشاء مجموعة تعزيزية جديدة
+        </h4>
+        <small class="text-muted">اختر طريقة التوليد ثم الدفعة والإعدادات</small>
+    </div>
+    <a asp-action="Index" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-right me-1"></i> رجوع
+    </a>
+</div>
+
+@if (!ViewData.ModelState.IsValid && ViewData.ModelState.Values.Any(v => v.Errors.Any()))
+{
+    <div class="alert alert-danger mb-3">
+        <i class="fas fa-exclamation-circle me-2"></i>
+        <div asp-validation-summary="All"></div>
+    </div>
+}
+
+<form asp-action="Create" method="post" id="createForm">
+    @Html.AntiForgeryToken()
+
+    <!-- اختيار طريقة التوليد -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="form-check form-check-inline d-none">
+                        <input class="form-check-input" type="radio" name="GenerationMethod" id="method1" value="1" checked />
+                    </div>
+                    <label for="method1" class="method-card d-block border rounded-3 p-3 cursor-pointer selected-method"
+                           onclick="selectMethod(1)">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center" style="width:44px;height:44px;flex-shrink:0">
+                                <i class="fas fa-layer-group text-white fs-5"></i>
+                            </div>
+                            <div>
+                                <div class="fw-bold">الطريقة الأولى — محاور ومؤشرات</div>
+                                <small class="text-muted">اختر محاور المنهج وحدد عدد الأسئلة من كل مؤشر</small>
+                            </div>
+                        </div>
+                    </label>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-check form-check-inline d-none">
+                        <input class="form-check-input" type="radio" name="GenerationMethod" id="method2" value="2" />
+                    </div>
+                    <label for="method2" class="method-card d-block border rounded-3 p-3 cursor-pointer"
+                           onclick="selectMethod(2)">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="rounded-circle bg-success d-flex align-items-center justify-content-center" style="width:44px;height:44px;flex-shrink:0">
+                                <i class="fas fa-file-alt text-white fs-5"></i>
+                            </div>
+                            <div>
+                                <div class="fw-bold">الطريقة الثانية — نموذج احترافي</div>
+                                <small class="text-muted">اختر من النماذج الاحترافية الجاهزة في المشروع</small>
+                            </div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- المعلومات المشتركة -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-primary text-white py-3">
+            <h6 class="mb-0"><i class="fas fa-info-circle me-2"></i> معلومات المجموعة</h6>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">الدفعة <span class="text-danger">*</span></label>
+                    <select name="BatchId" id="batchSelect" class="form-select" required>
+                        <option value="">-- اختر الدفعة --</option>
+                        @foreach (var b in Model.Batches)
+                        {
+                            <option value="@b.Value">@b.Text</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">عنوان المجموعة</label>
+                    <input type="text" name="Title" class="form-control"
+                           value="@Model.Title" placeholder="مهارات تعزيزية (اختياري)" />
+                </div>
+                <div class="col-md-12">
+                    <label class="form-label fw-semibold">الوصف</label>
+                    <textarea name="Description" class="form-control" rows="2"
+                              placeholder="وصف اختياري...">@Model.Description</textarea>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">وقت الإرسال المجدول</label>
+                    <input type="datetime-local" name="ScheduledSendAt" class="form-control" />
+                    <div class="form-text">اختياري — يُرسَل تلقائياً في هذا الوقت</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">الموعد النهائي للإجابة</label>
+                    <input type="datetime-local" name="EndAt" class="form-control" />
+                    <div class="form-text">اختياري — يُغلق النموذج بعد هذا الوقت</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- منطقة الطريقة الأولى: محاور ومؤشرات -->
+    <div id="method1Panel" class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-light py-3">
+            <h6 class="mb-0 fw-bold"><i class="fas fa-layer-group me-2 text-primary"></i> اختيار المحاور والمؤشرات</h6>
+        </div>
+        <div class="card-body">
+            <div id="sectionsLoadingMsg" class="text-muted small mb-3" style="display:none">
+                <i class="fas fa-spinner fa-spin me-1"></i> جارٍ تحميل محاور المنهج...
+            </div>
+            <div id="sectionsEmpty" class="text-muted small mb-3">
+                اختر الدفعة أولاً لتظهر محاور المنهج.
+            </div>
+            <div id="sectionsList"></div>
+            <div id="indicatorsContainer"></div>
+        </div>
+    </div>
+
+    <!-- منطقة الطريقة الثانية: نموذج احترافي -->
+    <div id="method2Panel" class="card border-0 shadow-sm mb-4" style="display:none">
+        <div class="card-header bg-light py-3">
+            <h6 class="mb-0 fw-bold"><i class="fas fa-file-alt me-2 text-success"></i> اختيار النموذج الاحترافي</h6>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-8">
+                    <label class="form-label fw-semibold">النموذج الاحترافي <span class="text-danger">*</span></label>
+                    <select name="ProfessionalModelId" id="modelSelect" class="form-select">
+                        <option value="">-- اختر النموذج --</option>
+                        @foreach (var m in Model.ProfessionalModels)
+                        {
+                            <option value="@m.Value">@m.Text</option>
+                        }
+                    </select>
+                    <div id="modelQuestionsInfo" class="form-text mt-1"></div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">عدد الأسئلة لكل طالب <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                        <input type="number" name="QuestionsPerStudent" id="questionsPerStudent"
+                               class="form-control" value="10" min="1" max="100" />
+                        <span class="input-group-text">سؤال</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex gap-2 justify-content-end">
+        <a asp-action="Index" class="btn btn-outline-secondary">إلغاء</a>
+        <button type="submit" class="btn btn-primary px-4">
+            <i class="fas fa-plus me-1"></i> إنشاء المجموعة
+        </button>
+    </div>
+</form>
+
+@section Scripts {
+    <style>
+        .method-card { transition: all .2s; cursor: pointer; }
+        .method-card:hover { border-color: #3b82f6 !important; }
+        .method-card.selected-method { border-color: #3b82f6 !important; background: #eff6ff; }
+        .section-card { border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
+        .section-header { background: #f8fafc; padding: 12px 16px; display: flex; align-items: center; gap: 10px; cursor: pointer; }
+        .indicators-panel { padding: 12px 16px; display: none; background: #fff; }
+        .indicator-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid #f0f0f0; }
+        .indicator-row:last-child { border-bottom: none; }
+    </style>
+    <script>
+        let currentMethod = 1;
+
+        function selectMethod(m) {
+            currentMethod = m;
+            document.getElementById('method1').checked = (m === 1);
+            document.getElementById('method2').checked = (m === 2);
+            document.querySelectorAll('.method-card').forEach((el, i) => {
+                el.classList.toggle('selected-method', i + 1 === m);
+            });
+            document.getElementById('method1Panel').style.display = (m === 1) ? '' : 'none';
+            document.getElementById('method2Panel').style.display = (m === 2) ? '' : 'none';
+        }
+
+        // تغيير الدفعة
+        document.getElementById('batchSelect').addEventListener('change', async function () {
+            const batchId = this.value;
+            const sectionsList = document.getElementById('sectionsList');
+            const sectionsEmpty = document.getElementById('sectionsEmpty');
+            const sectionsLoadingMsg = document.getElementById('sectionsLoadingMsg');
+            const indicatorsContainer = document.getElementById('indicatorsContainer');
+
+            sectionsList.innerHTML = '';
+            indicatorsContainer.innerHTML = '';
+
+            if (!batchId) {
+                sectionsEmpty.style.display = '';
+                sectionsLoadingMsg.style.display = 'none';
+                return;
+            }
+
+            sectionsEmpty.style.display = 'none';
+            sectionsLoadingMsg.style.display = '';
+
+            const res = await fetch(`/Admin/EnhancementSkills/GetSectionsForBatch?batchId=${batchId}`);
+            const sections = await res.json();
+            sectionsLoadingMsg.style.display = 'none';
+
+            if (!sections.length) {
+                sectionsEmpty.textContent = 'لا توجد محاور مرتبطة بمنهج هذه الدفعة.';
+                sectionsEmpty.style.display = '';
+                return;
+            }
+
+            sections.forEach(sec => {
+                const card = document.createElement('div');
+                card.className = 'section-card';
+                card.innerHTML = `
+                    <div class="section-header" onclick="toggleSection(${sec.id}, this)">
+                        <input type="checkbox" class="form-check-input section-cb" id="sec_${sec.id}"
+                               onchange="onSectionCheck(${sec.id}, this)" onclick="event.stopPropagation()" />
+                        <label for="sec_${sec.id}" class="fw-semibold mb-0" onclick="event.stopPropagation()">${sec.title}</label>
+                        <i class="fas fa-chevron-left ms-auto text-muted toggle-arrow"></i>
+                    </div>
+                    <div class="indicators-panel" id="indicators_${sec.id}">
+                        <div class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i> جارٍ تحميل المؤشرات...</div>
+                    </div>`;
+                sectionsList.appendChild(card);
+            });
+        });
+
+        async function toggleSection(sectionId, headerEl) {
+            const panel = document.getElementById(`indicators_${sectionId}`);
+            const cb = document.getElementById(`sec_${sectionId}`);
+            const arrow = headerEl.querySelector('.toggle-arrow');
+            const isOpen = panel.style.display === 'block';
+
+            if (!isOpen) {
+                panel.style.display = 'block';
+                arrow.className = 'fas fa-chevron-down ms-auto text-muted toggle-arrow';
+                if (!panel.dataset.loaded) {
+                    await loadIndicators(sectionId);
+                }
+            } else {
+                panel.style.display = 'none';
+                arrow.className = 'fas fa-chevron-left ms-auto text-muted toggle-arrow';
+            }
+        }
+
+        async function onSectionCheck(sectionId, cb) {
+            const panel = document.getElementById(`indicators_${sectionId}`);
+            if (cb.checked) {
+                panel.style.display = 'block';
+                if (!panel.dataset.loaded) {
+                    await loadIndicators(sectionId);
+                }
+            }
+        }
+
+        async function loadIndicators(sectionId) {
+            const panel = document.getElementById(`indicators_${sectionId}`);
+            const res = await fetch(`/Admin/EnhancementSkills/GetLessonsForSection?sectionId=${sectionId}`);
+            const lessons = await res.json();
+            panel.dataset.loaded = '1';
+
+            if (!lessons.length) {
+                panel.innerHTML = '<div class="text-muted small">لا توجد مؤشرات نشطة في هذا المحور.</div>';
+                return;
+            }
+
+            panel.innerHTML = lessons.map((l, idx) => `
+                <div class="indicator-row">
+                    <input type="hidden" name="SelectedIndicators[${sectionId}_${idx}].LessonId" value="${l.id}" class="ind-lesson-id" data-secid="${sectionId}" />
+                    <span class="flex-grow-1 fw-semibold">${l.title}</span>
+                    <span class="badge ${l.availableCount > 0 ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning'} me-2">
+                        ${l.availableCount} سؤال متاح
+                    </span>
+                    <div class="input-group" style="width:120px">
+                        <input type="number" name="SelectedIndicators[${sectionId}_${idx}].QuestionCount"
+                               class="form-control form-control-sm ind-count" value="${l.availableCount > 0 ? 2 : 0}"
+                               min="0" max="${l.availableCount}" placeholder="0"
+                               ${l.availableCount === 0 ? 'disabled' : ''} />
+                        <span class="input-group-text" style="font-size:11px">سؤال</span>
+                    </div>
+                </div>`).join('');
+        }
+
+        // النموذج الاحترافي
+        document.getElementById('modelSelect').addEventListener('change', async function () {
+            const modelId = this.value;
+            const info = document.getElementById('modelQuestionsInfo');
+            const qps = document.getElementById('questionsPerStudent');
+            if (!modelId) { info.textContent = ''; return; }
+            const res = await fetch(`/Admin/EnhancementSkills/GetModelQuestionsCount?modelId=${modelId}`);
+            const data = await res.json();
+            info.innerHTML = `<span class="text-primary"><i class="fas fa-info-circle me-1"></i>النموذج يحتوي على <strong>${data.count}</strong> سؤال</span>`;
+            if (data.count > 0 && parseInt(qps.value) > data.count) qps.value = data.count;
+        });
+
+        // تحويل أسماء حقول المؤشرات لـ array صحيح قبل الإرسال
+        document.getElementById('createForm').addEventListener('submit', function (e) {
+            const method = parseInt(document.querySelector('input[name="GenerationMethod"]:checked').value);
+
+            if (method === 1) {
+                // جمع كل مدخلات المؤشرات وإعادة ترقيمها
+                const lessonInputs = this.querySelectorAll('.ind-lesson-id');
+                const countInputs = this.querySelectorAll('.ind-count');
+
+                let idx = 0;
+                lessonInputs.forEach((inp, i) => {
+                    const count = parseInt(countInputs[i]?.value || '0');
+                    if (count > 0) {
+                        inp.name = `SelectedIndicators[${idx}].LessonId`;
+                        countInputs[i].name = `SelectedIndicators[${idx}].QuestionCount`;
+                        inp.disabled = false;
+                        countInputs[i].disabled = false;
+                        idx++;
+                    } else {
+                        inp.disabled = true;
+                        if (countInputs[i]) countInputs[i].disabled = true;
+                    }
+                });
+
+                if (idx === 0) {
+                    e.preventDefault();
+                    alert('يرجى تحديد عدد الأسئلة لمؤشر واحد على الأقل (قيمة أكبر من صفر).');
+                    return;
+                }
+
+                // تعطيل حقول الطريقة الثانية
+                document.getElementById('modelSelect').disabled = true;
+                document.getElementById('questionsPerStudent').disabled = true;
+            } else {
+                // تعطيل حقول الطريقة الأولى
+                this.querySelectorAll('.ind-lesson-id, .ind-count').forEach(el => el.disabled = true);
+            }
+        });
+    </script>
+}

@@ -1,0 +1,1065 @@
+﻿@using QdratNew.ViewModels.Admin
+@model PartnerStudentsPageViewModel
+
+
+@{
+    ViewData["Title"] = "طلاب الشريك";
+
+    var studentsList = Model.Students != null
+        ? Model.Students.ToList()
+        : new List<QdratNew.ViewModels.Admin.PartnerStudentListViewModel>();
+
+    var totalStudents = studentsList.Count;
+    var studentsWithUsers = studentsList.Count(x => !string.IsNullOrWhiteSpace(x.UserId));
+    var studentsWithoutUsers = totalStudents - studentsWithUsers;
+
+    var schoolsCount = studentsList
+        .Where(x => !string.IsNullOrWhiteSpace(x.School))
+        .Select(x => x.School)
+        .Distinct()
+        .Count();
+}
+
+@section Styles {
+    <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet" />
+
+    <style>
+        :root {
+            --ink: #0D1B2A;
+            --ink-2: #2C3E50;
+            --ink-3: #5A6A7A;
+            --ink-4: #8FA0B0;
+            --ink-5: #C8D5E0;
+            --canvas: #F3F6FA;
+            --surface: #FFFFFF;
+            --surface-2: #F8FAFC;
+            --surface-3: #EEF2F7;
+            --border: #DDE4EC;
+            --blue: #1B5EAE;
+            --blue-2: #2471D0;
+            --blue-bg: #E8F1FB;
+            --blue-dark: #103E7A;
+            --emerald: #0D7A5B;
+            --emerald-bg: #E4F5EE;
+            --amber: #985D09;
+            --amber-bg: #FDF0D8;
+            --rose: #BF1030;
+            --rose-bg: #FDEAEE;
+            --violet: #5535B5;
+            --violet-bg: #EDE8F9;
+            --r-sm: 6px;
+            --r-md: 10px;
+            --r-lg: 14px;
+            --r-xl: 20px;
+            --sh-xs: 0 1px 3px rgba(13,27,42,.06);
+            --sh-sm: 0 2px 8px rgba(13,27,42,.08);
+            --sh-md: 0 4px 18px rgba(13,27,42,.10);
+            --ease: cubic-bezier(.25,.46,.45,.94);
+        }
+
+        .partner-students-page {
+            background: var(--canvas);
+            min-height: 100vh;
+            padding: 32px 28px 64px;
+            direction: rtl;
+            font-family: 'Cairo';
+            color: var(--ink-2);
+        }
+
+        .partner-students-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-bottom: 28px;
+        }
+
+        .partner-students-brand {
+            display: flex;
+            align-items: center;
+            gap: 13px;
+        }
+
+        .partner-students-brand-icon {
+            width: 46px;
+            height: 46px;
+            background: var(--blue);
+            border-radius: var(--r-lg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 20px;
+            box-shadow: 0 4px 14px rgba(27,94,174,.28);
+        }
+
+        .partner-students-brand-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--ink);
+            line-height: 1.15;
+        }
+
+        .partner-students-brand-sub {
+            font-size: 16px;
+            color: var(--ink-4);
+            margin-top: 2px;
+        }
+
+        .top-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn-secondary-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            background: var(--surface);
+            color: var(--blue);
+            border: 1px solid #B6D3F4;
+            border-radius: var(--r-md);
+            padding: 10px 20px;
+            font-size: 18px;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            transition: background .16s var(--ease), transform .14s, box-shadow .16s;
+        }
+
+            .btn-secondary-action:hover {
+                background: var(--blue-bg);
+                color: var(--blue-dark);
+                transform: translateY(-2px);
+                box-shadow: var(--sh-sm);
+            }
+
+        .partner-students-kpis {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 13px;
+            margin-bottom: 24px;
+        }
+
+        @@media (max-width: 960px) {
+            .partner-students-kpis {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @@media (max-width: 480px) {
+            .partner-students-kpis {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .kpi-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            padding: 18px 19px;
+            display: flex;
+            align-items: center;
+            gap: 13px;
+            box-shadow: var(--sh-xs);
+            transition: transform .2s var(--ease), box-shadow .2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+            .kpi-card::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                right: 0;
+                width: 4px;
+                height: 100%;
+                border-radius: 0 var(--r-xl) var(--r-xl) 0;
+            }
+
+            .kpi-card:hover {
+                transform: translateY(-3px);
+                box-shadow: var(--sh-sm);
+            }
+
+        .kpi-blue::after {
+            background: var(--blue);
+        }
+
+        .kpi-emerald::after {
+            background: var(--emerald);
+        }
+
+        .kpi-amber::after {
+            background: var(--amber);
+        }
+
+        .kpi-violet::after {
+            background: var(--violet);
+        }
+
+        .kpi-ico {
+            width: 42px;
+            height: 42px;
+            border-radius: var(--r-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .ico-blue {
+            background: var(--blue-bg);
+            color: var(--blue);
+        }
+
+        .ico-emerald {
+            background: var(--emerald-bg);
+            color: var(--emerald);
+        }
+
+        .ico-amber {
+            background: var(--amber-bg);
+            color: var(--amber);
+        }
+
+        .ico-violet {
+            background: var(--violet-bg);
+            color: var(--violet);
+        }
+
+        .kpi-label {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--ink-4);
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            margin-bottom: 3px;
+        }
+
+        .kpi-val {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--ink);
+            line-height: 1;
+        }
+
+        .students-table-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            overflow: visible;
+            box-shadow: var(--sh-sm);
+            margin-bottom: 24px;
+        }
+
+        .students-table-topbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 11px 16px;
+            border-bottom: 1px solid var(--surface-3);
+            flex-wrap: wrap;
+        }
+
+        .table-section-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--ink);
+            margin-left: 10px;
+        }
+
+            .table-section-title i {
+                color: var(--blue);
+            }
+
+        .students-table-search-wrap {
+            position: relative;
+            flex: 1;
+            min-width: 220px;
+            max-width: 390px;
+        }
+
+            .students-table-search-wrap i {
+                position: absolute;
+                right: 11px;
+                top: 50%;
+                transform: translateY(-50%);
+                color: var(--ink-4);
+                font-size: 17px;
+                pointer-events: none;
+            }
+
+            .students-table-search-wrap input {
+                width: 100%;
+                padding: 7px 32px 7px 12px;
+                border: 1px solid var(--border);
+                border-radius: var(--r-md);
+                font-size: 18px;
+                background: var(--surface-2);
+                color: var(--ink);
+                transition: border-color .15s, box-shadow .15s;
+            }
+
+                .students-table-search-wrap input:focus {
+                    outline: none;
+                    border-color: var(--blue-2);
+                    box-shadow: 0 0 0 3px rgba(36,113,208,.1);
+                    background: var(--surface);
+                }
+
+        .students-count-badge {
+            margin-right: auto;
+            font-size: 16px;
+            color: var(--ink-4);
+        }
+
+            .students-count-badge strong {
+                color: var(--blue);
+                font-weight: 700;
+            }
+
+        .table-responsive-safe {
+            width: 100%;
+            overflow-x: auto;
+            overflow-y: visible;
+        }
+
+        #partnerStudentsTable {
+            width: 100% !important;
+            border-collapse: collapse;
+        }
+
+            #partnerStudentsTable thead th {
+                background: var(--surface-2) !important;
+                padding: 11px 15px !important;
+                font-size: 15px !important;
+                font-weight: 700 !important;
+                color: var(--ink-4) !important;
+                text-transform: uppercase;
+                letter-spacing: .05em;
+                white-space: nowrap;
+                border: none !important;
+                text-align: center;
+            }
+
+            #partnerStudentsTable tbody tr {
+                border-bottom: 1px solid var(--surface-3);
+                transition: background .1s;
+            }
+
+                #partnerStudentsTable tbody tr:last-child {
+                    border-bottom: none;
+                }
+
+                #partnerStudentsTable tbody tr:hover {
+                    background: #F5F8FD;
+                }
+
+            #partnerStudentsTable td {
+                padding: 11px 15px !important;
+                vertical-align: middle !important;
+                font-size: 18px !important;
+                color: var(--ink-2);
+                border: none !important;
+                text-align: center;
+            }
+
+        .student-title-cell {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-align: right;
+        }
+
+        .student-avatar {
+            width: 33px;
+            height: 33px;
+            border-radius: 50%;
+            background: var(--blue-bg);
+            color: var(--blue);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .student-item-name {
+            font-weight: 600;
+            color: var(--ink);
+            font-size: 18px;
+        }
+
+        .id-chip,
+        .phone-chip,
+        .school-chip,
+        .level-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 11px;
+            border-radius: 30px;
+            font-size: 16px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .id-chip {
+            background: var(--surface-3);
+            color: var(--ink-3);
+            direction: ltr;
+        }
+
+        .national-id-wrap {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            direction: ltr;
+        }
+
+        .copy-national-id-btn {
+            width: 30px;
+            height: 30px;
+            min-width: 30px;
+            border-radius: 8px;
+            border: 1px solid #B6D3F4;
+            background: var(--blue-bg);
+            color: var(--blue);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 15px;
+            cursor: pointer;
+            transition: all .15s ease;
+        }
+
+            .copy-national-id-btn:hover {
+                background: var(--blue);
+                color: #fff;
+                border-color: var(--blue);
+                transform: translateY(-1px);
+            }
+
+            .copy-national-id-btn.copied {
+                background: var(--emerald);
+                color: #fff;
+                border-color: var(--emerald);
+            }
+        .phone-chip {
+            background: var(--emerald-bg);
+            color: var(--emerald);
+            direction: ltr;
+        }
+
+        .school-chip {
+            background: var(--violet-bg);
+            color: var(--violet);
+        }
+
+        .level-chip {
+            background: var(--amber-bg);
+            color: var(--amber);
+        }
+
+        .no-user-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 5px 11px;
+            border-radius: 30px;
+            font-size: 16px;
+            font-weight: 700;
+            white-space: nowrap;
+            background: var(--surface-3);
+            color: var(--ink-4);
+        }
+
+        .students-act-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            flex-wrap: nowrap;
+            position: relative;
+            overflow: visible;
+        }
+
+        .act-form {
+            display: inline-flex;
+            margin: 0;
+            padding: 0;
+        }
+
+        .act-btn {
+            position: relative;
+            width: 34px;
+            height: 34px;
+            min-width: 34px;
+            padding: 0;
+            border-radius: var(--r-sm);
+            font-size: 16px;
+            font-weight: 600;
+            text-decoration: none;
+            border: 1.5px solid transparent;
+            cursor: pointer;
+            background: transparent;
+            transition: all .15s;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            overflow: visible;
+        }
+
+            .act-btn i {
+                margin: 0;
+                font-size: 15px;
+                line-height: 1;
+            }
+
+            .act-btn .act-text {
+                position: absolute;
+                bottom: calc(100% + 8px);
+                right: 50%;
+                transform: translateX(50%) translateY(4px);
+                background: var(--ink);
+                color: #fff;
+                font-size: 13px;
+                font-weight: 600;
+                padding: 5px 9px;
+                border-radius: 6px;
+                opacity: 0;
+                visibility: hidden;
+                pointer-events: none;
+                transition: opacity .15s ease, transform .15s ease, visibility .15s ease;
+                z-index: 9999;
+                box-shadow: 0 4px 12px rgba(13,27,42,.18);
+                min-width: max-content;
+            }
+
+                .act-btn .act-text::after {
+                    content: "";
+                    position: absolute;
+                    top: 100%;
+                    right: 50%;
+                    transform: translateX(50%);
+                    border-width: 5px;
+                    border-style: solid;
+                    border-color: var(--ink) transparent transparent transparent;
+                }
+
+            .act-btn:hover .act-text {
+                opacity: 1;
+                visibility: visible;
+                transform: translateX(50%) translateY(0);
+            }
+
+        .act-roles {
+            background: var(--blue-bg);
+            color: var(--blue);
+            border-color: #B6D3F4;
+        }
+
+            .act-roles:hover {
+                background: var(--blue);
+                color: #fff;
+                border-color: var(--blue);
+            }
+
+        .act-permissions {
+            background: var(--amber-bg);
+            color: var(--amber);
+            border-color: #F3D494;
+        }
+
+            .act-permissions:hover {
+                background: var(--amber);
+                color: #fff;
+                border-color: var(--amber);
+            }
+
+        .act-edit {
+            background: var(--surface-3);
+            color: var(--ink-3);
+            border-color: var(--border);
+        }
+
+            .act-edit:hover {
+                background: var(--ink-3);
+                color: #fff;
+                border-color: var(--ink-3);
+            }
+
+        .act-password {
+            background: var(--violet-bg);
+            color: var(--violet);
+            border-color: #D7CDF8;
+        }
+
+            .act-password:hover {
+                background: var(--violet);
+                color: #fff;
+                border-color: var(--violet);
+            }
+
+        .act-delete {
+            background: var(--rose-bg);
+            color: var(--rose);
+            border-color: #F5B8C2;
+        }
+
+            .act-delete:hover {
+                background: var(--rose);
+                color: #fff;
+                border-color: var(--rose);
+            }
+
+        .dataTables_wrapper {
+            direction: rtl;
+            overflow: visible;
+        }
+
+            .dataTables_wrapper .dataTables_filter {
+                display: none;
+            }
+
+            .dataTables_wrapper .dataTables_length,
+            .dataTables_wrapper .dataTables_info {
+                padding: 9px 16px;
+                font-size: 16px;
+                color: var(--ink-4);
+            }
+
+            .dataTables_wrapper .dataTables_paginate {
+                padding: 9px 16px;
+            }
+
+                .dataTables_wrapper .dataTables_paginate .paginate_button {
+                    border-radius: var(--r-sm) !important;
+                    font-size: 16px !important;
+                    padding: 4px 10px !important;
+                    border: 1px solid var(--border) !important;
+                    margin: 0 2px !important;
+                    color: var(--ink-3) !important;
+                }
+
+                    .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+                    .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
+                        background: var(--blue) !important;
+                        border-color: var(--blue) !important;
+                        color: #fff !important;
+                    }
+
+                    .dataTables_wrapper .dataTables_paginate .paginate_button:hover:not(.current):not(.disabled) {
+                        background: var(--blue-bg) !important;
+                        border-color: #B6D3F4 !important;
+                        color: var(--blue) !important;
+                    }
+
+            .dataTables_wrapper .dataTables_length select {
+                border: 1px solid var(--border);
+                border-radius: var(--r-sm);
+                padding: 3px 8px;
+                font-size: 16px;
+                color: var(--ink);
+            }
+
+        div.dataTables_wrapper div.dataTables_paginate,
+        div.dataTables_wrapper div.dataTables_info,
+        div.dataTables_wrapper div.dataTables_length {
+            border-top: 1px solid var(--surface-3);
+            background: var(--surface-2);
+        }
+
+        .students-empty {
+            text-align: center;
+            padding: 56px 16px;
+            color: var(--ink-4);
+        }
+
+            .students-empty i {
+                font-size: 20px;
+                display: block;
+                margin-bottom: 12px;
+                color: var(--ink-5);
+            }
+
+        .students-empty-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--ink-3);
+        }
+
+        .students-empty-sub {
+            font-size: 16px;
+            margin-top: 4px;
+        }
+
+        @@media (max-width: 768px) {
+            .partner-students-page {
+                padding: 22px 14px 48px;
+            }
+
+            .top-actions {
+                width: 100%;
+            }
+
+            .btn-secondary-action {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .students-table-topbar {
+                align-items: stretch;
+            }
+
+            .students-table-search-wrap {
+                max-width: 100%;
+                width: 100%;
+            }
+
+            .students-count-badge {
+                margin-right: 0;
+            }
+        }
+    </style>
+}
+
+<div class="partner-students-page">
+
+    <div class="partner-students-topbar">
+        <div class="partner-students-brand">
+            <div class="partner-students-brand-icon">
+                <i class="bi bi-mortarboard-fill"></i>
+            </div>
+            <div>
+                <div class="partner-students-brand-title">طلاب الشريك</div>
+                <div class="partner-students-brand-sub">
+                    الشريك: <strong>@Model.PartnerName</strong>
+                </div>
+            </div>
+        </div>
+
+        <div class="top-actions">
+            <a asp-action="AssignPartner"
+               asp-route-partnerId="@Model.PartnerId"
+               class="btn-secondary-action">
+                <i class="bi bi-arrow-left"></i>
+                رجوع لإدارة الشريك
+            </a>
+        </div>
+    </div>
+
+    <div class="partner-students-kpis">
+
+        <div class="kpi-card kpi-blue">
+            <div class="kpi-ico ico-blue">
+                <i class="bi bi-people"></i>
+            </div>
+            <div>
+                <div class="kpi-label">إجمالي الطلاب</div>
+                <div class="kpi-val">@totalStudents</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-emerald">
+            <div class="kpi-ico ico-emerald">
+                <i class="bi bi-person-check"></i>
+            </div>
+            <div>
+                <div class="kpi-label">لديهم حساب</div>
+                <div class="kpi-val">@studentsWithUsers</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-amber">
+            <div class="kpi-ico ico-amber">
+                <i class="bi bi-person-x"></i>
+            </div>
+            <div>
+                <div class="kpi-label">بدون حساب</div>
+                <div class="kpi-val">@studentsWithoutUsers</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-violet">
+            <div class="kpi-ico ico-violet">
+                <i class="bi bi-building"></i>
+            </div>
+            <div>
+                <div class="kpi-label">المدارس</div>
+                <div class="kpi-val">@schoolsCount</div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="students-table-card">
+
+        <div class="students-table-topbar">
+            <div class="table-section-title">
+                <i class="bi bi-table"></i>
+                قائمة طلاب الشريك
+            </div>
+
+            <div class="students-table-search-wrap">
+                <i class="bi bi-search"></i>
+                <input type="text"
+                       id="partnerStudentsSearch"
+                       placeholder="ابحث في الاسم أو الهوية أو الهاتف أو المدرسة أو المرحلة..." />
+            </div>
+
+            <div class="students-count-badge">
+                إجمالي: <strong>@totalStudents</strong> طالب
+            </div>
+        </div>
+
+        @if (!studentsList.Any())
+        {
+            <div class="students-empty">
+                <i class="bi bi-inbox"></i>
+                <div class="students-empty-title">لا يوجد طلاب مرتبطون بهذا الشريك</div>
+                <div class="students-empty-sub">ستظهر هنا بيانات الطلاب بعد ربطهم بالشريك</div>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive-safe">
+                <table id="partnerStudentsTable">
+                    <thead>
+                        <tr>
+                            <th style="width:7%">#</th>
+                            <th style="text-align:right; width:24%">اسم الطالب</th>
+                            <th style="width:14%">رقم الهوية</th>
+                            <th style="width:14%">الهاتف</th>
+                            <th style="width:16%">المدرسة</th>
+                            <th style="width:12%">المرحلة</th>
+                            <th style="width:13%">الإجراءات</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        @{
+                            int i = 1;
+                        }
+
+                        @foreach (var s in studentsList)
+                        {
+                            <tr>
+                                <td>
+                                    <span class="id-chip">@i</span>
+                                </td>
+
+                                <td style="text-align:right">
+                                    <div class="student-title-cell">
+                                        <div class="student-avatar">
+                                            <i class="bi bi-person-fill"></i>
+                                        </div>
+                                        <span class="student-item-name">@s.FullName</span>
+                                    </div>
+                                </td>
+
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(s.NationalID))
+                                    {
+                                        <div class="national-id-wrap">
+                                            <button type="button"
+                                                    class="copy-national-id-btn"
+                                                    data-national-id="@s.NationalID"
+                                                    title="نسخ رقم الهوية"
+                                                    aria-label="نسخ رقم الهوية">
+                                                <i class="bi bi-copy"></i>
+                                            </button>
+
+                                            <span class="id-chip">
+                                                <i class="bi bi-credit-card-2-front"></i>
+                                                @s.NationalID
+                                            </span>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span class="id-chip">
+                                            <i class="bi bi-credit-card-2-front"></i>
+                                            —
+                                        </span>
+                                    }
+                                </td>
+
+                                <td>
+                                    <span class="phone-chip">
+                                        <i class="bi bi-telephone"></i>
+                                        @(string.IsNullOrWhiteSpace(s.Phone) ? "—" : s.Phone)
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="school-chip">
+                                        <i class="bi bi-building"></i>
+                                        @(string.IsNullOrWhiteSpace(s.School) ? "—" : s.School)
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="level-chip">
+                                        <i class="bi bi-bar-chart-steps"></i>
+                                        @(string.IsNullOrWhiteSpace(s.Level) ? "—" : s.Level)
+                                    </span>
+                                </td>
+
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(s.UserId))
+                                    {
+                                        <div class="students-act-row">
+
+                                            <a class="act-btn act-roles"
+                                               asp-action="AssignRoles"
+                                               asp-route-userId="@s.UserId"
+                                               aria-label="تعيين الأدوار">
+                                                <i class="bi bi-person-gear"></i>
+                                                <span class="act-text">تعيين الأدوار</span>
+                                            </a>
+
+                                            <a asp-action="ManagePermissions"
+                                               asp-route-userId="@s.UserId"
+                                               class="act-btn act-permissions"
+                                               aria-label="الصلاحيات">
+                                                <i class="bi bi-shield-lock"></i>
+                                                <span class="act-text">الصلاحيات</span>
+                                            </a>
+
+                                            <a class="act-btn act-edit"
+                                               asp-action="Edit"
+                                               asp-route-id="@s.UserId"
+                                               aria-label="تعديل المستخدم">
+                                                <i class="bi bi-pencil-square"></i>
+                                                <span class="act-text">تعديل المستخدم</span>
+                                            </a>
+
+                                            <a class="act-btn act-password"
+                                               asp-action="ResetPassword"
+                                               asp-route-userId="@s.UserId"
+                                               aria-label="إعادة كلمة المرور">
+                                                <i class="bi bi-key"></i>
+                                                <span class="act-text">إعادة كلمة المرور</span>
+                                            </a>
+
+                                            <form asp-action="DeleteUser"
+                                                  asp-route-id="@s.UserId"
+                                                  method="post"
+                                                  class="act-form"
+                                                  onsubmit="return confirm('هل أنت متأكد من الحذف؟');">
+                                                @Html.AntiForgeryToken()
+
+                                                <button type="submit"
+                                                        class="act-btn act-delete"
+                                                        aria-label="حذف المستخدم">
+                                                    <i class="bi bi-trash"></i>
+                                                    <span class="act-text">حذف المستخدم</span>
+                                                </button>
+                                            </form>
+
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span class="no-user-pill">
+                                            <i class="bi bi-person-x"></i>
+                                            لا يوجد حساب مستخدم
+                                        </span>
+                                    }
+                                </td>
+                            </tr>
+
+                            i++;
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+    </div>
+
+</div>
+
+@section Scripts {
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            var tableElement = document.getElementById('partnerStudentsTable');
+
+            if (tableElement) {
+                var table = $('#partnerStudentsTable').DataTable({
+                    language: {
+                        url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json"
+                    },
+                    pageLength: 10,
+                    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "الكل"]],
+                    order: [[0, "asc"]],
+                    responsive: true,
+                    stateSave: true,
+                    dom: 'Brtip',
+                    columnDefs: [
+                        { orderable: false, targets: [6] }
+                    ]
+                });
+
+                $('#partnerStudentsSearch').on('input', function () {
+                    table.search($(this).val()).draw();
+                });
+            }
+
+                document.querySelectorAll(".copy-national-id-btn").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                var nationalId = this.getAttribute("data-national-id");
+
+                if (!nationalId) {
+                    return;
+                }
+
+                if (navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(nationalId).then(() => {
+                        markCopied(btn);
+                    });
+                } else {
+                    var tempInput = document.createElement("input");
+                    tempInput.value = nationalId;
+                    document.body.appendChild(tempInput);
+                    tempInput.select();
+                    document.execCommand("copy");
+                    document.body.removeChild(tempInput);
+                    markCopied(btn);
+                }
+            });
+        });
+
+        function markCopied(btn) {
+            var oldHtml = btn.innerHTML;
+
+            btn.classList.add("copied");
+            btn.innerHTML = '<i class="bi bi-check2"></i>';
+
+            setTimeout(function () {
+                btn.classList.remove("copied");
+                btn.innerHTML = oldHtml;
+            }, 1200);
+        }
+        
+        
+        
+        });
+    </script>
+}

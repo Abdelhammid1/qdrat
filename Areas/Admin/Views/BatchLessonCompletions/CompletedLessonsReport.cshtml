@@ -1,0 +1,144 @@
+﻿@{
+    ViewData["Title"] = "تقرير المؤشرات المنتهية";
+}
+@Html.AntiForgeryToken()
+
+<div class="container mt-4">
+    <h3 class="text-center mb-4">📊 تقرير المؤشرات المنتهية</h3>
+
+    <div class="row mb-3">
+        <div class="col-md-4">
+            <label>الدفعة</label>
+            <select id="batchFilter" class="form-control">
+                <option value="">-- اختر دفعة --</option>
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label>من تاريخ</label>
+            <input type="date" id="fromDate" class="form-control" />
+        </div>
+        <div class="col-md-4">
+            <label>&nbsp;</label>
+            <button class="btn btn-primary btn-block" onclick="loadReport()">عرض التقرير</button>
+        </div>
+    </div>
+
+    <div id="reportTableContainer">
+        <table class="table table-bordered table-striped">
+            <thead>
+                <tr>
+                    <th>الدفعة</th>
+                    <th>عنوان التسجيل</th>
+                    <th>عدد المؤشرات</th>
+                    <th>تاريخ التسجيل</th>
+                    <th>تمت الإضافة بواسطة</th>
+                    <th>التفاصيل</th>
+                    <th>إعادة إرسال</th>
+                </tr>
+            </thead>
+            <tbody id="reportBody">
+                <tr><td colspan="7" class="text-center">يرجى اختيار الفلاتر والضغط على "عرض التقرير"</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        async function loadBatches() {
+            const res = await fetch('/Admin/BatchLessonCompletions/GetAllBatches');
+            const data = await res.json();
+            const dropdown = document.getElementById("batchFilter");
+            data.forEach(b => {
+                const opt = document.createElement("option");
+                opt.value = b.id;
+                opt.text = b.name;
+                dropdown.appendChild(opt);
+            });
+        }
+
+        async function loadReport() {
+            const batchId = document.getElementById("batchFilter").value;
+            const fromDate = document.getElementById("fromDate").value;
+
+            const res = await fetch(`/Admin/BatchLessonCompletions/GetCompletedLessonsReportData?batchId=${batchId}&fromDate=${fromDate}`);
+            const data = await res.json();
+            const tbody = document.getElementById("reportBody");
+            tbody.innerHTML = "";
+
+            if (data.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">لا توجد نتائج مطابقة</td></tr>`;
+                return;
+            }
+
+            data.forEach(row => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>${row.batchName}</td>
+                    <td>${row.completionTitle}</td>
+                    <td>${row.completedLessonCount}</td>
+                    <td>${new Date(row.completionDate).toLocaleDateString()}</td>
+                    <td>${row.addedByName || row.addedBy}</td>
+                    <td>
+                        <a href="/Admin/BatchLessonCompletions/CompletedLessonsDetails?batchId=${row.batchId}&completionTitle=${encodeURIComponent(row.completionTitle)}"
+                           class="btn btn-sm btn-info">عرض التفاصيل</a>
+                    </td>
+                           <td>
+            <button class="btn btn-sm btn-warning"
+                    data-batch-id="${row.batchId}"
+                    data-title="${encodeURIComponent(row.completionTitle)}"
+                    onclick="regenerateHomework(this)">
+                🔁 إعادة إرسال
+            </button>
+        </td>
+
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+                   async function regenerateHomework(button) {
+            const batchId = button.getAttribute("data-batch-id");
+            const completionTitle = decodeURIComponent(button.getAttribute("data-title"));
+
+            if (!confirm("هل أنت متأكد من إعادة إرسال الواجب لهذه الدفعة؟")) {
+                button.disabled = false;
+                return;
+            }
+
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+
+            const res = await fetch('/Admin/BatchLessonCompletions/RegenerateHomeworkSetJson', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'RequestVerificationToken': token
+                },
+                body: JSON.stringify({ batchId, completionTitle })
+            });
+
+            const result = await res.json();
+
+            if (result.success) {
+                alert("✅ تم إعادة إرسال الواجب بنجاح.");
+            } else {
+                alert("❌ فشلت العملية: " + (result.message || "حدث خطأ غير متوقع."));
+            }
+
+            button.disabled = false;
+        }
+
+
+
+        document.addEventListener("DOMContentLoaded", () => {
+            loadBatches();
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const batchIdFromUrl = urlParams.get('batchId');
+            if (batchIdFromUrl) {
+                document.getElementById("batchFilter").value = batchIdFromUrl;
+                loadReport();
+            }
+        });
+    </script>
+}

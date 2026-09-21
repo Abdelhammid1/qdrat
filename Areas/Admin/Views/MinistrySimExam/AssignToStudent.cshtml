@@ -1,0 +1,158 @@
+@model QdratNew.ViewModels.Exam.MinistrySimExamAssignStudentPageVm
+@{
+    ViewData["Title"] = "إسناد لطالب/طلاب";
+}
+
+<style>
+    .qdrat-page { direction: rtl; text-align: right; }
+
+    .qdrat-hero {
+        background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 48%, #2563eb 100%);
+        border-radius: 24px; padding: 28px; color: #fff; margin-bottom: 24px;
+        box-shadow: 0 18px 45px rgba(15, 23, 42, .18);
+    }
+
+    .qdrat-card {
+        background: #fff; border: 1px solid #e5e7eb; border-radius: 22px;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, .06); padding: 20px; margin-bottom: 18px;
+    }
+
+    .qdrat-student-row {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        padding: 10px 14px; border: 1px solid #e5e7eb; border-radius: 14px; margin-bottom: 8px;
+    }
+
+    .qdrat-student-row.disabled { background: #f8fafc; opacity: .75; }
+
+    .qdrat-empty { padding: 40px 20px; text-align: center; color: #64748b; }
+    .qdrat-loading, .qdrat-error { padding: 20px; text-align: center; color: #64748b; }
+    .qdrat-error { color: #b91c1c; }
+
+    .qdrat-btn-primary {
+        border: none; border-radius: 16px; padding: 12px 24px; font-weight: 900;
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: #fff;
+        box-shadow: 0 12px 24px rgba(37,99,235,.22);
+    }
+
+    .qdrat-mode-row { display: flex; gap: 14px; flex-wrap: wrap; }
+    .qdrat-mode-option {
+        flex: 1; min-width: 180px; border: 2px solid #e5e7eb; border-radius: 16px; padding: 14px 16px; cursor: pointer;
+    }
+    .qdrat-mode-option input { margin-inline-end: 8px; }
+    .qdrat-mode-option:has(input:checked) { border-color: #2563eb; background: #eff6ff; }
+</style>
+
+<div class="container-fluid py-4 qdrat-page">
+    <div class="qdrat-hero">
+        <h3 class="mb-1"><i class="bi bi-person-check ms-2"></i> إسناد لطالب/طلاب محددين</h3>
+        <p class="mb-0" style="opacity:.9">@Model.Title — الدورة: @Model.CourseName</p>
+    </div>
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger">@TempData["Error"]</div>
+    }
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success">@TempData["Success"]</div>
+    }
+    @if (TempData["Warning"] != null)
+    {
+        <div class="alert alert-warning">@TempData["Warning"]</div>
+    }
+
+    <div class="qdrat-card">
+        <label class="form-label fw-bold d-block mb-2">طريقة الحضور</label>
+        <div class="qdrat-mode-row">
+            <label class="qdrat-mode-option">
+                <input type="radio" name="isOnline" value="true" form="assignForm" checked />
+                <strong>أونلاين</strong> — فتح مباشر للطالب بلا رمز
+            </label>
+            <label class="qdrat-mode-option">
+                <input type="radio" name="isOnline" value="false" form="assignForm" />
+                <strong>حضوري</strong> — يلزم رمزًا مرجعيًا من المعمل
+            </label>
+        </div>
+    </div>
+
+    <div class="qdrat-card">
+        <label for="batchSelect" class="form-label fw-bold">اختر الدفعة</label>
+        @if (!Model.Batches.Any())
+        {
+            <div class="qdrat-empty">
+                <i class="bi bi-inbox" style="font-size:28px"></i>
+                <p class="mb-0 mt-2">لا توجد دفعات نشطة لهذه الدورة بعد.</p>
+            </div>
+        }
+        else
+        {
+            <select id="batchSelect" class="form-select">
+                <option value="">— اختر دفعة —</option>
+                @foreach (var batch in Model.Batches)
+                {
+                    <option value="@batch.BatchId">@batch.Name</option>
+                }
+            </select>
+        }
+    </div>
+
+    <form method="post" asp-action="AssignToStudent" asp-route-id="@Model.ExamId" id="assignForm">
+        @Html.AntiForgeryToken()
+        <div class="qdrat-card" id="studentsCard" hidden>
+            <div id="studentsContent"></div>
+        </div>
+
+        <button type="submit" class="btn qdrat-btn-primary" id="submitBtn" hidden>
+            <i class="bi bi-send-check ms-1"></i> إسناد الطلاب المختارين
+        </button>
+    </form>
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            'use strict';
+
+            var getStudentsUrl = '@Url.Action("GetStudentsForBatch", "MinistrySimExam", new { area = "Admin" })';
+            var examId = @Model.ExamId;
+
+            var batchSelect = document.getElementById('batchSelect');
+            var studentsCard = document.getElementById('studentsCard');
+            var studentsContent = document.getElementById('studentsContent');
+            var submitBtn = document.getElementById('submitBtn');
+
+            if (!batchSelect) return;
+
+            batchSelect.addEventListener('change', function () {
+                var batchId = batchSelect.value;
+                if (!batchId) {
+                    studentsCard.hidden = true;
+                    submitBtn.hidden = true;
+                    studentsContent.innerHTML = '';
+                    return;
+                }
+
+                studentsCard.hidden = false;
+                submitBtn.hidden = true;
+                studentsContent.innerHTML = '<div class="qdrat-loading"><i class="bi bi-arrow-repeat ms-1"></i> جاري تحميل الطلاب...</div>';
+
+                fetch(getStudentsUrl + '?examId=' + encodeURIComponent(examId) + '&batchId=' + encodeURIComponent(batchId), {
+                    method: 'GET',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                    .then(function (response) {
+                        if (!response.ok) throw new Error('bad-response');
+                        return response.text();
+                    })
+                    .then(function (html) {
+                        studentsContent.innerHTML = html;
+                        submitBtn.hidden = !studentsContent.querySelector('input[type="checkbox"]:not(:disabled)');
+                    })
+                    .catch(function () {
+                        studentsContent.innerHTML = '<div class="qdrat-error"><i class="bi bi-exclamation-circle ms-1"></i> تعذّر تحميل طلاب هذه الدفعة — حاول اختيار الدفعة مرة أخرى.</div>';
+                        submitBtn.hidden = true;
+                    });
+            });
+        })();
+    </script>
+}

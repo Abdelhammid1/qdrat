@@ -1,0 +1,245 @@
+@model QdratNew.ViewModels.Exam.MinistrySimExamReviewStageVm
+@using QdratNew.Helpers
+@{
+    ViewData["Title"] = "مراجعة أسئلة المرحلة";
+}
+
+<style>
+    .qdrat-page { direction: rtl; text-align: right; }
+
+    .qdrat-hero {
+        background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 48%, #2563eb 100%);
+        border-radius: 24px; padding: 28px; color: #fff; margin-bottom: 24px;
+        box-shadow: 0 18px 45px rgba(15, 23, 42, .18);
+    }
+
+    .qdrat-card {
+        background: #fff; border: 1px solid #e5e7eb; border-radius: 22px;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, .06); overflow: hidden; margin-bottom: 18px;
+    }
+
+    .qdrat-card-header {
+        padding: 17px 20px; background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+        border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+
+    .qdrat-card-body { padding: 0; }
+
+    .qdrat-q-row {
+        display: flex; align-items: flex-start; gap: 14px;
+        padding: 14px 20px; border-bottom: 1px dashed #e5e7eb; flex-wrap: wrap;
+    }
+
+    .qdrat-q-row:last-child { border-bottom: none; }
+
+    .qdrat-q-order {
+        font-family: monospace; font-weight: 900; font-size: 14px; color: #1d4ed8;
+        background: #eef4ff; border-radius: 10px; padding: 4px 10px; min-width: 44px; text-align: center; flex-shrink: 0;
+    }
+
+    .qdrat-q-body { flex: 1; min-width: 240px; }
+    .qdrat-q-meta { font-size: 12.5px; color: #64748b; margin-top: 4px; display: flex; gap: 10px; flex-wrap: wrap; }
+    .qdrat-q-actions { flex-shrink: 0; }
+
+    .qdrat-badge { display: inline-block; border-radius: 999px; padding: 2px 10px; font-size: 11.5px; font-weight: 800; }
+    .qdrat-badge.quant { background: #eef4ff; color: #2f59c0; }
+    .qdrat-badge.verbal { background: #fff6ea; color: #b45309; }
+    .qdrat-badge.manual { background: #ecfdf5; color: #047857; }
+
+    .qdrat-empty { padding: 40px 20px; text-align: center; color: #64748b; }
+
+    .qdrat-ind-row {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        padding: 12px 20px; border-bottom: 1px dashed #e5e7eb; flex-wrap: wrap;
+    }
+    .qdrat-ind-row:last-child { border-bottom: none; }
+    .qdrat-ind-count { font-family: monospace; font-weight: 800; }
+    .qdrat-ind-count.ok { color: #047857; }
+    .qdrat-ind-count.bad { color: #b91c1c; }
+</style>
+
+<div class="container-fluid py-4 qdrat-page">
+    <div class="qdrat-hero">
+        <h2 class="mb-1"><i class="bi bi-diagram-3 ms-2"></i> مراجعة أسئلة المرحلة @Model.StageNumber</h2>
+        <p class="mb-0" style="opacity:.9">
+            المحور الكمي: @Model.QuantSectionTitle — المحور اللفظي: @Model.VerbalSectionTitle — المدة: @Model.DurationMinutes دقيقة
+        </p>
+        <a class="btn btn-sm btn-light mt-3" href="@Url.Action("Details", "MinistrySimExam", new { area = "Admin", id = Model.MinistrySimExamId })">
+            <i class="bi bi-arrow-right ms-1"></i> رجوع لحالة الاختبار
+        </a>
+    </div>
+
+    <form id="antiForm">@Html.AntiForgeryToken()</form>
+
+    @if (Model.IndicatorStatuses.Any(x => !x.IsComplete))
+    {
+        <div class="qdrat-card">
+            <div class="qdrat-card-header">
+                <h5 class="mb-0"><i class="bi bi-exclamation-triangle ms-1" style="color:#b91c1c"></i> مؤشرات ناقصة العدد</h5>
+            </div>
+            <div class="qdrat-card-body">
+                @foreach (var ind in Model.IndicatorStatuses.Where(x => !x.IsComplete))
+                {
+                    string diffLabelInd = ind.DifficultyLevel switch
+                    {
+                        0 => "سهل",
+                        1 => "متوسط",
+                        2 => "صعب",
+                        _ => "صعب جدًا"
+                    };
+
+                    <div class="qdrat-ind-row">
+                        <div>
+                            <span class="qdrat-badge @(ind.IsQuant ? "quant" : "verbal")">@(ind.IsQuant ? "كمي" : "لفظي")</span>
+                            المؤشر: @ind.LessonTitle — الصعوبة: @diffLabelInd
+                        </div>
+                        <div class="qdrat-ind-count bad">@ind.ActualCount / @ind.RequestedCount</div>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-outline-warning btn-sm"
+                                    onclick="regenerateIndicator(@Model.StageId, @ind.LessonId, @ind.DifficultyLevel)">
+                                <i class="bi bi-arrow-clockwise ms-1"></i> إعادة توليد
+                            </button>
+                            <a class="btn btn-outline-success btn-sm"
+                               href="@Url.Action("AddQuestionPage", "MinistrySimExam", new { area = "Admin", stageId = Model.StageId, lessonId = ind.LessonId, difficulty = ind.DifficultyLevel })">
+                                <i class="bi bi-plus-circle ms-1"></i> إضافة يدوية
+                            </a>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    <div class="qdrat-card">
+        <div class="qdrat-card-header">
+            <h5 class="mb-0"><i class="bi bi-list-ol ms-1"></i> أسئلة المرحلة (@Model.Questions.Count)</h5>
+        </div>
+        <div class="qdrat-card-body">
+            @if (!Model.Questions.Any())
+            {
+                <div class="qdrat-empty">
+                    <i class="bi bi-inbox" style="font-size:28px"></i>
+                    <p class="mb-0 mt-2">لا توجد أسئلة مبنية لهذه المرحلة بعد.</p>
+                </div>
+            }
+            else
+            {
+                @foreach (var q in Model.Questions)
+                {
+                    string diffLabel = q.DifficultyLevel switch
+                    {
+                        0 => "سهل",
+                        1 => "متوسط",
+                        2 => "صعب",
+                        _ => "صعب جدًا"
+                    };
+
+                    <div class="qdrat-q-row">
+                        <div class="qdrat-q-order">@q.StageOrder</div>
+                        <div class="qdrat-q-body">
+                            <div>@Html.Raw(NumberHelper.ToIndicNumbersSafe(q.Title))</div>
+                            <div class="qdrat-q-meta">
+                                <span class="qdrat-badge @(q.IsQuant ? "quant" : "verbal")">@(q.IsQuant ? "كمي" : "لفظي")</span>
+                                <span>المؤشر: @q.LessonTitle</span>
+                                <span>الصعوبة: @diffLabel</span>
+                                <span>الترتيب العام: #@q.GlobalOrder</span>
+                                @if (q.IsManuallySelected)
+                                {
+                                    <span class="qdrat-badge manual"><i class="bi bi-hand-index-thumb ms-1"></i> استبدال يدوي</span>
+                                }
+                            </div>
+                        </div>
+                        <div class="qdrat-q-actions d-flex gap-2">
+                            <a class="btn btn-outline-primary btn-sm"
+                               href="@Url.Action("ReplaceQuestionPage", "MinistrySimExam", new { area = "Admin", stageQuestionId = q.StageQuestionId })">
+                                <i class="bi bi-arrow-repeat ms-1"></i> استبدال
+                            </a>
+                            <button type="button" class="btn btn-outline-danger btn-sm" onclick="excludeQuestion(@q.StageQuestionId)">
+                                <i class="bi bi-x-circle ms-1"></i> استبعاد
+                            </button>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+    function getAntiForgeryToken() {
+        return document.querySelector('#antiForm input[name="__RequestVerificationToken"]').value;
+    }
+
+    function excludeQuestion(stageQuestionId) {
+        Swal.fire({
+            title: "تأكيد الاستبعاد؟",
+            text: "سيتم حذف هذا السؤال من المرحلة، ولن يُسحَب بديل تلقائيًا — يترك المؤشر ناقصًا حتى تعيد التوليد أو تضيف سؤالاً يدويًا.",
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonText: "نعم، استبعد",
+            cancelButtonText: "إلغاء"
+        }).then(function (result) {
+            if (!result.isConfirmed) return;
+
+            var formData = new FormData();
+            formData.append("stageQuestionId", stageQuestionId);
+
+            fetch('@Url.Action("ExcludeQuestion", "MinistrySimExam", new { area = "Admin" })', {
+                method: "POST",
+                headers: { "RequestVerificationToken": getAntiForgeryToken() },
+                body: formData
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    window.location.reload();
+                } else {
+                    Swal.fire("خطأ", data.message || "تعذّر الاستبعاد.", "error");
+                }
+            })
+            .catch(function () {
+                Swal.fire("خطأ", "تعذّر الاتصال بالخادم — حاول مرة أخرى.", "error");
+            });
+        });
+    }
+
+    function regenerateIndicator(stageId, lessonId, difficulty) {
+        Swal.fire({
+            title: "إعادة توليد أسئلة هذا المؤشر؟",
+            text: "سيتم استبدال كل أسئلة هذا المؤشر/الصعوبة باختيار عشوائي جديد بنفس العدد المطلوب.",
+            icon: "question",
+            showCancelButton: true,
+            confirmButtonText: "نعم، أعد التوليد",
+            cancelButtonText: "إلغاء"
+        }).then(function (result) {
+            if (!result.isConfirmed) return;
+
+            var formData = new FormData();
+            formData.append("stageId", stageId);
+            formData.append("lessonId", lessonId);
+            formData.append("difficulty", difficulty);
+
+            fetch('@Url.Action("RegenerateIndicator", "MinistrySimExam", new { area = "Admin" })', {
+                method: "POST",
+                headers: { "RequestVerificationToken": getAntiForgeryToken() },
+                body: formData
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    Swal.fire({ icon: "success", title: "تم التوليد بالكامل", timer: 1500, showConfirmButton: false })
+                        .then(function () { window.location.reload(); });
+                } else {
+                    var msg = (data.messages && data.messages.length) ? data.messages.join('\n') : (data.message || "لم يكتمل العدد المطلوب.");
+                    Swal.fire("تنبيه", msg, "warning").then(function () { window.location.reload(); });
+                }
+            })
+            .catch(function () {
+                Swal.fire("خطأ", "تعذّر الاتصال بالخادم — حاول مرة أخرى.", "error");
+            });
+        });
+    }
+</script>
+}

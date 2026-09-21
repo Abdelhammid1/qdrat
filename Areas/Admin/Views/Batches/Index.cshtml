@@ -1,0 +1,2063 @@
+﻿@model IEnumerable<QdratNew.ViewModels.Batch.BatchViewModel>
+
+@{
+    ViewData["Title"] = "إدارة الدفعات";
+
+    var batches = Model != null
+        ? Model.ToList()
+        : new List<QdratNew.ViewModels.Batch.BatchViewModel>();
+
+    var today = DateTime.Today;
+
+    var currentView = ViewBag.CurrentBatchView != null
+        ? ViewBag.CurrentBatchView.ToString()
+        : "active";
+
+    var activeBatchesCount = ViewBag.ActiveBatchesCount != null ? (int)ViewBag.ActiveBatchesCount : 0;
+    var graduatedBatchesCount = ViewBag.GraduatedBatchesCount != null ? (int)ViewBag.GraduatedBatchesCount : 0;
+    var archivedBatchesCount = ViewBag.ArchivedBatchesCount != null ? (int)ViewBag.ArchivedBatchesCount : 0;
+    var allBatchesCount = ViewBag.AllBatchesCount != null ? (int)ViewBag.AllBatchesCount : batches.Count;
+    var batchesWithLecturesCount = ViewBag.BatchesWithLecturesCount != null ? (int)ViewBag.BatchesWithLecturesCount : 0;
+    var batchesWithoutLecturesCount = ViewBag.BatchesWithoutLecturesCount != null ? (int)ViewBag.BatchesWithoutLecturesCount : 0;
+
+    var currentPageTitle = currentView == "archived"
+        ? "أرشيف الدفعات"
+        : currentView == "graduated"
+            ? "الدفعات المنتهية / المتخرجة"
+            : currentView == "all"
+                ? "كل الدفعات"
+                : "الدفعات النشطة والقادمة";
+
+    var activeInCurrentList = batches.Count(b => !b.EndDate.HasValue || b.EndDate.Value.Date >= today);
+    var endedInCurrentList = batches.Count(b => b.EndDate.HasValue && b.EndDate.Value.Date < today);
+    var upcomingInCurrentList = batches.Count(b => b.StartDate.Date > today);
+    var withLecturesInCurrentList = batches.Count(b => b.LecturesCount > 0);
+    var withoutLecturesInCurrentList = batches.Count(b => b.LecturesCount == 0);
+
+    string SafeText(string? value, string fallback = "غير محدد")
+    {
+        return string.IsNullOrWhiteSpace(value) ? fallback : value;
+    }
+
+    string GetCourseName(QdratNew.ViewModels.Batch.BatchViewModel batch)
+    {
+        if (batch.Courses != null && batch.Courses.Any())
+        {
+            return batch.Courses.First().Text;
+        }
+
+        return "غير محدد";
+    }
+
+    string ResolveBatchStatus(QdratNew.ViewModels.Batch.BatchViewModel batch)
+    {
+        if (batch.StartDate.Date > today)
+        {
+            return "قادمة";
+        }
+
+        if (batch.EndDate.HasValue && batch.EndDate.Value.Date < today)
+        {
+            return "منتهية";
+        }
+
+        return "نشطة";
+    }
+
+    string ResolveBatchStatusCss(QdratNew.ViewModels.Batch.BatchViewModel batch)
+    {
+        if (batch.StartDate.Date > today)
+        {
+            return "upcoming";
+        }
+
+        if (batch.EndDate.HasValue && batch.EndDate.Value.Date < today)
+        {
+            return "graduated";
+        }
+
+        return "active";
+    }
+
+    int ResolveDaysValue(QdratNew.ViewModels.Batch.BatchViewModel batch)
+    {
+        if (batch.StartDate.Date > today)
+        {
+            return (batch.StartDate.Date - today).Days;
+        }
+
+        if (batch.EndDate.HasValue && batch.EndDate.Value.Date >= today)
+        {
+            return (batch.EndDate.Value.Date - today).Days;
+        }
+
+        if (batch.EndDate.HasValue && batch.EndDate.Value.Date < today)
+        {
+            return (today - batch.EndDate.Value.Date).Days;
+        }
+
+        return 0;
+    }
+
+    string ResolveDaysText(QdratNew.ViewModels.Batch.BatchViewModel batch)
+    {
+        if (batch.StartDate.Date > today)
+        {
+            return "تبدأ بعد";
+        }
+
+        if (batch.EndDate.HasValue && batch.EndDate.Value.Date >= today)
+        {
+            return "متبقي";
+        }
+
+        if (batch.EndDate.HasValue && batch.EndDate.Value.Date < today)
+        {
+            return "انتهت منذ";
+        }
+
+        return "مفتوحة";
+    }
+
+    string BuildAvatar(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return "دف";
+        }
+
+        var cleaned = name.Trim();
+        var parts = cleaned.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        if (parts.Length >= 2)
+        {
+            return (parts[0].Substring(0, 1) + parts[1].Substring(0, 1)).ToUpper();
+        }
+
+        return cleaned.Substring(0, Math.Min(2, cleaned.Length)).ToUpper();
+    }
+
+    string ActiveTab(string tab)
+    {
+        return currentView == tab ? "active" : "";
+    }
+
+    string ResolveLecturesState(QdratNew.ViewModels.Batch.BatchViewModel batch)
+    {
+        return batch.LecturesCount > 0 ? "has-lectures" : "no-lectures";
+    }
+
+    string ResolveGenderLabel(object? gender)
+    {
+        var value = gender == null ? "" : gender.ToString();
+
+        if (value == "Male")
+        {
+            return "ذكور";
+        }
+
+        if (value == "Female")
+        {
+            return "إناث";
+        }
+
+        return string.IsNullOrWhiteSpace(value) ? "غير محدد" : value;
+    }
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet" />
+
+    <style>
+        :root {
+            --ink: #0D1B2A;
+            --ink-2: #2C3E50;
+            --ink-3: #5A6A7A;
+            --ink-4: #8FA0B0;
+            --ink-5: #C8D5E0;
+            --canvas: #F3F6FA;
+            --surface: #FFFFFF;
+            --surface-2: #F8FAFC;
+            --surface-3: #EEF2F7;
+            --border: #DDE4EC;
+            --blue: #1B5EAE;
+            --blue-2: #2471D0;
+            --blue-bg: #E8F1FB;
+            --blue-dark: #103E7A;
+            --emerald: #0D7A5B;
+            --emerald-bg: #E4F5EE;
+            --amber: #985D09;
+            --amber-bg: #FDF0D8;
+            --rose: #BF1030;
+            --rose-bg: #FDEAEE;
+            --violet: #5535B5;
+            --violet-bg: #EDE8F9;
+            --cyan: #087B92;
+            --cyan-bg: #E2F6FA;
+            --r-sm: 6px;
+            --r-md: 10px;
+            --r-lg: 14px;
+            --r-xl: 20px;
+            --sh-xs: 0 1px 3px rgba(13,27,42,.06);
+            --sh-sm: 0 2px 8px rgba(13,27,42,.08);
+            --sh-md: 0 4px 18px rgba(13,27,42,.10);
+            --ease: cubic-bezier(.25,.46,.45,.94);
+        }
+
+        .batches-page {
+            background: var(--canvas);
+            min-height: 100vh;
+            padding: 32px 28px 64px;
+            direction: rtl;
+            font-family: 'Cairo', 'Tahoma', sans-serif;
+            color: var(--ink-2);
+        }
+
+            .batches-page *,
+            .batches-page *::before,
+            .batches-page *::after {
+                box-sizing: border-box;
+            }
+
+            .batches-page a {
+                text-decoration: none;
+            }
+
+        .batches-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-bottom: 22px;
+        }
+
+        .batches-brand {
+            display: flex;
+            align-items: center;
+            gap: 13px;
+        }
+
+        .batches-brand-icon {
+            width: 46px;
+            height: 46px;
+            background: var(--blue);
+            border-radius: var(--r-lg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 20px;
+            box-shadow: 0 4px 14px rgba(27,94,174,.28);
+        }
+
+        .batches-brand-title {
+            font-size: 20px;
+            font-weight: 900;
+            color: var(--ink);
+            line-height: 1.15;
+        }
+
+        .batches-brand-sub {
+            font-size: 14px;
+            color: var(--ink-4);
+            margin-top: 3px;
+        }
+
+        .top-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .top-btn {
+            min-height: 42px;
+            border-radius: 12px;
+            border: 1px solid transparent;
+            padding: 10px 15px;
+            font-size: 13px;
+            font-weight: 900;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: transform .2s var(--ease), box-shadow .2s var(--ease), background .2s var(--ease);
+        }
+
+            .top-btn:hover {
+                transform: translateY(-1px);
+                box-shadow: var(--sh-sm);
+            }
+
+            .top-btn.primary {
+                color: #fff;
+                background: var(--blue);
+                border-color: var(--blue);
+            }
+
+            .top-btn.secondary {
+                color: var(--violet);
+                background: var(--violet-bg);
+                border-color: rgba(85, 53, 181, .16);
+            }
+
+        .batch-tabs {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+
+        .batch-tab {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-lg);
+            min-height: 58px;
+            padding: 13px 14px;
+            color: var(--ink-3);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            box-shadow: var(--sh-xs);
+            transition: transform .2s var(--ease), box-shadow .2s var(--ease), border-color .2s var(--ease);
+        }
+
+            .batch-tab span {
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                font-size: 13px;
+                font-weight: 900;
+            }
+
+            .batch-tab strong {
+                min-width: 32px;
+                min-height: 28px;
+                border-radius: 999px;
+                background: var(--surface-3);
+                color: var(--ink-2);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: 3px 9px;
+                font-size: 13px;
+                font-weight: 900;
+            }
+
+            .batch-tab:hover,
+            .batch-tab.active {
+                transform: translateY(-2px);
+                border-color: rgba(27, 94, 174, .25);
+                box-shadow: var(--sh-sm);
+            }
+
+            .batch-tab.active {
+                background: var(--blue-bg);
+                color: var(--blue-dark);
+            }
+
+                .batch-tab.active strong {
+                    background: #fff;
+                    color: var(--blue-dark);
+                }
+
+        .batches-kpis {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 13px;
+            margin-bottom: 18px;
+        }
+
+        .kpi-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            padding: 18px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: var(--sh-xs);
+            transition: transform .2s var(--ease), box-shadow .2s var(--ease), border-color .2s var(--ease);
+            position: relative;
+            overflow: hidden;
+            width: 100%;
+            text-align: right;
+            cursor: pointer;
+        }
+
+            .kpi-card::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                right: 0;
+                width: 4px;
+                height: 100%;
+                border-radius: 0 var(--r-xl) var(--r-xl) 0;
+            }
+
+            .kpi-card:hover,
+            .kpi-card.is-active {
+                transform: translateY(-3px);
+                box-shadow: var(--sh-sm);
+            }
+
+            .kpi-card.is-active {
+                border-color: rgba(27, 94, 174, .25);
+            }
+
+        .kpi-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: var(--r-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex: 0 0 44px;
+        }
+
+        .kpi-card span {
+            display: block;
+            font-size: 12px;
+            color: var(--ink-3);
+            font-weight: 800;
+            margin-bottom: 2px;
+        }
+
+        .kpi-card strong {
+            display: block;
+            font-size: 24px;
+            color: var(--ink);
+            font-weight: 900;
+            line-height: 1.1;
+        }
+
+        .kpi-card small {
+            display: block;
+            font-size: 11px;
+            color: var(--ink-4);
+            margin-top: 4px;
+            line-height: 1.5;
+        }
+
+        .kpi-blue::after {
+            background: var(--blue);
+        }
+
+        .kpi-emerald::after {
+            background: var(--emerald);
+        }
+
+        .kpi-amber::after {
+            background: var(--amber);
+        }
+
+        .kpi-rose::after {
+            background: var(--rose);
+        }
+
+        .kpi-violet::after {
+            background: var(--violet);
+        }
+
+        .kpi-cyan::after {
+            background: var(--cyan);
+        }
+
+        .kpi-icon.blue {
+            background: var(--blue-bg);
+            color: var(--blue);
+        }
+
+        .kpi-icon.emerald {
+            background: var(--emerald-bg);
+            color: var(--emerald);
+        }
+
+        .kpi-icon.amber {
+            background: var(--amber-bg);
+            color: var(--amber);
+        }
+
+        .kpi-icon.rose {
+            background: var(--rose-bg);
+            color: var(--rose);
+        }
+
+        .kpi-icon.violet {
+            background: var(--violet-bg);
+            color: var(--violet);
+        }
+
+        .kpi-icon.cyan {
+            background: var(--cyan-bg);
+            color: var(--cyan);
+        }
+
+        .kpi-detail-panel,
+        .filter-card,
+        .archive-manager,
+        .batches-section,
+        .graduated-notice {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            box-shadow: var(--sh-xs);
+            margin-bottom: 18px;
+        }
+
+        .kpi-detail-panel {
+            padding: 18px;
+        }
+
+        .kpi-detail-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 14px;
+            margin-bottom: 12px;
+        }
+
+            .kpi-detail-head span {
+                display: block;
+                font-size: 12px;
+                color: var(--blue);
+                font-weight: 900;
+                margin-bottom: 4px;
+            }
+
+            .kpi-detail-head h2 {
+                margin: 0;
+                color: var(--ink);
+                font-size: 18px;
+                font-weight: 900;
+            }
+
+        .panel-close {
+            border: none;
+            background: var(--surface-3);
+            color: var(--ink-3);
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #kpiDetailText {
+            color: var(--ink-3);
+            font-size: 13px;
+            line-height: 1.8;
+            margin: 0 0 12px;
+        }
+
+        .kpi-detail-list {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .kpi-detail-item {
+            border: 1px solid var(--border);
+            background: var(--surface-2);
+            border-radius: 14px;
+            padding: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+            .kpi-detail-item strong {
+                display: block;
+                font-size: 13px;
+                color: var(--ink);
+                font-weight: 900;
+                margin-bottom: 3px;
+            }
+
+            .kpi-detail-item span {
+                display: block;
+                color: var(--ink-4);
+                font-size: 11px;
+                line-height: 1.6;
+            }
+
+        .mini-action {
+            white-space: nowrap;
+            border-radius: 10px;
+            background: var(--blue);
+            color: #fff !important;
+            padding: 8px 10px;
+            font-size: 11px;
+            font-weight: 900;
+        }
+
+        .archive-manager {
+            overflow: hidden;
+        }
+
+        .archive-manager-toggle {
+            width: 100%;
+            border: none;
+            background: transparent;
+            padding: 17px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            text-align: right;
+        }
+
+        .archive-manager-toggle-main {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .archive-manager-toggle-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 13px;
+            background: var(--violet-bg);
+            color: var(--violet);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 42px;
+        }
+
+        .archive-manager-title {
+            display: block;
+            color: var(--ink);
+            font-size: 15px;
+            font-weight: 900;
+            margin-bottom: 3px;
+        }
+
+        .archive-manager-subtitle {
+            display: block;
+            color: var(--ink-4);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .archive-manager-toggle-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .archive-manager-chevron {
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            background: var(--surface-3);
+            color: var(--ink-3);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform .2s var(--ease);
+        }
+
+        .archive-manager.is-open .archive-manager-chevron {
+            transform: rotate(180deg);
+        }
+
+        .archive-manager-body {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height .25s var(--ease);
+            border-top: 1px solid transparent;
+        }
+
+        .archive-manager.is-open .archive-manager-body {
+            max-height: 520px;
+            border-top-color: var(--border);
+        }
+
+        .archive-manager-body-inner {
+            padding: 16px 18px 18px;
+        }
+
+        .archive-manager-grid {
+            display: grid;
+            grid-template-columns: 1fr 220px;
+            gap: 14px;
+            align-items: start;
+        }
+
+        .archive-batches {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 9px;
+            max-height: 220px;
+            overflow: auto;
+            padding: 2px 2px 8px;
+        }
+
+        .archive-batch-check {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            border: 1px solid var(--border);
+            background: var(--surface-2);
+            border-radius: 999px;
+            padding: 8px 11px;
+            color: var(--ink-3);
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+        .archive-actions {
+            display: grid;
+            gap: 9px;
+        }
+
+        .archive-submit {
+            border: none;
+            min-height: 42px;
+            border-radius: 12px;
+            background: var(--violet);
+            color: #fff;
+            font-size: 12px;
+            font-weight: 900;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            padding: 10px 12px;
+        }
+
+            .archive-submit.restore {
+                background: var(--emerald);
+            }
+
+        .graduated-notice {
+            padding: 18px;
+            display: flex;
+            align-items: flex-start;
+            gap: 13px;
+            background: var(--amber-bg);
+            border-color: rgba(152, 93, 9, .16);
+        }
+
+        .notice-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            background: #fff;
+            color: var(--amber);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 42px;
+        }
+
+        .graduated-notice h2 {
+            margin: 0 0 5px;
+            color: var(--amber);
+            font-size: 16px;
+            font-weight: 900;
+        }
+
+        .graduated-notice p {
+            margin: 0;
+            color: var(--amber);
+            font-size: 13px;
+            line-height: 1.8;
+        }
+
+        .filter-card {
+            padding: 18px;
+        }
+
+        .filter-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--ink);
+            font-size: 15px;
+            font-weight: 900;
+            margin-bottom: 14px;
+        }
+
+        .filter-grid {
+            display: grid;
+            grid-template-columns: 1.4fr .75fr .65fr 150px;
+            gap: 12px;
+            align-items: end;
+        }
+
+        .field label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--ink-3);
+            font-size: 12px;
+            font-weight: 900;
+            margin-bottom: 7px;
+        }
+
+        .form-control-custom {
+            width: 100%;
+            min-height: 44px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--surface-2);
+            color: var(--ink);
+            padding: 10px 12px;
+            outline: none;
+            font-size: 13px;
+            font-weight: 800;
+            transition: border-color .2s var(--ease), box-shadow .2s var(--ease), background .2s var(--ease);
+        }
+
+            .form-control-custom:focus {
+                border-color: rgba(27, 94, 174, .45);
+                background: #fff;
+                box-shadow: 0 0 0 3px rgba(27, 94, 174, .08);
+            }
+
+        .reset-btn {
+            width: 100%;
+            min-height: 44px;
+            border: none;
+            border-radius: 12px;
+            background: var(--surface-3);
+            color: var(--ink-3);
+            font-size: 12px;
+            font-weight: 900;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .batches-section {
+            overflow: hidden;
+        }
+
+        .section-head {
+            padding: 18px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+
+            .section-head span {
+                display: block;
+                color: var(--blue);
+                font-size: 12px;
+                font-weight: 900;
+                margin-bottom: 4px;
+            }
+
+            .section-head h2 {
+                margin: 0;
+                color: var(--ink);
+                font-size: 19px;
+                font-weight: 900;
+            }
+
+        .count-badge {
+            min-height: 34px;
+            border-radius: 999px;
+            background: var(--surface-3);
+            color: var(--ink-3);
+            padding: 8px 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 12px;
+            font-weight: 900;
+        }
+
+            .count-badge strong {
+                color: var(--ink);
+            }
+
+        .batch-card-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
+            padding: 18px;
+        }
+
+        .batch-card {
+            position: relative;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            padding: 16px;
+            min-height: 260px;
+            box-shadow: var(--sh-xs);
+            transition: transform .2s var(--ease), box-shadow .2s var(--ease), border-color .2s var(--ease);
+            overflow: hidden;
+        }
+
+            .batch-card::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                right: 0;
+                width: 5px;
+                height: 100%;
+                background: var(--blue);
+            }
+
+            .batch-card:hover {
+                transform: translateY(-3px);
+                box-shadow: var(--sh-sm);
+                border-color: rgba(27, 94, 174, .24);
+            }
+
+            .batch-card.upcoming::after {
+                background: var(--amber);
+            }
+
+            .batch-card.graduated::after {
+                background: var(--rose);
+            }
+
+        .batch-card-top {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .batch-identity {
+            display: flex;
+            align-items: center;
+            gap: 11px;
+            min-width: 0;
+        }
+
+        .batch-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            background: var(--blue);
+            font-size: 15px;
+            font-weight: 900;
+            flex: 0 0 48px;
+            box-shadow: var(--sh-xs);
+        }
+
+            .batch-avatar.upcoming {
+                background: var(--amber);
+            }
+
+            .batch-avatar.graduated {
+                background: var(--rose);
+            }
+
+        .batch-title-wrap {
+            min-width: 0;
+        }
+
+            .batch-title-wrap h3 {
+                margin: 0;
+                color: var(--ink);
+                font-size: 17px;
+                font-weight: 900;
+                line-height: 1.45;
+                word-break: break-word;
+            }
+
+            .batch-title-wrap span {
+                display: block;
+                color: var(--ink-4);
+                font-size: 11px;
+                font-weight: 800;
+                margin-top: 2px;
+            }
+
+        .status-pill {
+            min-height: 29px;
+            border-radius: 999px;
+            padding: 6px 10px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            font-weight: 900;
+            white-space: nowrap;
+        }
+
+            .status-pill.active {
+                background: var(--emerald-bg);
+                color: var(--emerald);
+            }
+
+            .status-pill.upcoming {
+                background: var(--amber-bg);
+                color: var(--amber);
+            }
+
+            .status-pill.graduated {
+                background: var(--rose-bg);
+                color: var(--rose);
+            }
+
+        .batch-main-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .info-box {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 11px 12px;
+            min-height: 66px;
+        }
+
+            .info-box span {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                color: var(--ink-4);
+                font-size: 11px;
+                font-weight: 900;
+                margin-bottom: 6px;
+            }
+
+            .info-box strong {
+                display: block;
+                color: var(--ink);
+                font-size: 13px;
+                font-weight: 900;
+                line-height: 1.5;
+                word-break: break-word;
+            }
+
+        .wide-info {
+            grid-column: 1 / -1;
+        }
+
+        .batch-progress-strip {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            border-radius: 14px;
+            background: var(--blue-bg);
+            color: var(--blue-dark);
+            padding: 10px 12px;
+            margin-bottom: 12px;
+        }
+
+            .batch-progress-strip span {
+                font-size: 12px;
+                font-weight: 900;
+            }
+
+            .batch-progress-strip strong {
+                font-size: 14px;
+                font-weight: 900;
+            }
+
+            .batch-progress-strip.upcoming {
+                background: var(--amber-bg);
+                color: var(--amber);
+            }
+
+            .batch-progress-strip.graduated {
+                background: var(--rose-bg);
+                color: var(--rose);
+            }
+
+        .batch-actions {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .batch-actions-extra {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .action-btn {
+            border: 1px solid transparent;
+            border-radius: 12px;
+            min-height: 38px;
+            padding: 8px 10px;
+            font-size: 12px;
+            font-weight: 900;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            transition: transform .2s var(--ease), box-shadow .2s var(--ease);
+            cursor: pointer;
+            width: 100%;
+        }
+
+            .action-btn:hover {
+                transform: translateY(-1px);
+                box-shadow: var(--sh-xs);
+            }
+
+            .action-btn.view {
+                background: var(--blue-bg);
+                color: var(--blue-dark);
+                border-color: rgba(27, 94, 174, .16);
+            }
+
+            .action-btn.edit {
+                background: var(--amber-bg);
+                color: var(--amber);
+                border-color: rgba(152, 93, 9, .16);
+            }
+
+            .action-btn.students {
+                background: var(--emerald-bg);
+                color: var(--emerald);
+                border-color: rgba(13, 122, 91, .16);
+            }
+
+            .action-btn.delete {
+                background: var(--rose-bg);
+                color: var(--rose);
+                border-color: rgba(191, 16, 48, .16);
+            }
+
+            .action-btn.lectures {
+                background: var(--cyan-bg);
+                color: var(--cyan);
+                border-color: rgba(8, 123, 146, .16);
+            }
+
+            .action-btn.archive {
+                background: var(--surface-3);
+                color: var(--ink-3);
+                border-color: var(--border);
+            }
+
+            .action-btn.restore {
+                background: var(--emerald-bg);
+                color: var(--emerald);
+                border-color: rgba(13, 122, 91, .16);
+            }
+
+        .inline-row-form {
+            display: block;
+            margin: 0;
+        }
+
+        .empty-box {
+            padding: 46px 20px;
+            text-align: center;
+            color: var(--ink-4);
+        }
+
+            .empty-box i {
+                display: block;
+                font-size: 34px;
+                color: var(--ink-5);
+                margin-bottom: 10px;
+            }
+
+            .empty-box strong {
+                display: block;
+                color: var(--ink);
+                font-size: 16px;
+                font-weight: 900;
+                margin-bottom: 4px;
+            }
+
+            .empty-box span {
+                display: block;
+                font-size: 12px;
+            }
+
+        .d-none {
+            display: none !important;
+        }
+
+        @@media (max-width: 1300px) {
+            .batches-kpis {
+                grid-template-columns: repeat(3, 1fr);
+            }
+
+            .batch-card-grid,
+            .kpi-detail-list {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @@media (max-width: 992px) {
+            .filter-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .action-field {
+                grid-column: 1 / -1;
+            }
+
+            .batch-tabs {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @@media (max-width: 768px) {
+            .batches-page {
+                padding: 18px 14px 44px;
+            }
+
+            .batches-topbar {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .top-actions {
+                width: 100%;
+            }
+
+            .top-btn {
+                flex: 1 1 auto;
+                justify-content: center;
+            }
+
+            .batches-kpis,
+            .batch-tabs,
+            .filter-grid,
+            .archive-manager-grid,
+            .batch-card-grid,
+            .kpi-detail-list {
+                grid-template-columns: 1fr;
+            }
+
+            .archive-manager-toggle {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .archive-manager-toggle-left {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .batch-main-info {
+                grid-template-columns: 1fr;
+            }
+
+            .batch-actions {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+    </style>
+}
+
+<div class="batches-page" dir="rtl">
+
+    <section class="batches-topbar">
+        <div class="batches-brand">
+            <div class="batches-brand-icon">
+                <i class="fas fa-users"></i>
+            </div>
+
+            <div>
+                <div class="batches-brand-title">@currentPageTitle</div>
+                <div class="batches-brand-sub">
+                    عرض الدفعات بنفس كونسيبت كروت الحضور والانصراف مع إتاحة الإدارة السريعة لكل دفعة.
+                </div>
+            </div>
+        </div>
+
+        <div class="top-actions">
+            <a asp-area="Admin"
+               asp-controller="Batches"
+               asp-action="Archive"
+               class="top-btn secondary">
+                <i class="fas fa-archive"></i>
+                إدارة الأرشيف
+                @if (archivedBatchesCount > 0)
+                {
+                    <span class="count-badge">@archivedBatchesCount</span>
+                }
+            </a>
+
+            <a asp-area="Admin"
+               asp-controller="Batches"
+               asp-action="Create"
+               class="top-btn primary">
+                <i class="fas fa-plus-circle"></i>
+                إنشاء دفعة
+            </a>
+        </div>
+    </section>
+
+    <section class="batch-tabs">
+        <a asp-area="Admin"
+           asp-controller="Batches"
+           asp-action="Index"
+           asp-route-view="active"
+           class="batch-tab @ActiveTab("active")">
+            <span>
+                <i class="fas fa-bolt"></i>
+                النشطة والقادمة
+            </span>
+            <strong>@activeBatchesCount</strong>
+        </a>
+
+        <a asp-area="Admin"
+           asp-controller="Batches"
+           asp-action="Index"
+           asp-route-view="graduated"
+           class="batch-tab @ActiveTab("graduated")">
+            <span>
+                <i class="fas fa-user-graduate"></i>
+                المنتهية / المتخرجة
+            </span>
+            <strong>@graduatedBatchesCount</strong>
+        </a>
+
+        <a asp-area="Admin"
+           asp-controller="Batches"
+           asp-action="Index"
+           asp-route-view="all"
+           class="batch-tab @ActiveTab("all")">
+            <span>
+                <i class="fas fa-layer-group"></i>
+                كل الدفعات
+            </span>
+            <strong>@allBatchesCount</strong>
+        </a>
+
+        <a asp-area="Admin"
+           asp-controller="Batches"
+           asp-action="Index"
+           asp-route-view="archived"
+           class="batch-tab @ActiveTab("archived")">
+            <span>
+                <i class="fas fa-archive"></i>
+                الأرشيف
+            </span>
+            <strong>@archivedBatchesCount</strong>
+        </a>
+    </section>
+
+    <section class="batches-kpis">
+        <button type="button" class="kpi-card kpi-blue js-kpi-card" data-panel="shown">
+            <div class="kpi-icon blue">
+                <i class="fas fa-list"></i>
+            </div>
+            <div>
+                <span>المعروض الآن</span>
+                <strong>@batches.Count</strong>
+                <small>@currentPageTitle</small>
+            </div>
+        </button>
+
+        <button type="button" class="kpi-card kpi-emerald js-kpi-card" data-panel="active">
+            <div class="kpi-icon emerald">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <div>
+                <span>نشطة / قادمة</span>
+                <strong>@activeBatchesCount</strong>
+                <small>صالحة للتشغيل والمتابعة</small>
+            </div>
+        </button>
+
+        <button type="button" class="kpi-card kpi-violet js-kpi-card" data-panel="archived">
+            <div class="kpi-icon violet">
+                <i class="fas fa-archive"></i>
+            </div>
+            <div>
+                <span>داخل الأرشيف</span>
+                <strong>@archivedBatchesCount</strong>
+                <small>يمكن استرجاعها لاحقًا</small>
+            </div>
+        </button>
+
+        <button type="button" class="kpi-card kpi-cyan js-kpi-card" data-panel="has-lectures">
+            <div class="kpi-icon cyan">
+                <i class="fas fa-chalkboard-teacher"></i>
+            </div>
+            <div>
+                <span>لها محاضرات</span>
+                <strong>@batchesWithLecturesCount</strong>
+                <small>جاهزة للمتابعة التشغيلية</small>
+            </div>
+        </button>
+
+        <button type="button" class="kpi-card kpi-rose js-kpi-card" data-panel="no-lectures">
+            <div class="kpi-icon rose">
+                <i class="fas fa-calendar-plus"></i>
+            </div>
+            <div>
+                <span>بدون محاضرات</span>
+                <strong>@batchesWithoutLecturesCount</strong>
+                <small>تحتاج تجهيز جدول المحاضرات</small>
+            </div>
+        </button>
+
+        <button type="button" class="kpi-card kpi-amber js-kpi-card" data-panel="upcoming">
+            <div class="kpi-icon amber">
+                <i class="fas fa-clock"></i>
+            </div>
+            <div>
+                <span>قادمة في القائمة</span>
+                <strong>@upcomingInCurrentList</strong>
+                <small>لم تبدأ بعد</small>
+            </div>
+        </button>
+    </section>
+
+    <section class="kpi-detail-panel d-none" id="kpiDetailPanel">
+        <div class="kpi-detail-head">
+            <div>
+                <span id="kpiDetailEyebrow">إحصائيات الدفعات</span>
+                <h2 id="kpiDetailTitle">تفاصيل الدفعات</h2>
+            </div>
+
+            <button type="button" id="closeKpiDetail" class="panel-close" aria-label="إغلاق">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div class="kpi-detail-body">
+            <p id="kpiDetailText"></p>
+            <div class="kpi-detail-list" id="kpiDetailList"></div>
+        </div>
+    </section>
+
+    <div class="archive-manager" id="archiveManagerSection">
+        <button type="button" class="archive-manager-toggle" id="archiveManagerToggle" aria-expanded="false" aria-controls="archiveManagerBody">
+            <div class="archive-manager-toggle-main">
+                <span class="archive-manager-toggle-icon">
+                    <i class="fas fa-archive"></i>
+                </span>
+
+                <span class="archive-manager-toggle-text">
+                    <span class="archive-manager-title">إدارة الأرشيف حسب الدفعات</span>
+                    <span class="archive-manager-subtitle">اختر دفعة أو أكثر لنقلها إلى الأرشيف أو إخراجها منه</span>
+                </span>
+            </div>
+
+            <div class="archive-manager-toggle-left">
+                <span class="count-badge">
+                    داخل الأرشيف:
+                    <strong>@archivedBatchesCount</strong>
+                    دفعة
+                </span>
+                <span class="archive-manager-chevron">
+                    <i class="fas fa-chevron-down"></i>
+                </span>
+            </div>
+        </button>
+
+        <div class="archive-manager-body" id="archiveManagerBody">
+            <div class="archive-manager-body-inner">
+                <form asp-area="Admin" asp-controller="Batches" asp-action="ArchiveBatchesByIds" method="post">
+                    @Html.AntiForgeryToken()
+
+                    <div class="archive-manager-grid">
+                        <div class="archive-batches">
+                            @foreach (var batch in batches)
+                            {
+                                <label class="archive-batch-check">
+                                    <input type="checkbox" name="selectedBatchIds" value="@batch.Id" />
+                                    <span>@SafeText(batch.Name, "دفعة بدون اسم")</span>
+                                </label>
+                            }
+                        </div>
+
+                        <div class="archive-actions">
+                            <button type="submit" class="archive-submit" onclick="return confirm('سيتم نقل الدفعات المحددة إلى الأرشيف. هل تريد المتابعة؟')">
+                                <i class="fas fa-box-archive"></i>
+                                أرشفة المحدد
+                            </button>
+
+                            <button type="submit"
+                                    formaction="@Url.Action("RestoreBatchesByIds", "Batches", new { area = "Admin" })"
+                                    class="archive-submit restore"
+                                    onclick="return confirm('سيتم إخراج الدفعات المحددة من الأرشيف. هل تريد المتابعة؟')">
+                                <i class="fas fa-undo"></i>
+                                إخراج من الأرشيف
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    @if (currentView == "graduated")
+    {
+        <section class="graduated-notice">
+            <div class="notice-icon">
+                <i class="fas fa-user-graduate"></i>
+            </div>
+
+            <div>
+                <h2>أنت الآن داخل أرشيف الدفعات المنتهية</h2>
+                <p>
+                    هذه الدفعات انتهى تدريسها حسب تاريخ النهاية. لا تظهر افتراضيًا في صفحة الدفعات حتى لا تزاحم الدفعات النشطة، لكنها محفوظة للتقارير والمراجعة والتحليل.
+                </p>
+            </div>
+        </section>
+    }
+
+    <section class="filter-card">
+        <div class="filter-title">
+            <i class="fas fa-sliders-h"></i>
+            تصفية داخل النتائج الحالية
+        </div>
+
+        <div class="filter-grid">
+            <div class="field search-field">
+                <label>
+                    <i class="fas fa-search"></i>
+                    بحث سريع
+                </label>
+                <input id="batchSearch"
+                       type="text"
+                       class="form-control-custom"
+                       placeholder="ابحث باسم الدفعة أو الدورة أو الحالة..." />
+            </div>
+
+            <div class="field">
+                <label>
+                    <i class="fas fa-toggle-on"></i>
+                    حالة الدفعة
+                </label>
+                <select id="statusFilter" class="form-control-custom">
+                    <option value="">كل الحالات</option>
+                    <option value="active">نشطة</option>
+                    <option value="upcoming">قادمة</option>
+                    <option value="graduated">منتهية</option>
+                </select>
+            </div>
+
+            <div class="field">
+                <label>
+                    <i class="fas fa-venus-mars"></i>
+                    النوع
+                </label>
+                <select id="genderFilter" class="form-control-custom">
+                    <option value="">الكل</option>
+                    <option value="Male">ذكور</option>
+                    <option value="Female">إناث</option>
+                </select>
+            </div>
+
+            <div class="field action-field">
+                <button type="button" id="resetBatchFilters" class="reset-btn">
+                    <i class="fas fa-undo-alt"></i>
+                    إعادة ضبط
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <section class="batches-section">
+        <div class="section-head">
+            <div>
+                <span>قائمة الدفعات</span>
+                <h2>@currentPageTitle</h2>
+            </div>
+
+            <div class="count-badge">
+                المعروض:
+                <strong id="visibleBatchesCount">@batches.Count</strong>
+                من
+                <strong>@batches.Count</strong>
+            </div>
+        </div>
+
+        @if (!batches.Any())
+        {
+            <div class="empty-box">
+                <i class="fas fa-users-slash"></i>
+                <strong>لا توجد دفعات في هذا التصنيف</strong>
+                <span>غيّر التبويب أو أنشئ دفعة جديدة.</span>
+            </div>
+        }
+        else
+        {
+            <div class="batch-card-grid" id="batchesCards">
+                @foreach (var batch in batches)
+                {
+                    var statusText = ResolveBatchStatus(batch);
+                    var statusCss = ResolveBatchStatusCss(batch);
+                    var courseName = GetCourseName(batch);
+                    var daysValue = ResolveDaysValue(batch);
+                    var daysText = ResolveDaysText(batch);
+                    var genderValue = batch.Gender.ToString();
+                    var genderText = ResolveGenderLabel(batch.Gender);
+                    var rowSearch = $"{batch.Name} {courseName} {genderText} {statusText}".ToLower();
+
+                    <article class="batch-card batch-item @statusCss"
+                             data-search="@rowSearch"
+                             data-status="@statusCss"
+                             data-gender="@genderValue"
+                             data-lectures="@ResolveLecturesState(batch)"
+                             data-name="@SafeText(batch.Name, "دفعة بدون اسم")"
+                             data-course="@courseName"
+                             data-students="@batch.StudentsCount"
+                             data-lectures-count="@batch.LecturesCount"
+                             data-lectures-url="@Url.Action("Lectures", "Lectures", new { area = "Admin", batchId = batch.Id })"
+                             data-create-lecture-url="@Url.Action("Create", "Lectures", new { area = "Admin", batchId = batch.Id })">
+
+                        <div class="batch-card-top">
+                            <div class="batch-identity">
+                                <div class="batch-avatar @statusCss">
+                                    @BuildAvatar(batch.Name)
+                                </div>
+
+                                <div class="batch-title-wrap">
+                                    <h3>@SafeText(batch.Name, "دفعة بدون اسم")</h3>
+                                    <span>رقم الدفعة: @batch.Id</span>
+                                </div>
+                            </div>
+
+                            <span class="status-pill @statusCss">
+                                <i class="fas fa-circle"></i>
+                                @statusText
+                            </span>
+                        </div>
+
+                        <div class="batch-main-info">
+                            <div class="info-box wide-info">
+                                <span>
+                                    <i class="fas fa-book"></i>
+                                    الدورة
+                                </span>
+                                <strong>@courseName</strong>
+                            </div>
+
+                            <div class="info-box">
+                                <span>
+                                    <i class="fas fa-venus-mars"></i>
+                                    النوع
+                                </span>
+                                <strong>@genderText</strong>
+                            </div>
+
+                            <div class="info-box">
+                                <span>
+                                    <i class="fas fa-user-graduate"></i>
+                                    الطلاب
+                                </span>
+                                <strong>@batch.StudentsCount طالب</strong>
+                            </div>
+
+                            <div class="info-box">
+                                <span>
+                                    <i class="fas fa-calendar-alt"></i>
+                                    بداية الدفعة
+                                </span>
+                                <strong>@batch.StartDate.ToString("yyyy/MM/dd")</strong>
+                            </div>
+
+                            <div class="info-box">
+                                <span>
+                                    <i class="fas fa-calendar-check"></i>
+                                    نهاية الدفعة
+                                </span>
+                                <strong>@(batch.EndDate.HasValue? batch.EndDate.Value.ToString("yyyy/MM/dd") : "غير محدد")</strong>
+                            </div>
+
+                            <div class="info-box">
+                                <span>
+                                    <i class="fas fa-chalkboard"></i>
+                                    المحاضرات
+                                </span>
+                                <strong>@batch.LecturesCount محاضرة</strong>
+                            </div>
+
+                            <div class="info-box">
+                                <span>
+                                    <i class="fas fa-box-archive"></i>
+                                    حالة الأرشيف
+                                </span>
+                                <strong>@(batch.IsArchived ? "مؤرشفة" : "غير مؤرشفة")</strong>
+                            </div>
+                        </div>
+
+                        <div class="batch-progress-strip @statusCss">
+                            @if (batch.EndDate.HasValue || batch.StartDate.Date > today)
+                            {
+                                <span>@daysText</span>
+                                <strong>@daysValue يوم</strong>
+                            }
+                            else
+                            {
+                                <span>مدة الدفعة</span>
+                                <strong>مفتوحة</strong>
+                            }
+                        </div>
+
+                        <div class="batch-actions">
+                            <a asp-area="Admin"
+                               asp-controller="Batches"
+                               asp-action="Details"
+                               asp-route-id="@batch.Id"
+                               class="action-btn view"
+                               title="تفاصيل">
+                                <i class="fas fa-eye"></i>
+                                تفاصيل
+                            </a>
+
+                            <a asp-area="Admin"
+                               asp-controller="Batches"
+                               asp-action="Edit"
+                               asp-route-id="@batch.Id"
+                               class="action-btn edit"
+                               title="تعديل">
+                                <i class="fas fa-edit"></i>
+                                تعديل
+                            </a>
+
+                            <a asp-area="Admin"
+                               asp-controller="Batches"
+                               asp-action="BatchStudents"
+                               asp-route-batchId="@batch.Id"
+                               class="action-btn students"
+                               title="طلاب الدفعة">
+                                <i class="fas fa-user-graduate"></i>
+                                الطلاب
+                            </a>
+
+                            <a asp-area="Admin"
+                               asp-controller="Batches"
+                               asp-action="Delete"
+                               asp-route-id="@batch.Id"
+                               class="action-btn delete"
+                               title="حذف">
+                                <i class="fas fa-trash-alt"></i>
+                                حذف
+                            </a>
+                        </div>
+
+                        <div class="batch-actions-extra">
+                            @if (batch.LecturesCount > 0)
+                            {
+                                <a asp-area="Admin"
+                                   asp-controller="Lectures"
+                                   asp-action="Lectures"
+                                   asp-route-batchId="@batch.Id"
+                                   class="action-btn lectures"
+                                   title="محاضرات الدفعة">
+                                    <i class="fas fa-chalkboard-teacher"></i>
+                                    المحاضرات
+                                </a>
+                            }
+                            else
+                            {
+                                <a asp-area="Admin"
+                                   asp-controller="Lectures"
+                                   asp-action="Create"
+                                   asp-route-batchId="@batch.Id"
+                                   class="action-btn lectures"
+                                   title="إنشاء محاضرة">
+                                    <i class="fas fa-calendar-plus"></i>
+                                    إنشاء محاضرة
+                                </a>
+                            }
+
+                            @if (!batch.IsArchived)
+                            {
+                                <form asp-area="Admin"
+                                      asp-controller="Batches"
+                                      asp-action="ArchiveBatchesByIds"
+                                      method="post"
+                                      class="inline-row-form">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="selectedBatchIds" value="@batch.Id" />
+                                    <button type="submit"
+                                            class="action-btn archive"
+                                            title="أرشفة"
+                                            onclick="return confirm('سيتم نقل هذه الدفعة إلى الأرشيف. هل تريد المتابعة؟')">
+                                        <i class="fas fa-box-archive"></i>
+                                        أرشفة
+                                    </button>
+                                </form>
+                            }
+                            else
+                            {
+                                <form asp-area="Admin"
+                                      asp-controller="Batches"
+                                      asp-action="RestoreBatchesByIds"
+                                      method="post"
+                                      class="inline-row-form">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="selectedBatchIds" value="@batch.Id" />
+                                    <button type="submit"
+                                            class="action-btn restore"
+                                            title="إخراج من الأرشيف"
+                                            onclick="return confirm('سيتم إخراج هذه الدفعة من الأرشيف. هل تريد المتابعة؟')">
+                                        <i class="fas fa-undo"></i>
+                                        استرجاع
+                                    </button>
+                                </form>
+                            }
+                        </div>
+                    </article>
+                }
+            </div>
+
+            <div id="noFilteredBatches" class="empty-box d-none">
+                <i class="fas fa-filter"></i>
+                <strong>لا توجد نتائج مطابقة</strong>
+                <span>غيّر البحث أو أعد ضبط الفلاتر.</span>
+            </div>
+        }
+    </section>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const searchInput = document.getElementById('batchSearch');
+            const statusFilter = document.getElementById('statusFilter');
+            const genderFilter = document.getElementById('genderFilter');
+            const resetButton = document.getElementById('resetBatchFilters');
+            const visibleCount = document.getElementById('visibleBatchesCount');
+            const noFilteredBatches = document.getElementById('noFilteredBatches');
+            const cards = Array.from(document.querySelectorAll('.batch-item'));
+            const archiveManagerSection = document.getElementById('archiveManagerSection');
+            const archiveManagerToggle = document.getElementById('archiveManagerToggle');
+            const kpiCards = Array.from(document.querySelectorAll('.js-kpi-card'));
+            const kpiDetailPanel = document.getElementById('kpiDetailPanel');
+            const kpiDetailTitle = document.getElementById('kpiDetailTitle');
+            const kpiDetailText = document.getElementById('kpiDetailText');
+            const kpiDetailList = document.getElementById('kpiDetailList');
+            const closeKpiDetail = document.getElementById('closeKpiDetail');
+
+            function normalize(value) {
+                if (!value) {
+                    return '';
+                }
+
+                return value.toString().trim().toLowerCase();
+            }
+
+            function applyFilters() {
+                const searchValue = normalize(searchInput ? searchInput.value : '');
+                const statusValue = normalize(statusFilter ? statusFilter.value : '');
+                const genderValue = normalize(genderFilter ? genderFilter.value : '');
+
+                let shown = 0;
+
+                cards.forEach(function (card) {
+                    const rowSearch = normalize(card.getAttribute('data-search'));
+                    const rowStatus = normalize(card.getAttribute('data-status'));
+                    const rowGender = normalize(card.getAttribute('data-gender'));
+
+                    const matchSearch = searchValue === '' || rowSearch.indexOf(searchValue) !== -1;
+                    const matchStatus = statusValue === '' || rowStatus === statusValue;
+                    const matchGender = genderValue === '' || rowGender === genderValue;
+
+                    const visible = matchSearch && matchStatus && matchGender;
+
+                    card.style.display = visible ? '' : 'none';
+
+                    if (visible) {
+                        shown++;
+                    }
+                });
+
+                if (visibleCount) {
+                    visibleCount.textContent = shown;
+                }
+
+                if (noFilteredBatches) {
+                    noFilteredBatches.classList.toggle('d-none', shown !== 0);
+                }
+            }
+
+            function batchMatchesPanel(card, panel) {
+                const status = normalize(card.getAttribute('data-status'));
+                const lectures = normalize(card.getAttribute('data-lectures'));
+
+                if (panel === 'active') {
+                    return status === 'active' || status === 'upcoming';
+                }
+
+                if (panel === 'upcoming') {
+                    return status === 'upcoming';
+                }
+
+                if (panel === 'has-lectures') {
+                    return lectures === 'has-lectures';
+                }
+
+                if (panel === 'no-lectures') {
+                    return lectures === 'no-lectures';
+                }
+
+                return true;
+            }
+
+            function panelMeta(panel) {
+                const data = {
+                    shown: {
+                        title: 'الدفعات المعروضة الآن',
+                        text: 'هذه الدفعات طبقًا للتبويب الحالي، مع عرضها على هيئة كروت تشغيلية واضحة.'
+                    },
+                    active: {
+                        title: 'الدفعات النشطة والقادمة',
+                        text: 'دفعات يمكن العمل عليها الآن أو تجهيزها قبل بداية الدراسة.'
+                    },
+                    archived: {
+                        title: 'أرشيف الدفعات',
+                        text: 'انتقل إلى تبويب الأرشيف لاستعراض الدفعات المؤرشفة أو إخراجها من الأرشيف.'
+                    },
+                    'has-lectures': {
+                        title: 'دفعات لها محاضرات',
+                        text: 'يمكن فتح صفحة محاضرات كل دفعة مباشرة من هنا.'
+                    },
+                    'no-lectures': {
+                        title: 'دفعات بدون محاضرات',
+                        text: 'هذه الدفعات تحتاج إنشاء محاضرات حتى تبدأ المتابعة التشغيلية.'
+                    },
+                    upcoming: {
+                        title: 'دفعات قادمة',
+                        text: 'دفعات لم يبدأ تاريخها بعد ويمكن تجهيز محاضراتها مبكرًا.'
+                    }
+                };
+
+                return data[panel] || data.shown;
+            }
+
+            function openKpiPanel(panel) {
+                if (!kpiDetailPanel || !kpiDetailTitle || !kpiDetailText || !kpiDetailList) {
+                    return;
+                }
+
+                kpiCards.forEach(function (card) {
+                    card.classList.toggle('is-active', card.getAttribute('data-panel') === panel);
+                });
+
+                const meta = panelMeta(panel);
+                const matchedCards = cards.filter(function (card) {
+                    return batchMatchesPanel(card, panel);
+                });
+
+                kpiDetailTitle.textContent = meta.title + ' (' + matchedCards.length + ')';
+                kpiDetailText.textContent = meta.text;
+                kpiDetailList.innerHTML = '';
+
+                if (panel === 'archived') {
+                    const item = document.createElement('div');
+                    item.className = 'kpi-detail-item';
+                    item.innerHTML = '<div><strong>إدارة الأرشيف</strong><span>افتح تبويب الأرشيف لاسترجاع الدفعات المؤرشفة.</span></div><a class="mini-action" href="/Admin/Batches?view=archived">فتح الأرشيف</a>';
+                    kpiDetailList.appendChild(item);
+                } else if (matchedCards.length === 0) {
+                    const item = document.createElement('div');
+                    item.className = 'kpi-detail-item';
+                    item.innerHTML = '<div><strong>لا توجد دفعات مطابقة</strong><span>غيّر التبويب أو أعد ضبط الفلاتر.</span></div>';
+                    kpiDetailList.appendChild(item);
+                } else {
+                    matchedCards.slice(0, 24).forEach(function (card) {
+                        const name = card.getAttribute('data-name') || 'دفعة بدون اسم';
+                        const course = card.getAttribute('data-course') || 'غير محدد';
+                        const students = card.getAttribute('data-students') || '0';
+                        const lecturesCount = card.getAttribute('data-lectures-count') || '0';
+                        const lecturesUrl = card.getAttribute('data-lectures-url') || '#';
+                        const createLectureUrl = card.getAttribute('data-create-lecture-url') || '#';
+                        const hasLectures = Number(lecturesCount) > 0;
+                        const actionUrl = hasLectures ? lecturesUrl : createLectureUrl;
+                        const actionText = hasLectures ? 'فتح المحاضرات' : 'إنشاء محاضرة';
+
+                        const item = document.createElement('div');
+                        item.className = 'kpi-detail-item';
+                        item.innerHTML = '<div><strong>' + name + '</strong><span>' + course + ' | ' + students + ' طالب | ' + lecturesCount + ' محاضرة</span></div><a class="mini-action" href="' + actionUrl + '">' + actionText + '</a>';
+                        kpiDetailList.appendChild(item);
+                    });
+                }
+
+                kpiDetailPanel.classList.remove('d-none');
+                kpiDetailPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+
+            if (archiveManagerSection && archiveManagerToggle) {
+                archiveManagerToggle.addEventListener('click', function () {
+                    const isOpen = archiveManagerSection.classList.contains('is-open');
+
+                    if (isOpen) {
+                        archiveManagerSection.classList.remove('is-open');
+                        archiveManagerToggle.setAttribute('aria-expanded', 'false');
+                    } else {
+                        archiveManagerSection.classList.add('is-open');
+                        archiveManagerToggle.setAttribute('aria-expanded', 'true');
+                    }
+                });
+            }
+
+            kpiCards.forEach(function (card) {
+                card.addEventListener('click', function () {
+                    openKpiPanel(card.getAttribute('data-panel') || 'shown');
+                });
+            });
+
+            if (closeKpiDetail) {
+                closeKpiDetail.addEventListener('click', function () {
+                    if (kpiDetailPanel) {
+                        kpiDetailPanel.classList.add('d-none');
+                    }
+
+                    kpiCards.forEach(function (card) {
+                        card.classList.remove('is-active');
+                    });
+                });
+            }
+
+            if (searchInput) {
+                searchInput.addEventListener('input', applyFilters);
+            }
+
+            if (statusFilter) {
+                statusFilter.addEventListener('change', applyFilters);
+            }
+
+            if (genderFilter) {
+                genderFilter.addEventListener('change', applyFilters);
+            }
+
+            if (resetButton) {
+                resetButton.addEventListener('click', function () {
+                    if (searchInput) {
+                        searchInput.value = '';
+                    }
+
+                    if (statusFilter) {
+                        statusFilter.value = '';
+                    }
+
+                    if (genderFilter) {
+                        genderFilter.value = '';
+                    }
+
+                    applyFilters();
+                });
+            }
+
+            applyFilters();
+        });
+    </script>
+}

@@ -1,0 +1,591 @@
+@model QdratNew.ViewModels.Students.StudentAttendanceDashboardVM
+@{
+    ViewData["Title"] = "سجل الحضور والانصراف";
+    var monthlyLabels  = string.Join(",", Model.MonthlyStats.Select(m => $"\"{m.MonthLabel}\""));
+    var monthlyRates   = string.Join(",", Model.MonthlyStats.Select(m => m.Rate.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)));
+    var courseLabels   = string.Join(",", Model.CourseSummaries.Select(c => $"\"{c.CourseName}\""));
+    var coursePresent  = string.Join(",", Model.CourseSummaries.Select(c => c.Attended));
+    var courseAbsent   = string.Join(",", Model.CourseSummaries.Select(c => c.Absent));
+    var filterBatch    = Model.FilterBatchId?.ToString() ?? "";
+    var filterCourse   = Model.FilterCourseId?.ToString() ?? "";
+    var filterMonth    = Model.FilterMonth ?? "";
+}
+
+<style>
+    :root {
+        --clr-primary: #1a7f6e;
+        --clr-primary-light: #e8f7f5;
+        --clr-success: #16a34a;
+        --clr-warning: #d97706;
+        --clr-danger: #dc2626;
+        --clr-info: #0369a1;
+        --clr-late: #b45309;
+        --clr-excused: #6d28d9;
+    }
+
+    /* ── هيدر البطل ── */
+    .att-hero {
+        background: linear-gradient(135deg, var(--clr-primary) 0%, #134e3f 100%);
+        border-radius: 20px;
+        color: #fff;
+        padding: 2rem 2.5rem;
+        position: relative;
+        overflow: hidden;
+    }
+    .att-hero::before {
+        content: '';
+        position: absolute;
+        width: 300px; height: 300px;
+        background: rgba(255,255,255,.06);
+        border-radius: 50%;
+        top: -80px; left: -60px;
+    }
+    .att-hero::after {
+        content: '';
+        position: absolute;
+        width: 200px; height: 200px;
+        background: rgba(255,255,255,.04);
+        border-radius: 50%;
+        bottom: -60px; right: -40px;
+    }
+    .att-hero .rate-ring {
+        width: 110px; height: 110px;
+        border-radius: 50%;
+        background: conic-gradient(rgba(255,255,255,.9) calc(@Model.AttendanceRate * 1%),
+                                   rgba(255,255,255,.15) 0%);
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
+    }
+    .att-hero .rate-ring-inner {
+        width: 84px; height: 84px;
+        border-radius: 50%;
+        background: rgba(0,0,0,.25);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.35rem; font-weight: 700;
+    }
+
+    /* ── بطاقات الإحصاء ── */
+    .stat-card {
+        border-radius: 16px;
+        padding: 1.4rem 1rem;
+        text-align: center;
+        transition: transform .25s, box-shadow .25s;
+        border: none;
+        position: relative;
+        overflow: hidden;
+    }
+    .stat-card:hover { transform: translateY(-4px); box-shadow: 0 10px 30px rgba(0,0,0,.12); }
+    .stat-card .stat-icon {
+        width: 52px; height: 52px;
+        border-radius: 14px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.5rem;
+        margin: 0 auto .75rem;
+    }
+    .stat-card .stat-num { font-size: 2rem; font-weight: 800; line-height: 1; }
+    .stat-card .stat-lbl { font-size: .8rem; opacity: .75; margin-top: .3rem; }
+
+    .card-total   { background: linear-gradient(135deg,#f0fdf9,#d1fae5); color:#065f46; }
+    .card-present { background: linear-gradient(135deg,#f0fdf4,#bbf7d0); color:#15803d; }
+    .card-absent  { background: linear-gradient(135deg,#fef2f2,#fecaca); color:#991b1b; }
+    .card-late    { background: linear-gradient(135deg,#fffbeb,#fde68a); color:#92400e; }
+
+    /* ── قسم AI ── */
+    .ai-section {
+        background: linear-gradient(135deg,#f8faff 0%,#eef2ff 100%);
+        border-radius: 18px;
+        border: 1.5px solid #c7d2fe;
+    }
+    .ai-badge {
+        background: linear-gradient(90deg,#4f46e5,#7c3aed);
+        color:#fff;
+        border-radius: 20px;
+        padding: 4px 14px;
+        font-size: .75rem;
+        font-weight: 600;
+        display: inline-flex; align-items: center; gap: 6px;
+    }
+    .ai-rec-card {
+        border-radius: 14px;
+        border: none;
+        padding: 1rem 1.25rem;
+        border-right: 4px solid;
+        transition: transform .2s;
+    }
+    .ai-rec-card:hover { transform: translateX(-3px); }
+    .ai-rec-card.success { background:#f0fdf4; border-color: var(--clr-success); }
+    .ai-rec-card.warning { background:#fffbeb; border-color: var(--clr-warning); }
+    .ai-rec-card.danger  { background:#fef2f2; border-color: var(--clr-danger); }
+    .ai-rec-card.info    { background:#f0f9ff; border-color: var(--clr-info); }
+
+    /* ── بادجات الحالة ── */
+    .badge-present { background:#dcfce7; color:#15803d; }
+    .badge-absent  { background:#fee2e2; color:#991b1b; }
+    .badge-late    { background:#fef3c7; color:#92400e; }
+    .badge-excused { background:#ede9fe; color:#6d28d9; }
+
+    /* ── فلتر الشريط ── */
+    .filter-bar {
+        background: #fff;
+        border-radius: 14px;
+        padding: 1.1rem 1.5rem;
+        box-shadow: 0 2px 12px rgba(0,0,0,.07);
+    }
+
+    /* ── جدول ── */
+    .att-table thead th {
+        background: var(--clr-primary);
+        color: #fff;
+        font-weight: 600;
+        border: none;
+        padding: .85rem;
+    }
+    .att-table tbody tr { transition: background .15s; }
+    .att-table tbody tr:hover { background: #f0fdf9; }
+    .att-table tbody td { vertical-align: middle; border-color: #e5e7eb; }
+
+    /* ── سلسلة الحضور ── */
+    .streak-card {
+        background: linear-gradient(135deg, #fdf4ff, #fae8ff);
+        border: 1.5px solid #e9d5ff;
+        border-radius: 16px;
+        padding: 1.2rem;
+        text-align: center;
+    }
+    .streak-num { font-size: 2.5rem; font-weight: 900; color: #7c3aed; }
+
+    /* ── progress bar ── */
+    .rate-bar { height: 8px; border-radius: 8px; background:#e5e7eb; overflow:hidden; }
+    .rate-bar-fill { height: 100%; border-radius: 8px; transition: width .6s ease; }
+
+    @@media (max-width: 768px) {
+        .att-hero { padding: 1.2rem; }
+        .att-hero .rate-ring { width: 80px; height: 80px; }
+        .att-hero .rate-ring-inner { width: 60px; height: 60px; font-size: 1rem; }
+    }
+</style>
+
+<div class="container-fluid px-3 px-md-4 py-4" dir="rtl">
+
+    <!-- ═══════════════════ هيدر البطل ═══════════════════ -->
+    <div class="att-hero mb-4">
+        <div class="d-flex flex-wrap align-items-center gap-4 position-relative">
+            <!-- دائرة النسبة -->
+            <div class="rate-ring">
+                <div class="rate-ring-inner">@Model.AttendanceRate%</div>
+            </div>
+            <!-- معلومات الطالب -->
+            <div class="flex-grow-1">
+                <p class="mb-1 opacity-75 small">سجل الحضور والانصراف</p>
+                <h3 class="fw-bold mb-1">@Model.StudentName</h3>
+                @if (!string.IsNullOrEmpty(Model.BatchNames))
+                {
+                    <span class="opacity-75 small"><i class="bi bi-people-fill me-1"></i>@Model.BatchNames</span>
+                }
+            </div>
+            <!-- مؤشر المستوى -->
+            <div class="text-center">
+                <div class="badge fs-6 px-4 py-2 rounded-pill"
+                     style="background:rgba(255,255,255,.2); color:#fff; border:1.5px solid rgba(255,255,255,.35)">
+                    @Model.AttendanceRateLabel
+                </div>
+                <p class="small mt-2 opacity-75 mb-0">@Model.AttendedCount من @Model.TotalLectures محاضرة</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════ كروت الإحصاء ═══════════════════ -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="stat-card card-total shadow-sm h-100">
+                <div class="stat-icon" style="background:rgba(6,95,70,.12)">
+                    <i class="bi bi-calendar3-week-fill" style="color:#065f46"></i>
+                </div>
+                <div class="stat-num">@Model.TotalLectures</div>
+                <div class="stat-lbl">إجمالي المحاضرات</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card card-present shadow-sm h-100">
+                <div class="stat-icon" style="background:rgba(21,128,61,.12)">
+                    <i class="bi bi-check-circle-fill" style="color:#15803d"></i>
+                </div>
+                <div class="stat-num">@Model.AttendedCount</div>
+                <div class="stat-lbl">محاضرات الحضور</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card card-absent shadow-sm h-100">
+                <div class="stat-icon" style="background:rgba(153,27,27,.1)">
+                    <i class="bi bi-x-circle-fill" style="color:#991b1b"></i>
+                </div>
+                <div class="stat-num">@Model.AbsentCount</div>
+                <div class="stat-lbl">محاضرات الغياب</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card card-late shadow-sm h-100">
+                <div class="stat-icon" style="background:rgba(146,64,14,.1)">
+                    <i class="bi bi-clock-history" style="color:#92400e"></i>
+                </div>
+                <div class="stat-num">@Model.LateCount</div>
+                <div class="stat-lbl">حضور متأخر</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+
+        <!-- ═══════════════════ توصيات AI ═══════════════════ -->
+        <div class="col-12 col-lg-7">
+            <div class="ai-section p-3 p-md-4 h-100">
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <span class="ai-badge">
+                        <i class="bi bi-stars"></i> ذكاء اصطناعي
+                    </span>
+                    <h6 class="mb-0 fw-bold text-indigo-900">التوصيات والإرشادات الذكية</h6>
+                </div>
+
+                @if (!Model.AIRecommendations.Any())
+                {
+                    <p class="text-muted text-center py-3">
+                        <i class="bi bi-robot fs-3 d-block mb-2"></i>
+                        لا توجد بيانات كافية لتوليد توصيات.
+                    </p>
+                }
+                else
+                {
+                    <div class="d-flex flex-column gap-3">
+                        @foreach (var rec in Model.AIRecommendations)
+                        {
+                            <div class="ai-rec-card @rec.Type">
+                                <div class="d-flex gap-2 align-items-start">
+                                    <i class="bi @rec.Icon fs-5 flex-shrink-0 mt-1
+                                       @(rec.Type == "success" ? "text-success" :
+                                         rec.Type == "warning" ? "text-warning" :
+                                         rec.Type == "danger"  ? "text-danger" : "text-info")"></i>
+                                    <div>
+                                        <div class="fw-semibold mb-1">@rec.Title</div>
+                                        <p class="mb-0 small opacity-90">@rec.Message</p>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- ═══════════════════ سلسلة الحضور + رسم دائري ═══════════════════ -->
+        <div class="col-12 col-lg-5">
+            <div class="d-flex flex-column gap-3 h-100">
+                <!-- سلسلة الحضور -->
+                <div class="streak-card">
+                    <div class="d-flex justify-content-around">
+                        <div>
+                            <div class="streak-num">@Model.CurrentStreak</div>
+                            <div class="small text-muted">السلسلة الحالية</div>
+                        </div>
+                        <div class="vr mx-2"></div>
+                        <div>
+                            <div class="streak-num" style="color:#1a7f6e">@Model.BestStreak</div>
+                            <div class="small text-muted">أفضل سلسلة</div>
+                        </div>
+                    </div>
+                    <p class="small text-muted mt-2 mb-0">
+                        <i class="bi bi-fire text-warning"></i>
+                        @if (Model.CurrentStreak >= 5)
+                        {
+                            <span>ممتاز! سلسلة حضور نشطة</span>
+                        }
+                        else if (Model.CurrentStreak > 0)
+                        {
+                            <span>استمر في بناء سلسلتك!</span>
+                        }
+                        else
+                        {
+                            <span>ابدأ سلسلتك في المحاضرة القادمة</span>
+                        }
+                    </p>
+                </div>
+
+                <!-- الرسم الدائري -->
+                <div class="card border-0 shadow-sm flex-grow-1" style="border-radius:16px">
+                    <div class="card-body d-flex flex-column align-items-center justify-content-center">
+                        <canvas id="donutChart" style="max-height:180px"></canvas>
+                        <div class="d-flex gap-3 mt-2 small">
+                            <span><span class="badge me-1" style="background:#16a34a">حضور</span>@Model.AttendedCount</span>
+                            <span><span class="badge me-1" style="background:#dc2626">غياب</span>@Model.AbsentCount</span>
+                            @if (Model.LateCount > 0)
+                            {
+                                <span><span class="badge me-1" style="background:#d97706">متأخر</span>@Model.LateCount</span>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════ رسم الاتجاه الشهري ═══════════════════ -->
+    @if (Model.MonthlyStats.Any())
+    {
+        <div class="card border-0 shadow-sm mb-4" style="border-radius:16px">
+            <div class="card-body p-3 p-md-4">
+                <h6 class="fw-bold mb-3">
+                    <i class="bi bi-bar-chart-line-fill text-primary me-2"></i>
+                    الاتجاه الشهري للحضور
+                </h6>
+                <canvas id="monthlyChart" style="max-height:200px"></canvas>
+            </div>
+        </div>
+    }
+
+    <!-- ═══════════════════ ملخص الدورات ═══════════════════ -->
+    @if (Model.CourseSummaries.Any())
+    {
+        <div class="card border-0 shadow-sm mb-4" style="border-radius:16px">
+            <div class="card-body p-3 p-md-4">
+                <h6 class="fw-bold mb-3">
+                    <i class="bi bi-journal-richtext me-2" style="color:var(--clr-primary)"></i>
+                    الحضور حسب الدورة
+                </h6>
+                <div class="row g-3">
+                    @foreach (var c in Model.CourseSummaries)
+                    {
+                        <div class="col-12 col-md-6">
+                            <div class="p-3 rounded-3" style="background:#f8fafc;border:1px solid #e2e8f0">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="fw-semibold small">@c.CourseName</span>
+                                    <span class="badge bg-@c.RateColor">@c.Rate%</span>
+                                </div>
+                                <div class="rate-bar mb-1">
+                                    <div class="rate-bar-fill bg-@c.RateColor" style="width:@c.Rate%"></div>
+                                </div>
+                                <div class="d-flex gap-3 small text-muted">
+                                    <span><i class="bi bi-check2 text-success me-1"></i>@c.Attended حضر</span>
+                                    <span><i class="bi bi-x text-danger me-1"></i>@c.Absent غياب</span>
+                                    @if (c.Late > 0)
+                                    {
+                                        <span><i class="bi bi-clock text-warning me-1"></i>@c.Late متأخر</span>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- ═══════════════════ شريط الفلتر ═══════════════════ -->
+    <div class="filter-bar mb-3">
+        <form method="get" class="row g-2 align-items-end">
+            @if (Model.Batches.Any())
+            {
+                <div class="col-6 col-md-3">
+                    <label class="form-label small fw-semibold mb-1">الدفعة</label>
+                    <select name="batchId" class="form-select form-select-sm"
+                            onchange="this.form.submit()">
+                        <option value="">الكل</option>
+                        @foreach (var b in Model.Batches)
+                        {
+                            <option value="@b.Id" selected="@(filterBatch == b.Id.ToString())">@b.Name</option>
+                        }
+                    </select>
+                </div>
+            }
+            @if (Model.CourseSummaries.Any())
+            {
+                <div class="col-6 col-md-3">
+                    <label class="form-label small fw-semibold mb-1">الدورة</label>
+                    <select name="courseId" class="form-select form-select-sm"
+                            onchange="this.form.submit()">
+                        <option value="">الكل</option>
+                        @foreach (var c in Model.CourseSummaries)
+                        {
+                            <option value="@c.CourseId"
+                                    selected="@(filterCourse == c.CourseId.ToString())">@c.CourseName</option>
+                        }
+                    </select>
+                </div>
+            }
+            @if (Model.MonthlyStats.Any())
+            {
+                <div class="col-6 col-md-3">
+                    <label class="form-label small fw-semibold mb-1">الشهر</label>
+                    <select name="month" class="form-select form-select-sm"
+                            onchange="this.form.submit()">
+                        <option value="">الكل</option>
+                        @foreach (var m in Model.MonthlyStats.OrderByDescending(x => x.Year).ThenByDescending(x => x.Month))
+                        {
+                            var key = $"{m.Year}-{m.Month:D2}";
+                            <option value="@key" selected="@(filterMonth == key)">@m.MonthLabel</option>
+                        }
+                    </select>
+                </div>
+            }
+            <div class="col-6 col-md-3 d-flex gap-2">
+                @if (!string.IsNullOrEmpty(filterBatch) || !string.IsNullOrEmpty(filterCourse) || !string.IsNullOrEmpty(filterMonth))
+                {
+                    <a href="@Url.Action("Index")" class="btn btn-sm btn-outline-secondary w-100">
+                        <i class="bi bi-x-lg me-1"></i> إعادة تعيين
+                    </a>
+                }
+            </div>
+        </form>
+    </div>
+
+    <!-- ═══════════════════ جدول الحضور ═══════════════════ -->
+    <div class="card border-0 shadow-sm" style="border-radius:16px">
+        <div class="card-body p-0">
+            @if (!Model.Records.Any())
+            {
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-calendar-x fs-1 d-block mb-3 opacity-30"></i>
+                    <p class="mb-0">لا توجد سجلات حضور تطابق الفلتر المحدد.</p>
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table att-table mb-0">
+                        <thead>
+                            <tr>
+                                <th style="border-radius:16px 0 0 0">#</th>
+                                <th>المحاضرة</th>
+                                <th>المحور</th>
+                                <th>الدورة</th>
+                                <th>الدفعة</th>
+                                <th>المدرب</th>
+                                <th>التاريخ</th>
+                                <th style="border-radius:0 16px 0 0">الحالة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @{ int idx = 1; }
+                            @foreach (var r in Model.Records)
+                            {
+                                <tr>
+                                    <td class="text-muted small">@(idx++)</td>
+                                    <td class="fw-semibold">@r.LectureTitle</td>
+                                    <td class="text-muted small">@(r.Section ?? "—")</td>
+                                    <td>
+                                        @if (!string.IsNullOrEmpty(r.Course))
+                                        {
+                                            <span class="badge rounded-pill" style="background:#e0f2fe;color:#0369a1">@r.Course</span>
+                                        }
+                                        else { <span class="text-muted small">—</span> }
+                                    </td>
+                                    <td class="text-muted small">@(r.BatchName ?? "—")</td>
+                                    <td class="text-muted small">@(r.InstructorName ?? "—")</td>
+                                    <td>
+                                        <div class="fw-semibold small">@r.FormattedDate</div>
+                                        <div class="text-muted" style="font-size:.72rem">@r.DayName</div>
+                                    </td>
+                                    <td>
+                                        <span class="badge rounded-pill px-3 py-2 @r.StatusBadgeClass">
+                                            <i class="bi @r.StatusIcon me-1"></i>@r.StatusText
+                                        </span>
+                                        @if (!string.IsNullOrWhiteSpace(r.Notes))
+                                        {
+                                            <div class="small text-muted mt-1" title="@r.Notes">
+                                                <i class="bi bi-chat-text me-1"></i>@(r.Notes.Length > 30 ? r.Notes[..30] + "…" : r.Notes)
+                                            </div>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="p-3 text-muted small text-center border-top">
+                    إجمالي @Model.Records.Count سجل — حضور @Model.Records.Count(r => r.IsPresent) |
+                    غياب @Model.Records.Count(r => !r.IsPresent)
+                </div>
+            }
+        </div>
+    </div>
+
+</div>
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+    Chart.defaults.font.family = "'Segoe UI', Tahoma, sans-serif";
+    Chart.defaults.color = '#6b7280';
+
+    // ── الرسم الدائري ──────────────────────────────────────────────
+    const donutCtx = document.getElementById('donutChart');
+    if (donutCtx) {
+        new Chart(donutCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['حضر', 'غياب', 'متأخر'],
+                datasets: [{
+                    data: [@Model.AttendedCount, @Model.AbsentCount, @Model.LateCount],
+                    backgroundColor: ['#16a34a', '#dc2626', '#d97706'],
+                    borderWidth: 2,
+                    borderColor: '#fff',
+                    hoverOffset: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                cutout: '68%',
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => ` ${ctx.label}: ${ctx.raw} محاضرة`
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // ── رسم الاتجاه الشهري ─────────────────────────────────────────
+    const monthlyCtx = document.getElementById('monthlyChart');
+    if (monthlyCtx) {
+        new Chart(monthlyCtx, {
+            type: 'line',
+            data: {
+                labels: [@Html.Raw(monthlyLabels)],
+                datasets: [{
+                    label: 'نسبة الحضور %',
+                    data: [@Html.Raw(monthlyRates)],
+                    borderColor: '#1a7f6e',
+                    backgroundColor: 'rgba(26,127,110,.12)',
+                    borderWidth: 2.5,
+                    fill: true,
+                    tension: 0.4,
+                    pointBackgroundColor: '#1a7f6e',
+                    pointRadius: 5,
+                    pointHoverRadius: 7
+                }]
+            },
+            options: {
+                responsive: true,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => ` نسبة الحضور: ${ctx.raw}%`
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        min: 0, max: 100,
+                        ticks: { callback: v => v + '%' },
+                        grid: { color: '#f1f5f9' }
+                    },
+                    x: { grid: { display: false } }
+                }
+            }
+        });
+    }
+</script>
+}

@@ -1,0 +1,1426 @@
+@model QdratNew.ViewModels.Admin.DecisionLab.DecisionLabIndexViewModel
+@using QdratNew.ViewModels.Admin.DecisionLab
+@{
+    ViewData["Title"] = "مختبر القرار";
+    Layout = "~/Areas/Admin/Views/Shared/_AdminLayout.cshtml";
+
+    var sel = Model.SelectedBatchAnalysis;
+    bool hasSel = sel != null;
+
+    static string RiskCss(double score) =>
+        score >= 70 ? "risk-high" : score >= 50 ? "risk-med" : "risk-low";
+
+    static string RiskLabel(double score) =>
+        score >= 70 ? "خطر عالي" : score >= 50 ? "متوسط" : "جيد";
+
+    static string ScoreColor(double score) =>
+        score >= 70 ? "var(--c-success)" : score >= 50 ? "var(--c-warn)" : "var(--c-danger)";
+}
+@{
+    string MetricClass(double v) => v >= 70 ? "good" : v >= 50 ? "warn" : "danger";
+    string MetricFillColor(double v) => v >= 70 ? "var(--c-success)" : v >= 50 ? "var(--c-warn)" : "var(--c-danger)";
+    string MetricTextColor(double v) => v >= 70 ? "var(--c-success)" : v >= 50 ? "var(--c-warn)" : "var(--c-danger)";
+}
+
+@{
+    var riskPillClass = hasSel
+        ? sel!.RiskScore >= 70 ? "high" : sel.RiskScore >= 50 ? "medium" : "low"
+        : string.Empty;
+}
+@section Styles {
+<style>
+/* ─── Design Tokens ───────────────────────────────────────── */
+:root {
+    --c-primary:   #4f46e5;
+    --c-primary-l: #ede9fe;
+    --c-danger:    #ef4444;
+    --c-danger-l:  #fef2f2;
+    --c-warn:      #f59e0b;
+    --c-warn-l:    #fffbeb;
+    --c-success:   #10b981;
+    --c-success-l: #ecfdf5;
+    --c-ink:       #0f172a;
+    --c-ink-2:     #334155;
+    --c-muted:     #64748b;
+    --c-subtle:    #94a3b8;
+    --c-border:    #e2e8f0;
+    --c-surface:   #f8fafc;
+    --c-card:      #ffffff;
+    --radius-lg:   14px;
+    --radius-md:   10px;
+    --radius-sm:   6px;
+    --shadow-sm:   0 1px 3px rgba(15,23,42,.06), 0 1px 2px rgba(15,23,42,.04);
+    --shadow-md:   0 4px 16px rgba(15,23,42,.08), 0 1px 4px rgba(15,23,42,.04);
+    --transition:  all .18s ease;
+}
+
+/* ─── Page Shell ───────────────────────────────────────────── */
+.dl-page {
+    background: var(--c-surface);
+    min-height: calc(100vh - 60px);
+    font-family: inherit;
+    direction: rtl;
+}
+
+/* ─── Command Bar ──────────────────────────────────────────── */
+.dl-cmd {
+    background: var(--c-card);
+    border-bottom: 1px solid var(--c-border);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    box-shadow: var(--shadow-sm);
+}
+.dl-cmd-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+.dl-cmd-icon {
+    width: 38px; height: 38px;
+    background: var(--c-primary-l);
+    border-radius: var(--radius-sm);
+    display: grid; place-items: center;
+    color: var(--c-primary);
+    font-size: 17px;
+}
+.dl-cmd-title {
+    font-size: 16px;
+    font-weight: 900;
+    color: var(--c-ink);
+    margin: 0;
+    line-height: 1;
+}
+.dl-cmd-sub {
+    font-size: 11px;
+    color: var(--c-subtle);
+    margin-top: 2px;
+}
+.dl-cmd-kpis {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+.dl-kpi {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 4px 16px;
+    border-radius: var(--radius-sm);
+    border-right: 1px solid var(--c-border);
+    min-width: 70px;
+}
+.dl-kpi:first-child { border-right: none; }
+.dl-kpi-val {
+    font-size: 18px;
+    font-weight: 900;
+    line-height: 1;
+}
+.dl-kpi-lbl {
+    font-size: 10px;
+    color: var(--c-muted);
+    font-weight: 600;
+    margin-top: 2px;
+    white-space: nowrap;
+}
+.dl-cmd-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+/* ─── Alerts ───────────────────────────────────────────────── */
+.dl-alert {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0 24px 0;
+}
+.dl-alert-success { background: var(--c-success-l); color: #065f46; border: 1px solid #6ee7b7; }
+.dl-alert-danger  { background: var(--c-danger-l);  color: #991b1b; border: 1px solid #fca5a5; }
+.dl-alert-close {
+    margin-right: auto;
+    background: none; border: none;
+    color: inherit; cursor: pointer;
+    opacity: .5; font-size: 14px;
+}
+.dl-alert-close:hover { opacity: 1; }
+
+/* ─── Main Layout ──────────────────────────────────────────── */
+.dl-body {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    height: calc(100vh - 121px);
+    overflow: hidden;
+}
+@@media (max-width: 900px) {
+    .dl-body { grid-template-columns: 1fr; height: auto; }
+}
+
+/* ─── Sidebar ──────────────────────────────────────────────── */
+.dl-sidebar {
+    background: var(--c-card);
+    border-left: 1px solid var(--c-border);
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+}
+.dl-sidebar::-webkit-scrollbar { width: 4px; }
+.dl-sidebar::-webkit-scrollbar-track { background: transparent; }
+.dl-sidebar::-webkit-scrollbar-thumb { background: var(--c-border); border-radius: 4px; }
+
+.dl-sidebar-head {
+    padding: 14px 16px 10px;
+    position: sticky;
+    top: 0;
+    background: var(--c-card);
+    z-index: 2;
+    border-bottom: 1px solid var(--c-border);
+}
+.dl-sidebar-title {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--c-muted);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+}
+.dl-sidebar-count {
+    font-size: 11px;
+    color: var(--c-subtle);
+    font-weight: 600;
+}
+.dl-sidebar-list { padding: 8px; flex: 1; }
+
+/* ─── Batch Card ───────────────────────────────────────────── */
+.dl-batch {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    transition: var(--transition);
+    margin-bottom: 4px;
+    border: 1.5px solid transparent;
+    position: relative;
+    overflow: hidden;
+}
+.dl-batch::before {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0; right: 0;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    transition: var(--transition);
+}
+.dl-batch:hover {
+    background: var(--c-surface);
+    border-color: var(--c-border);
+}
+.dl-batch.is-active {
+    background: var(--c-primary-l);
+    border-color: var(--c-primary);
+}
+.dl-batch.is-active::before { background: var(--c-primary); }
+
+.dl-batch-risk-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.dl-batch-info { flex: 1; min-width: 0; }
+.dl-batch-name {
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--c-ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.dl-batch.is-active .dl-batch-name { color: var(--c-primary); }
+.dl-batch-course {
+    font-size: 10.5px;
+    color: var(--c-muted);
+    margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.dl-batch-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 3px;
+    flex-shrink: 0;
+}
+.dl-batch-score {
+    font-size: 13px;
+    font-weight: 900;
+}
+.dl-batch-students {
+    font-size: 10px;
+    color: var(--c-subtle);
+}
+
+/* ─── Risk helpers ─────────────────────────────────────────── */
+.risk-high  { color: var(--c-danger);  }
+.risk-med   { color: var(--c-warn);    }
+.risk-low   { color: var(--c-success); }
+.dot-high   { background: var(--c-danger);  }
+.dot-med    { background: var(--c-warn);    }
+.dot-low    { background: var(--c-success); }
+
+/* ─── Main Panel ───────────────────────────────────────────── */
+.dl-main {
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: var(--c-surface);
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+.dl-main::-webkit-scrollbar { width: 5px; }
+.dl-main::-webkit-scrollbar-thumb { background: var(--c-border); border-radius: 4px; }
+
+/* ─── Empty state ──────────────────────────────────────────── */
+.dl-empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 60px 40px;
+    gap: 14px;
+}
+.dl-empty-icon {
+    width: 72px; height: 72px;
+    background: var(--c-primary-l);
+    border-radius: 20px;
+    display: grid; place-items: center;
+    font-size: 30px;
+    color: var(--c-primary);
+    margin-bottom: 4px;
+}
+.dl-empty-title { font-size: 17px; font-weight: 800; color: var(--c-ink); }
+.dl-empty-sub   { font-size: 13px; color: var(--c-muted); max-width: 280px; line-height: 1.6; }
+
+/* ─── Card ─────────────────────────────────────────────────── */
+.dl-card {
+    background: var(--c-card);
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+}
+.dl-card-head {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--c-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.dl-card-title {
+    font-size: 13.5px;
+    font-weight: 800;
+    color: var(--c-ink);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: 0;
+}
+.dl-card-body { padding: 18px; }
+
+/* ─── Batch Header Card ────────────────────────────────────── */
+.dl-batch-hero-name {
+    font-size: 19px;
+    font-weight: 900;
+    color: var(--c-ink);
+    line-height: 1.2;
+    margin: 0 0 4px;
+}
+.dl-batch-hero-sub {
+    font-size: 12px;
+    color: var(--c-muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.dl-sep { color: var(--c-border); }
+
+/* ─── Risk Score pill inside header ──────────────────────────── */
+.dl-risk-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 900;
+    border: 1.5px solid;
+    white-space: nowrap;
+}
+.dl-risk-pill.high   { background: var(--c-danger-l);  color: var(--c-danger);  border-color: #fca5a5; }
+.dl-risk-pill.medium { background: var(--c-warn-l);    color: #92400e;           border-color: #fde68a; }
+.dl-risk-pill.low    { background: var(--c-success-l); color: #065f46;           border-color: #6ee7b7; }
+
+/* ─── Back to batches button (mobile) ───────────────────────── */
+.dl-back-btn {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--c-primary);
+    text-decoration: none;
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    border: 1.5px solid var(--c-primary);
+    background: var(--c-primary-l);
+    margin-bottom: 12px;
+    width: fit-content;
+}
+@@media (max-width: 900px) { .dl-back-btn { display: flex; } }
+
+/* ─── Metric Grid ──────────────────────────────────────────── */
+.dl-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+@@media (max-width: 600px) { .dl-metrics { grid-template-columns: 1fr 1fr; } }
+
+.dl-metric {
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-md);
+    padding: 14px 12px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+.dl-metric::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 3px;
+}
+.dl-metric.good::after   { background: var(--c-success); }
+.dl-metric.warn::after   { background: var(--c-warn); }
+.dl-metric.danger::after { background: var(--c-danger); }
+
+.dl-metric-val {
+    font-size: 22px;
+    font-weight: 900;
+    line-height: 1;
+}
+.dl-metric-lbl {
+    font-size: 10.5px;
+    color: var(--c-muted);
+    margin-top: 5px;
+    font-weight: 600;
+}
+.dl-metric-bar {
+    height: 4px;
+    background: var(--c-border);
+    border-radius: 2px;
+    margin-top: 8px;
+    overflow: hidden;
+}
+.dl-metric-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width .6s ease;
+}
+
+/* ─── Decision Box ─────────────────────────────────────────── */
+.dl-decision-box {
+    display: flex;
+    gap: 14px;
+    padding: 16px;
+    border-radius: var(--radius-md);
+    border: 1.5px solid;
+    align-items: flex-start;
+}
+.dl-decision-box.high   { background: var(--c-danger-l);  border-color: #fca5a5; }
+.dl-decision-box.medium { background: var(--c-warn-l);    border-color: #fde68a; }
+.dl-decision-box.low    { background: var(--c-success-l); border-color: #6ee7b7; }
+
+.dl-decision-box-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+.dl-decision-title {
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--c-ink);
+    margin-bottom: 4px;
+}
+.dl-decision-text {
+    font-size: 12px;
+    color: var(--c-ink-2);
+    line-height: 1.6;
+}
+
+/* ─── Weak Lessons Table ───────────────────────────────────── */
+.dl-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+}
+.dl-table th {
+    padding: 8px 12px;
+    color: var(--c-muted);
+    font-weight: 700;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    border-bottom: 1.5px solid var(--c-border);
+    text-align: right;
+    background: var(--c-surface);
+}
+.dl-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--c-border);
+    vertical-align: middle;
+}
+.dl-table tr:last-child td { border-bottom: none; }
+.dl-table tr:hover td { background: var(--c-surface); }
+.dl-table .lesson-title { font-weight: 700; color: var(--c-ink); }
+.dl-table .lesson-section { font-size: 11px; color: var(--c-subtle); margin-top: 2px; }
+
+/* ─── Error bar ─────────────────────────────────────────────── */
+.dl-err-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.dl-err-bar-track {
+    flex: 1;
+    height: 6px;
+    background: var(--c-border);
+    border-radius: 3px;
+    overflow: hidden;
+    min-width: 60px;
+}
+.dl-err-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+}
+.dl-err-pct { font-weight: 800; font-size: 12px; min-width: 34px; text-align: left; }
+
+/* ─── Student pill ──────────────────────────────────────────── */
+.dl-student-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--c-muted);
+    font-weight: 600;
+}
+
+/* ─── Decision Queue ────────────────────────────────────────── */
+.dl-queue-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 12px;
+}
+.dl-queue-item {
+    background: var(--c-card);
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: var(--transition);
+    box-shadow: var(--shadow-sm);
+}
+.dl-queue-item:hover {
+    border-color: var(--c-primary);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+}
+.dl-queue-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+}
+.dl-queue-title {
+    font-size: 12.5px;
+    font-weight: 800;
+    color: var(--c-ink);
+    line-height: 1.3;
+}
+.dl-queue-batch {
+    font-size: 11px;
+    color: var(--c-muted);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.dl-queue-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 2px;
+}
+
+/* ─── Badge ─────────────────────────────────────────────────── */
+.dl-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+    border: 1px solid;
+}
+.dl-badge-pending  { background: var(--c-warn-l);    color: #92400e;  border-color: #fde68a; }
+.dl-badge-approved { background: var(--c-success-l); color: #065f46;  border-color: #6ee7b7; }
+.dl-badge-tasks    { background: var(--c-primary-l); color: var(--c-primary); border-color: #c4b5fd; }
+.dl-badge-danger   { background: var(--c-danger-l);  color: #991b1b;  border-color: #fca5a5; }
+
+/* ─── CTA Button ────────────────────────────────────────────── */
+.dl-cta {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 14px 24px;
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    font-weight: 800;
+    text-decoration: none;
+    transition: var(--transition);
+    border: none;
+    cursor: pointer;
+    width: 100%;
+}
+.dl-cta-primary {
+    background: var(--c-primary);
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(79,70,229,.3);
+}
+.dl-cta-primary:hover {
+    background: #4338ca;
+    color: #fff;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(79,70,229,.4);
+}
+
+/* ─── Section heading ───────────────────────────────────────── */
+.dl-section-label {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--c-subtle);
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.dl-divider {
+    flex: 1;
+    height: 1px;
+    background: var(--c-border);
+}
+
+/* ─── Pending count ribbon ──────────────────────────────────── */
+.dl-ribbon {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 18px;
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border: 1px solid #fde68a;
+    border-radius: var(--radius-md);
+    margin-bottom: 2px;
+}
+.dl-ribbon-val { font-size: 24px; font-weight: 900; color: #92400e; line-height: 1; }
+.dl-ribbon-lbl { font-size: 12px; font-weight: 700; color: #78350f; }
+.dl-ribbon-sub { font-size: 11px; color: #92400e; }
+
+/* ─── Task summary strip ────────────────────────────────────── */
+.dl-task-strip {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 18px;
+    background: var(--c-success-l);
+    border: 1px solid #6ee7b7;
+    border-radius: var(--radius-md);
+}
+.dl-task-val { font-size: 24px; font-weight: 900; color: #065f46; line-height: 1; }
+.dl-task-lbl { font-size: 12px; font-weight: 700; color: #064e3b; }
+.dl-task-sub { font-size: 11px; color: #059669; }
+
+/* ─── Utility ───────────────────────────────────────────────── */
+.gap-col { display: flex; flex-direction: column; gap: 18px; }
+.btn-sm-dl {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: 1.5px solid;
+    transition: var(--transition);
+    white-space: nowrap;
+}
+.btn-sm-primary {
+    color: var(--c-primary);
+    border-color: var(--c-primary);
+    background: var(--c-primary-l);
+}
+.btn-sm-primary:hover {
+    background: var(--c-primary);
+    color: #fff;
+}
+.btn-sm-ghost {
+    color: var(--c-muted);
+    border-color: var(--c-border);
+    background: transparent;
+}
+.btn-sm-ghost:hover { background: var(--c-surface); color: var(--c-ink); }
+
+
+        /* ─── Fixed Batch Summary Header ───────────────────────────── */
+
+        .dl-batch-summary-card {
+            overflow: visible;
+        }
+
+        .dl-batch-summary-head {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 92px 132px;
+            align-items: center;
+            gap: 18px;
+            padding: 14px 18px;
+            min-height: 86px;
+            direction: rtl;
+        }
+
+        .dl-batch-summary-info {
+            min-width: 0;
+            text-align: right;
+        }
+
+            .dl-batch-summary-info .dl-batch-hero-name {
+                margin: 0 0 7px 0;
+                font-size: 20px;
+                font-weight: 900;
+                color: var(--c-ink);
+                line-height: 1.25;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .dl-batch-summary-info .dl-batch-hero-sub {
+                display: flex;
+                align-items: center;
+                justify-content: flex-start;
+                flex-wrap: wrap;
+                gap: 7px;
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--c-muted);
+            }
+
+                .dl-batch-summary-info .dl-batch-hero-sub i {
+                    color: var(--c-primary);
+                    margin-left: 4px;
+                }
+
+        .dl-batch-summary-risk {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            min-width: 92px;
+        }
+
+        .dl-risk-circle {
+            width: 58px;
+            height: 58px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #ffffff;
+            font-size: 14px;
+            font-weight: 900;
+            line-height: 1;
+            border: 7px solid currentColor;
+        }
+
+            .dl-risk-circle.high {
+                color: var(--c-danger);
+            }
+
+            .dl-risk-circle.medium {
+                color: var(--c-warn);
+            }
+
+            .dl-risk-circle.low {
+                color: var(--c-success);
+            }
+
+        .dl-risk-label {
+            font-size: 11px;
+            font-weight: 800;
+            color: var(--c-muted);
+            line-height: 1;
+            white-space: nowrap;
+        }
+
+        .dl-batch-summary-actions {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            justify-content: center;
+            gap: 7px;
+            min-width: 132px;
+        }
+
+            .dl-batch-summary-actions .btn-sm-dl {
+                width: 100%;
+                height: 31px;
+                justify-content: center;
+            }
+
+        /* منع تأثير dl-risk-pill القديم على كارت الهيدر */
+        .dl-batch-summary-card .dl-risk-pill {
+            display: none;
+        }
+
+        @@media (max-width: 1100px) {
+            .dl-batch-summary-head
+
+        {
+            grid-template-columns: minmax(0, 1fr) 86px 124px;
+            gap: 14px;
+        }
+
+        .dl-batch-summary-actions {
+            min-width: 124px;
+        }
+
+        }
+
+        @@media (max-width: 768px) {
+            .dl-batch-summary-head
+
+        {
+            grid-template-columns: 1fr;
+            align-items: stretch;
+            gap: 14px;
+        }
+
+        .dl-batch-summary-risk {
+            flex-direction: row;
+            justify-content: flex-start;
+            align-items: center;
+        }
+
+        .dl-batch-summary-actions {
+            min-width: 0;
+            flex-direction: row;
+        }
+
+            .dl-batch-summary-actions .btn-sm-dl {
+                flex: 1;
+            }
+
+        .dl-batch-summary-info .dl-batch-hero-name {
+            white-space: normal;
+        }
+
+        }
+
+        @@media (max-width: 520px) {
+            .dl-batch-summary-actions
+
+        {
+            flex-direction: column;
+        }
+
+        .dl-batch-summary-head {
+            padding: 13px;
+        }
+
+        .dl-risk-circle {
+            width: 52px;
+            height: 52px;
+            font-size: 13px;
+            border-width: 6px;
+        }
+
+        }</style>
+}
+
+<div class="dl-page">
+
+    @* ══════════════════════════════════════════════════════════════════════════
+       COMMAND BAR
+       ══════════════════════════════════════════════════════════════════════════ *@
+    <div class="dl-cmd">
+        <div class="dl-cmd-brand">
+            <div class="dl-cmd-icon"><i class="fas fa-brain"></i></div>
+            <div>
+                <div class="dl-cmd-title">مختبر القرار</div>
+                <div class="dl-cmd-sub">
+                    آخر تحديث @Model.LastUpdatedAt.ToString("hh:mm tt") &nbsp;·&nbsp; @Model.GeneratedAt.ToString("yyyy/MM/dd")
+                </div>
+            </div>
+        </div>
+
+        <div class="dl-cmd-kpis">
+            <div class="dl-kpi">
+                <div class="dl-kpi-val" style="color:var(--c-primary);">@Model.TotalStudentsCount</div>
+                <div class="dl-kpi-lbl">إجمالي الطلاب</div>
+            </div>
+            <div class="dl-kpi">
+                <div class="dl-kpi-val" style="color:var(--c-danger);">@Model.TotalAtRiskCount</div>
+                <div class="dl-kpi-lbl">طلاب في خطر</div>
+            </div>
+            <div class="dl-kpi">
+                @{ var avgColor = Model.OverallAvgScorePct >= 70 ? "var(--c-success)" : Model.OverallAvgScorePct >= 50 ? "var(--c-warn)" : "var(--c-danger)"; }
+                <div class="dl-kpi-val" style="color:@avgColor;">
+                    @Model.OverallAvgScorePct.ToString("0")<small style="font-size:.7em;font-weight:700;">%</small>
+                </div>
+                <div class="dl-kpi-lbl">متوسط الأداء</div>
+            </div>
+            <div class="dl-kpi">
+                <div class="dl-kpi-val" style="color:var(--c-warn);">@Model.PendingRecommendationsCount</div>
+                <div class="dl-kpi-lbl">قرارات معلقة</div>
+            </div>
+            <div class="dl-kpi">
+                <div class="dl-kpi-val" style="color:var(--c-success);">@Model.ActiveInterventionTasksCount</div>
+                <div class="dl-kpi-lbl">مهام نشطة</div>
+            </div>
+        </div>
+
+        <div class="dl-cmd-actions">
+            <a asp-area="Admin"
+               asp-controller="Analytics"
+               asp-action="AdvancedDashboard"
+               asp-route-batchId="@Model.SelectedBatchId"
+               class="btn-sm-dl btn-sm-ghost">
+                <i class="bi bi-graph-up"></i> Analytics
+            </a>
+            <a asp-action="SavedRecommendations" class="btn-sm-dl btn-sm-ghost">
+                <i class="bi bi-archive"></i> القرارات المحفوظة
+            </a>
+            <a asp-action="InterventionTasks" class="btn-sm-dl btn-sm-ghost">
+                <i class="bi bi-list-check"></i> المهام
+            </a>
+            @if (Model.Batches?.Any() == true)
+            {
+                <a asp-action="RecommendationPreview"
+                   asp-route-batchId="@(Model.SelectedBatchId ?? Model.Batches.First().BatchId)"
+                   class="btn-sm-dl btn-sm-primary">
+                    <i class="bi bi-plus-circle-fill"></i> توصية جديدة
+                </a>
+            }
+        </div>
+    </div>
+
+    @* Alerts *@
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="dl-alert dl-alert-success py-2 mt-3 mx-4" role="alert" style="margin-bottom:0;">
+            <i class="bi bi-check-circle-fill"></i>
+            <span>@TempData["SuccessMessage"]</span>
+            <button class="dl-alert-close" onclick="this.closest('.dl-alert').remove()">✕</button>
+        </div>
+    }
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="dl-alert dl-alert-danger py-2 mt-3 mx-4" role="alert" style="margin-bottom:0;">
+            <i class="bi bi-exclamation-circle-fill"></i>
+            <span>@TempData["ErrorMessage"]</span>
+            <button class="dl-alert-close" onclick="this.closest('.dl-alert').remove()">✕</button>
+        </div>
+    }
+
+    @* ══════════════════════════════════════════════════════════════════════════
+       BODY: SIDEBAR + MAIN
+       ══════════════════════════════════════════════════════════════════════════ *@
+    <div class="dl-body">
+
+        @* ─── SIDEBAR: قائمة الدفعات ──────────────────────────────────── *@
+        <div class="dl-sidebar">
+            <div class="dl-sidebar-head">
+                <div class="d-flex align-items-center justify-content-between">
+                    <span class="dl-sidebar-title"><i class="bi bi-layers me-1"></i> الدفعات</span>
+                    <span class="dl-sidebar-count">@(Model.Batches?.Count ?? 0) دفعة</span>
+                </div>
+            </div>
+
+            <div class="dl-sidebar-list">
+                @if (Model.Batches == null || !Model.Batches.Any())
+                {
+                    <div class="text-center py-5">
+                        <div style="font-size:2rem;opacity:.25;color:var(--c-muted);margin-bottom:8px;">
+                            <i class="bi bi-layers"></i>
+                        </div>
+                        <div style="font-size:12px;color:var(--c-subtle);font-weight:600;">لا توجد دفعات نشطة</div>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var batch in Model.Batches.OrderByDescending(b => b.RiskScore))
+                    {
+                        var rCss = RiskCss(batch.RiskScore);
+                        var isActive = Model.SelectedBatchId == batch.BatchId;
+                        <a asp-action="Index"
+                           asp-route-batchId="@batch.BatchId"
+                           asp-route-curriculumId="@Model.SelectedCurriculumId"
+                           class="dl-batch @(isActive ? "is-active" : "")">
+
+                            <div class="dl-batch-risk-dot dot-@(rCss.Replace("risk-",""))"></div>
+
+                            <div class="dl-batch-info">
+                                <div class="dl-batch-name">@batch.BatchName</div>
+                                <div class="dl-batch-course">
+                                    <i class="bi bi-book"></i> @batch.CourseName
+                                </div>
+                            </div>
+
+                            <div class="dl-batch-meta">
+                                <span class="dl-batch-score @rCss">
+                                    @batch.RiskScore.ToString("0")%
+                                </span>
+                                <span class="dl-batch-students">
+                                    <i class="bi bi-people-fill"></i> @batch.ActiveStudentsCount
+                                </span>
+                            </div>
+                        </a>
+                    }
+                }
+            </div>
+        </div>
+
+        @* ─── MAIN PANEL ────────────────────────────────────────────────── *@
+        <div class="dl-main">
+
+            @if (!hasSel)
+            {
+                @* ── Empty state ── *@
+                <div class="dl-empty-state">
+                    <div class="dl-empty-icon"><i class="bi bi-hand-index-thumb"></i></div>
+                    <div class="dl-empty-title">اختر دفعة من القائمة</div>
+                    <div class="dl-empty-sub">
+                        اختر أي دفعة من القائمة على اليمين لعرض تحليلها الكامل واتخاذ القرار المناسب
+                    </div>
+                    @if (Model.PendingRecommendationsCount > 0 || Model.ActiveInterventionTasksCount > 0)
+                    {
+                        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
+                            @if (Model.PendingRecommendationsCount > 0)
+                            {
+                                <a asp-action="SavedRecommendations" class="btn-sm-dl btn-sm-primary">
+                                    <i class="bi bi-clock-history"></i>
+                                    @Model.PendingRecommendationsCount قرار معلق
+                                </a>
+                            }
+                            @if (Model.ActiveInterventionTasksCount > 0)
+                            {
+                                <a asp-action="InterventionTasks" class="btn-sm-dl btn-sm-ghost">
+                                    <i class="bi bi-list-check"></i>
+                                    @Model.ActiveInterventionTasksCount مهمة نشطة
+                                </a>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                @* زر الرجوع للدفعات (ظاهر على الموبايل فقط) *@
+                <a asp-action="Index" class="dl-back-btn">
+                    <i class="bi bi-arrow-right"></i> عرض كل الدفعات
+                </a>
+
+                @* ══════════════════════════════════════════════════════════
+                   BATCH HEADER CARD — عنوان الدفعة في header واضح
+                   ══════════════════════════════════════════════════════════ *@
+
+                <div class="dl-card dl-batch-summary-card">
+                    <div class="dl-batch-summary-head">
+
+                        @* بيانات الدفعة *@
+                        <div class="dl-batch-summary-info">
+                            <h2 class="dl-batch-hero-name">@sel.BatchName</h2>
+
+                            <div class="dl-batch-hero-sub">
+                                <span>
+                                    <i class="bi bi-book"></i>
+                                    @sel.CourseName
+                                </span>
+
+                                @if (!string.IsNullOrWhiteSpace(sel.CurriculumTitle))
+                                {
+                                    <span class="dl-sep">|</span>
+                                    <span>
+                                        <i class="bi bi-collection"></i>
+                                        @sel.CurriculumTitle
+                                    </span>
+                                }
+
+                                <span class="dl-sep">|</span>
+
+                                <span>
+                                    <i class="bi bi-people-fill"></i>
+                                    @sel.ActiveStudentsCount طالب
+                                </span>
+
+                                <span class="dl-sep">|</span>
+
+                                <span>
+                                    <i class="bi bi-layers"></i>
+                                    @sel.CompletedLessonsCount درس مكتمل
+                                </span>
+                            </div>
+                        </div>
+
+                        @* درجة الخطر *@
+                        <div class="dl-batch-summary-risk">
+                            <div class="dl-risk-circle @riskPillClass">
+                                @sel.RiskScore.ToString("0")%
+                            </div>
+                            <div class="dl-risk-label">
+                                @sel.RiskLevel
+                            </div>
+                        </div>
+
+                        @* أزرار الإجراءات *@
+                        <div class="dl-batch-summary-actions">
+                            <a asp-action="BatchAnalysis"
+                               asp-route-batchId="@sel.BatchId"
+                               asp-route-curriculumId="@sel.CurriculumId"
+                               class="btn-sm-dl btn-sm-ghost">
+                                <i class="bi bi-zoom-in"></i>
+                                التحليل الكامل
+                            </a>
+
+                            <a asp-action="RecommendationPreview"
+                               asp-route-batchId="@sel.BatchId"
+                               asp-route-curriculumId="@sel.CurriculumId"
+                               class="btn-sm-dl btn-sm-primary">
+                                <i class="bi bi-lightning-fill"></i>
+                                اتخاذ قرار
+                            </a>
+                        </div>
+
+                    </div>
+                </div>
+                @* ══════════════════════════════════════════════════════════
+                   METRICS ROW
+                   ══════════════════════════════════════════════════════════ *@
+              
+                <div class="dl-metrics">
+                    <div class="dl-metric @MetricClass(sel.AverageExamScore)">
+                        <div class="dl-metric-val" style="color:@MetricTextColor(sel.AverageExamScore);">
+                            @sel.AverageExamScore.ToString("0.0")<small style="font-size:.6em;">%</small>
+                        </div>
+                        <div class="dl-metric-lbl">متوسط الاختبارات</div>
+                        <div class="dl-metric-bar">
+                            <div class="dl-metric-bar-fill"
+                                 style="width:@sel.AverageExamScore.ToString("0")%;background:@MetricFillColor(sel.AverageExamScore);"></div>
+                        </div>
+                    </div>
+                    <div class="dl-metric @MetricClass(sel.AverageHomeworkScore)">
+                        <div class="dl-metric-val" style="color:@MetricTextColor(sel.AverageHomeworkScore);">
+                            @sel.AverageHomeworkScore.ToString("0.0")<small style="font-size:.6em;">%</small>
+                        </div>
+                        <div class="dl-metric-lbl">متوسط الواجبات</div>
+                        <div class="dl-metric-bar">
+                            <div class="dl-metric-bar-fill"
+                                 style="width:@sel.AverageHomeworkScore.ToString("0")%;background:@MetricFillColor(sel.AverageHomeworkScore);"></div>
+                        </div>
+                    </div>
+                    <div class="dl-metric @MetricClass(sel.AttendancePercent)">
+                        <div class="dl-metric-val" style="color:@MetricTextColor(sel.AttendancePercent);">
+                            @sel.AttendancePercent.ToString("0.0")<small style="font-size:.6em;">%</small>
+                        </div>
+                        <div class="dl-metric-lbl">نسبة الحضور</div>
+                        <div class="dl-metric-bar">
+                            <div class="dl-metric-bar-fill"
+                                 style="width:@sel.AttendancePercent.ToString("0")%;background:@MetricFillColor(sel.AttendancePercent);"></div>
+                        </div>
+                    </div>
+                    <div class="dl-metric">
+                        <div class="dl-metric-val" style="color:var(--c-danger);">@sel.WeakLessonsCount</div>
+                        <div class="dl-metric-lbl">دروس ضعيفة</div>
+                    </div>
+                    <div class="dl-metric">
+                        <div class="dl-metric-val" style="color:var(--c-warn);">@sel.HighRiskQuestionsCount</div>
+                        <div class="dl-metric-lbl">أسئلة عالية الخطأ</div>
+                    </div>
+                    <div class="dl-metric">
+                        <div class="dl-metric-val" style="color:var(--c-primary);">@sel.TotalQuestionAttempts</div>
+                        <div class="dl-metric-lbl">إجمالي المحاولات</div>
+                    </div>
+                </div>
+
+                @* ══════════════════════════════════════════════════════════
+                   DECISION RECOMMENDATION BOX
+                   ══════════════════════════════════════════════════════════ *@
+                @if (!string.IsNullOrEmpty(sel.DecisionSummary) || !string.IsNullOrEmpty(sel.DecisionMessage))
+                {
+                    var boxClass = sel.RiskScore >= 70 ? "high" : sel.RiskScore >= 50 ? "medium" : "low";
+                    var boxIcon  = sel.RiskScore >= 70 ? "bi-exclamation-triangle-fill" : sel.RiskScore >= 50 ? "bi-info-circle-fill" : "bi-check-circle-fill";
+                    var boxColor = sel.RiskScore >= 70 ? "var(--c-danger)" : sel.RiskScore >= 50 ? "var(--c-warn)" : "var(--c-success)";
+                    <div class="dl-decision-box @boxClass">
+                        <i class="bi @boxIcon dl-decision-box-icon" style="color:@boxColor;"></i>
+                        <div>
+                            <div class="dl-decision-title">توصية النظام</div>
+                            <div class="dl-decision-text">
+                                @(!string.IsNullOrEmpty(sel.DecisionSummary) ? sel.DecisionSummary : sel.DecisionMessage)
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @* ══════════════════════════════════════════════════════════
+                   WEAK LESSONS
+                   ══════════════════════════════════════════════════════════ *@
+                @if (sel.WeakLessons.Any())
+                {
+                    <div class="dl-card">
+                        <div class="dl-card-head">
+                            <h3 class="dl-card-title">
+                                <i class="bi bi-exclamation-triangle-fill text-warning"></i>
+                                الدروس الضعيفة
+                            </h3>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="dl-badge dl-badge-danger">
+                                    @sel.WeakLessons.Count درس
+                                </span>
+                                <a asp-action="BatchAnalysis"
+                                   asp-route-batchId="@sel.BatchId"
+                                   asp-route-curriculumId="@sel.CurriculumId"
+                                   class="btn-sm-dl btn-sm-ghost" style="font-size:10.5px;">
+                                    عرض الكل <i class="bi bi-arrow-left"></i>
+                                </a>
+                            </div>
+                        </div>
+                        <div style="overflow-x:auto;">
+                            <table class="dl-table">
+                                <thead>
+                                    <tr>
+                                        <th style="min-width:180px;">الدرس / الوحدة</th>
+                                        <th style="width:200px;">نسبة الخطأ</th>
+                                        <th style="width:90px;text-align:center;">طلاب متأثرون</th>
+                                        <th style="width:80px;text-align:center;">المحاولات</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var lesson in sel.WeakLessons.OrderByDescending(l => l.ErrorPercentage).Take(6))
+                                    {
+                                        var lFill = lesson.ErrorPercentage >= 70 ? "var(--c-danger)"
+                                                   : lesson.ErrorPercentage >= 50 ? "var(--c-warn)"
+                                                   : "var(--c-success)";
+                                        <tr>
+                                            <td>
+                                                <div class="lesson-title">@lesson.LessonTitle</div>
+                                                @if (!string.IsNullOrEmpty(lesson.SectionTitle))
+                                                {
+                                                    <div class="lesson-section">@lesson.SectionTitle</div>
+                                                }
+                                            </td>
+                                            <td>
+                                                <div class="dl-err-bar">
+                                                    <div class="dl-err-bar-track">
+                                                        <div class="dl-err-bar-fill"
+                                                             style="width:@lesson.ErrorPercentage.ToString("0")%;background:@lFill;"></div>
+                                                    </div>
+                                                    <span class="dl-err-pct" style="color:@lFill;">
+                                                        @lesson.ErrorPercentage.ToString("0")%
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td style="text-align:center;">
+                                                <span class="dl-student-pill">
+                                                    <i class="bi bi-person-fill"></i>
+                                                    @lesson.AffectedStudentsCount
+                                                </span>
+                                            </td>
+                                            <td style="text-align:center;color:var(--c-muted);font-size:11.5px;font-weight:600;">
+                                                @lesson.TotalAttempts
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                }
+
+                @* ══════════════════════════════════════════════════════════
+                   CTA: GENERATE RECOMMENDATION
+                   ══════════════════════════════════════════════════════════ *@
+                <a asp-action="RecommendationPreview"
+                   asp-route-batchId="@sel.BatchId"
+                   asp-route-curriculumId="@sel.CurriculumId"
+                   asp-route-sourceArea="Admin"
+                   asp-route-sourceController="DecisionLab"
+                   asp-route-sourceAction="Index"
+                   class="dl-cta dl-cta-primary">
+                    <i class="fas fa-brain"></i>
+                    عرض التوصية الكاملة واتخاذ القرار
+                    <i class="bi bi-arrow-left-short" style="font-size:18px;"></i>
+                </a>
+
+                @* ══════════════════════════════════════════════════════════
+                   DECISION QUEUE (only when there are pending items)
+                   ══════════════════════════════════════════════════════════ *@
+                @if ((Model.RecentRecommendations?.Any() == true) || Model.ActiveInterventionTasksCount > 0)
+                {
+                    <div style="padding-top:4px;">
+                        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+                            <span class="dl-section-label">
+                                <i class="bi bi-clock-history"></i>
+                                قائمة الانتظار
+                            </span>
+                            <div class="dl-divider"></div>
+                            <a asp-action="SavedRecommendations"
+                               style="font-size:11px;color:var(--c-primary);text-decoration:none;font-weight:700;white-space:nowrap;">
+                                عرض الكل ←
+                            </a>
+                        </div>
+
+                        @if (Model.PendingRecommendationsCount > 0)
+                        {
+                            <div class="dl-ribbon mb-3">
+                                <div>
+                                    <div class="dl-ribbon-val">@Model.PendingRecommendationsCount</div>
+                                </div>
+                                <div>
+                                    <div class="dl-ribbon-lbl">قرار معلق بانتظار الاعتماد</div>
+                                    <div class="dl-ribbon-sub">يحتاج مراجعة وموافقة قبل التنفيذ</div>
+                                </div>
+                                <div style="margin-right:auto;">
+                                    <a asp-action="SavedRecommendations" class="btn-sm-dl btn-sm-primary">
+                                        <i class="bi bi-arrow-left"></i> مراجعة الآن
+                                    </a>
+                                </div>
+                            </div>
+                        }
+
+                        @if (Model.ActiveInterventionTasksCount > 0)
+                        {
+                            <div class="dl-task-strip mb-3">
+                                <div>
+                                    <div class="dl-task-val">@Model.ActiveInterventionTasksCount</div>
+                                </div>
+                                <div>
+                                    <div class="dl-task-lbl">مهمة تدخل قيد التنفيذ</div>
+                                    <div class="dl-task-sub">مهام موزعة على المدربين</div>
+                                </div>
+                                <div style="margin-right:auto;">
+                                    <a asp-action="InterventionTasks" class="btn-sm-dl btn-sm-ghost">
+                                        <i class="bi bi-list-check"></i> عرض المهام
+                                    </a>
+                                </div>
+                            </div>
+                        }
+
+                        @if (Model.RecentRecommendations?.Any() == true)
+                        {
+                            <div class="dl-queue-grid">
+                                @foreach (var rec in Model.RecentRecommendations.Take(6))
+                                {
+                                    <div class="dl-queue-item">
+                                        <div class="dl-queue-header">
+                                            <div class="dl-queue-title">@rec.Title</div>
+                                            <span class="dl-badge @(rec.Status == "Approved" ? "dl-badge-approved" : "dl-badge-pending")" style="flex-shrink:0;">
+                                                @(rec.Status == "Approved" ? "معتمد" : "معلق")
+                                            </span>
+                                        </div>
+                                        <div class="dl-queue-batch">
+                                            <i class="bi bi-layers"></i>
+                                            @rec.BatchName
+                                        </div>
+                                        <div class="dl-queue-foot">
+                                            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                                                <span class="dl-badge dl-badge-tasks">
+                                                    <i class="bi bi-list-check"></i> @rec.TasksCount مهمة
+                                                </span>
+                                                <span style="font-size:10.5px;color:var(--c-subtle);">
+                                                    @rec.CreatedAt.ToString("MM/dd")
+                                                </span>
+                                            </div>
+                                            <a asp-action="RecommendationDetails"
+                                               asp-route-id="@rec.Id"
+                                               class="btn-sm-dl btn-sm-primary"
+                                               style="font-size:10.5px;">
+                                                راجع <i class="bi bi-arrow-left"></i>
+                                            </a>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+
+            } @* end hasSel *@
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    'use strict';
+
+    // Animate metric bars on load
+    requestAnimationFrame(function () {
+        document.querySelectorAll('.dl-metric-bar-fill').forEach(function (el) {
+            var w = el.style.width;
+            el.style.width = '0';
+            setTimeout(function () { el.style.width = w; }, 80);
+        });
+    });
+
+    // Animate error bars
+    requestAnimationFrame(function () {
+        document.querySelectorAll('.dl-err-bar-fill').forEach(function (el) {
+            var w = el.style.width;
+            el.style.width = '0';
+            setTimeout(function () { el.style.width = w; }, 120);
+        });
+    });
+}());
+</script>
+}

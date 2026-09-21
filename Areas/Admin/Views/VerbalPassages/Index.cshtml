@@ -1,0 +1,1323 @@
+﻿@using QdratNew.Enums
+@model IEnumerable<QdratNew.Entities.VerbalPassage>
+
+@{
+    ViewData["Title"] = "إدارة القطع اللفظية";
+
+    var totalCount = Model.Count();
+    var textCount = Model.Count(x => x.Type == PassageType.Text);
+    var audioCount = Model.Count(x => x.Type == PassageType.Audio);
+    var videoCount = Model.Count(x => x.Type == PassageType.Video);
+    var mediaCount = Model.Count(x => !string.IsNullOrEmpty(x.MediaUrl));
+}
+
+@functions {
+    string HtmlPreview(string html, int length)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return "";
+
+        var text = System.Text.RegularExpressions.Regex
+            .Replace(html, "<.*?>", string.Empty)
+            .Trim();
+
+        if (text.Length <= length)
+            return text;
+
+        return text.Substring(0, length) + "…";
+    }
+
+    string PassageTypeText(PassageType type)
+    {
+        if (type == PassageType.Audio)
+            return "صوت";
+
+        if (type == PassageType.Video)
+            return "فيديو";
+
+        return "نص";
+    }
+}
+
+@Html.AntiForgeryToken()
+
+@section Styles {
+    <link href="https://cdn.datatables.net/1.13.5/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+
+    <style>
+        :root {
+            --ink: #0D1B2A;
+            --ink-2: #2C3E50;
+            --ink-3: #5A6A7A;
+            --ink-4: #8FA0B0;
+            --ink-5: #C8D5E0;
+            --canvas: #F3F6FA;
+            --surface: #FFFFFF;
+            --surface-2: #F8FAFC;
+            --surface-3: #EEF2F7;
+            --border: #DDE4EC;
+            --blue: #1B5EAE;
+            --blue-2: #2471D0;
+            --blue-bg: #E8F1FB;
+            --blue-dark: #103E7A;
+            --emerald: #0D7A5B;
+            --emerald-bg: #E4F5EE;
+            --amber: #985D09;
+            --amber-bg: #FDF0D8;
+            --rose: #BF1030;
+            --rose-bg: #FDEAEE;
+            --violet: #5535B5;
+            --violet-bg: #EDE8F9;
+            --r-sm: 6px;
+            --r-md: 10px;
+            --r-lg: 14px;
+            --r-xl: 20px;
+            --sh-xs: 0 1px 3px rgba(13,27,42,.06);
+            --sh-sm: 0 2px 8px rgba(13,27,42,.08);
+            --sh-md: 0 4px 18px rgba(13,27,42,.10);
+            --ease: cubic-bezier(.25,.46,.45,.94);
+        }
+
+        .passages-page {
+            background: var(--canvas);
+            min-height: 100vh;
+            padding: 32px 28px 124px;
+            direction: rtl;
+            font-family: 'Cairo';
+            color: var(--ink-2);
+        }
+
+        .passages-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-bottom: 28px;
+        }
+
+        .passages-brand {
+            display: flex;
+            align-items: center;
+            gap: 13px;
+        }
+
+        .passages-brand-icon {
+            width: 46px;
+            height: 46px;
+            background: var(--blue);
+            border-radius: var(--r-lg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 18px;
+            box-shadow: 0 4px 14px rgba(27,94,174,.28);
+        }
+
+        .passages-brand-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--ink);
+            line-height: 1.15;
+        }
+
+        .passages-brand-sub {
+            font-size: 14px;
+            color: var(--ink-4);
+            margin-top: 2px;
+            line-height: 1.8;
+        }
+
+        .top-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn-main-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            background: var(--blue);
+            color: #fff;
+            border: none;
+            border-radius: var(--r-md);
+            padding: 10px 20px;
+            font-size: 16px;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            box-shadow: 0 3px 10px rgba(27,94,174,.28);
+            transition: background .16s var(--ease), transform .14s, box-shadow .16s;
+        }
+
+            .btn-main-action:hover {
+                background: var(--blue-dark);
+                color: #fff;
+                transform: translateY(-2px);
+                box-shadow: 0 6px 18px rgba(27,94,174,.32);
+            }
+
+        .passages-kpis {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 13px;
+            margin-bottom: 24px;
+        }
+
+        .kpi-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            padding: 18px 19px;
+            display: flex;
+            align-items: center;
+            gap: 13px;
+            box-shadow: var(--sh-xs);
+            transition: transform .2s var(--ease), box-shadow .2s, border-color .2s;
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+            .kpi-card::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                right: 0;
+                width: 4px;
+                height: 100%;
+                border-radius: 0 var(--r-xl) var(--r-xl) 0;
+            }
+
+            .kpi-card:hover {
+                transform: translateY(-3px);
+                box-shadow: var(--sh-sm);
+            }
+
+            .kpi-card.active-card {
+                border-color: var(--blue);
+                box-shadow: 0 0 0 3px rgba(27,94,174,.10), var(--sh-sm);
+            }
+
+        .kpi-blue::after {
+            background: var(--blue);
+        }
+
+        .kpi-emerald::after {
+            background: var(--emerald);
+        }
+
+        .kpi-amber::after {
+            background: var(--amber);
+        }
+
+        .kpi-violet::after {
+            background: var(--violet);
+        }
+
+        .kpi-rose::after {
+            background: var(--rose);
+        }
+
+        .kpi-ico {
+            width: 42px;
+            height: 42px;
+            border-radius: var(--r-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .ico-blue {
+            background: var(--blue-bg);
+            color: var(--blue);
+        }
+
+        .ico-emerald {
+            background: var(--emerald-bg);
+            color: var(--emerald);
+        }
+
+        .ico-amber {
+            background: var(--amber-bg);
+            color: var(--amber);
+        }
+
+        .ico-violet {
+            background: var(--violet-bg);
+            color: var(--violet);
+        }
+
+        .ico-rose {
+            background: var(--rose-bg);
+            color: var(--rose);
+        }
+
+        .kpi-label {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--ink-4);
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            margin-bottom: 3px;
+        }
+
+        .kpi-val {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--ink);
+            line-height: 1;
+        }
+
+        .passages-table-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            overflow: visible;
+            box-shadow: var(--sh-sm);
+            margin-bottom: 24px;
+        }
+
+        .passages-table-topbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 11px 16px;
+            border-bottom: 1px solid var(--surface-3);
+            flex-wrap: wrap;
+        }
+
+        .table-section-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 16px;
+            font-weight: 800;
+            color: var(--ink);
+            margin-left: 10px;
+        }
+
+            .table-section-title i {
+                color: var(--blue);
+            }
+
+        .passages-table-search-wrap {
+            position: relative;
+            flex: 1;
+            min-width: 220px;
+            max-width: 390px;
+        }
+
+            .passages-table-search-wrap i {
+                position: absolute;
+                right: 11px;
+                top: 50%;
+                transform: translateY(-50%);
+                color: var(--ink-4);
+                font-size: 15px;
+                pointer-events: none;
+            }
+
+            .passages-table-search-wrap input {
+                width: 100%;
+                padding: 7px 32px 7px 12px;
+                border: 1px solid var(--border);
+                border-radius: var(--r-md);
+                font-size: 16px;
+                background: var(--surface-2);
+                color: var(--ink);
+                transition: border-color .15s, box-shadow .15s;
+            }
+
+                .passages-table-search-wrap input:focus {
+                    outline: none;
+                    border-color: var(--blue-2);
+                    box-shadow: 0 0 0 3px rgba(36,113,208,.1);
+                    background: var(--surface);
+                }
+
+        .passages-count-badge {
+            margin-right: auto;
+            font-size: 14px;
+            color: var(--ink-4);
+        }
+
+            .passages-count-badge strong {
+                color: var(--blue);
+                font-weight: 700;
+            }
+
+        .table-responsive-safe {
+            width: 100%;
+            overflow-x: auto;
+            overflow-y: visible;
+        }
+
+        #passagesTable {
+            width: 100% !important;
+            border-collapse: collapse;
+        }
+
+            #passagesTable thead th {
+                background: var(--surface-2) !important;
+                padding: 11px 15px !important;
+                font-size: 13px !important;
+                font-weight: 700 !important;
+                color: var(--ink-4) !important;
+                text-transform: uppercase;
+                letter-spacing: .05em;
+                white-space: nowrap;
+                border: none !important;
+                text-align: center;
+            }
+
+            #passagesTable tbody tr {
+                border-bottom: 1px solid var(--surface-3);
+                transition: background .1s;
+                cursor: pointer;
+            }
+
+                #passagesTable tbody tr:last-child {
+                    border-bottom: none;
+                }
+
+                #passagesTable tbody tr:hover {
+                    background: #F5F8FD;
+                }
+
+                #passagesTable tbody tr.row-selected {
+                    background: #E8F1FB !important;
+                }
+
+                    #passagesTable tbody tr.row-selected td {
+                        background: #E8F1FB !important;
+                    }
+
+            #passagesTable td {
+                padding: 11px 15px !important;
+                vertical-align: middle !important;
+                font-size: 16px !important;
+                color: var(--ink-2);
+                border: none !important;
+                text-align: center;
+            }
+
+        .select-col {
+            width: 46px !important;
+            min-width: 46px !important;
+            max-width: 46px !important;
+            text-align: center !important;
+        }
+
+        .passage-row-checkbox,
+        #passagesSelectAll {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--blue);
+            cursor: pointer;
+        }
+
+        .passage-title-cell {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-align: right;
+            min-width: 280px;
+        }
+
+        .passage-avatar {
+            width: 33px;
+            height: 33px;
+            border-radius: 50%;
+            background: var(--blue-bg);
+            color: var(--blue);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .passage-item-name {
+            font-weight: 700;
+            color: var(--ink);
+            font-size: 16px;
+            line-height: 1.7;
+        }
+
+        .type-chip,
+        .date-chip,
+        .media-chip,
+        .content-preview {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 11px;
+            border-radius: 30px;
+            font-size: 14px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .type-text {
+            background: var(--surface-3);
+            color: var(--ink-3);
+        }
+
+        .type-audio {
+            background: var(--blue-bg);
+            color: var(--blue);
+        }
+
+        .type-video {
+            background: var(--amber-bg);
+            color: var(--amber);
+        }
+
+        .media-chip {
+            background: var(--emerald-bg);
+            color: var(--emerald);
+        }
+
+        .media-empty-chip {
+            background: var(--surface-3);
+            color: var(--ink-4);
+        }
+
+        .date-chip {
+            background: var(--surface-3);
+            color: var(--ink-3);
+            direction: ltr;
+        }
+
+        .content-preview {
+            background: var(--surface-2);
+            color: var(--ink-3);
+            max-width: 520px;
+            white-space: normal;
+            text-align: right;
+            line-height: 1.7;
+            border-radius: var(--r-md);
+        }
+
+        .media-preview {
+            width: 160px;
+            max-width: 160px;
+        }
+
+        .dataTables_wrapper {
+            direction: rtl;
+            overflow: visible;
+        }
+
+            .dataTables_wrapper .dataTables_filter {
+                display: none;
+            }
+
+            .dataTables_wrapper .dataTables_length,
+            .dataTables_wrapper .dataTables_info {
+                padding: 9px 16px;
+                font-size: 14px;
+                color: var(--ink-4);
+            }
+
+            .dataTables_wrapper .dataTables_paginate {
+                padding: 9px 16px;
+            }
+
+                .dataTables_wrapper .dataTables_paginate .paginate_button {
+                    border-radius: var(--r-sm) !important;
+                    font-size: 14px !important;
+                    padding: 4px 10px !important;
+                    border: 1px solid var(--border) !important;
+                    margin: 0 2px !important;
+                    color: var(--ink-3) !important;
+                }
+
+                    .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+                    .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
+                        background: var(--blue) !important;
+                        border-color: var(--blue) !important;
+                        color: #fff !important;
+                    }
+
+                    .dataTables_wrapper .dataTables_paginate .paginate_button:hover:not(.current):not(.disabled) {
+                        background: var(--blue-bg) !important;
+                        border-color: #B6D3F4 !important;
+                        color: var(--blue) !important;
+                    }
+
+            .dataTables_wrapper .dataTables_length select {
+                border: 1px solid var(--border);
+                border-radius: var(--r-sm);
+                padding: 3px 8px;
+                font-size: 14px;
+                color: var(--ink);
+            }
+
+        div.dataTables_wrapper div.dataTables_paginate,
+        div.dataTables_wrapper div.dataTables_info,
+        div.dataTables_wrapper div.dataTables_length {
+            border-top: 1px solid var(--surface-3);
+            background: var(--surface-2);
+        }
+
+        .passages-empty {
+            text-align: center;
+            padding: 56px 16px;
+            color: var(--ink-4);
+        }
+
+            .passages-empty i {
+                font-size: 18px;
+                display: block;
+                margin-bottom: 12px;
+                color: var(--ink-5);
+            }
+
+        .passages-empty-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--ink-3);
+        }
+
+        .passages-empty-sub {
+            font-size: 14px;
+            margin-top: 4px;
+        }
+
+        .passages-bulk-footer {
+            position: fixed;
+            right: 50%;
+            bottom: 18px;
+            transform: translateX(50%);
+            z-index: 1050;
+            width: min(920px, calc(100% - 28px));
+            background: #0D1B2A;
+            color: #ffffff;
+            border: 1px solid rgba(255,255,255,.14);
+            border-radius: 16px;
+            box-shadow: 0 18px 45px rgba(13,27,42,.30);
+            padding: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+            .passages-bulk-footer.is-hidden {
+                display: none;
+            }
+
+        .bulk-summary {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: auto;
+            font-size: 14px;
+            font-weight: 800;
+            min-width: 165px;
+        }
+
+        .bulk-count {
+            min-width: 30px;
+            height: 30px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--blue);
+            color: #ffffff;
+            font-weight: 900;
+        }
+
+        .bulk-btn {
+            border: 1px solid rgba(255,255,255,.14);
+            border-radius: 11px;
+            color: #ffffff;
+            font-size: 13px;
+            font-weight: 800;
+            padding: 8px 13px;
+            background: rgba(255,255,255,.08);
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            transition: var(--ease) .15s;
+            cursor: pointer;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+
+            .bulk-btn:hover {
+                background: rgba(255,255,255,.16);
+                color: #ffffff;
+                text-decoration: none;
+                transform: translateY(-1px);
+            }
+
+        .bulk-btn-view {
+            background: rgba(27,94,174,.95);
+            border-color: transparent;
+        }
+
+        .bulk-btn-edit {
+            background: rgba(152,93,9,.22);
+            border-color: rgba(152,93,9,.35);
+            color: #FDE68A;
+        }
+
+        .bulk-btn-delete {
+            background: rgba(191,16,48,.22);
+            border-color: rgba(191,16,48,.35);
+            color: #FECACA;
+        }
+
+        .bulk-clear {
+            width: 34px;
+            height: 34px;
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,.18);
+            background: rgba(255,255,255,.08);
+            color: #ffffff;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: var(--ease) .15s;
+        }
+
+            .bulk-clear:hover {
+                background: rgba(255,255,255,.16);
+            }
+
+        .single-only.d-none {
+            display: none !important;
+        }
+
+        @@media (max-width: 1100px) {
+            .passages-kpis {
+                grid-template-columns: repeat(3, 1fr);
+            }
+
+            .bulk-summary {
+                width: 100%;
+                margin-left: 0;
+                justify-content: center;
+            }
+        }
+
+        @@media (max-width: 768px) {
+            .passages-page {
+                padding: 22px 14px 190px;
+            }
+
+            .passages-kpis {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .top-actions {
+                width: 100%;
+            }
+
+            .btn-main-action {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .passages-table-topbar {
+                align-items: stretch;
+            }
+
+            .passages-table-search-wrap {
+                max-width: 100%;
+                width: 100%;
+            }
+
+            .passages-count-badge {
+                margin-right: 0;
+            }
+
+            .passages-bulk-footer {
+                bottom: 12px;
+                align-items: stretch;
+            }
+
+            .bulk-btn {
+                flex: 1 1 auto;
+                justify-content: center;
+            }
+        }
+
+        @@media (max-width: 480px) {
+            .passages-kpis {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+}
+
+<div class="passages-page">
+
+    <div class="passages-topbar">
+        <div class="passages-brand">
+            <div class="passages-brand-icon">
+                <i class="fas fa-book-open"></i>
+            </div>
+
+            <div>
+                <div class="passages-brand-title">إدارة القطع اللفظية</div>
+                <div class="passages-brand-sub">
+                    إدارة النصوص والمقاطع الصوتية والمرئية المستخدمة في أسئلة الفهم اللفظي.
+                </div>
+            </div>
+        </div>
+
+        <div class="top-actions">
+            <a asp-action="Create" class="btn-main-action">
+                <i class="fas fa-plus"></i>
+                إضافة قطعة جديدة
+            </a>
+        </div>
+    </div>
+
+    <div class="passages-kpis">
+        <div class="kpi-card kpi-blue active-card" data-filter="all">
+            <div class="kpi-ico ico-blue">
+                <i class="fas fa-layer-group"></i>
+            </div>
+            <div>
+                <div class="kpi-label">الكل</div>
+                <div class="kpi-val">@totalCount</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-violet" data-filter="text">
+            <div class="kpi-ico ico-violet">
+                <i class="fas fa-file-lines"></i>
+            </div>
+            <div>
+                <div class="kpi-label">نص</div>
+                <div class="kpi-val">@textCount</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-blue" data-filter="audio">
+            <div class="kpi-ico ico-blue">
+                <i class="fas fa-headphones"></i>
+            </div>
+            <div>
+                <div class="kpi-label">صوت</div>
+                <div class="kpi-val">@audioCount</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-amber" data-filter="video">
+            <div class="kpi-ico ico-amber">
+                <i class="fas fa-video"></i>
+            </div>
+            <div>
+                <div class="kpi-label">فيديو</div>
+                <div class="kpi-val">@videoCount</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-emerald" data-filter="media">
+            <div class="kpi-ico ico-emerald">
+                <i class="fas fa-photo-film"></i>
+            </div>
+            <div>
+                <div class="kpi-label">تحتوي ميديا</div>
+                <div class="kpi-val">@mediaCount</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="passages-table-card">
+        <div class="passages-table-topbar">
+            <div class="table-section-title">
+                <i class="fas fa-table-list"></i>
+                قائمة القطع اللفظية
+            </div>
+
+            <div class="passages-table-search-wrap">
+                <i class="fas fa-search"></i>
+                <input type="text"
+                       id="passagesSearch"
+                       placeholder="بحث في العنوان أو النوع أو المحتوى..." />
+            </div>
+
+            <div class="passages-count-badge">
+                عدد القطع: <strong>@totalCount</strong>
+            </div>
+        </div>
+
+        <div class="table-responsive-safe">
+            <table id="passagesTable" class="table w-100">
+                <thead>
+                    <tr>
+                        <th class="select-col">
+                            <input type="checkbox"
+                                   id="passagesSelectAll"
+                                   aria-label="تحديد كل القطع في الصفحة الحالية" />
+                        </th>
+                        <th>العنوان</th>
+                        <th>النوع</th>
+                        <th>المحتوى</th>
+                        <th>الميديا</th>
+                        <th>التاريخ</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    @foreach (var item in Model)
+                    {
+                        var typeText = PassageTypeText(item.Type);
+                        var contentPreview = HtmlPreview(item.Content, 120);
+                        var createdAtText = item.CreatedAt.ToString("yyyy/MM/dd");
+
+                        <tr>
+                            <td class="select-col">
+                                <input type="checkbox"
+                                       class="passage-row-checkbox"
+                                       value="@item.Id"
+                                       data-title="@item.Title"
+                                       data-type="@typeText"
+                                       data-content="@contentPreview"
+                                       data-has-media="@(!string.IsNullOrEmpty(item.MediaUrl) ? "نعم" : "لا")"
+                                       data-created-at="@createdAtText"
+                                       aria-label="تحديد @item.Title" />
+                            </td>
+
+                            <td>
+                                <div class="passage-title-cell">
+                                    <div class="passage-avatar">
+                                        <i class="fas fa-book-open"></i>
+                                    </div>
+                                    <div class="passage-item-name">@item.Title</div>
+                                </div>
+                            </td>
+
+                            <td>
+                                @if (item.Type == PassageType.Audio)
+                                {
+                                    <span class="type-chip type-audio">
+                                        <i class="fas fa-headphones"></i>
+                                        صوت
+                                    </span>
+                                }
+                                else if (item.Type == PassageType.Video)
+                                {
+                                    <span class="type-chip type-video">
+                                        <i class="fas fa-video"></i>
+                                        فيديو
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="type-chip type-text">
+                                        <i class="fas fa-file-lines"></i>
+                                        نص
+                                    </span>
+                                }
+                            </td>
+
+                            <td class="text-start">
+                                <span class="content-preview">
+                                    @HtmlPreview(item.Content, 120)
+                                </span>
+                            </td>
+
+                            <td>
+                                @if (!string.IsNullOrEmpty(item.MediaUrl))
+                                {
+                                    if (item.Type == PassageType.Audio)
+                                    {
+                                        <audio controls class="media-preview">
+                                            <source src="@item.MediaUrl">
+                                        </audio>
+                                    }
+                                    else
+                                    {
+                                        <video controls class="media-preview">
+                                            <source src="@item.MediaUrl">
+                                        </video>
+                                    }
+                                }
+                                else
+                                {
+                                    <span class="media-chip media-empty-chip">
+                                        لا يوجد
+                                    </span>
+                                }
+                            </td>
+
+                            <td>
+                                <span class="date-chip">
+                                    @createdAtText
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (!Model.Any())
+        {
+            <div class="passages-empty">
+                <i class="fas fa-folder-open"></i>
+                <div class="passages-empty-title">لا توجد قطع لفظية حتى الآن</div>
+                <div class="passages-empty-sub">ابدأ بإضافة قطعة لفظية جديدة من زر الإضافة أعلى الصفحة.</div>
+            </div>
+        }
+    </div>
+
+    <div class="passages-bulk-footer is-hidden" id="passagesBulkFooter">
+        <div class="bulk-summary">
+            <span class="bulk-count" id="passagesSelectedCount">0</span>
+            <span>قطعة محددة</span>
+        </div>
+
+        <button type="button"
+                class="bulk-btn bulk-btn-view single-only"
+                onclick="openSelectedLinkedQuestions()">
+            <i class="fas fa-eye"></i>
+            الأسئلة المرتبطة
+        </button>
+
+        <button type="button"
+                class="bulk-btn bulk-btn-edit single-only"
+                onclick="editSelectedPassage()">
+            <i class="fas fa-pen"></i>
+            تعديل
+        </button>
+
+        <button type="button"
+                class="bulk-btn bulk-btn-delete single-only"
+                onclick="deleteSelectedPassage()">
+            <i class="fas fa-trash"></i>
+            حذف
+        </button>
+
+        <button type="button"
+                class="bulk-btn"
+                onclick="exportSelectedPassages()">
+            <i class="fas fa-download"></i>
+            تصدير المحدد
+        </button>
+
+        <button type="button"
+                class="bulk-clear"
+                onclick="clearPassagesSelection()"
+                aria-label="إلغاء التحديد">
+            <i class="fas fa-xmark"></i>
+        </button>
+    </div>
+
+    <form id="deletePassageForm" method="post" style="display:none;">
+        @Html.AntiForgeryToken()
+    </form>
+
+</div>
+
+@section Scripts {
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.5/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.5/js/dataTables.bootstrap5.min.js"></script>
+
+    <script>
+        let table;
+        const selectedPassagesMap = new Map();
+
+        const linkedQuestionsUrlTemplate = '@Url.Action("LinkedQuestions", new { id = "__id__" })';
+        const editUrlTemplate = '@Url.Action("Edit", new { id = "__id__" })';
+        const deleteUrlTemplate = '@Url.Action("Delete", new { id = "__id__" })';
+
+        function buildActionUrl(template, id) {
+            return template.replace('__id__', encodeURIComponent(id));
+        }
+
+        function getSelectedPassagesArray() {
+            return Array.from(selectedPassagesMap.values());
+        }
+
+        function updatePassagesBulkFooter() {
+            const selected = getSelectedPassagesArray();
+            const footer = document.getElementById('passagesBulkFooter');
+            const count = document.getElementById('passagesSelectedCount');
+            const selectAll = document.getElementById('passagesSelectAll');
+            const singleOnlyButtons = document.querySelectorAll('.single-only');
+
+            if (footer) {
+                footer.classList.toggle('is-hidden', selected.length === 0);
+            }
+
+            if (count) {
+                count.textContent = selected.length;
+            }
+
+            singleOnlyButtons.forEach(function (btn) {
+                btn.classList.toggle('d-none', selected.length !== 1);
+            });
+
+            const pageCheckboxes = Array.from(document.querySelectorAll('.passage-row-checkbox'));
+
+            if (selectAll) {
+                const checkedOnPage = pageCheckboxes.filter(function (cb) {
+                    return cb.checked;
+                }).length;
+
+                selectAll.checked = pageCheckboxes.length > 0 && checkedOnPage === pageCheckboxes.length;
+                selectAll.indeterminate = checkedOnPage > 0 && checkedOnPage < pageCheckboxes.length;
+            }
+        }
+
+        function syncPassageRowSelectionStyles() {
+            document.querySelectorAll('#passagesTable tbody tr').forEach(function (tr) {
+                const cb = tr.querySelector('.passage-row-checkbox');
+                tr.classList.toggle('row-selected', !!cb && cb.checked);
+            });
+        }
+
+        function setPassageSelectedFromCheckbox(cb) {
+            if (!cb) {
+                return;
+            }
+
+            const passageId = cb.value;
+
+            if (!passageId) {
+                return;
+            }
+
+            if (cb.checked) {
+                selectedPassagesMap.set(passageId, {
+                    id: passageId,
+                    title: cb.dataset.title || '',
+                    type: cb.dataset.type || '',
+                    content: cb.dataset.content || '',
+                    hasMedia: cb.dataset.hasMedia || '',
+                    createdAt: cb.dataset.createdAt || ''
+                });
+            } else {
+                selectedPassagesMap.delete(passageId);
+            }
+
+            syncPassageRowSelectionStyles();
+            updatePassagesBulkFooter();
+        }
+
+        function clearPassagesSelection() {
+            selectedPassagesMap.clear();
+
+            document.querySelectorAll('.passage-row-checkbox').forEach(function (cb) {
+                cb.checked = false;
+            });
+
+            const selectAll = document.getElementById('passagesSelectAll');
+            if (selectAll) {
+                selectAll.checked = false;
+                selectAll.indeterminate = false;
+            }
+
+            syncPassageRowSelectionStyles();
+            updatePassagesBulkFooter();
+        }
+
+        function getSingleSelectedPassage() {
+            const selected = getSelectedPassagesArray();
+
+            if (selected.length !== 1) {
+                alert('اختر قطعة واحدة فقط لتنفيذ هذا الإجراء.');
+                return null;
+            }
+
+            return selected[0];
+        }
+
+        function openSelectedLinkedQuestions() {
+            const selected = getSingleSelectedPassage();
+
+            if (!selected) {
+                return;
+            }
+
+            window.location.href = buildActionUrl(linkedQuestionsUrlTemplate, selected.id);
+        }
+
+        function editSelectedPassage() {
+            const selected = getSingleSelectedPassage();
+
+            if (!selected) {
+                return;
+            }
+
+            window.location.href = buildActionUrl(editUrlTemplate, selected.id);
+        }
+
+        function deleteSelectedPassage() {
+            const selected = getSingleSelectedPassage();
+
+            if (!selected) {
+                return;
+            }
+
+            const confirmed = confirm('تأكيد حذف القطعة: ' + (selected.title || 'هذه القطعة') + '؟');
+
+            if (!confirmed) {
+                return;
+            }
+
+            const form = document.getElementById('deletePassageForm');
+
+            if (!form) {
+                alert('نموذج الحذف غير موجود في الصفحة.');
+                return;
+            }
+
+            form.action = buildActionUrl(deleteUrlTemplate, selected.id);
+            form.submit();
+        }
+
+        function exportSelectedPassages() {
+            const selected = getSelectedPassagesArray();
+
+            if (!selected.length) {
+                alert('اختر قطعة واحدة على الأقل للتصدير.');
+                return;
+            }
+
+            const csvRows = [[
+                'العنوان',
+                'النوع',
+                'المحتوى',
+                'تحتوي ميديا',
+                'التاريخ'
+            ]];
+
+            selected.forEach(function (item) {
+                csvRows.push([
+                    item.title || '',
+                    item.type || '',
+                    item.content || '',
+                    item.hasMedia || '',
+                    item.createdAt || ''
+                ]);
+            });
+
+            const csv = '\uFEFF' + csvRows.map(function (items) {
+                return items.map(function (item) {
+                    return '"' + String(item || '').replace(/"/g, '""') + '"';
+                }).join(',');
+            }).join('\r\n');
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+
+            link.href = url;
+            link.download = 'selected_verbal_passages.csv';
+            link.click();
+
+            URL.revokeObjectURL(url);
+        }
+
+        $(document).ready(function () {
+
+            if ($.fn.dataTable.isDataTable('#passagesTable')) {
+                $('#passagesTable').DataTable().destroy();
+            }
+
+            table = $('#passagesTable').DataTable({
+                language: {
+                    url: "//cdn.datatables.net/plug-ins/1.13.5/i18n/ar.json"
+                },
+                pageLength: 25,
+                order: [[5, "desc"]],
+                columnDefs: [
+                    { orderable: false, searchable: false, targets: [0] }
+                ],
+                drawCallback: function () {
+                    document.querySelectorAll('.passage-row-checkbox').forEach(function (cb) {
+                        cb.checked = selectedPassagesMap.has(cb.value);
+                    });
+
+                    syncPassageRowSelectionStyles();
+                    updatePassagesBulkFooter();
+                }
+            });
+
+            $('#passagesTable').on('change', '.passage-row-checkbox', function () {
+                setPassageSelectedFromCheckbox(this);
+            });
+
+            $('#passagesTable tbody').on('click', 'tr', function (event) {
+                const ignoredSelectors = 'input, button, a, audio, video, source, .passage-row-checkbox, i';
+
+                if ($(event.target).closest(ignoredSelectors).length) {
+                    return;
+                }
+
+                const cb = this.querySelector('.passage-row-checkbox');
+
+                if (!cb) {
+                    return;
+                }
+
+                cb.checked = !cb.checked;
+                setPassageSelectedFromCheckbox(cb);
+            });
+
+            $('#passagesSelectAll').on('change', function () {
+                const isChecked = this.checked;
+
+                document.querySelectorAll('.passage-row-checkbox').forEach(function (cb) {
+                    cb.checked = isChecked;
+                    setPassageSelectedFromCheckbox(cb);
+                });
+
+                syncPassageRowSelectionStyles();
+                updatePassagesBulkFooter();
+            });
+
+            $('#passagesSearch').on('keyup input', function () {
+                clearPassagesSelection();
+                table.search(this.value).draw();
+            });
+
+            $('.kpi-card').on('click', function () {
+
+                $('.kpi-card').removeClass('active-card');
+                $(this).addClass('active-card');
+
+                const filter = $(this).data('filter');
+
+                clearPassagesSelection();
+
+                table.search('').columns().search('');
+                $('#passagesSearch').val('');
+
+                if (filter === "text") {
+                    table.column(2).search('نص');
+                }
+                else if (filter === "audio") {
+                    table.column(2).search('صوت');
+                }
+                else if (filter === "video") {
+                    table.column(2).search('فيديو');
+                }
+                else if (filter === "media") {
+                    table.column(4).search('controls');
+                }
+
+                table.draw();
+            });
+
+        });
+    </script>
+}

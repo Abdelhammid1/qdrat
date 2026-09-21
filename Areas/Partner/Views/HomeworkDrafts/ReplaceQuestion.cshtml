@@ -1,0 +1,161 @@
+﻿@model QdratNew.ViewModels.Partner.HomeworkDraft.ReplaceHomeworkDraftQuestionVM
+
+@{
+    ViewData["Title"] = "استبدال سؤال";
+}
+
+<div class="container mt-4" dir="rtl">
+
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="fw-bold mb-1">🔁 استبدال سؤال</h4>
+            <div class="text-muted small">
+                اختر سؤالًا بديلًا من نفس المحور
+            </div>
+        </div>
+
+        <a asp-action="Preview"
+           asp-route-id="@Model.DraftId"
+           class="btn btn-outline-secondary">
+            رجوع
+        </a>
+    </div>
+
+    <!-- Old Question -->
+    <div class="alert alert-secondary">
+        <strong>السؤال الحالي:</strong>
+        <div class="mt-2">
+            @Html.Raw(Model.OldQuestionTitle)
+        </div>
+    </div>
+
+    <!-- Candidates Table -->
+    <div class="card shadow-sm border-0 rounded-4">
+        <div class="card-body">
+
+            <table id="replaceQuestionsTable"
+                   class="table table-bordered table-hover align-middle text-center w-100">
+                <thead class="table-light">
+                    <tr>
+                        <th>السؤال</th>
+                        <th style="width:120px">معاينة</th>
+                        <th style="width:140px">إجراء</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var q in Model.Candidates)
+                    {
+                        <tr>
+                            <td class="text-start">
+                                @Html.Raw(q.Title)
+                            </td>
+
+                            <!-- Preview -->
+                            <td>
+                                <button type="button"
+                                        class="btn btn-sm btn-outline-primary"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#questionPreviewModal"
+                                        data-question-id="@q.QuestionId">
+                                    👁️
+                                </button>
+                            </td>
+
+                            <!-- Replace -->
+                            <td>
+                                <form asp-action="ConfirmReplaceQuestion"
+                                      method="post"
+                                      class="d-inline">
+                                    @Html.AntiForgeryToken()
+
+                                    <input type="hidden" name="DraftId" value="@Model.DraftId" />
+                                    <input type="hidden" name="OldQuestionId" value="@Model.OldQuestionId" />
+                                    <input type="hidden" name="NewQuestionId" value="@q.QuestionId" />
+
+                                    <button type="submit"
+                                            class="btn btn-sm btn-success"
+                                            onclick="return confirm('هل أنت متأكد من استبدال السؤال؟');">
+                                        استبدال
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+        </div>
+    </div>
+</div>
+
+<!-- Question Preview Modal -->
+<div class="modal fade" id="questionPreviewModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">معاينة السؤال</h5>
+                <button type="button"
+                        class="btn-close"
+                        data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="questionPreviewContent">
+                <div class="text-center text-muted py-5">جاري التحميل...</div>
+            </div>
+        </div>
+    </div>
+</div>
+@section Scripts {
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+
+    <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
+
+    <!-- DataTables -->
+    <script>
+        $(document).ready(function () {
+
+            $('#replaceQuestionsTable').DataTable({
+                paging: true,
+                searching: true,
+                info: true,
+                pageLength: 25,
+                lengthChange: true,
+                ordering: false,
+                autoWidth: false,
+                responsive: true,
+
+                language: {
+                    search: "بحث:",
+                    lengthMenu: "عرض _MENU_ سؤال",
+                    info: "عرض _START_ إلى _END_ من _TOTAL_ سؤال",
+                    infoEmpty: "لا توجد أسئلة",
+                    zeroRecords: "لا توجد نتائج مطابقة",
+                    paginate: {
+                        previous: "السابق",
+                        next: "التالي"
+                    }
+                }
+            });
+
+        });
+    </script>
+
+    <!-- Question Preview -->
+    <script>
+        document.getElementById('questionPreviewModal')
+            .addEventListener('show.bs.modal', function (event) {
+
+                const button = event.relatedTarget;
+                const questionId = button.getAttribute('data-question-id');
+                const container = document.getElementById('questionPreviewContent');
+
+                container.innerHTML = '<div class="text-center py-5">جاري التحميل...</div>';
+
+                fetch('/Partner/HomeworkDrafts/PreviewQuestion?questionId=' + questionId)
+                    .then(r => r.text())
+                    .then(html => container.innerHTML = html);
+            });
+    </script>
+}

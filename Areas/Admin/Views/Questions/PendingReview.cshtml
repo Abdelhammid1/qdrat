@@ -1,0 +1,1952 @@
+@model QdratNew.ViewModels.Question.QuestionIndexViewModel
+@{
+    ViewData["Title"] = "مركز اعتماد الأسئلة";
+    var totalPending = Model.PendingReviewCount;
+    var filteredPending = Model.PendingReviewFilteredCount;
+    var confirmedPercent = filteredPending == 0 ? 0 : (int)Math.Round((double)Model.PendingReviewConfirmedAnswersCount / filteredPending * 100);
+    var unconfirmedPercent = 100 - confirmedPercent;
+}
+@Html.AntiForgeryToken()
+
+@section Styles {
+    <style>
+        /* ─── Design Tokens ─── */
+        :root {
+            --pr-bg: #0f1623;
+            --pr-surface: #161e2e;
+            --pr-card: #1c2538;
+            --pr-border: rgba(255,255,255,.07);
+            --pr-accent: #3b82f6;
+            --pr-accent-glow: rgba(59,130,246,.25);
+            --pr-success: #22c55e;
+            --pr-danger: #ef4444;
+            --pr-warning: #f59e0b;
+            --pr-text: #e2e8f0;
+            --pr-muted: #64748b;
+            --pr-radius: 12px;
+            --pr-radius-sm: 8px;
+            --pr-font: 'Cairo', sans-serif;
+            --pr-transition: .2s cubic-bezier(.4,0,.2,1);
+        }
+
+        /* ─── Page Base ─── */
+        body {
+            background: var(--pr-bg);
+        }
+
+        .pr-page {
+            font-family: var(--pr-font);
+            color: var(--pr-text);
+            min-height: 100vh;
+            padding: 28px 0 60px;
+            direction: rtl;
+        }
+
+        /* ─── Page Header ─── */
+        .pr-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .pr-header-title {
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: -.3px;
+            color: #fff;
+            margin: 0;
+            line-height: 1.2;
+        }
+
+        .pr-header-sub {
+            font-size: 13px;
+            color: var(--pr-muted);
+            margin-top: 4px;
+        }
+
+        .pr-header-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        /* ─── Alert Overrides ─── */
+        .pr-alert {
+            border-radius: var(--pr-radius-sm);
+            border: none;
+            font-size: 14px;
+            margin-bottom: 20px;
+            padding: 12px 18px;
+        }
+
+        .pr-alert-success {
+            background: rgba(34,197,94,.12);
+            color: #86efac;
+            border-right: 3px solid var(--pr-success);
+        }
+
+        .pr-alert-danger {
+            background: rgba(239,68,68,.12);
+            color: #fca5a5;
+            border-right: 3px solid var(--pr-danger);
+        }
+
+        /* ─── Hero Stats Banner ─── */
+        .pr-hero {
+            background: linear-gradient(135deg, #1a2540 0%, #1c3052 60%, #162440 100%);
+            border: 1px solid var(--pr-border);
+            border-radius: var(--pr-radius);
+            padding: 28px 32px;
+            margin-bottom: 28px;
+            position: relative;
+            overflow: hidden;
+        }
+
+            .pr-hero::before {
+                content: '';
+                position: absolute;
+                top: -60px;
+                left: -60px;
+                width: 220px;
+                height: 220px;
+                background: radial-gradient(circle, rgba(59,130,246,.18) 0%, transparent 70%);
+                pointer-events: none;
+            }
+
+        .pr-hero-number {
+            font-size: 52px;
+            font-weight: 800;
+            line-height: 1;
+            color: #fff;
+            letter-spacing: -2px;
+        }
+
+        .pr-hero-label {
+            font-size: 13px;
+            color: var(--pr-muted);
+            margin-top: 4px;
+        }
+
+        .pr-hero-filtered {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            background: rgba(59,130,246,.12);
+            color: #93c5fd;
+            border: 1px solid rgba(59,130,246,.25);
+            border-radius: 20px;
+            padding: 4px 12px;
+            margin-top: 10px;
+        }
+
+        /* ─── Mini Stat Chips ─── */
+        .pr-chips {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        @@media (max-width: 768px) {
+            .pr-chips
+
+        {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        }
+
+        .pr-chip {
+            background: rgba(255,255,255,.05);
+            border: 1px solid var(--pr-border);
+            border-radius: var(--pr-radius-sm);
+            padding: 12px 14px;
+            text-align: center;
+        }
+
+        .pr-chip-val {
+            font-size: 22px;
+            font-weight: 700;
+            color: #fff;
+            line-height: 1;
+        }
+
+        .pr-chip-lbl {
+            font-size: 11px;
+            color: var(--pr-muted);
+            margin-top: 3px;
+        }
+
+        /* ─── Progress Bar ─── */
+        .pr-progress-wrap {
+            background: rgba(255,255,255,.08);
+            border-radius: 20px;
+            height: 7px;
+            overflow: hidden;
+        }
+
+        .pr-progress-fill {
+            height: 100%;
+            border-radius: 20px;
+            background: linear-gradient(90deg, var(--pr-success), #4ade80);
+            transition: width .6s ease;
+        }
+
+        .pr-progress-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: var(--pr-muted);
+            margin-top: 5px;
+        }
+
+        /* ─── Curriculum Cards ─── */
+        .pr-cur-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 14px;
+            margin-bottom: 28px;
+        }
+
+        .pr-cur-card {
+            background: var(--pr-card);
+            border: 1px solid var(--pr-border);
+            border-radius: var(--pr-radius);
+            padding: 18px;
+            text-decoration: none;
+            color: var(--pr-text);
+            display: block;
+            transition: var(--pr-transition);
+            position: relative;
+            overflow: hidden;
+        }
+
+            .pr-cur-card::after {
+                content: '';
+                position: absolute;
+                inset: 0;
+                background: linear-gradient(135deg, transparent 60%, rgba(59,130,246,.04));
+                pointer-events: none;
+            }
+
+            .pr-cur-card:hover {
+                border-color: rgba(59,130,246,.4);
+                transform: translateY(-2px);
+                box-shadow: 0 8px 24px rgba(0,0,0,.3), 0 0 0 1px rgba(59,130,246,.2);
+                color: var(--pr-text);
+                text-decoration: none;
+            }
+
+        .pr-cur-card-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .pr-cur-card-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: #fff;
+            line-height: 1.35;
+        }
+
+        .pr-cur-card-sub {
+            font-size: 12px;
+            color: var(--pr-muted);
+            margin-top: 2px;
+        }
+
+        .pr-badge-count {
+            background: rgba(245,158,11,.15);
+            color: #fcd34d;
+            border: 1px solid rgba(245,158,11,.3);
+            border-radius: 20px;
+            padding: 2px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .pr-cur-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            font-size: 12px;
+        }
+
+        .pr-cur-stat-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .pr-cur-stat-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .pr-cur-date {
+            font-size: 11px;
+            color: var(--pr-muted);
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid var(--pr-border);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        /* ─── Section Label ─── */
+        .pr-section-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: var(--pr-muted);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+            .pr-section-label::after {
+                content: '';
+                flex: 1;
+                height: 1px;
+                background: var(--pr-border);
+            }
+
+        /* ─── Filter Panel ─── */
+        .pr-filter-panel {
+            background: var(--pr-card);
+            border: 1px solid var(--pr-border);
+            border-radius: var(--pr-radius);
+            padding: 20px 24px;
+            margin-bottom: 20px;
+        }
+
+            .pr-filter-panel .form-label {
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--pr-muted);
+                margin-bottom: 6px;
+                text-transform: uppercase;
+                letter-spacing: .5px;
+            }
+
+            .pr-filter-panel .form-select,
+            .pr-filter-panel .form-control {
+                background: rgba(255,255,255,.04);
+                border: 1px solid var(--pr-border);
+                color: var(--pr-text);
+                border-radius: var(--pr-radius-sm);
+                font-size: 13px;
+                height: 38px;
+                transition: var(--pr-transition);
+            }
+
+                .pr-filter-panel .form-select:focus,
+                .pr-filter-panel .form-control:focus {
+                    background: rgba(255,255,255,.07);
+                    border-color: rgba(59,130,246,.5);
+                    box-shadow: 0 0 0 3px rgba(59,130,246,.12);
+                    color: var(--pr-text);
+                }
+
+                .pr-filter-panel .form-select option {
+                    background: #1c2538;
+                    color: var(--pr-text);
+                }
+
+                .pr-filter-panel .form-control::placeholder {
+                    color: var(--pr-muted);
+                }
+
+        /* ─── Toolbar ─── */
+        .pr-toolbar {
+            background: var(--pr-card);
+            border: 1px solid var(--pr-border);
+            border-radius: var(--pr-radius);
+            padding: 14px 20px;
+            margin-bottom: 16px;
+            position: sticky;
+            top: 8px;
+            z-index: 30;
+            backdrop-filter: blur(12px);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .pr-selected-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--pr-accent);
+            background: var(--pr-accent-glow);
+            border: 1px solid rgba(59,130,246,.3);
+            border-radius: 20px;
+            padding: 4px 14px;
+            transition: var(--pr-transition);
+        }
+
+            .pr-selected-badge.empty {
+                color: var(--pr-muted);
+                background: rgba(255,255,255,.04);
+                border-color: var(--pr-border);
+            }
+
+        /* ─── Buttons ─── */
+        .btn-pr-primary {
+            background: var(--pr-accent);
+            border: none;
+            color: #fff;
+            font-size: 13px;
+            font-weight: 600;
+            border-radius: var(--pr-radius-sm);
+            padding: 8px 18px;
+            transition: var(--pr-transition);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+            .btn-pr-primary:hover:not(:disabled) {
+                background: #2563eb;
+                transform: translateY(-1px);
+                box-shadow: 0 4px 16px rgba(59,130,246,.4);
+                color: #fff;
+            }
+
+            .btn-pr-primary:disabled {
+                opacity: .35;
+                cursor: not-allowed;
+            }
+
+        .btn-pr-outline {
+            background: transparent;
+            border: 1px solid var(--pr-border);
+            color: var(--pr-text);
+            font-size: 13px;
+            font-weight: 600;
+            border-radius: var(--pr-radius-sm);
+            padding: 8px 18px;
+            transition: var(--pr-transition);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+
+            .btn-pr-outline:hover:not(:disabled) {
+                border-color: rgba(255,255,255,.2);
+                background: rgba(255,255,255,.06);
+                color: #fff;
+            }
+
+            .btn-pr-outline:disabled {
+                opacity: .35;
+                cursor: not-allowed;
+            }
+
+        .btn-pr-ghost {
+            background: transparent;
+            border: none;
+            color: var(--pr-muted);
+            font-size: 13px;
+            font-weight: 500;
+            border-radius: var(--pr-radius-sm);
+            padding: 8px 14px;
+            transition: var(--pr-transition);
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+            .btn-pr-ghost:hover {
+                color: var(--pr-text);
+                background: rgba(255,255,255,.05);
+            }
+
+        .btn-pr-success {
+            background: rgba(34,197,94,.15);
+            border: 1px solid rgba(34,197,94,.3);
+            color: #86efac;
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: 6px;
+            padding: 5px 12px;
+            transition: var(--pr-transition);
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+            .btn-pr-success:hover {
+                background: rgba(34,197,94,.25);
+                border-color: rgba(34,197,94,.5);
+                color: #bbf7d0;
+            }
+
+        .btn-pr-nav {
+            background: transparent;
+            border: 1px solid var(--pr-border);
+            color: var(--pr-muted);
+            font-size: 11px;
+            border-radius: 6px;
+            padding: 4px 8px;
+            transition: var(--pr-transition);
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            text-decoration: none;
+        }
+
+            .btn-pr-nav:hover {
+                border-color: rgba(255,255,255,.15);
+                color: var(--pr-text);
+                text-decoration: none;
+            }
+
+        /* ─── Table Panel ─── */
+        .pr-table-panel {
+            background: var(--pr-card);
+            border: 1px solid var(--pr-border);
+            border-radius: var(--pr-radius);
+            overflow: hidden;
+        }
+
+            .pr-table-panel .table {
+                margin: 0;
+                color: var(--pr-text);
+                font-size: 13px;
+            }
+
+                .pr-table-panel .table thead th {
+                    background: rgba(255,255,255,.04);
+                    border-color: var(--pr-border);
+                    color: var(--pr-muted);
+                    font-size: 11px;
+                    font-weight: 700;
+                    text-transform: uppercase;
+                    letter-spacing: .7px;
+                    padding: 12px 14px;
+                    white-space: nowrap;
+                    vertical-align: middle;
+                }
+
+                .pr-table-panel .table tbody td {
+                    border-color: var(--pr-border);
+                    padding: 12px 14px;
+                    vertical-align: middle;
+                    background: transparent;
+                    transition: background var(--pr-transition);
+                }
+
+                .pr-table-panel .table tbody tr:hover td {
+                    background: rgba(255,255,255,.025);
+                }
+
+                .pr-table-panel .table tbody tr:last-child td {
+                    border-bottom: none;
+                }
+
+        /* ─── Question Title Cell ─── */
+        .pr-q-title {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+        }
+
+        .pr-q-title-text {
+            font-size: 13px;
+            color: var(--pr-text);
+            line-height: 1.5;
+            max-width: 360px;
+            white-space: normal;
+        }
+
+        .pr-q-ref {
+            font-size: 11px;
+            color: var(--pr-muted);
+            background: rgba(255,255,255,.05);
+            border-radius: 4px;
+            padding: 1px 6px;
+            white-space: nowrap;
+            font-family: monospace;
+            letter-spacing: .3px;
+        }
+
+        /* ─── Badges ─── */
+        .pr-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            border-radius: 20px;
+            padding: 3px 10px;
+            border: 1px solid transparent;
+        }
+
+        .pr-badge-confirmed {
+            background: rgba(34,197,94,.1);
+            color: #86efac;
+            border-color: rgba(34,197,94,.25);
+        }
+
+        .pr-badge-unconfirmed {
+            background: rgba(239,68,68,.1);
+            color: #fca5a5;
+            border-color: rgba(239,68,68,.25);
+        }
+
+        .pr-badge-quant {
+            background: rgba(59,130,246,.1);
+            color: #93c5fd;
+            border-color: rgba(59,130,246,.25);
+        }
+
+        .pr-badge-verbal {
+            background: rgba(168,85,247,.1);
+            color: #d8b4fe;
+            border-color: rgba(168,85,247,.25);
+        }
+
+        .pr-badge-tag {
+            background: rgba(255,255,255,.06);
+            color: var(--pr-muted);
+            border-color: var(--pr-border);
+            font-size: 10px;
+            padding: 2px 7px;
+        }
+
+        /* ─── Action Buttons in Table ─── */
+        .pr-action-group {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+            flex-wrap: nowrap;
+        }
+
+        .pr-action-btn {
+            background: rgba(255,255,255,.04);
+            border: 1px solid var(--pr-border);
+            color: var(--pr-muted);
+            border-radius: 6px;
+            width: 30px;
+            height: 30px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            transition: var(--pr-transition);
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+            .pr-action-btn:hover {
+                background: rgba(255,255,255,.1);
+                border-color: rgba(255,255,255,.15);
+                color: var(--pr-text);
+                text-decoration: none;
+            }
+
+            .pr-action-btn.edit:hover {
+                border-color: rgba(245,158,11,.4);
+                color: #fcd34d;
+                background: rgba(245,158,11,.08);
+            }
+
+            .pr-action-btn.detail:hover {
+                border-color: rgba(59,130,246,.4);
+                color: #93c5fd;
+                background: rgba(59,130,246,.08);
+            }
+
+            .pr-action-btn.audit:hover {
+                border-color: rgba(168,85,247,.4);
+                color: #d8b4fe;
+                background: rgba(168,85,247,.08);
+            }
+
+            .pr-action-btn.similar:hover {
+                border-color: rgba(239,68,68,.4);
+                color: #fca5a5;
+                background: rgba(239,68,68,.08);
+            }
+
+            .pr-action-btn.preview:hover {
+                border-color: rgba(34,197,94,.4);
+                color: #86efac;
+                background: rgba(34,197,94,.08);
+            }
+
+        /* ─── Checkbox ─── */
+        .form-check-input.pr-check {
+            width: 16px;
+            height: 16px;
+            background-color: rgba(255,255,255,.06);
+            border: 1px solid rgba(255,255,255,.2);
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 0;
+            flex-shrink: 0;
+        }
+
+            .form-check-input.pr-check:checked {
+                background-color: var(--pr-accent);
+                border-color: var(--pr-accent);
+            }
+
+        /* ─── DataTable Overrides ─── */
+        .dataTables_wrapper .dataTables_length select,
+        .dataTables_wrapper .dataTables_filter input {
+            background: rgba(255,255,255,.05);
+            border: 1px solid var(--pr-border);
+            color: var(--pr-text);
+            border-radius: 6px;
+            padding: 5px 10px;
+            font-size: 13px;
+        }
+
+            .dataTables_wrapper .dataTables_filter input:focus {
+                outline: none;
+                border-color: rgba(59,130,246,.5);
+                box-shadow: 0 0 0 3px rgba(59,130,246,.1);
+            }
+
+        .dataTables_wrapper .dataTables_length label,
+        .dataTables_wrapper .dataTables_filter label,
+        .dataTables_wrapper .dataTables_info {
+            color: var(--pr-muted);
+            font-size: 12px;
+        }
+
+        .dataTables_wrapper .dataTables_paginate .paginate_button {
+            background: rgba(255,255,255,.04) !important;
+            border: 1px solid var(--pr-border) !important;
+            border-radius: 6px !important;
+            color: var(--pr-muted) !important;
+            margin: 0 2px;
+            font-size: 12px;
+            padding: 4px 10px !important;
+            min-width: 34px;
+            text-align: center;
+        }
+
+            .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+            .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+                background: var(--pr-accent) !important;
+                border-color: var(--pr-accent) !important;
+                color: #fff !important;
+            }
+
+        .dataTables_wrapper .dataTables_processing {
+            background: var(--pr-card);
+            color: var(--pr-text);
+            border: 1px solid var(--pr-border);
+            border-radius: var(--pr-radius-sm);
+        }
+
+        /* ─── Modals ─── */
+        .pr-modal .modal-content {
+            background: var(--pr-surface);
+            border: 1px solid var(--pr-border);
+            border-radius: var(--pr-radius);
+            color: var(--pr-text);
+        }
+
+        .pr-modal .modal-header {
+            background: rgba(255,255,255,.03);
+            border-bottom: 1px solid var(--pr-border);
+            padding: 16px 22px;
+        }
+
+        .pr-modal .modal-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .pr-modal .modal-body {
+            padding: 24px 22px;
+        }
+
+        .pr-modal .btn-close {
+            filter: invert(1) brightness(.6);
+        }
+
+        .pr-modal .list-group-item {
+            background: rgba(255,255,255,.04);
+            border-color: var(--pr-border);
+            color: var(--pr-text);
+            font-size: 13px;
+            transition: var(--pr-transition);
+        }
+
+            .pr-modal .list-group-item:hover {
+                background: rgba(255,255,255,.08);
+                color: #fff;
+            }
+
+        /* ─── Empty State ─── */
+        .pr-empty {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--pr-muted);
+        }
+
+            .pr-empty i {
+                font-size: 40px;
+                margin-bottom: 14px;
+                opacity: .4;
+            }
+
+            .pr-empty p {
+                font-size: 14px;
+                margin: 0;
+            }
+
+        /* ─── Responsive ─── */
+        @@media (max-width: 768px) {
+            .pr-hero
+
+        {
+            padding: 20px;
+        }
+
+        .pr-hero-number {
+            font-size: 36px;
+        }
+
+        .pr-toolbar {
+            top: 0;
+            border-radius: 0;
+        }
+
+        }
+
+        /* ─── Swal Dark Theme Override ─── */
+        .swal2-popup {
+            background: var(--pr-surface) !important;
+            border: 1px solid var(--pr-border) !important;
+            color: var(--pr-text) !important;
+            font-family: var(--pr-font) !important;
+            border-radius: var(--pr-radius) !important;
+        }
+
+        .swal2-title, .swal2-html-container {
+            color: var(--pr-text) !important;
+        }
+
+        .swal2-confirm {
+            background: var(--pr-accent) !important;
+            border-radius: 8px !important;
+            font-family: var(--pr-font) !important;
+        }
+
+        .swal2-cancel {
+            background: rgba(255,255,255,.08) !important;
+            color: var(--pr-text) !important;
+            border-radius: 8px !important;
+            font-family: var(--pr-font) !important;
+        }
+
+
+
+
+.pr-table-panel {
+    background: #ffffff !important;
+    border: 1px solid #d8e0ec !important;
+    border-radius: 14px !important;
+    overflow: hidden;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+}
+
+/* خلفية الجدول */
+.pr-table-panel .table,
+.pr-table-panel table.dataTable {
+    background-color: #ffffff !important;
+    color: #1e293b !important;
+}
+
+/* رأس الجدول */
+.pr-table-panel .table thead th,
+.pr-table-panel table.dataTable thead th {
+    background: #f1f5f9 !important;
+    color: #0f172a !important;
+    border-bottom: 1px solid #cbd5e1 !important;
+    border-color: #dbe4ef !important;
+    font-size: 12px !important;
+    font-weight: 800 !important;
+    opacity: 1 !important;
+}
+
+/* خلايا الجدول */
+.pr-table-panel .table tbody td,
+.pr-table-panel table.dataTable tbody td {
+    background: #ffffff !important;
+    color: #1e293b !important;
+    border-color: #e2e8f0 !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    opacity: 1 !important;
+}
+
+/* Hover للصف */
+.pr-table-panel .table tbody tr:hover td,
+.pr-table-panel table.dataTable tbody tr:hover td {
+    background: #f8fafc !important;
+}
+
+/* نص السؤال */
+.pr-q-title-text {
+    color: #0f172a !important;
+    font-weight: 700 !important;
+    opacity: 1 !important;
+}
+
+/* رقم المرجع */
+.pr-q-ref {
+    color: #334155 !important;
+    background: #eef2ff !important;
+    border: 1px solid #c7d2fe !important;
+    font-weight: 800 !important;
+}
+
+/* نصوص القسم / المحور / المؤشر / التاريخ التي كانت باهتة بسبب inline style */
+.pr-table-panel td span {
+    color: #334155 !important;
+    opacity: 1 !important;
+}
+
+/* شارة كمي */
+.pr-badge-quant {
+    background: #dbeafe !important;
+    color: #1d4ed8 !important;
+    border-color: #93c5fd !important;
+    font-weight: 800 !important;
+}
+
+/* شارة لفظي */
+.pr-badge-verbal {
+    background: #f3e8ff !important;
+    color: #7e22ce !important;
+    border-color: #d8b4fe !important;
+    font-weight: 800 !important;
+}
+
+/* شارة الإجابة المؤكدة */
+.pr-badge-confirmed {
+    background: #dcfce7 !important;
+    color: #15803d !important;
+    border-color: #86efac !important;
+    font-weight: 800 !important;
+}
+
+/* شارة الإجابة غير المؤكدة */
+.pr-badge-unconfirmed {
+    background: #fee2e2 !important;
+    color: #b91c1c !important;
+    border-color: #fca5a5 !important;
+    font-weight: 800 !important;
+}
+
+/* شارات التصنيفات */
+.pr-badge-tag {
+    background: #f1f5f9 !important;
+    color: #334155 !important;
+    border-color: #cbd5e1 !important;
+    font-weight: 700 !important;
+}
+
+/* زر الاعتماد */
+.btn-pr-success {
+    background: #dcfce7 !important;
+    color: #15803d !important;
+    border: 1px solid #86efac !important;
+    font-weight: 800 !important;
+}
+
+.btn-pr-success:hover {
+    background: #bbf7d0 !important;
+    color: #166534 !important;
+}
+
+/* أزرار الإجراءات */
+.pr-action-btn {
+    background: #f8fafc !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #475569 !important;
+    opacity: 1 !important;
+}
+
+.pr-action-btn:hover {
+    background: #e2e8f0 !important;
+    color: #0f172a !important;
+}
+
+/* أيقونة المعاينة */
+.pr-action-btn.preview {
+    color: #2563eb !important;
+}
+
+/* زر التعديل */
+.pr-action-btn.edit {
+    color: #b45309 !important;
+}
+
+/* زر التفاصيل */
+.pr-action-btn.detail {
+    color: #475569 !important;
+}
+
+/* زر السجل */
+.pr-action-btn.audit {
+    color: #7e22ce !important;
+}
+
+/* زر التشابه */
+.pr-action-btn.similar {
+    color: #dc2626 !important;
+}
+
+/* التشيك بوكس - مهم جدًا */
+.form-check-input.pr-check,
+.pr-table-panel input[type="checkbox"].pr-check,
+#selectAllVisible,
+.row-select {
+    width: 20px !important;
+    height: 20px !important;
+    min-width: 20px !important;
+    min-height: 20px !important;
+    background-color: #ffffff !important;
+    border: 2px solid #2563eb !important;
+    border-radius: 6px !important;
+    cursor: pointer !important;
+    opacity: 1 !important;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12) !important;
+    appearance: auto !important;
+    -webkit-appearance: checkbox !important;
+}
+
+/* عند الاختيار */
+.form-check-input.pr-check:checked,
+.pr-table-panel input[type="checkbox"].pr-check:checked,
+#selectAllVisible:checked,
+.row-select:checked {
+    background-color: #2563eb !important;
+    border-color: #1d4ed8 !important;
+}
+
+/* تحسين محاذاة أول عمود */
+.pr-table-panel table.dataTable tbody td:first-child,
+.pr-table-panel table.dataTable thead th:first-child {
+    text-align: center !important;
+    vertical-align: middle !important;
+}
+
+/* DataTables: مربع البحث وعدد النتائج */
+.dataTables_wrapper .dataTables_length label,
+.dataTables_wrapper .dataTables_filter label,
+.dataTables_wrapper .dataTables_info {
+    color: #334155 !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+}
+
+.dataTables_wrapper .dataTables_length select,
+.dataTables_wrapper .dataTables_filter input {
+    background: #ffffff !important;
+    border: 1px solid #94a3b8 !important;
+    color: #0f172a !important;
+    border-radius: 8px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+}
+
+/* Placeholder البحث */
+.dataTables_wrapper .dataTables_filter input::placeholder {
+    color: #64748b !important;
+}
+
+/* أسهم الترتيب في DataTables */
+table.dataTable thead .sorting:before,
+table.dataTable thead .sorting:after,
+table.dataTable thead .sorting_asc:before,
+table.dataTable thead .sorting_asc:after,
+table.dataTable thead .sorting_desc:before,
+table.dataTable thead .sorting_desc:after {
+    color: #475569 !important;
+    opacity: 1 !important;
+}
+
+/* أزرار الصفحات */
+.dataTables_wrapper .dataTables_paginate .paginate_button {
+    background: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #334155 !important;
+    font-weight: 700 !important;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button.current,
+.dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+    background: #2563eb !important;
+    border-color: #2563eb !important;
+    color: #ffffff !important;
+}
+
+/* منع بهتان أي عنصر داخل الجدول */
+.pr-table-panel *,
+.pr-table-panel .table *,
+.pr-table-panel table.dataTable * {
+    opacity: 1;
+}
+        /* جسم المودال */
+        #questionPreviewModal .modal-content {
+            background: #111827 !important;
+            color: #ffffff !important;
+            border: 1px solid #334155 !important;
+        }
+
+        /* رأس المودال */
+        #questionPreviewModal .modal-header {
+            background: #111827 !important;
+            border-bottom: 1px solid #334155 !important;
+        }
+
+        #questionPreviewModal .modal-title {
+            color: #ffffff !important;
+            font-weight: 800 !important;
+        }
+
+        /* جسم عرض السؤال */
+        #questionPreviewModalBody {
+            background: #111827 !important;
+            color: #0f172a !important;
+        }
+
+            /* أي كارت داخلي قادم من البارشال */
+            #questionPreviewModalBody .card,
+            #questionPreviewModalBody .question-card,
+            #questionPreviewModalBody .question-preview-card,
+            #questionPreviewModalBody .q-card,
+            #questionPreviewModalBody .preview-box,
+            #questionPreviewModalBody .question-box {
+                background: #ffffff !important;
+                color: #0f172a !important;
+                border: 1px solid #dbe4ef !important;
+                box-shadow: 0 10px 24px rgba(15, 23, 42, 0.10) !important;
+            }
+
+            /* العنوان الرئيسي للسؤال */
+            #questionPreviewModalBody h1,
+            #questionPreviewModalBody h2,
+            #questionPreviewModalBody h3,
+            #questionPreviewModalBody h4,
+            #questionPreviewModalBody h5,
+            #questionPreviewModalBody h6,
+            #questionPreviewModalBody .question-title,
+            #questionPreviewModalBody .q-title,
+            #questionPreviewModalBody .title {
+                color: #0f172a !important;
+                font-weight: 900 !important;
+                opacity: 1 !important;
+            }
+
+            /* النصوص العامة داخل البارشال */
+            #questionPreviewModalBody p,
+            #questionPreviewModalBody span,
+            #questionPreviewModalBody div,
+            #questionPreviewModalBody label,
+            #questionPreviewModalBody strong,
+            #questionPreviewModalBody small {
+                opacity: 1 !important;
+            }
+
+            /* منع جعل كل النصوص بيضاء فوق خلفية بيضاء */
+            #questionPreviewModalBody .card p,
+            #questionPreviewModalBody .card span,
+            #questionPreviewModalBody .card div,
+            #questionPreviewModalBody .card label,
+            #questionPreviewModalBody .question-card p,
+            #questionPreviewModalBody .question-card span,
+            #questionPreviewModalBody .question-card div,
+            #questionPreviewModalBody .question-card label,
+            #questionPreviewModalBody .question-preview-card p,
+            #questionPreviewModalBody .question-preview-card span,
+            #questionPreviewModalBody .question-preview-card div,
+            #questionPreviewModalBody .question-preview-card label {
+                color: #0f172a !important;
+            }
+
+            /* نص السؤال نفسه */
+            #questionPreviewModalBody .question-text,
+            #questionPreviewModalBody .q-text,
+            #questionPreviewModalBody .question-content,
+            #questionPreviewModalBody .preview-question-text {
+                color: #0f172a !important;
+                font-size: 22px !important;
+                font-weight: 900 !important;
+                line-height: 1.9 !important;
+                opacity: 1 !important;
+            }
+
+            /* اختيارات السؤال */
+            #questionPreviewModalBody .option,
+            #questionPreviewModalBody .answer-option,
+            #questionPreviewModalBody .choice,
+            #questionPreviewModalBody .option-card,
+            #questionPreviewModalBody .answer-card,
+            #questionPreviewModalBody .q-option,
+            #questionPreviewModalBody .list-group-item {
+                background: #ffffff !important;
+                color: #0f172a !important;
+                border: 1px solid #cbd5e1 !important;
+                border-radius: 14px !important;
+                font-weight: 800 !important;
+                opacity: 1 !important;
+            }
+
+                /* النص داخل الاختيارات */
+                #questionPreviewModalBody .option *,
+                #questionPreviewModalBody .answer-option *,
+                #questionPreviewModalBody .choice *,
+                #questionPreviewModalBody .option-card *,
+                #questionPreviewModalBody .answer-card *,
+                #questionPreviewModalBody .q-option *,
+                #questionPreviewModalBody .list-group-item * {
+                    color: #0f172a !important;
+                    opacity: 1 !important;
+                }
+
+                /* الاختيار الصحيح */
+                #questionPreviewModalBody .correct,
+                #questionPreviewModalBody .is-correct,
+                #questionPreviewModalBody .correct-answer,
+                #questionPreviewModalBody .answer-option.correct,
+                #questionPreviewModalBody .option-card.correct,
+                #questionPreviewModalBody .choice.correct {
+                    background: #dcfce7 !important;
+                    color: #14532d !important;
+                    border: 2px solid #16a34a !important;
+                    font-weight: 900 !important;
+                }
+
+                    /* النص داخل الاختيار الصحيح */
+                    #questionPreviewModalBody .correct *,
+                    #questionPreviewModalBody .is-correct *,
+                    #questionPreviewModalBody .correct-answer *,
+                    #questionPreviewModalBody .answer-option.correct *,
+                    #questionPreviewModalBody .option-card.correct *,
+                    #questionPreviewModalBody .choice.correct * {
+                        color: #14532d !important;
+                        opacity: 1 !important;
+                    }
+
+            /* بادج الإجابة الصحيحة */
+            #questionPreviewModalBody .badge,
+            #questionPreviewModalBody .badge-success,
+            #questionPreviewModalBody .bg-success,
+            #questionPreviewModalBody .correct-badge {
+                background: #16a34a !important;
+                color: #ffffff !important;
+                border: 1px solid #15803d !important;
+                font-weight: 900 !important;
+                opacity: 1 !important;
+            }
+
+            /* إطار منطقة السؤال إن كان البارشال يستخدم خلفية رمادية فاتحة */
+            #questionPreviewModalBody .bg-light,
+            #questionPreviewModalBody .preview-wrapper,
+            #questionPreviewModalBody .question-wrapper {
+                background: #f8fafc !important;
+                color: #0f172a !important;
+                border-color: #dbe4ef !important;
+            }
+
+            /* الصور داخل السؤال */
+            #questionPreviewModalBody img {
+                opacity: 1 !important;
+                max-width: 100% !important;
+            }
+
+            /* روابط أو أيقونات */
+            #questionPreviewModalBody a,
+            #questionPreviewModalBody i {
+                opacity: 1 !important;
+            }
+
+        /* زر إغلاق المودال */
+        #questionPreviewModal .btn-close {
+            filter: invert(1) brightness(1.8) !important;
+            opacity: 1 !important;
+        }
+
+        .pr-header {
+            background: #ffffff !important;
+            border: 1px solid #dbe4ef !important;
+            border-radius: 14px !important;
+            padding: 18px 22px !important;
+            box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06) !important;
+        }
+
+        .pr-header-title {
+            color: #0f172a !important;
+            font-size: 22px !important;
+            font-weight: 900 !important;
+            opacity: 1 !important;
+        }
+
+            .pr-header-title i {
+                color: #2563eb !important;
+                opacity: 1 !important;
+            }
+
+        .pr-header-sub {
+            color: #475569 !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            opacity: 1 !important;
+        }
+
+    </style>
+}
+
+<div class="pr-page container-fluid px-4" dir="rtl">
+
+    @* ─── Alerts ─── *@
+    @if (TempData["Message"] != null)
+    {
+        <div class="pr-alert pr-alert-success d-flex align-items-center gap-2">
+            <i class="fas fa-check-circle"></i> @TempData["Message"]
+        </div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="pr-alert pr-alert-danger d-flex align-items-center gap-2">
+            <i class="fas fa-exclamation-circle"></i> @TempData["Error"]
+        </div>
+    }
+
+    @* ─── Page Header ─── *@
+    <div class="pr-header">
+        <div>
+            <h1 class="pr-header-title">
+                <i class="fas fa-shield-check me-2" style="color:var(--pr-accent);font-size:18px;"></i>
+                مركز اعتماد الأسئلة
+            </h1>
+            <div class="pr-header-sub">مراجعة الأسئلة الجاهزة، تحليل المناهج، واعتماد فردي أو جماعي من مكان واحد.</div>
+        </div>
+        <div class="pr-header-actions">
+            <a asp-action="Dashboard" class="btn-pr-ghost">
+                <i class="fas fa-chart-line"></i> لوحة بنك الأسئلة
+            </a>
+            <a asp-action="Index" class="btn-pr-outline">
+                <i class="fas fa-database"></i> بنك الأسئلة
+            </a>
+            <a asp-action="Create" class="btn-pr-primary">
+                <i class="fas fa-plus"></i> إضافة سؤال
+            </a>
+        </div>
+    </div>
+
+    @* ─── Hero Banner ─── *@
+    <div class="pr-hero mb-4">
+        <div class="row g-4 align-items-center">
+            <div class="col-lg-4">
+                <div class="pr-hero-label">إجمالي الأسئلة المنتظرة</div>
+                <div class="pr-hero-number">@totalPending</div>
+                <div class="pr-hero-filtered">
+                    <i class="fas fa-filter" style="font-size:10px;"></i>
+                    بعد الفلاتر: @filteredPending سؤال
+                </div>
+            </div>
+            <div class="col-lg-8">
+                <div class="pr-chips">
+                    <div class="pr-chip">
+                        <div class="pr-chip-val" style="color:#86efac;">@Model.PendingReviewConfirmedAnswersCount</div>
+                        <div class="pr-chip-lbl">إجابة مؤكدة</div>
+                    </div>
+                    <div class="pr-chip">
+                        <div class="pr-chip-val" style="color:#fca5a5;">@Model.PendingReviewUnconfirmedAnswersCount</div>
+                        <div class="pr-chip-lbl">غير مؤكدة</div>
+                    </div>
+                    <div class="pr-chip">
+                        <div class="pr-chip-val" style="color:#93c5fd;">@Model.PendingReviewQuantitativeCount</div>
+                        <div class="pr-chip-lbl">كمي</div>
+                    </div>
+                    <div class="pr-chip">
+                        <div class="pr-chip-val" style="color:#d8b4fe;">@Model.PendingReviewVerbalCount</div>
+                        <div class="pr-chip-lbl">لفظي</div>
+                    </div>
+                </div>
+                <div class="pr-progress-wrap">
+                    <div class="pr-progress-fill" style="width:@confirmedPercent%;"></div>
+                </div>
+                <div class="pr-progress-meta">
+                    <span>الإجابات المؤكدة @confirmedPercent%</span>
+                    <span>غير المؤكدة @unconfirmedPercent%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ─── Curriculum Cards ─── *@
+    @if (Model.PendingReviewCurriculumStats.Any())
+    {
+        <div class="pr-section-label">توزيع الأسئلة على المناهج</div>
+        <div class="pr-cur-grid">
+            @foreach (var item in Model.PendingReviewCurriculumStats)
+            {
+                <a class="pr-cur-card" asp-action="PendingReview" asp-route-curriculumId="@item.CurriculumId">
+                    <div class="pr-cur-card-head">
+                        <div>
+                            <div class="pr-cur-card-title">@item.CurriculumTitle</div>
+                            <div class="pr-cur-card-sub">
+                                <i class="fas fa-layer-group" style="font-size:10px;"></i>
+                                @item.SectionsCount محور
+                            </div>
+                        </div>
+                        <span class="pr-badge-count">@item.PendingCount</span>
+                    </div>
+                    <div class="pr-cur-stats">
+                        <div class="pr-cur-stat-item">
+                            <span class="pr-cur-stat-dot" style="background:#22c55e;"></span>
+                            <span style="color:#86efac;">مؤكد: @item.ConfirmedAnswersCount</span>
+                        </div>
+                        <div class="pr-cur-stat-item">
+                            <span class="pr-cur-stat-dot" style="background:#ef4444;"></span>
+                            <span style="color:#fca5a5;">غير مؤكد: @item.UnconfirmedAnswersCount</span>
+                        </div>
+                        <div class="pr-cur-stat-item">
+                            <span class="pr-cur-stat-dot" style="background:#3b82f6;"></span>
+                            <span>كمي: @item.QuantitativeCount</span>
+                        </div>
+                        <div class="pr-cur-stat-item">
+                            <span class="pr-cur-stat-dot" style="background:#a855f7;"></span>
+                            <span>لفظي: @item.VerbalCount</span>
+                        </div>
+                    </div>
+                    <div class="pr-cur-date">
+                        <i class="fas fa-clock" style="font-size:10px;"></i>
+                        أقدم سؤال: @(item.OldestCreatedAt?.ToString("yyyy/MM/dd") ?? "—")
+                    </div>
+                </a>
+            }
+        </div>
+    }
+
+    @* ─── Filter Panel ─── *@
+    <div class="pr-section-label">الفلاتر</div>
+    <div class="pr-filter-panel mb-4">
+        <form method="get" asp-action="PendingReview" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">القسم</label>
+                <select asp-for="CurriculumId" class="form-select" asp-items="Model.Curriculums" id="CurriculumId">
+                    <option value="">كل الأقسام</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">المحور</label>
+                <select asp-for="SectionId" class="form-select" asp-items="Model.Sections" id="SectionId">
+                    <option value="">كل المحاور</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">المؤشر</label>
+                <select asp-for="LessonId" class="form-select" asp-items="Model.Lessons" id="LessonId">
+                    <option value="">كل المؤشرات</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">بحث سريع</label>
+                <div class="input-group">
+                    <input asp-for="SearchTitle" class="form-control" id="SearchTitle" placeholder="كلمة من السؤال…" />
+                </div>
+            </div>
+            <div class="col-12 d-flex flex-wrap gap-2 align-items-center">
+                <button type="submit" class="btn-pr-primary">
+                    <i class="fas fa-filter"></i> تطبيق الفلاتر
+                </button>
+                <a asp-action="PendingReview" class="btn-pr-outline">
+                    <i class="fas fa-rotate-right"></i> إعادة تعيين
+                </a>
+            </div>
+        </form>
+    </div>
+
+    @* ─── Bulk Actions Toolbar ─── *@
+    <div class="pr-toolbar">
+        <div class="d-flex align-items-center gap-12 flex-wrap" style="gap:12px;">
+            <div class="fw-semibold" style="font-size:14px;color:#fff;">جدول الاعتماد</div>
+            <span class="pr-selected-badge empty" id="selectedBadge">
+                <i class="fas fa-square-check" style="font-size:11px;"></i>
+                <span id="selectedCount">0</span> سؤال محدد
+            </span>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <form method="post" asp-action="ApproveQuestions" id="bulkApproveForm">
+                @Html.AntiForgeryToken()
+                <div id="selectedInputs"></div>
+                <button type="button" class="btn-pr-primary" id="bulkApproveBtn" disabled>
+                    <i class="fas fa-check-double"></i> اعتماد المحدد
+                </button>
+            </form>
+
+            <form method="post" asp-action="ApprovePendingReviewFiltered" id="approveFilteredForm">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="curriculumId" value="@Model.CurriculumId" />
+                <input type="hidden" name="sectionId" value="@Model.SectionId" />
+                <input type="hidden" name="lessonId" value="@Model.LessonId" />
+                <input type="hidden" name="searchTitle" value="@Model.SearchTitle" />
+                <button type="button" class="btn-pr-outline" id="approveFilteredBtn" @(filteredPending == 0 ? "disabled" : "")>
+                    <i class="fas fa-list-check"></i> اعتماد كل الفلتر (@filteredPending)
+                </button>
+            </form>
+        </div>
+    </div>
+
+    @* ─── Questions Table ─── *@
+    <div class="pr-table-panel">
+        <div class="table-responsive">
+            <table class="table table-hover w-100" id="questionsTable">
+                <thead>
+                    <tr>
+                        <th style="width:40px;">
+                            <input type="checkbox" class="form-check-input pr-check" id="selectAllVisible" />
+                        </th>
+                        <th style="width:90px;"># مرجع</th>
+                        <th>السؤال</th>
+                        <th>القسم</th>
+                        <th>المحور</th>
+                        <th>المؤشر</th>
+                        <th>الإجابة</th>
+                        <th>التاريخ</th>
+                        <th style="width:100px;">اعتماد</th>
+                        <th style="width:130px;">إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+@* ─── Modals ─── *@
+
+@* Preview Modal *@
+<div class="modal fade pr-modal" id="questionPreviewModal" tabindex="-1" dir="rtl">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-eye" style="color:var(--pr-accent);"></i>
+                    معاينة السؤال
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="questionPreviewModalBody">
+                <div class="pr-empty"><i class="fas fa-spinner fa-spin"></i><p>جارٍ التحميل…</p></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Labels Modal *@
+<div class="modal fade pr-modal" id="labelsModal" tabindex="-1" dir="rtl">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-tags" style="color:var(--pr-warning);"></i>
+                    تصنيفات السؤال
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="labelsModalBody"></div>
+        </div>
+    </div>
+</div>
+
+@* Audit Modal *@
+<div class="modal fade pr-modal" id="auditModal" tabindex="-1" dir="rtl">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-history" style="color:#d8b4fe;"></i>
+                    آخر التعديلات
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="auditModalBody">
+                <div class="pr-empty"><i class="fas fa-spinner fa-spin"></i><p>جارٍ التحميل…</p></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Similar Modal *@
+<div class="modal fade pr-modal" id="similarModal" tabindex="-1" dir="rtl">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-copy" style="color:#fca5a5;"></i>
+                    نتائج فحص التشابه
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="list-group" id="similarResults"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        /* ─── State ─── */
+        const selectedQuestions = new Set();
+
+        function rowId(row) {
+            return row.id || row.Id;
+        }
+
+        /* ─── Selected badge update ─── */
+        function updateBulkState() {
+            const count = selectedQuestions.size;
+            const badge = document.getElementById('selectedBadge');
+            document.getElementById('selectedCount').textContent = count;
+            document.getElementById('bulkApproveBtn').disabled = count === 0;
+
+            if (count > 0) {
+                badge.classList.remove('empty');
+            } else {
+                badge.classList.add('empty');
+            }
+
+            const container = document.getElementById('selectedInputs');
+            container.innerHTML = '';
+            selectedQuestions.forEach(id => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'selectedIds';
+                input.value = id;
+                container.appendChild(input);
+            });
+        }
+
+        /* ─── DataTable Init ─── */
+        const questionsTable = $('#questionsTable').DataTable({
+            ajax: {
+                url: '/Admin/Questions/LoadPendingReviewQuestionsData',
+                type: 'POST',
+                data: function (d) {
+                    d.curriculumId = $('#CurriculumId').val();
+                    d.sectionId    = $('#SectionId').val();
+                    d.lessonId     = $('#LessonId').val();
+                    d.searchTitle  = $('#SearchTitle').val();
+                },
+                dataSrc: 'data'
+            },
+            order: [[7, 'desc']],
+            pageLength: 25,
+            columns: [
+                {
+                    data: null,
+                    orderable: false,
+                    searchable: false,
+                    render: function (_, __, row) {
+                        const id = rowId(row);
+                        const checked = selectedQuestions.has(String(id)) ? 'checked' : '';
+                        return `<input type="checkbox" class="form-check-input pr-check row-select" value="${id}" ${checked} />`;
+                    }
+                },
+                {
+                    data: 'referenceNumber',
+                    render: function (data) {
+                        return `<span class="pr-q-ref">${data ?? '—'}</span>`;
+                    }
+                },
+                {
+                    data: null,
+                    className: 'dt-body-right',
+                    render: function (_, __, row) {
+                        const id = rowId(row);
+                        const type = row.isQuantitative
+                            ? `<span class="pr-badge pr-badge-quant ms-1">كمي</span>`
+                            : `<span class="pr-badge pr-badge-verbal ms-1">لفظي</span>`;
+
+                        const labels = (row.labels && row.labels.length > 0)
+                            ? row.labels.map(l => `<span class="pr-badge pr-badge-tag">${l}</span>`).join(' ')
+                            : '';
+
+                        return `
+                            <div class="pr-q-title">
+                                <button class="pr-action-btn preview flex-shrink-0" type="button" onclick="showQuestionPreview('${id}')" title="معاينة">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <div>
+                                    <div class="pr-q-title-text">${row.titlePreview ?? row.title ?? ''}</div>
+                                    <div class="d-flex flex-wrap gap-1 mt-1">${type}${labels}</div>
+                                </div>
+                            </div>`;
+                    }
+                },
+                {
+                    data: 'curriculum',
+                    render: function (data) {
+                        return `<span style="font-size:12px;color:var(--pr-muted);">${data ?? '—'}</span>`;
+                    }
+                },
+                {
+                    data: 'section',
+                    render: function (data) {
+                        return `<span style="font-size:12px;color:var(--pr-muted);">${data ?? '—'}</span>`;
+                    }
+                },
+                {
+                    data: 'lesson',
+                    render: function (data) {
+                        return `<span style="font-size:12px;color:var(--pr-muted);">${data ?? '—'}</span>`;
+                    }
+                },
+                {
+                    data: 'isAnswerConfirmed',
+                    render: function (data) {
+                        return data
+                            ? `<span class="pr-badge pr-badge-confirmed"><i class="fas fa-check" style="font-size:9px;"></i> مؤكدة</span>`
+                            : `<span class="pr-badge pr-badge-unconfirmed"><i class="fas fa-xmark" style="font-size:9px;"></i> غير مؤكدة</span>`;
+                    }
+                },
+                {
+                    data: 'createdAt',
+                    render: function (data) {
+                        return `<span style="font-size:12px;color:var(--pr-muted);">${data ?? '—'}</span>`;
+                    }
+                },
+                {
+                    data: null,
+                    orderable: false,
+                    searchable: false,
+                    render: function (_, __, row) {
+                        const id = rowId(row);
+                        return `<button type="button" class="btn-pr-success" onclick="approveSingle('${id}')">
+                                    <i class="fas fa-check-circle"></i> اعتماد
+                                </button>`;
+                    }
+                },
+                {
+                    data: null,
+                    orderable: false,
+                    searchable: false,
+                    render: function (_, __, row) {
+                        const id = rowId(row);
+                        return `
+                            <div class="pr-action-group">
+                                <a href="/Admin/Questions/Edit/${id}" target="_blank" class="pr-action-btn edit" title="تعديل">
+                                    <i class="fas fa-pen"></i>
+                                </a>
+                                <a href="/Admin/Questions/Details/${id}" class="pr-action-btn detail" title="التفاصيل">
+                                    <i class="fas fa-info-circle"></i>
+                                </a>
+                                <button type="button" class="pr-action-btn audit" onclick="openAuditModal('${id}')" title="آخر التعديلات">
+                                    <i class="fas fa-history"></i>
+                                </button>
+                                <button type="button" class="pr-action-btn similar" onclick="checkSimilar('${id}')" title="فحص التشابه">
+                                    <i class="fas fa-copy"></i>
+                                </button>
+                            </div>`;
+                    }
+                }
+            ],
+            language: {
+                url: "//cdn.datatables.net/plug-ins/1.13.5/i18n/ar.json"
+            },
+            drawCallback: function () {
+                $('#selectAllVisible').prop('checked', false);
+            }
+        });
+
+        /* ─── Row Checkbox ─── */
+        $('#questionsTable').on('change', '.row-select', function () {
+            const id = String(this.value);
+            if (this.checked) {
+                selectedQuestions.add(id);
+            } else {
+                selectedQuestions.delete(id);
+            }
+            updateBulkState();
+        });
+
+        /* ─── Select All Visible ─── */
+        $('#selectAllVisible').on('change', function () {
+            const checked = this.checked;
+            $('#questionsTable .row-select').each(function () {
+                this.checked = checked;
+                const id = String(this.value);
+                if (checked) {
+                    selectedQuestions.add(id);
+                } else {
+                    selectedQuestions.delete(id);
+                }
+            });
+            updateBulkState();
+        });
+
+        /* ─── Bulk Approve ─── */
+        $('#bulkApproveBtn').on('click', function () {
+            Swal.fire({
+                icon: 'question',
+                title: 'اعتماد الأسئلة المحددة؟',
+                text: `سيتم اعتماد ${selectedQuestions.size} سؤال بعد التحقق من صلاحيتها.`,
+                showCancelButton: true,
+                confirmButtonText: 'اعتماد',
+                cancelButtonText: 'إلغاء'
+            }).then(result => {
+                if (result.isConfirmed) {
+                    document.getElementById('bulkApproveForm').submit();
+                }
+            });
+        });
+
+        /* ─── Approve Filtered ─── */
+        $('#approveFilteredBtn').on('click', function () {
+            Swal.fire({
+                icon: 'warning',
+                title: 'اعتماد كل نتائج الفلتر؟',
+                text: 'سيتم اعتماد كل الأسئلة الصالحة المطابقة للفلاتر الحالية، وليس الصفحة المعروضة فقط.',
+                showCancelButton: true,
+                confirmButtonText: 'اعتماد الكل',
+                cancelButtonText: 'إلغاء'
+            }).then(result => {
+                if (result.isConfirmed) {
+                    document.getElementById('approveFilteredForm').submit();
+                }
+            });
+        });
+
+        /* ─── Approve Single (Fetch) ─── */
+        async function approveSingle(questionId) {
+            const result = await Swal.fire({
+                icon: 'question',
+                title: 'اعتماد هذا السؤال؟',
+                showCancelButton: true,
+                confirmButtonText: 'اعتماد',
+                cancelButtonText: 'إلغاء'
+            });
+
+            if (!result.isConfirmed) return;
+
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+
+            try {
+                const response = await fetch('/Admin/Questions/ApproveSingleQuestion', {
+                    method: 'POST',
+                    headers: { 'RequestVerificationToken': token },
+                    body: new URLSearchParams({
+                        selectedId: questionId,
+                        __RequestVerificationToken: token
+                    })
+                });
+
+                if (!response.ok) throw new Error('فشل الاتصال بالخادم');
+
+                const data = await response.json();
+                if (data.success) {
+                    selectedQuestions.delete(String(questionId));
+                    updateBulkState();
+                    questionsTable.ajax.reload(null, false);
+                    Swal.fire('تم الاعتماد', data.message, 'success');
+                } else {
+                    Swal.fire('تنبيه', data.message, 'warning');
+                }
+            } catch {
+                Swal.fire('خطأ', 'حدث خطأ غير متوقع، يرجى المحاولة مجدداً.', 'error');
+            }
+        }
+
+        /* ─── Preview Modal ─── */
+        function showQuestionPreview(id) {
+            const body = document.getElementById('questionPreviewModalBody');
+            body.innerHTML = '<div class="pr-empty"><i class="fas fa-spinner fa-spin fa-2x"></i><p class="mt-2">جارٍ التحميل…</p></div>';
+            const modal = new bootstrap.Modal(document.getElementById('questionPreviewModal'));
+            modal.show();
+
+            fetch(`/Admin/Questions/Preview/${id}`)
+                .then(r => r.text())
+                .then(html => { body.innerHTML = html; })
+                .catch(() => {
+                    body.innerHTML = '<div class="pr-empty"><i class="fas fa-exclamation-triangle"></i><p>حدث خطأ أثناء تحميل السؤال.</p></div>';
+                });
+        }
+
+        /* ─── Audit Modal ─── */
+        function openAuditModal(id) {
+            const body = document.getElementById('auditModalBody');
+            body.innerHTML = '<div class="pr-empty"><i class="fas fa-spinner fa-spin fa-2x"></i><p class="mt-2">جارٍ التحميل…</p></div>';
+            new bootstrap.Modal(document.getElementById('auditModal')).show();
+
+            fetch(`/Admin/Questions/Audit/${id}`)
+                .then(r => r.text())
+                .then(html => { body.innerHTML = html; })
+                .catch(() => {
+                    body.innerHTML = '<div class="pr-empty"><i class="fas fa-exclamation-triangle"></i><p>حدث خطأ في تحميل السجل.</p></div>';
+                });
+        }
+
+        /* ─── Similar Check ─── */
+        function checkSimilar(questionId) {
+            const container = document.getElementById('similarResults');
+            container.innerHTML = '<div class="text-center py-4" style="color:var(--pr-muted);"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
+            new bootstrap.Modal(document.getElementById('similarModal')).show();
+
+            fetch(`/Admin/Questions/CheckSimilarQuestions?id=${questionId}`)
+                .then(res => res.json())
+                .then(data => {
+                    container.innerHTML = '';
+                    if (data.length === 0) {
+                        container.innerHTML = '<div class="text-center py-4" style="color:var(--pr-muted);"><i class="fas fa-check-circle fa-2x mb-2 d-block" style="color:#22c55e;"></i>لا يوجد أسئلة متشابهة بنسبة 80% أو أكثر.</div>';
+                    } else {
+                        data.forEach(q => {
+                            const title = $('<div>').text(q.title || '').html();
+                            const meta = [q.referenceNumber, q.lesson, q.matchType].filter(Boolean).map(x => $('<div>').text(x).html()).join(' · ');
+                            container.innerHTML += `
+                                <a href="/Admin/Questions/Details/${q.id}" target="_blank" class="list-group-item list-group-item-action d-flex justify-content-between align-items-start gap-2">
+                                    <span>
+                                        <span class="d-block fw-bold">${title}</span>
+                                        <small class="text-muted">${meta}</small>
+                                    </span>
+                                    <span class="pr-badge pr-badge-quant">${(q.similarity * 100).toFixed(1)}%</span>
+                                </a>`;
+                        });
+                    }
+                })
+                .catch(() => {
+                    container.innerHTML = '<div class="text-center py-4" style="color:#fca5a5;"><i class="fas fa-exclamation-triangle"></i> فشل في تحميل الأسئلة المتشابهة.</div>';
+                });
+        }
+    </script>
+}

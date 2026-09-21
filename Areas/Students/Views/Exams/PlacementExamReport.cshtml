@@ -1,0 +1,157 @@
+﻿@model List<QdratNew.ViewModels.Students.PlacementExamReportVm>
+@using QdratNew.Helpers
+@{
+    Layout = "~/Views/Shared/_QuestionStudentLayout.cshtml";
+    var total = Model.Count;
+    var correct = Model.Count(q => q.IsCorrect);
+    var wrong = Model.Count(q => !q.IsCorrect && !string.IsNullOrEmpty(q.StudentAnswer));
+    var skipped = Model.Count(q => string.IsNullOrEmpty(q.StudentAnswer));
+    var percent = total > 0 ? Math.Round((double)correct / total * 100, 1) : 0;
+}
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>تقرير تحديد المستوى</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background: #f6f7fb;
+            font-family: 'Noto Kufi Arabic','Noto Sans Arabic',sans-serif;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(0,0,0,.06);
+            padding: 18px;
+        }
+
+        .badge {
+            background: #0d94881a;
+            color: #0d9488;
+            font-weight: 700;
+            padding: .35rem .7rem;
+            border-radius: .75rem;
+            font-size: .9rem;
+        }
+
+        .label {
+            color: #64748b;
+            font-size: .85rem;
+        }
+
+        .value {
+            color: #0f172a;
+            font-weight: 800;
+        }
+        @@media print {
+            .no-print
+
+        {
+            display: none !important
+        }
+
+        body {
+            background: #fff !important
+        }
+
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div class="max-w-5xl mx-auto px-4 py-6 space-y-5">
+
+        <!-- Header -->
+        <section class="card">
+            <div class="flex items-start justify-between gap-6">
+                <div>
+                    <h1 class="text-2xl md:text-3xl font-extrabold text-slate-900">تقرير تحديد المستوى</h1>
+                    <p class="text-slate-600">الكمي واللفظي</p>
+                </div>
+                <svg width="64" height="64" viewBox="0 0 48 48" class="text-teal-600">
+                    <circle cx="24" cy="24" r="22" fill="currentColor" opacity=".15" />
+                    <path d="M12 30l8-12 6 9 4-6 6 9" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+            </div>
+
+            <!-- معلومات الطالب -->
+            <div class="mt-4 grid sm:grid-cols-2 gap-4">
+                <div class="grid grid-cols-3 gap-x-2 gap-y-2">
+                    <div class="label">اسم الطالب:</div><div class="col-span-2 value">@Model.FirstOrDefault()?.StudentName</div>
+                    <div class="label">رقم الطالب:</div><div class="col-span-2 value">@Model.FirstOrDefault()?.StudentCode</div>
+                    <div class="label">الصف/المستوى:</div><div class="col-span-2 value">@Model.FirstOrDefault()?.StudentLevel</div>
+                    <div class="label">تاريخ الاختبار:</div><div class="col-span-2 value">@Model.FirstOrDefault()?.ExamDate.ToString("yyyy-MM-dd")</div>
+                </div>
+                <div class="grid grid-cols-3 gap-x-2 gap-y-2">
+                    <div class="label">زمن الحل:</div><div class="col-span-2 value">@NumberHelper.ToIndicNumbersSafe(Model.FirstOrDefault()?.TimeTakenMinutes.ToString() ?? "0") دقيقة</div>
+                    <div class="label">عدد الأسئلة:</div><div class="col-span-2 value">@NumberHelper.ToIndicNumbersSafe(total.ToString())</div>
+                    <div class="label">الإجابات الصحيحة:</div><div class="col-span-2 value">@NumberHelper.ToIndicNumbersSafe(correct.ToString())</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- مؤشرات الأداء -->
+        <section class="grid sm:grid-cols-3 gap-4">
+            <div class="card text-center">
+                <div class="label">النسبة العامة</div>
+                <div class="text-3xl font-bold text-slate-900">@percent%</div>
+                <div class="text-gray-500 text-xs">تقدير: @(percent >= 80 ? "جيد جدًا" : (percent >= 60 ? "متوسط" : "قيد التطوير"))</div>
+            </div>
+            <div class="card text-center">
+                <div class="label">إجابات صحيحة</div>
+                <div class="text-3xl font-bold text-emerald-600">@correct</div>
+                <div class="text-gray-500 text-xs">من أصل @total سؤال</div>
+            </div>
+            <div class="card text-center">
+                <div class="label">الأسئلة غير المجابة</div>
+                <div class="text-3xl font-bold text-amber-600">@skipped</div>
+                <div class="text-gray-500 text-xs">يُنصح بإكمال التدريب</div>
+            </div>
+        </section>
+
+        <!-- رسم بياني -->
+        <section class="card">
+            <h2 class="font-bold mb-3">توزيع الأداء</h2>
+            <canvas id="scoreChart" height="160"></canvas>
+        </section>
+
+        <!-- التوصيات -->
+        <section class="card">
+            <h2 class="font-bold mb-3">التوصيات الفردية</h2>
+            <ul class="list-disc pr-6 space-y-2 text-gray-800">
+                <li>راجع الأسئلة الخاطئة وركّز على نقاط الضعف.</li>
+                <li>درّب نفسك على السرعة والدقة مع ضبط الوقت.</li>
+                <li>التزم بالخطة التدريبية المقترحة من المعهد.</li>
+            </ul>
+        </section>
+
+        <div class="text-center no-print">
+            <button onclick="window.print()" class="px-5 py-2 mt-3 rounded-xl bg-teal-600 text-white hover:bg-teal-700">طباعة / حفظ PDF</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const ctx = document.getElementById('scoreChart');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['صحيحة','خاطئة','غير مجابة'],
+                datasets: [{
+                    data: [@correct,@wrong,@skipped],
+                    backgroundColor: ['#10b981','#ef4444','#f59e0b'],
+                    borderRadius: 10
+                }]
+            },
+            options: {
+                plugins:{legend:{display:false}},
+                scales:{y:{beginAtZero:true,max:@total}}
+            }
+        });
+    </script>
+</body>
+</html>

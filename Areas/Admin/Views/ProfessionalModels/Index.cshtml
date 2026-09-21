@@ -1,0 +1,1639 @@
+﻿@model IEnumerable<QdratNew.Entities.ProfessionalModel>
+@using Microsoft.AspNetCore.Mvc.Rendering
+@using QdratNew.Enums
+
+@{
+    ViewData["Title"] = "النماذج الاحترافية";
+
+    var modelsList = Model?.ToList() ?? new List<QdratNew.Entities.ProfessionalModel>();
+    var showArchived = ViewBag.ShowArchived as bool? ?? false;
+    var activeModelsCount = ViewBag.ActiveModelsCount as int? ?? modelsList.Count(x => !x.IsArchived);
+    var archivedModelsCount = ViewBag.ArchivedModelsCount as int? ?? modelsList.Count(x => x.IsArchived);
+    var selectedCurriculumId = ViewBag.SelectedCurriculumId as int?;
+    var selectedModelType = ViewBag.SelectedModelType as ProfessionalModelType?;
+    var curriculums = ViewBag.Curriculums as List<SelectListItem> ?? new List<SelectListItem>();
+
+    var totalModels = modelsList.Count;
+    var createdToday = modelsList.Count(x => x.CreatedAt.Date == DateTime.Today);
+    var createdThisMonth = modelsList.Count(x =>
+        x.CreatedAt.Year == DateTime.Today.Year &&
+        x.CreatedAt.Month == DateTime.Today.Month);
+
+    var creatorsCount = modelsList
+        .Where(x => !string.IsNullOrWhiteSpace(x.CreatedBy))
+        .Select(x => x.CreatedBy)
+        .Distinct()
+        .Count();
+}
+
+@section Styles {
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" />
+
+    <style>
+        :root {
+            --ink: #0D1B2A;
+            --ink-2: #2C3E50;
+            --ink-3: #5A6A7A;
+            --ink-4: #8FA0B0;
+            --ink-5: #C8D5E0;
+            --canvas: #F3F6FA;
+            --surface: #FFFFFF;
+            --surface-2: #F8FAFC;
+            --surface-3: #EEF2F7;
+            --border: #DDE4EC;
+            --blue: #1B5EAE;
+            --blue-2: #2471D0;
+            --blue-bg: #E8F1FB;
+            --blue-dark: #103E7A;
+            --emerald: #0D7A5B;
+            --emerald-bg: #E4F5EE;
+            --amber: #985D09;
+            --amber-bg: #FDF0D8;
+            --rose: #BF1030;
+            --rose-bg: #FDEAEE;
+            --violet: #5535B5;
+            --violet-bg: #EDE8F9;
+            --r-sm: 6px;
+            --r-md: 10px;
+            --r-lg: 14px;
+            --r-xl: 20px;
+            --sh-xs: 0 1px 3px rgba(13,27,42,.06);
+            --sh-sm: 0 2px 8px rgba(13,27,42,.08);
+            --sh-md: 0 4px 18px rgba(13,27,42,.10);
+            --ease: cubic-bezier(.25,.46,.45,.94);
+        }
+
+        .models-page {
+            background: var(--canvas);
+            min-height: 100vh;
+            padding: 32px 28px 64px;
+            direction: rtl;
+            font-family: 'Cairo';
+            color: var(--ink-2);
+        }
+
+        .models-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-bottom: 28px;
+        }
+
+        .models-brand {
+            display: flex;
+            align-items: center;
+            gap: 13px;
+        }
+
+        .models-brand-icon {
+            width: 46px;
+            height: 46px;
+            background: var(--blue);
+            border-radius: var(--r-lg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 20px;
+            box-shadow: 0 4px 14px rgba(27,94,174,.28);
+        }
+
+        .models-brand-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--ink);
+            line-height: 1.15;
+        }
+
+        .models-brand-sub {
+            font-size: 16px;
+            color: var(--ink-4);
+            margin-top: 2px;
+        }
+
+        .top-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn-main-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            background: var(--blue);
+            color: #fff;
+            border: none;
+            border-radius: var(--r-md);
+            padding: 10px 20px;
+            font-size: 18px;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            box-shadow: 0 3px 10px rgba(27,94,174,.28);
+            transition: background .16s var(--ease), transform .14s, box-shadow .16s;
+        }
+
+            .btn-main-action:hover {
+                background: var(--blue-dark);
+                color: #fff;
+                transform: translateY(-2px);
+                box-shadow: 0 6px 18px rgba(27,94,174,.32);
+            }
+
+        .models-kpis {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 13px;
+            margin-bottom: 24px;
+        }
+
+        @@media (max-width: 960px) {
+            .models-kpis {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @@media (max-width: 480px) {
+            .models-kpis {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .kpi-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            padding: 18px 19px;
+            display: flex;
+            align-items: center;
+            gap: 13px;
+            box-shadow: var(--sh-xs);
+            transition: transform .2s var(--ease), box-shadow .2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+            .kpi-card::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                right: 0;
+                width: 4px;
+                height: 100%;
+                border-radius: 0 var(--r-xl) var(--r-xl) 0;
+            }
+
+            .kpi-card:hover {
+                transform: translateY(-3px);
+                box-shadow: var(--sh-sm);
+            }
+
+        .kpi-blue::after {
+            background: var(--blue);
+        }
+
+        .kpi-emerald::after {
+            background: var(--emerald);
+        }
+
+        .kpi-amber::after {
+            background: var(--amber);
+        }
+
+        .kpi-violet::after {
+            background: var(--violet);
+        }
+
+        .models-tabs {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 18px;
+        }
+
+        .model-tab {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--ink-3);
+            border-radius: var(--r-md);
+            padding: 10px 16px;
+            font-size: 16px;
+            font-weight: 800;
+            text-decoration: none;
+            box-shadow: var(--sh-xs);
+        }
+
+            .model-tab.active {
+                background: var(--blue);
+                border-color: var(--blue);
+                color: #fff;
+            }
+
+        .archive-manager {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            box-shadow: var(--sh-sm);
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+
+        .archive-manager-toggle {
+            width: 100%;
+            border: none;
+            background: #fff;
+            padding: 16px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            cursor: pointer;
+            font-family: 'Cairo';
+            text-align: right;
+        }
+
+        .archive-manager-toggle-main,
+        .archive-manager-toggle-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .archive-manager-toggle-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: var(--r-md);
+            background: var(--amber-bg);
+            color: var(--amber);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .archive-manager-toggle-text {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .archive-manager-title {
+            font-size: 16px;
+            font-weight: 900;
+            color: var(--ink);
+        }
+
+        .archive-manager-subtitle {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--ink-4);
+        }
+
+        .archive-manager-chevron {
+            width: 34px;
+            height: 34px;
+            border-radius: var(--r-sm);
+            background: var(--surface-3);
+            color: var(--ink-3);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform .2s;
+        }
+
+        .archive-manager.is-open .archive-manager-chevron {
+            transform: rotate(180deg);
+            background: var(--amber-bg);
+            color: var(--amber);
+        }
+
+        .archive-manager-body {
+            display: none;
+            padding: 0 18px 18px;
+            border-top: 1px solid var(--surface-3);
+        }
+
+        .archive-manager.is-open .archive-manager-body {
+            display: block;
+        }
+
+        .archive-manager-body-inner {
+            padding-top: 16px;
+        }
+
+        .archive-manager-grid {
+            display: grid;
+            grid-template-columns: minmax(240px, 1fr) auto;
+            gap: 14px;
+            align-items: end;
+        }
+
+        .archive-models {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+            gap: 8px;
+            max-height: 180px;
+            overflow-y: auto;
+            padding: 10px;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: var(--r-md);
+        }
+
+        .archive-model-check {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            color: var(--ink-3);
+            font-size: 14px;
+            font-weight: 800;
+        }
+
+        .archive-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .archive-submit {
+            border: none;
+            border-radius: var(--r-md);
+            padding: 10px 16px;
+            background: var(--ink);
+            color: #fff;
+            font-family: 'Cairo';
+            font-size: 15px;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+            .archive-submit.restore {
+                background: var(--emerald);
+            }
+
+        .kpi-ico {
+            width: 42px;
+            height: 42px;
+            border-radius: var(--r-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .ico-blue {
+            background: var(--blue-bg);
+            color: var(--blue);
+        }
+
+        .ico-emerald {
+            background: var(--emerald-bg);
+            color: var(--emerald);
+        }
+
+        .ico-amber {
+            background: var(--amber-bg);
+            color: var(--amber);
+        }
+
+        .ico-violet {
+            background: var(--violet-bg);
+            color: var(--violet);
+        }
+
+        .kpi-label {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--ink-4);
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            margin-bottom: 3px;
+        }
+
+        .kpi-val {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--ink);
+            line-height: 1;
+        }
+
+        .models-table-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            overflow: visible;
+            box-shadow: var(--sh-sm);
+            margin-bottom: 24px;
+        }
+
+        .models-table-topbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 11px 16px;
+            border-bottom: 1px solid var(--surface-3);
+            flex-wrap: wrap;
+        }
+
+        .table-section-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--ink);
+            margin-left: 10px;
+        }
+
+            .table-section-title i {
+                color: var(--blue);
+            }
+
+        .models-table-search-wrap {
+            position: relative;
+            flex: 1;
+            min-width: 200px;
+            max-width: 360px;
+        }
+
+            .models-table-search-wrap i {
+                position: absolute;
+                right: 11px;
+                top: 50%;
+                transform: translateY(-50%);
+                color: var(--ink-4);
+                font-size: 17px;
+                pointer-events: none;
+            }
+
+            .models-table-search-wrap input {
+                width: 100%;
+                padding: 7px 32px 7px 12px;
+                border: 1px solid var(--border);
+                border-radius: var(--r-md);
+                font-size: 18px;
+                background: var(--surface-2);
+                color: var(--ink);
+                transition: border-color .15s, box-shadow .15s;
+            }
+
+                .models-table-search-wrap input:focus {
+                    outline: none;
+                    border-color: var(--blue-2);
+                    box-shadow: 0 0 0 3px rgba(36,113,208,.1);
+                    background: var(--surface);
+                }
+
+        .models-count-badge {
+            margin-right: auto;
+            font-size: 16px;
+            color: var(--ink-4);
+        }
+
+            .models-count-badge strong {
+                color: var(--blue);
+                font-weight: 700;
+            }
+
+        .table-responsive-safe {
+            width: 100%;
+            overflow-x: auto;
+            overflow-y: visible;
+        }
+
+        #modelsTable {
+            width: 100% !important;
+            border-collapse: collapse;
+        }
+
+            #modelsTable thead th {
+                background: var(--surface-2) !important;
+                padding: 11px 15px !important;
+                font-size: 15px !important;
+                font-weight: 700 !important;
+                color: var(--ink-4) !important;
+                text-transform: uppercase;
+                letter-spacing: .05em;
+                white-space: nowrap;
+                border: none !important;
+                text-align: center;
+            }
+
+            #modelsTable tbody tr {
+                border-bottom: 1px solid var(--surface-3);
+                transition: background .1s;
+            }
+
+                #modelsTable tbody tr:last-child {
+                    border-bottom: none;
+                }
+
+                #modelsTable tbody tr:hover {
+                    background: #F5F8FD;
+                }
+
+            #modelsTable td {
+                padding: 11px 15px !important;
+                vertical-align: middle !important;
+                font-size: 18px !important;
+                color: var(--ink-2);
+                border: none !important;
+                text-align: center;
+            }
+
+        .model-title-cell {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-align: right;
+        }
+
+        .model-avatar {
+            width: 33px;
+            height: 33px;
+            border-radius: 50%;
+            background: var(--blue-bg);
+            color: var(--blue);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .model-item-name {
+            font-weight: 600;
+            color: var(--ink);
+            font-size: 18px;
+        }
+
+        .description-text {
+            color: var(--ink-3);
+            font-size: 16px;
+            line-height: 1.6;
+            max-width: 420px;
+            display: inline-block;
+            text-align: right;
+        }
+
+        .creator-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: var(--violet-bg);
+            color: var(--violet);
+            padding: 3px 10px;
+            border-radius: 30px;
+            font-size: 16px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .date-chip {
+            font-size: 16px;
+            color: var(--ink-3);
+            white-space: nowrap;
+        }
+
+        .models-act-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            flex-wrap: nowrap;
+            position: relative;
+            overflow: visible;
+        }
+
+        .act-btn {
+            position: relative;
+            width: 34px;
+            height: 34px;
+            min-width: 34px;
+            padding: 0;
+            border-radius: var(--r-sm);
+            font-size: 16px;
+            font-weight: 600;
+            text-decoration: none;
+            border: 1.5px solid transparent;
+            cursor: pointer;
+            background: transparent;
+            transition: all .15s;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            overflow: visible;
+        }
+
+            .act-btn i {
+                margin: 0;
+                font-size: 15px;
+                line-height: 1;
+            }
+
+            .act-btn .act-text {
+                position: absolute;
+                bottom: calc(100% + 8px);
+                right: 50%;
+                transform: translateX(50%) translateY(4px);
+                background: var(--ink);
+                color: #fff;
+                font-size: 13px;
+                font-weight: 600;
+                padding: 5px 9px;
+                border-radius: 6px;
+                opacity: 0;
+                visibility: hidden;
+                pointer-events: none;
+                transition: opacity .15s ease, transform .15s ease, visibility .15s ease;
+                z-index: 9999;
+                box-shadow: 0 4px 12px rgba(13,27,42,.18);
+                min-width: max-content;
+            }
+
+                .act-btn .act-text::after {
+                    content: "";
+                    position: absolute;
+                    top: 100%;
+                    right: 50%;
+                    transform: translateX(50%);
+                    border-width: 5px;
+                    border-style: solid;
+                    border-color: var(--ink) transparent transparent transparent;
+                }
+
+            .act-btn:hover .act-text {
+                opacity: 1;
+                visibility: visible;
+                transform: translateX(50%) translateY(0);
+            }
+
+        .act-form {
+            display: inline-flex;
+            margin: 0;
+            padding: 0;
+        }
+
+        .act-view {
+            background: var(--blue-bg);
+            color: var(--blue);
+            border-color: #B6D3F4;
+        }
+
+            .act-view:hover {
+                background: var(--blue);
+                color: #fff;
+                border-color: var(--blue);
+            }
+
+        .act-edit {
+            background: var(--surface-3);
+            color: var(--ink-3);
+            border-color: var(--border);
+        }
+
+            .act-edit:hover {
+                background: var(--ink-3);
+                color: #fff;
+                border-color: var(--ink-3);
+            }
+
+        .act-duplicate {
+            background: var(--amber-bg);
+            color: var(--amber);
+            border-color: #F3D494;
+        }
+
+            .act-duplicate:hover {
+                background: var(--amber);
+                color: #fff;
+                border-color: var(--amber);
+            }
+
+        .act-visibility {
+            background: var(--violet-bg);
+            color: var(--violet);
+            border-color: #D7CDF8;
+        }
+
+            .act-visibility:hover {
+                background: var(--violet);
+                color: #fff;
+                border-color: var(--violet);
+            }
+
+        .act-delete {
+            background: var(--rose-bg);
+            color: var(--rose);
+            border-color: #F5B8C2;
+        }
+
+            .act-delete:hover {
+                background: var(--rose);
+                color: #fff;
+                border-color: var(--rose);
+            }
+
+        .act-archive {
+            background: var(--surface-3);
+            color: var(--ink-3);
+            border-color: var(--border);
+        }
+
+            .act-archive:hover {
+                background: var(--ink);
+                color: #fff;
+                border-color: var(--ink);
+            }
+
+        .act-restore {
+            background: var(--emerald-bg);
+            color: var(--emerald);
+            border-color: #B9E4D5;
+        }
+
+            .act-restore:hover {
+                background: var(--emerald);
+                color: #fff;
+                border-color: var(--emerald);
+            }
+
+        .dataTables_wrapper {
+            direction: rtl;
+            overflow: visible;
+        }
+
+            .dataTables_wrapper .dataTables_filter {
+                display: none;
+            }
+
+            .dataTables_wrapper .dataTables_length,
+            .dataTables_wrapper .dataTables_info {
+                padding: 9px 16px;
+                font-size: 16px;
+                color: var(--ink-4);
+            }
+
+            .dataTables_wrapper .dataTables_paginate {
+                padding: 9px 16px;
+            }
+
+                .dataTables_wrapper .dataTables_paginate .paginate_button {
+                    border-radius: var(--r-sm) !important;
+                    font-size: 16px !important;
+                    padding: 4px 10px !important;
+                    border: 1px solid var(--border) !important;
+                    margin: 0 2px !important;
+                    color: var(--ink-3) !important;
+                }
+
+                    .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+                    .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
+                        background: var(--blue) !important;
+                        border-color: var(--blue) !important;
+                        color: #fff !important;
+                    }
+
+                    .dataTables_wrapper .dataTables_paginate .paginate_button:hover:not(.current):not(.disabled) {
+                        background: var(--blue-bg) !important;
+                        border-color: #B6D3F4 !important;
+                        color: var(--blue) !important;
+                    }
+
+            .dataTables_wrapper .dataTables_length select {
+                border: 1px solid var(--border);
+                border-radius: var(--r-sm);
+                padding: 3px 8px;
+                font-size: 16px;
+                color: var(--ink);
+            }
+
+        div.dataTables_wrapper div.dataTables_paginate,
+        div.dataTables_wrapper div.dataTables_info,
+        div.dataTables_wrapper div.dataTables_length {
+            border-top: 1px solid var(--surface-3);
+            background: var(--surface-2);
+        }
+
+        .models-empty {
+            text-align: center;
+            padding: 56px 16px;
+            color: var(--ink-4);
+        }
+
+            .models-empty i {
+                font-size: 20px;
+                display: block;
+                margin-bottom: 12px;
+                color: var(--ink-5);
+            }
+
+        .models-empty-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--ink-3);
+        }
+
+        .models-empty-sub {
+            font-size: 16px;
+            margin-top: 4px;
+        }
+
+        /* Breadcrumb for filtered view */
+        .filtered-breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding: 10px 16px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-lg);
+            margin-bottom: 14px;
+            box-shadow: var(--sh-xs);
+        }
+
+        .filtered-back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 7px 14px;
+            border-radius: var(--r-md);
+            background: var(--blue-bg);
+            color: var(--blue);
+            border: 1px solid #B6D3F4;
+            font-size: 14px;
+            font-weight: 700;
+            text-decoration: none;
+            transition: all .15s;
+            white-space: nowrap;
+        }
+
+        .filtered-back-btn:hover {
+            background: var(--blue);
+            color: #fff;
+            border-color: var(--blue);
+        }
+
+        .filtered-crumb-sep {
+            color: var(--ink-5);
+            font-size: 11px;
+        }
+
+        .filtered-crumb-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 5px 11px;
+            border-radius: 30px;
+            font-size: 13px;
+            font-weight: 700;
+            background: var(--surface-3);
+            color: var(--ink-3);
+            border: 1px solid var(--border);
+        }
+
+        .filtered-crumb-item.type-hw {
+            background: var(--amber-bg);
+            color: var(--amber);
+            border-color: #F3D494;
+        }
+
+        .filtered-crumb-item.type-ex {
+            background: var(--blue-bg);
+            color: var(--blue);
+            border-color: #B6D3F4;
+        }
+
+        .filtered-results-count {
+            margin-right: auto;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--ink-4);
+        }
+
+        /* Legacy banner */
+        .cstat-legacy-banner {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            padding: 14px 18px;
+            border-radius: var(--r-lg);
+            background: linear-gradient(135deg, #FFFBEB 0%, #FDF0D8 100%);
+            border: 1px solid #F3D494;
+        }
+        .cstat-legacy-icon {
+            width: 42px; height: 42px; flex-shrink: 0;
+            border-radius: var(--r-md);
+            background: #F3D494; color: var(--amber);
+            display: flex; align-items: center; justify-content: center; font-size: 18px;
+        }
+        .cstat-legacy-text strong { display: block; font-size: 15px; font-weight: 900; color: var(--ink); margin-bottom: 4px; }
+        .cstat-legacy-text p { margin: 0; font-size: 13px; color: #7C4A07; font-weight: 600; line-height: 1.75; }
+        .cstat-legacy-count {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 2px 9px; border-radius: 20px; font-size: 12px; font-weight: 700;
+            background: #F3D494; color: var(--amber); margin-top: 5px;
+        }
+
+        .curriculum-filter-form {
+            margin: 0;
+        }
+
+        .curriculum-filter-wrap {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 0;
+        }
+
+            .curriculum-filter-wrap > i {
+                position: absolute;
+                right: 11px;
+                top: 50%;
+                transform: translateY(-50%);
+                color: var(--ink-4);
+                font-size: 15px;
+                pointer-events: none;
+                z-index: 2;
+            }
+
+        .curriculum-filter-select {
+            min-height: 42px;
+            border-radius: var(--r-md);
+            border: 1px solid var(--border);
+            background: var(--surface-2);
+            color: var(--ink);
+            font-size: 16px;
+            font-weight: 700;
+            font-family: 'Cairo';
+            padding: 6px 34px 6px 36px;
+            appearance: auto;
+            cursor: pointer;
+            transition: border-color .15s, box-shadow .15s;
+        }
+
+            .curriculum-filter-select:focus {
+                outline: none;
+                border-color: var(--blue-2);
+                box-shadow: 0 0 0 3px rgba(36,113,208,.1);
+                background: var(--surface);
+            }
+
+        .curriculum-filter-clear {
+            position: absolute;
+            left: 9px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: var(--rose-bg);
+            color: var(--rose);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            text-decoration: none;
+            z-index: 3;
+            transition: background .14s;
+        }
+
+            .curriculum-filter-clear:hover {
+                background: var(--rose);
+                color: #fff;
+            }
+
+        .curriculum-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: var(--emerald-bg);
+            color: var(--emerald);
+            padding: 4px 10px;
+            border-radius: 30px;
+            font-size: 14px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .model-type-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            border-radius: 30px;
+            font-size: 14px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .type-exam {
+            background: var(--blue-bg);
+            color: var(--blue);
+        }
+
+        .type-homework {
+            background: var(--amber-bg);
+            color: var(--amber);
+        }
+
+        @@media (max-width: 768px) {
+            .models-page {
+                padding: 22px 14px 48px;
+            }
+
+            .top-actions {
+                width: 100%;
+            }
+
+            .btn-main-action {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .models-table-topbar {
+                align-items: stretch;
+            }
+
+            .models-table-search-wrap {
+                max-width: 100%;
+                width: 100%;
+            }
+
+            .models-count-badge {
+                margin-right: 0;
+            }
+
+            .archive-manager-toggle,
+            .archive-manager-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .archive-manager-toggle {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+        }
+    </style>
+}
+
+<div class="models-page">
+
+    <div class="models-topbar">
+        <div class="models-brand">
+            <div class="models-brand-icon">
+                <i class="fa-solid fa-layer-group"></i>
+            </div>
+            <div>
+                <div class="models-brand-title">النماذج الاحترافية</div>
+                <div class="models-brand-sub">إدارة النماذج الاحترافية وتفاصيلها وصلاحيات الظهور والتكرار</div>
+            </div>
+        </div>
+
+        <div class="top-actions">
+            <a class="btn-main-action" asp-action="Create">
+                <i class="fa fa-plus"></i>
+                إنشاء نموذج جديد
+            </a>
+        </div>
+    </div>
+
+    <div class="models-tabs">
+        <a asp-action="Index"
+           asp-route-showArchived="false"
+           class="model-tab @(showArchived ? "" : "active")">
+            <i class="fa-solid fa-layer-group"></i>
+            النماذج النشطة (@activeModelsCount)
+        </a>
+        <a asp-action="Index"
+           asp-route-showArchived="true"
+           class="model-tab @(showArchived ? "active" : "")">
+            <i class="fa-solid fa-archive"></i>
+            الأرشيف (@archivedModelsCount)
+        </a>
+
+        <form method="get" asp-action="Index" class="curriculum-filter-form">
+            <input type="hidden" name="showArchived" value="@showArchived.ToString().ToLower()" />
+            @if (selectedModelType.HasValue)
+            {
+                <input type="hidden" name="modelType" value="@((int)selectedModelType.Value)" />
+            }
+            <div class="curriculum-filter-wrap">
+                <i class="fa fa-book"></i>
+                <select name="curriculumId" class="curriculum-filter-select" onchange="this.form.submit()">
+                    <option value="">كل المناهج</option>
+                    @foreach (var c in curriculums)
+                    {
+                        if (c.Value == selectedCurriculumId?.ToString())
+                        {
+                            <option value="@c.Value" selected>@c.Text</option>
+                        }
+                        else
+                        {
+                            <option value="@c.Value">@c.Text</option>
+                        }
+                    }
+                </select>
+                @if (selectedCurriculumId.HasValue)
+                {
+                    <a asp-action="Index" asp-route-showArchived="@showArchived.ToString().ToLower()" asp-route-modelType="@(selectedModelType.HasValue ? (int?)((int)selectedModelType.Value) : null)" class="curriculum-filter-clear" title="مسح فلتر المنهج">
+                        <i class="fa fa-times"></i>
+                    </a>
+                }
+            </div>
+        </form>
+
+        <form method="get" asp-action="Index" class="curriculum-filter-form">
+            <input type="hidden" name="showArchived" value="@showArchived.ToString().ToLower()" />
+            @if (selectedCurriculumId.HasValue)
+            {
+                <input type="hidden" name="curriculumId" value="@selectedCurriculumId.Value" />
+            }
+            <div class="curriculum-filter-wrap">
+                <i class="fa fa-tags"></i>
+                <select name="modelType" class="curriculum-filter-select" onchange="this.form.submit()">
+                    <option value="">كل الأنواع</option>
+                    @if (selectedModelType == ProfessionalModelType.Exam)
+                    {
+                        <option value="@((int)ProfessionalModelType.Exam)" selected>اختبارات</option>
+                        <option value="@((int)ProfessionalModelType.Homework)">واجبات</option>
+                    }
+                    else if (selectedModelType == ProfessionalModelType.Homework)
+                    {
+                        <option value="@((int)ProfessionalModelType.Exam)">اختبارات</option>
+                        <option value="@((int)ProfessionalModelType.Homework)" selected>واجبات</option>
+                    }
+                    else
+                    {
+                        <option value="@((int)ProfessionalModelType.Exam)">اختبارات</option>
+                        <option value="@((int)ProfessionalModelType.Homework)">واجبات</option>
+                    }
+                </select>
+                @if (selectedModelType.HasValue)
+                {
+                    <a asp-action="Index" asp-route-showArchived="@showArchived.ToString().ToLower()" asp-route-curriculumId="@selectedCurriculumId" class="curriculum-filter-clear" title="مسح فلتر النوع">
+                        <i class="fa fa-times"></i>
+                    </a>
+                }
+            </div>
+        </form>
+    </div>
+
+    <div class="models-kpis">
+
+        <div class="kpi-card kpi-blue">
+            <div class="kpi-ico ico-blue">
+                <i class="fa-solid fa-layer-group"></i>
+            </div>
+            <div>
+                <div class="kpi-label">إجمالي النماذج</div>
+                <div class="kpi-val">@totalModels</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-emerald">
+            <div class="kpi-ico ico-emerald">
+                <i class="fa-solid fa-calendar-day"></i>
+            </div>
+            <div>
+                <div class="kpi-label">نماذج اليوم</div>
+                <div class="kpi-val">@createdToday</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-amber">
+            <div class="kpi-ico ico-amber">
+                <i class="fa-solid fa-calendar-days"></i>
+            </div>
+            <div>
+                <div class="kpi-label">هذا الشهر</div>
+                <div class="kpi-val">@createdThisMonth</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-violet">
+            <div class="kpi-ico ico-violet">
+                <i class="fa-solid fa-user-pen"></i>
+            </div>
+            <div>
+                <div class="kpi-label">منشئون</div>
+                <div class="kpi-val">@creatorsCount</div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="archive-manager" id="archiveManagerSection">
+        <button type="button" class="archive-manager-toggle" id="archiveManagerToggle" aria-expanded="false" aria-controls="archiveManagerBody">
+            <div class="archive-manager-toggle-main">
+                <span class="archive-manager-toggle-icon"><i class="fa-solid fa-archive"></i></span>
+                <span class="archive-manager-toggle-text">
+                    <span class="archive-manager-title">إدارة أرشيف النماذج الاحترافية</span>
+                    <span class="archive-manager-subtitle">اختر نموذجًا أو أكثر لنقله إلى الأرشيف أو إخراجه منه</span>
+                </span>
+            </div>
+            <div class="archive-manager-toggle-left">
+                <span class="models-count-badge">داخل الأرشيف: <strong>@archivedModelsCount</strong> نموذج</span>
+                <span class="archive-manager-chevron"><i class="fa-solid fa-chevron-down"></i></span>
+            </div>
+        </button>
+
+        <div class="archive-manager-body" id="archiveManagerBody">
+            <div class="archive-manager-body-inner">
+                <form asp-action="ArchiveModelsByIds" method="post">
+                    @Html.AntiForgeryToken()
+                    <div class="archive-manager-grid">
+                        <div class="archive-models">
+                            @foreach (var item in modelsList)
+                            {
+                                <label class="archive-model-check">
+                                    <input type="checkbox" name="selectedModelIds" value="@item.Id" />
+                                    <span>@item.Title</span>
+                                </label>
+                            }
+                        </div>
+                        <div class="archive-actions">
+                            <button type="submit" class="archive-submit" onclick="return confirm('سيتم نقل النماذج المحددة إلى الأرشيف. هل تريد المتابعة؟')">
+                                <i class="fa-solid fa-box-archive"></i>
+                                أرشفة المحدد
+                            </button>
+                            <button type="submit"
+                                    formaction="@Url.Action("RestoreModelsByIds", "ProfessionalModels")"
+                                    class="archive-submit restore"
+                                    onclick="return confirm('سيتم إخراج النماذج المحددة من الأرشيف. هل تريد المتابعة؟')">
+                                <i class="fa-solid fa-undo"></i>
+                                إخراج من الأرشيف
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    @{
+        // هل يوجد فلتر نشط بمنهج أو نوع؟
+        bool isFiltered = selectedCurriculumId.HasValue || selectedModelType.HasValue;
+        var unclassified = modelsList.Where(m => m.CurriculumId == null).ToList();
+
+        // النماذج المعروضة في الجدول
+        // • عند وجود فلتر: كل نتائج الفلتر
+        // • بدون فلتر في وضع Active: النماذج غير المصنّفة فقط
+        // • الأرشيف: كل النماذج
+        var tableModels = (isFiltered || showArchived)
+            ? modelsList
+            : modelsList.Where(m => m.CurriculumId == null).ToList();
+
+        // عنوان الجدول
+        string tableTitle;
+        string tableIcon;
+        if (isFiltered && selectedCurriculumId.HasValue && selectedModelType.HasValue)
+        {
+            var currName = curriculums.FirstOrDefault(c => c.Value == selectedCurriculumId.ToString())?.Text ?? "المنهج";
+            tableTitle = $"نماذج {(selectedModelType == ProfessionalModelType.Homework ? "الواجبات" : "الاختبارات")} — {currName}";
+            tableIcon  = selectedModelType == ProfessionalModelType.Homework ? "fa-tasks" : "fa-file-alt";
+        }
+        else if (!isFiltered && !showArchived)
+        {
+            tableTitle = "النماذج غير المصنّفة";
+            tableIcon  = "fa-table-list";
+        }
+        else
+        {
+            tableTitle = "قائمة النماذج";
+            tableIcon  = "fa-table-list";
+        }
+    }
+
+    @* ═══ كروت المناهج (تظهر فقط بدون فلتر) ═══ *@
+    @if (!showArchived && !isFiltered)
+    {
+        await Html.RenderPartialAsync("_CurriculumStats");
+
+        @* بانر النماذج غير المصنّفة *@
+        @if (unclassified.Any())
+        {
+            <div class="cstat-legacy-banner" style="margin-bottom:16px">
+                <div class="cstat-legacy-icon">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                </div>
+                <div class="cstat-legacy-text">
+                    <strong>النماذج القديمة غير المصنّفة</strong>
+                    <p>هذه النماذج لم يُحدَّد لها منهج بعد. يُنصح بفتح كل نموذج وإضافة المنهج والنوع المناسب لينتقل إلى قسم المناهج أعلاه.</p>
+                    <span class="cstat-legacy-count"><i class="fa fa-layer-group"></i> @unclassified.Count نموذج غير مصنّف</span>
+                </div>
+            </div>
+        }
+    }
+
+    @* ═══ Breadcrumb عند التصفية ═══ *@
+    @if (isFiltered)
+    {
+        <div class="filtered-breadcrumb">
+            <a asp-action="Index" class="filtered-back-btn">
+                <i class="fa fa-arrow-right"></i>
+                <span>الرجوع لكل النماذج</span>
+            </a>
+            @if (selectedCurriculumId.HasValue)
+            {
+                var currName = curriculums.FirstOrDefault(c => c.Value == selectedCurriculumId.ToString())?.Text ?? "";
+                <span class="filtered-crumb-sep"><i class="fa fa-chevron-left"></i></span>
+                <span class="filtered-crumb-item">
+                    <i class="fa fa-book"></i> @currName
+                </span>
+            }
+            @if (selectedModelType.HasValue)
+            {
+                <span class="filtered-crumb-sep"><i class="fa fa-chevron-left"></i></span>
+                @if (selectedModelType == ProfessionalModelType.Homework)
+                {
+                    <span class="filtered-crumb-item type-hw">
+                        <i class="fa fa-tasks"></i> واجبات
+                    </span>
+                }
+                else
+                {
+                    <span class="filtered-crumb-item type-ex">
+                        <i class="fa fa-file-alt"></i> اختبارات
+                    </span>
+                }
+            }
+            <span class="filtered-results-count">@tableModels.Count نتيجة</span>
+        </div>
+    }
+
+    <div class="models-table-card">
+
+        <div class="models-table-topbar">
+            <div class="table-section-title">
+                <i class="fa-solid @tableIcon"></i>
+                @tableTitle
+            </div>
+
+            <div class="models-table-search-wrap">
+                <i class="fa-solid fa-search"></i>
+                <input type="text"
+                       id="modelsSearch"
+                       placeholder="ابحث في الكود أو الوصف أو المنشئ..." />
+            </div>
+
+            <div class="models-count-badge">
+                إجمالي: <strong>@tableModels.Count</strong> نموذج
+            </div>
+        </div>
+
+        <div class="table-responsive-safe">
+            <table id="modelsTable">
+                <thead>
+                    <tr>
+                        <th style="text-align:right; width:17%">الكود</th>
+                        <th style="text-align:right; width:12%">المنهج</th>
+                        <th style="width:9%">النوع</th>
+                        <th style="text-align:right; width:24%">الوصف</th>
+                        <th style="width:13%">تاريخ الإنشاء</th>
+                        <th style="width:11%">بواسطة</th>
+                        <th style="width:14%">الإجراءات</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    @if (tableModels.Any())
+                    {
+                        foreach (var item in tableModels)
+                        {
+                            <tr>
+                                <td style="text-align:right">
+                                    <div class="model-title-cell">
+                                        <div class="model-avatar">
+                                            <i class="fa-solid fa-file-lines"></i>
+                                        </div>
+                                        <span class="model-item-name">@item.Title</span>
+                                    </div>
+                                </td>
+
+                                <td style="text-align:right">
+                                    @if (item.Curriculum != null)
+                                    {
+                                        <span class="curriculum-badge">
+                                            <i class="fa fa-book"></i>
+                                            @item.Curriculum.Title
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted" style="font-size:15px">—</span>
+                                    }
+                                </td>
+
+                                <td>
+                                    @if (item.ModelType == ProfessionalModelType.Exam)
+                                    {
+                                        <span class="model-type-badge type-exam">
+                                            <i class="fa fa-file-alt"></i>
+                                            اختبار
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="model-type-badge type-homework">
+                                            <i class="fa fa-tasks"></i>
+                                            واجب
+                                        </span>
+                                    }
+                                </td>
+
+                                <td style="text-align:right">
+                                    <span class="description-text">
+                                        @(string.IsNullOrWhiteSpace(item.Description) ? "—" : item.Description)
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span class="date-chip">@item.CreatedAt.ToString("yyyy/MM/dd HH:mm")</span>
+                                </td>
+
+                                <td>
+                                    <span class="creator-tag">
+                                        <i class="fa-solid fa-user"></i>
+                                        @(string.IsNullOrWhiteSpace(item.CreatedBy) ? "غير محدد" : item.CreatedBy)
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <div class="models-act-row">
+
+                                        <a asp-action="Details"
+                                           asp-route-id="@item.Id"
+                                           class="act-btn act-view"
+                                           aria-label="تفاصيل">
+                                            <i class="fa fa-eye"></i>
+                                            <span class="act-text">تفاصيل</span>
+                                        </a>
+
+                                        <a asp-action="Edit"
+                                           asp-route-id="@item.Id"
+                                           class="act-btn act-edit"
+                                           aria-label="تعديل">
+                                            <i class="fa fa-edit"></i>
+                                            <span class="act-text">تعديل</span>
+                                        </a>
+
+                                        <button type="button"
+                                                class="act-btn act-duplicate duplicate-btn"
+                                                data-id="@item.Id"
+                                                aria-label="تكرار">
+                                            <i class="fa-solid fa-copy"></i>
+                                            <span class="act-text">تكرار</span>
+                                        </button>
+
+                                        <a asp-action="Visibility"
+                                           asp-route-id="@item.Id"
+                                           class="act-btn act-visibility"
+                                           aria-label="صلاحيات الظهور">
+                                            <i class="fa-solid fa-eye-low-vision"></i>
+                                            <span class="act-text">صلاحيات الظهور</span>
+                                        </a>
+
+                                        <a asp-action="Delete"
+                                           asp-route-id="@item.Id"
+                                           class="act-btn act-delete"
+                                           aria-label="حذف">
+                                            <i class="fa fa-trash"></i>
+                                            <span class="act-text">حذف</span>
+                                        </a>
+
+                                        @if (!item.IsArchived)
+                                        {
+                                            <form asp-action="ArchiveModelsByIds" method="post" class="act-form">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="selectedModelIds" value="@item.Id" />
+                                                <button type="submit"
+                                                        class="act-btn act-archive"
+                                                        aria-label="أرشفة"
+                                                        onclick="return confirm('سيتم نقل هذا النموذج إلى الأرشيف. هل تريد المتابعة؟')">
+                                                    <i class="fa-solid fa-box-archive"></i>
+                                                    <span class="act-text">أرشفة</span>
+                                                </button>
+                                            </form>
+                                        }
+                                        else
+                                        {
+                                            <form asp-action="RestoreModelsByIds" method="post" class="act-form">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="selectedModelIds" value="@item.Id" />
+                                                <button type="submit"
+                                                        class="act-btn act-restore"
+                                                        aria-label="استرجاع"
+                                                        onclick="return confirm('سيتم إخراج هذا النموذج من الأرشيف. هل تريد المتابعة؟')">
+                                                    <i class="fa-solid fa-undo"></i>
+                                                    <span class="act-text">استرجاع</span>
+                                                </button>
+                                            </form>
+                                        }
+
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (!tableModels.Any())
+        {
+            <div class="models-empty">
+                <i class="fa-solid fa-inbox"></i>
+                <div class="models-empty-title">لا توجد نماذج احترافية</div>
+                <div class="models-empty-sub">يمكنك إنشاء نموذج جديد من أعلى الصفحة</div>
+            </div>
+        }
+
+    </div>
+
+    <form id="duplicateForm" method="post" asp-action="Duplicate" style="display:none;">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="id" id="duplicateInput" />
+    </form>
+
+</div>
+
+@section Scripts {
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const archiveManagerSection = document.getElementById('archiveManagerSection');
+            const archiveManagerToggle = document.getElementById('archiveManagerToggle');
+            const archiveManagerBody = document.getElementById('archiveManagerBody');
+
+            if (archiveManagerSection && archiveManagerToggle && archiveManagerBody) {
+                archiveManagerToggle.addEventListener('click', function () {
+                    const isOpen = archiveManagerSection.classList.contains('is-open');
+
+                    if (isOpen) {
+                        archiveManagerSection.classList.remove('is-open');
+                        archiveManagerToggle.setAttribute('aria-expanded', 'false');
+                    } else {
+                        archiveManagerSection.classList.add('is-open');
+                        archiveManagerToggle.setAttribute('aria-expanded', 'true');
+                    }
+                });
+            }
+
+            var table = $('#modelsTable').DataTable({
+                language: {
+                    url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json"
+                },
+                pageLength: 30,
+                lengthMenu: [[5, 10, 20, 30, 50, 100, -1], [5, 10, 20, 30, 50, 100, "الكل"]],
+                order: [[2, 'desc']],
+                dom: 'Brtip',
+                columnDefs: [
+                    { orderable: false, targets: 6 }
+                ]
+            });
+
+            $('#modelsSearch').on('input', function () {
+                table.search($(this).val()).draw();
+            });
+
+            document.querySelectorAll(".duplicate-btn").forEach(function (btn) {
+                btn.addEventListener("click", function () {
+                    var id = this.getAttribute("data-id");
+
+                    Swal.fire({
+                        title: "تأكيد عملية التكرار",
+                        text: "هل ترغب في إنشاء نسخة جديدة من هذا النموذج؟",
+                        icon: "question",
+                        showCancelButton: true,
+                        confirmButtonText: "نعم، قم بالتكرار",
+                        cancelButtonText: "إلغاء",
+                        confirmButtonColor: "#0D7A5B",
+                        cancelButtonColor: "#BF1030"
+                    }).then(function (result) {
+                        if (result.isConfirmed) {
+                            document.getElementById("duplicateInput").value = id;
+                            document.getElementById("duplicateForm").submit();
+                        }
+                    });
+                });
+            });
+
+        });
+    </script>
+}

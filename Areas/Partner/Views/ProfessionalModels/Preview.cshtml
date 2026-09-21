@@ -1,0 +1,171 @@
+﻿@model QdratNew.Entities.ProfessionalModel
+
+@{
+    ViewData["Title"] = "مراجعة النموذج ";
+}
+
+@functions {
+    string ShortText(string html, int length = 40)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return "";
+
+        var plain = System.Text.RegularExpressions.Regex
+            .Replace(html, "<.*?>", string.Empty);
+
+        return plain.Length <= length
+            ? plain
+            : plain.Substring(0, length) + "...";
+    }
+}
+
+<div class="container mt-4" dir="rtl">
+
+    <!-- العنوان -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h3 class="fw-bold mb-1">📘 مراجعة النموذج الاحترافي</h3>
+            <div class="text-muted small">
+                يمكنك مراجعة الأسئلة داخل النموذج قبل استخدامه.
+            </div>
+        </div>
+
+        <a asp-action="Index" class="btn btn-outline-secondary">
+            رجوع
+        </a>
+    </div>
+
+    <!-- معلومات عامة -->
+    <div class="card shadow-sm border-0 rounded-4 mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+
+                <div class="col-md-6">
+                    <strong>عنوان النموذج:</strong>
+                    <div class="text-muted">@Model.Title</div>
+                </div>
+
+                <div class="col-md-6">
+                    <strong>الوصف:</strong>
+                    <div class="text-muted">
+                        @(string.IsNullOrWhiteSpace(Model.Description)
+                                                ? "—"
+                                                : Model.Description)
+                    </div>
+                </div>
+
+                <div class="col-md-3">
+                    <strong>عدد الأسئلة:</strong>
+                    <div class="text-muted">
+                        @(Model.Questions?.Count(q => q.Question != null) ?? 0) سؤال
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- الأسئلة (مجمعة حسب المؤشر إن وجد) -->
+    @{
+        var groups = Model.Questions?
+        .Where(q => q.Question != null)
+        .GroupBy(q => q.Question.Lesson?.Title ?? "أسئلة بدون مؤشر")
+        .ToList();
+    }
+
+    @foreach (var group in groups)
+    {
+        <div class="card shadow-sm border-0 rounded-4 mb-4">
+
+            <div class="card-header bg-light">
+                <strong>📌 @group.Key</strong>
+            </div>
+
+            <div class="card-body">
+                <ol class="list-group list-group-numbered list-group-flush">
+
+                    @foreach (var q in group.OrderBy(x => x.OrderNumber))
+                    {
+                        <li class="list-group-item d-flex justify-content-between align-items-end">
+
+                            <div class="fw-semibold">
+                                @ShortText(q.Question.Title, 50)
+                            </div>
+
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-primary"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#questionPreviewModal"
+                                    data-question-id="@q.QuestionId">
+                                👁️ معاينة
+                            </button>
+
+                        </li>
+                    }
+                </ol>
+            </div>
+        </div>
+    }
+
+    <!-- مودال معاينة السؤال -->
+    <div class="modal fade" id="questionPreviewModal" tabindex="-1">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+
+                <div class="modal-header">
+                    <h5 class="modal-title">معاينة السؤال</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body" id="questionPreviewContent">
+                    <div class="text-center text-muted py-5">
+                        جاري تحميل السؤال...
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- أزرار الإجراء -->
+    <div class="d-flex justify-content-end gap-2 mt-4">
+
+        <form asp-action="Send" method="post">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="modelId" value="@Model.Id" />
+
+            <button type="submit"
+                    class="btn btn-success px-4"
+                    onclick="return confirm('هل تريد استخدام النموذج كما هو؟');">
+                🚀 استخدام النموذج
+            </button>
+        </form>
+
+    </div>
+
+</div>
+
+@section Scripts {
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+
+            var modal = document.getElementById('questionPreviewModal');
+
+            modal.addEventListener('show.bs.modal', function (event) {
+
+                var button = event.relatedTarget;
+                var questionId = button.getAttribute('data-question-id');
+
+                var container = document.getElementById('questionPreviewContent');
+                container.innerHTML = 'جاري التحميل...';
+
+                fetch('/Partner/HomeworkDrafts/PreviewQuestion?questionId=' + questionId)
+                    .then(r => r.text())
+                    .then(html => container.innerHTML = html);
+            });
+
+        });
+    </script>
+
+}

@@ -1,0 +1,168 @@
+﻿@{
+    ViewData["Title"] = "واجبات الطلاب";
+    Layout = "~/Views/Shared/_Layout.cshtml"; // ✳️ عدل حسب Layout المدرب
+}
+
+<h2 class="text-primary mb-4">📋 قائمة طلاب الدفعة: <span id="batchTitle">جاري التحميل...</span></h2>
+
+<div class="row text-center mb-4" id="batchStats" style="display:none;">
+    <div class="col-md-4">
+        <div class="card border-primary">
+            <div class="card-body">
+                <h5 class="card-title">👨‍🎓 عدد الطلاب</h5>
+                <h4 id="studentCount">—</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-success">
+            <div class="card-body">
+                <h5 class="card-title">📄 إجمالي الواجبات</h5>
+                <h4 id="totalHomeworks">—</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-info">
+            <div class="card-body">
+                <h5 class="card-title">✅ نسبة الإكمال</h5>
+                <h4 id="completionRate">—</h4>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="studentsSection">
+    <table id="studentsTable" class="table table-bordered table-hover w-100">
+        <thead>
+            <tr>
+                <th>الطالب</th>
+                <th>عدد الواجبات</th>
+                <th>عرض الواجبات</th>
+                <th>تحليل الأداء</th>
+                <th>أرشيف</th>
+            </tr>
+        </thead>
+    </table>
+</div>
+
+<div id="studentHomeworksSection" style="display:none;">
+    <h4 class="text-success mt-4">📚 قائمة واجبات الطالب</h4>
+    <button class="btn btn-sm btn-secondary mb-3" onclick="backToStudents()">🔙 العودة لقائمة الطلاب</button>
+
+    <table id="studentHomeworkTable" class="table table-striped w-100">
+        <thead>
+            <tr>
+                <th>المحور</th>
+                <th>المحاضرة</th>
+                <th>الدرجة</th>
+                <th>مكتمل؟</th>
+            </tr>
+        </thead>
+    </table>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.3.6/js/dataTables.buttons.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.3.6/js/buttons.html5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.3.6/js/buttons.print.min.js"></script>
+    <script src="https://cdn.datatables.net/plug-ins/1.13.4/i18n/ar.json"></script>
+
+    <script>
+        let studentTable, hwTable;
+        const urlParams = new URLSearchParams(window.location.search);
+        const batchId = urlParams.get("batchId");
+
+        async function loadBatchInfo() {
+            if (!batchId) return;
+
+            try {
+                const res = await fetch(`/Instructors/Homeworks/GetBatchStats?batchId=${batchId}`);
+                if (!res.ok) throw new Error("فشل تحميل بيانات الدفعة");
+                const data = await res.json();
+
+                document.getElementById("batchTitle").innerText = data.name || "—";
+                document.getElementById("studentCount").innerText = data.studentCount ?? 0;
+                document.getElementById("totalHomeworks").innerText = data.homeworkCount ?? 0;
+                document.getElementById("completionRate").innerText = (data.completionRate ?? 0).toFixed(1) + " %";
+                document.getElementById("batchStats").style.display = "flex";
+            } catch (err) {
+                console.error("Batch info error:", err);
+            }
+        }
+
+        function loadStudents() {
+            const url = batchId
+                ? `/Instructors/Homeworks/LoadStudentsSummary?batchId=${batchId}`
+                : `/Instructors/Homeworks/LoadStudentsSummary`;
+
+            studentTable = $('#studentsTable').DataTable({
+                ajax: {
+                    url: url,
+                    dataSrc: ''
+                },
+                columns: [
+                    { data: 'studentName' },
+                    { data: 'homeworkCount' },
+                    {
+                        data: 'studentId',
+                        render: id => `<button class="btn btn-sm btn-outline-info" onclick="loadHomeworks(${id})" title="عرض واجبات الطالب">📄 عرض</button>`
+                    },
+                    {
+                        data: 'studentId',
+                        render: id => `<a class="btn btn-sm btn-outline-success" href="/Instructors/Homeworks/Analyze?studentId=${id}" title="تحليل الأداء">📊 تحليل</a>`
+                    },
+                    {
+                        data: 'studentId',
+                        render: id => `<a class="btn btn-sm btn-outline-secondary" href="/Instructors/Homeworks/Archive?studentId=${id}" title="أرشيف الطالب">🗂️ أرشيف</a>`
+                    }
+                ],
+                dom: 'Bfrtip',
+                buttons: ['copy', 'excel', 'print'],
+                language: {
+                    url: "//cdn.datatables.net/plug-ins/1.13.4/i18n/ar.json"
+                }
+            });
+        }
+
+        function loadHomeworks(studentId) {
+            $('#studentsSection').hide();
+            $('#studentHomeworksSection').show();
+
+            if (hwTable) hwTable.destroy();
+
+            hwTable = $('#studentHomeworkTable').DataTable({
+                ajax: {
+                    url: `/Instructors/Homeworks/LoadHomeworksForStudent?studentId=${studentId}`,
+                    dataSrc: ''
+                },
+                columns: [
+                    { data: 'sectionTitle' },
+                    { data: 'lectureDate' },
+                    { data: 'score' },
+                    {
+                        data: 'isCompleted',
+                        render: d => d ? '✅ نعم' : '❌ لا'
+                    }
+                ],
+                dom: 'Bfrtip',
+                buttons: ['copy', 'excel', 'print'],
+                language: {
+                    url: "//cdn.datatables.net/plug-ins/1.13.4/i18n/ar.json"
+                }
+            });
+        }
+
+        function backToStudents() {
+            $('#studentHomeworksSection').hide();
+            $('#studentsSection').show();
+        }
+
+        document.addEventListener("DOMContentLoaded", async () => {
+            await loadBatchInfo();
+            loadStudents();
+        });
+    </script>
+}
+

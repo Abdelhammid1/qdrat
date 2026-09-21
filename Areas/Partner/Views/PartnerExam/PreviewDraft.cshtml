@@ -1,0 +1,206 @@
+﻿@model QdratNew.ViewModels.Partner.Exam.ExamDraftPreviewVM
+
+@{
+    ViewData["Title"] = "مراجعة نموذج الاختبار";
+}
+
+@functions {
+    string ShortHtmlText(string html, int length = 45)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return "";
+            
+        // إزالة تاغات HTML للعرض المختصر
+        var plain = System.Text.RegularExpressions.Regex
+            .Replace(html, "<.*?>", string.Empty);
+
+        if (plain.Length <= length)
+            return plain;
+
+        return plain.Substring(0, length) + "...";
+    }
+}
+
+<div class="container mt-4" dir="rtl">
+
+    <!-- ================= Header ================= -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h3 class="fw-bold mb-1">📝 مراجعة نموذج الاختبار</h3>
+            <div class="text-muted small">
+                راجع الأسئلة وتأكد من توازنها قبل إرسال الاختبار.
+            </div>
+        </div>
+
+        <a asp-action="Drafts" class="btn btn-outline-secondary">
+            رجوع
+        </a>
+    </div>
+
+    <!-- ================= Summary ================= -->
+    <div class="card shadow-sm border-0 rounded-4 mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+
+                <div class="col-md-4">
+                    <div class="fw-semibold">عنوان الاختبار</div>
+                    <div class="text-muted">@Model.Title</div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="fw-semibold">الدورة</div>
+                    <div class="text-muted">@Model.CourseName</div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="fw-semibold">عدد الأسئلة</div>
+                    <div class="text-muted">@Model.TotalQuestions سؤال</div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= Questions ================= -->
+    @foreach (var group in Model.LessonGroups)
+    {
+        <div class="card shadow-sm border-0 rounded-4 mb-4">
+
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <strong>📌 @group.LessonTitle</strong>
+
+                <!-- إضافة سؤال لاحقًا -->
+                <a asp-area="Partner"
+                   asp-controller="PartnerExam"
+                   asp-action="AddQuestion"
+                   asp-route-draftId="@Model.DraftId"
+                   asp-route-lessonId="@group.LessonId"
+                   class="btn btn-sm btn-outline-success"
+                   title="إضافة سؤال من نفس المحور">
+                    ➕ إضافة
+                </a>
+
+            </div>
+
+            <div class="card-body p-0">
+                <ol class="list-group list-group-numbered list-group-flush">
+
+                    @foreach (var q in group.Questions)
+                    {
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+
+                            <!-- عنوان مختصر بدون HTML -->
+                            <div class="fw-semibold text-truncate" style="max-width:70%">
+                                @ShortHtmlText(q.Title)
+                            </div>
+
+                            <!-- أدوات التحكم -->
+                            <div class="btn-group btn-group-sm">
+
+                                <!-- معاينة -->
+                                <button type="button"
+                                        class="btn btn-outline-primary"
+                                        title="معاينة السؤال"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#questionPreviewModal"
+                                        data-question-id="@q.QuestionId">
+                                    👁️
+                                </button>
+
+                                <!-- استبدال -->
+                                <a asp-area="Partner"
+                                   asp-controller="PartnerExam"
+                                   asp-action="ReplaceQuestion"
+                                   asp-route-draftId="@Model.DraftId"
+                                   asp-route-oldQuestionId="@q.QuestionId"
+                                   asp-route-lessonId="@group.LessonId"
+                                   class="btn btn-sm btn-outline-warning">
+                                    🔁 استبدال
+                                </a>
+
+
+                            </div>
+
+                        </li>
+                    }
+                </ol>
+            </div>
+        </div>
+    }
+
+    <!-- ================= Send Draft ================= -->
+    <div class="d-flex justify-content-end">
+        <a asp-action="SendDraft"
+           asp-route-draftId="@Model.DraftId"
+           class="btn btn-success px-4">
+            🚀 إرسال النموذج
+        </a>
+    </div>
+
+</div>
+
+<!-- ================= Modal: Question Preview ================= -->
+<div class="modal fade" id="questionPreviewModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+
+            <div class="modal-header">
+                <h5 class="modal-title">معاينة السؤال</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body" id="questionPreviewContent">
+                <div class="text-center text-muted py-5">
+                    جاري تحميل السؤال...
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+
+
+
+<div class="modal fade" id="replaceQuestionModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content" id="replaceQuestionContent">
+            جاري التحميل...
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.getElementById('questionPreviewModal')
+            .addEventListener('show.bs.modal', function (event) {
+
+                const button = event.relatedTarget;
+                const questionId = button.getAttribute('data-question-id');
+                const container = document.getElementById('questionPreviewContent');
+
+                container.innerHTML = 'جاري التحميل...';
+
+                fetch('/Partner/HomeworkDrafts/PreviewQuestion?questionId=' + questionId)
+                    .then(r => r.text())
+                    .then(html => container.innerHTML = html);
+            });
+    </script>
+
+    <script>
+        document.getElementById('replaceQuestionModal')
+            .addEventListener('show.bs.modal', function (event) {
+
+                const button = event.relatedTarget;
+                const url = button.getAttribute('data-url');
+                const container = document.getElementById('replaceQuestionContent');
+
+                container.innerHTML = 'جاري التحميل...';
+
+                fetch(url)
+                    .then(r => r.text())
+                    .then(html => container.innerHTML = html);
+            });
+    </script>
+
+}

@@ -1,0 +1,1007 @@
+@model QdratNew.ViewModels.Homework.HomeworkManagementIndexViewModel
+
+@{
+    ViewData["Title"] = "أرشيف الواجبات";
+
+    var archivedBatchesCount = Model.BatchCards?.Count ?? 0;
+    var archivedHomeworksCount = Model.TotalHomeworksCount;
+    var totalStudentsCount = Model.BatchCards?.Sum(x => x.TotalStudents) ?? 0;
+    var averageSolvedPercentage = Model.BatchCards != null && Model.BatchCards.Any()
+        ? Math.Round(Model.BatchCards.Average(x => x.SolvedPercentage), 1)
+        : 0;
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet" />
+
+    <style>
+        :root {
+            --ink: #0D1B2A;
+            --ink-2: #2C3E50;
+            --ink-3: #5A6A7A;
+            --ink-4: #8FA0B0;
+            --ink-5: #C8D5E0;
+            --canvas: #F3F6FA;
+            --surface: #FFFFFF;
+            --surface-2: #F8FAFC;
+            --surface-3: #EEF2F7;
+            --border: #DDE4EC;
+            --blue: #1B5EAE;
+            --blue-2: #2471D0;
+            --blue-bg: #E8F1FB;
+            --blue-dark: #103E7A;
+            --emerald: #0D7A5B;
+            --emerald-bg: #E4F5EE;
+            --amber: #985D09;
+            --amber-bg: #FDF0D8;
+            --rose: #BF1030;
+            --rose-bg: #FDEAEE;
+            --violet: #5535B5;
+            --violet-bg: #EDE8F9;
+            --r-sm: 6px;
+            --r-md: 10px;
+            --r-lg: 14px;
+            --r-xl: 20px;
+            --sh-xs: 0 1px 3px rgba(13,27,42,.06);
+            --sh-sm: 0 2px 8px rgba(13,27,42,.08);
+            --sh-md: 0 4px 18px rgba(13,27,42,.10);
+            --ease: cubic-bezier(.25,.46,.45,.94);
+        }
+
+        .hw-page {
+            background: var(--canvas);
+            min-height: 100vh;
+            padding: 32px 28px 64px;
+            direction: rtl;
+            font-family: 'Cairo', sans-serif;
+            color: var(--ink-2);
+        }
+
+        .hw-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-bottom: 28px;
+        }
+
+        .hw-brand {
+            display: flex;
+            align-items: center;
+            gap: 13px;
+        }
+
+        .hw-brand-icon {
+            width: 46px;
+            height: 46px;
+            background: var(--amber);
+            border-radius: var(--r-lg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 20px;
+            box-shadow: 0 4px 14px rgba(152,93,9,.25);
+        }
+
+        .hw-brand-title {
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--ink);
+            line-height: 1.15;
+        }
+
+        .hw-brand-sub {
+            font-size: 15px;
+            color: var(--ink-4);
+            margin-top: 2px;
+        }
+
+        .btn-back {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 10px 20px;
+            background: var(--surface);
+            color: var(--blue);
+            border: 1px solid var(--border);
+            border-radius: var(--r-md);
+            font-size: 15px;
+            font-weight: 800;
+            text-decoration: none;
+            transition: background .15s, transform .12s, border-color .15s, color .15s;
+            box-shadow: var(--sh-xs);
+        }
+
+            .btn-back:hover {
+                background: var(--blue);
+                border-color: var(--blue);
+                color: #fff;
+                transform: translateY(-1px);
+            }
+
+        .hw-alert {
+            border: none;
+            border-radius: var(--r-lg);
+            padding: 14px 18px;
+            font-size: 15px;
+            font-weight: 700;
+            box-shadow: var(--sh-xs);
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+            .hw-alert.success {
+                background: var(--emerald-bg);
+                color: var(--emerald);
+            }
+
+            .hw-alert.error {
+                background: var(--rose-bg);
+                color: var(--rose);
+            }
+
+        .hw-kpis {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 13px;
+            margin-bottom: 24px;
+        }
+
+        @@media (max-width: 960px) {
+            .hw-kpis {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @@media (max-width: 480px) {
+            .hw-kpis {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .kpi-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            padding: 18px 19px;
+            display: flex;
+            align-items: center;
+            gap: 13px;
+            box-shadow: var(--sh-xs);
+            transition: transform .2s var(--ease), box-shadow .2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+            .kpi-card::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                right: 0;
+                width: 4px;
+                height: 100%;
+                border-radius: 0 var(--r-xl) var(--r-xl) 0;
+            }
+
+            .kpi-card:hover {
+                transform: translateY(-3px);
+                box-shadow: var(--sh-sm);
+            }
+
+        .kpi-blue::after {
+            background: var(--blue);
+        }
+
+        .kpi-emerald::after {
+            background: var(--emerald);
+        }
+
+        .kpi-amber::after {
+            background: var(--amber);
+        }
+
+        .kpi-violet::after {
+            background: var(--violet);
+        }
+
+        .kpi-ico {
+            width: 42px;
+            height: 42px;
+            border-radius: var(--r-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .ico-blue {
+            background: var(--blue-bg);
+            color: var(--blue);
+        }
+
+        .ico-emerald {
+            background: var(--emerald-bg);
+            color: var(--emerald);
+        }
+
+        .ico-amber {
+            background: var(--amber-bg);
+            color: var(--amber);
+        }
+
+        .ico-violet {
+            background: var(--violet-bg);
+            color: var(--violet);
+        }
+
+        .kpi-label {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--ink-4);
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            margin-bottom: 3px;
+        }
+
+        .kpi-val {
+            font-size: 22px;
+            font-weight: 800;
+            color: var(--ink);
+            line-height: 1;
+        }
+
+        .archive-note {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            box-shadow: var(--sh-xs);
+            padding: 16px 18px;
+            margin-bottom: 22px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+        }
+
+        .archive-note-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: var(--r-md);
+            background: var(--amber-bg);
+            color: var(--amber);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .archive-note-title {
+            font-size: 15px;
+            font-weight: 800;
+            color: var(--ink);
+            margin-bottom: 3px;
+        }
+
+        .archive-note-text {
+            font-size: 14px;
+            color: var(--ink-4);
+            line-height: 1.7;
+        }
+
+        .batches-section-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            overflow: visible;
+            box-shadow: var(--sh-sm);
+        }
+
+        .batches-section-topbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--surface-3);
+            flex-wrap: wrap;
+        }
+
+        .section-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--ink);
+            margin-left: 10px;
+        }
+
+            .section-title i {
+                color: var(--amber);
+            }
+
+        .batch-search-wrap {
+            position: relative;
+            flex: 1;
+            min-width: 220px;
+            max-width: 390px;
+        }
+
+            .batch-search-wrap i {
+                position: absolute;
+                right: 11px;
+                top: 50%;
+                transform: translateY(-50%);
+                color: var(--ink-4);
+                font-size: 17px;
+                pointer-events: none;
+            }
+
+            .batch-search-wrap input {
+                width: 100%;
+                padding: 7px 32px 7px 12px;
+                border: 1px solid var(--border);
+                border-radius: var(--r-md);
+                font-size: 15px;
+                background: var(--surface-2);
+                color: var(--ink);
+                transition: border-color .15s, box-shadow .15s;
+            }
+
+                .batch-search-wrap input:focus {
+                    outline: none;
+                    border-color: var(--amber);
+                    box-shadow: 0 0 0 3px rgba(152,93,9,.10);
+                    background: var(--surface);
+                }
+
+        .total-badge {
+            margin-right: auto;
+            font-size: 14px;
+            color: var(--ink-4);
+        }
+
+            .total-badge strong {
+                color: var(--amber);
+                font-weight: 800;
+            }
+
+        .batches-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+            padding: 18px;
+        }
+
+        @@media (max-width: 1200px) {
+            .batches-grid {
+                grid-template-columns: repeat(2,1fr);
+            }
+        }
+
+        @@media (max-width: 768px) {
+            .batches-grid {
+                grid-template-columns: 1fr;
+                padding: 14px;
+            }
+        }
+
+        .batch-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            box-shadow: var(--sh-xs);
+            transition: transform .18s var(--ease), box-shadow .18s, border-color .18s;
+            overflow: hidden;
+            position: relative;
+        }
+
+            .batch-card::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                right: 0;
+                width: 5px;
+                height: 100%;
+                background: var(--amber);
+            }
+
+            .batch-card:hover {
+                transform: translateY(-4px);
+                box-shadow: var(--sh-md);
+                border-color: #E0B463;
+            }
+
+        .batch-card-body {
+            padding: 18px 18px 16px;
+        }
+
+        .batch-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .batch-title-wrap {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            min-width: 0;
+        }
+
+        .batch-avatar {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: var(--amber-bg);
+            color: var(--amber);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 17px;
+            flex-shrink: 0;
+        }
+
+        .batch-title {
+            font-size: 17px;
+            font-weight: 800;
+            color: var(--ink);
+            margin-bottom: 3px;
+            word-break: break-word;
+        }
+
+        .batch-sub {
+            font-size: 13px;
+            color: var(--ink-4);
+            line-height: 1.5;
+            word-break: break-word;
+        }
+
+        .archive-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            border-radius: 30px;
+            font-size: 13px;
+            font-weight: 800;
+            white-space: nowrap;
+            background: var(--amber-bg);
+            color: var(--amber);
+        }
+
+        .batch-mini-grid {
+            display: grid;
+            grid-template-columns: repeat(3,1fr);
+            gap: 7px;
+            margin-bottom: 12px;
+        }
+
+        .batch-mini-stat {
+            background: var(--surface-2);
+            border: 1px solid var(--surface-3);
+            border-radius: var(--r-md);
+            padding: 9px 7px;
+            text-align: center;
+        }
+
+        .mini-val {
+            display: block;
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--ink);
+            line-height: 1.1;
+        }
+
+        .mini-label {
+            display: block;
+            font-size: 12px;
+            color: var(--ink-4);
+            margin-top: 2px;
+        }
+
+        .text-emerald {
+            color: var(--emerald) !important;
+        }
+
+        .text-amber {
+            color: var(--amber) !important;
+        }
+
+        .text-violet {
+            color: var(--violet) !important;
+        }
+
+        .hw-progress-wrap {
+            margin-bottom: 12px;
+        }
+
+        .hw-progress-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            color: var(--ink-4);
+            margin-bottom: 5px;
+        }
+
+            .hw-progress-meta strong {
+                color: var(--ink);
+                font-size: 14px;
+            }
+
+        .hw-progress {
+            width: 100%;
+            height: 8px;
+            border-radius: 30px;
+            background: var(--surface-3);
+            overflow: hidden;
+        }
+
+        .hw-progress-bar {
+            height: 100%;
+            background: var(--amber);
+            border-radius: 30px;
+            transition: width .3s ease;
+        }
+
+        .batch-alerts {
+            display: flex;
+            gap: 7px;
+            flex-wrap: wrap;
+            margin-bottom: 14px;
+        }
+
+        .alert-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            border-radius: 30px;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .alert-amber {
+            background: var(--amber-bg);
+            color: var(--amber);
+        }
+
+        .alert-emerald {
+            background: var(--emerald-bg);
+            color: var(--emerald);
+        }
+
+        .alert-ghost {
+            background: var(--surface-3);
+            color: var(--ink-4);
+        }
+
+        .batch-actions {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 8px;
+            margin-top: auto;
+        }
+
+        .batch-open-btn,
+        .batch-restore-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            width: 100%;
+            border-radius: var(--r-md);
+            padding: 10px 14px;
+            font-size: 15px;
+            font-weight: 800;
+            text-decoration: none;
+            transition: background .16s var(--ease), transform .14s, box-shadow .16s, border-color .16s, color .16s;
+        }
+
+        .batch-open-btn {
+            background: var(--blue);
+            color: #fff;
+            border: 1px solid var(--blue);
+            box-shadow: 0 3px 10px rgba(27,94,174,.20);
+        }
+
+            .batch-open-btn:hover {
+                color: #fff;
+                background: var(--blue-dark);
+                border-color: var(--blue-dark);
+                transform: translateY(-2px);
+                box-shadow: 0 6px 18px rgba(27,94,174,.28);
+            }
+
+        .batch-restore-btn {
+            background: var(--surface);
+            color: var(--emerald);
+            border: 1px solid rgba(13,122,91,.30);
+            box-shadow: var(--sh-xs);
+        }
+
+            .batch-restore-btn:hover {
+                background: var(--emerald);
+                border-color: var(--emerald);
+                color: #fff;
+                transform: translateY(-2px);
+            }
+
+        .batch-access-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            width: 100%;
+            border-radius: var(--r-md);
+            padding: 10px 14px;
+            font-size: 15px;
+            font-weight: 800;
+            text-decoration: none;
+            transition: background .16s var(--ease), transform .14s, box-shadow .16s, border-color .16s, color .16s;
+            background: var(--surface);
+            color: var(--violet);
+            border: 1px solid rgba(85,53,181,.30);
+            box-shadow: var(--sh-xs);
+        }
+
+            .batch-access-btn:hover {
+                background: var(--violet);
+                border-color: var(--violet);
+                color: #fff;
+                transform: translateY(-2px);
+                text-decoration: none;
+            }
+
+        .restore-form {
+            margin: 0;
+        }
+
+        .batches-empty {
+            text-align: center;
+            padding: 56px 16px;
+            color: var(--ink-4);
+        }
+
+            .batches-empty i {
+                font-size: 24px;
+                display: block;
+                margin-bottom: 12px;
+                color: var(--ink-5);
+            }
+
+        .batches-empty-title {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--ink-3);
+        }
+
+        .batches-empty-sub {
+            font-size: 14px;
+            margin-top: 4px;
+        }
+
+        .no-results {
+            display: none;
+            text-align: center;
+            padding: 36px 16px;
+            color: var(--ink-4);
+            border-top: 1px solid var(--surface-3);
+        }
+
+            .no-results i {
+                display: block;
+                font-size: 22px;
+                margin-bottom: 10px;
+                color: var(--ink-5);
+            }
+
+        @@media (max-width: 768px) {
+            .hw-page {
+                padding: 22px 14px 48px;
+            }
+
+            .batch-search-wrap {
+                max-width: 100%;
+                width: 100%;
+            }
+
+            .total-badge {
+                margin-right: 0;
+            }
+
+            .archive-note {
+                align-items: flex-start;
+            }
+        }
+    </style>
+}
+
+<div class="hw-page">
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="hw-alert success">
+            <i class="bi bi-check-circle-fill"></i>
+            @TempData["Success"]
+        </div>
+    }
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="hw-alert error">
+            <i class="bi bi-exclamation-circle-fill"></i>
+            @TempData["Error"]
+        </div>
+    }
+
+    <div class="hw-topbar">
+        <div class="hw-brand">
+            <div class="hw-brand-icon">
+                <i class="bi bi-archive-fill"></i>
+            </div>
+            <div>
+                <div class="hw-brand-title">أرشيف الواجبات</div>
+                <div class="hw-brand-sub">عرض الدفعات التي تحتوي على واجبات مؤرشفة بنفس تصميم المتابعة المعتمد</div>
+            </div>
+        </div>
+
+        <a asp-area="Admin"
+           asp-controller="HomeworkManagement"
+           asp-action="Index"
+           class="btn-back">
+            <i class="bi bi-arrow-right-circle"></i>
+            رجوع لإدارة الواجبات
+        </a>
+    </div>
+
+    <div class="hw-kpis">
+        <div class="kpi-card kpi-amber">
+            <div class="kpi-ico ico-amber">
+                <i class="bi bi-folder2-open"></i>
+            </div>
+            <div>
+                <div class="kpi-label">دفعات مؤرشفة</div>
+                <div class="kpi-val">@archivedBatchesCount</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-blue">
+            <div class="kpi-ico ico-blue">
+                <i class="bi bi-journal-check"></i>
+            </div>
+            <div>
+                <div class="kpi-label">واجبات مؤرشفة</div>
+                <div class="kpi-val">@archivedHomeworksCount</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-violet">
+            <div class="kpi-ico ico-violet">
+                <i class="bi bi-people-fill"></i>
+            </div>
+            <div>
+                <div class="kpi-label">إجمالي الطلاب</div>
+                <div class="kpi-val">@totalStudentsCount</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-emerald">
+            <div class="kpi-ico ico-emerald">
+                <i class="bi bi-graph-up-arrow"></i>
+            </div>
+            <div>
+                <div class="kpi-label">متوسط نسبة الحل</div>
+                <div class="kpi-val">@averageSolvedPercentage%</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="archive-note">
+        <div class="archive-note-icon">
+            <i class="bi bi-info-circle-fill"></i>
+        </div>
+        <div>
+            <div class="archive-note-title">ملاحظة الأرشيف</div>
+            <div class="archive-note-text">
+                هذه الصفحة مخصصة للواجبات المؤرشفة فقط. يمكنك فتح واجبات أي دفعة مؤرشفة، واسترجاع الدفعة من الأرشيف إذا كان حسابك يملك صلاحية فقط من المالك بهذه الاجراءات.
+            </div>
+        </div>
+    </div>
+
+    <div class="batches-section-card">
+        <div class="batches-section-topbar">
+            <div class="section-title">
+                <i class="bi bi-grid-3x3-gap-fill"></i>
+                دفعات الأرشيف
+            </div>
+
+            <div class="batch-search-wrap">
+                <i class="bi bi-search"></i>
+                <input type="text" id="batchSearch" placeholder="ابحث في اسم الدفعة أو الدورة..." />
+            </div>
+
+            <div class="total-badge">
+                إجمالي: <strong>@archivedBatchesCount</strong> دفعة
+            </div>
+        </div>
+
+        @if (Model.BatchCards == null || !Model.BatchCards.Any())
+        {
+            <div class="batches-empty">
+                <i class="bi bi-archive"></i>
+                <div class="batches-empty-title">لا توجد دفعات مؤرشفة</div>
+                <div class="batches-empty-sub">عند أرشفة واجبات الدفعات ستظهر هنا بنفس شكل كروت المتابعة</div>
+            </div>
+        }
+        else
+        {
+            <div class="batches-grid" id="batchesGrid">
+                @foreach (var card in Model.BatchCards)
+                {
+                    <div class="batch-card"
+                         data-search="@($"{card.BatchName} {card.CourseTitle}".ToLower())">
+                        <div class="batch-card-body">
+
+                            <div class="batch-head">
+                                <div class="batch-title-wrap">
+                                    <div class="batch-avatar">
+                                        <i class="bi bi-people-fill"></i>
+                                    </div>
+                                    <div>
+                                        <div class="batch-title">@card.BatchName</div>
+                                        <div class="batch-sub">@card.CourseTitle</div>
+                                    </div>
+                                </div>
+
+                                <span class="archive-pill">
+                                    <i class="bi bi-archive-fill"></i>
+                                    مؤرشفة
+                                </span>
+                            </div>
+
+                            <div class="batch-mini-grid">
+                                <div class="batch-mini-stat">
+                                    <span class="mini-val">@card.TotalHomeworks</span>
+                                    <span class="mini-label">واجب</span>
+                                </div>
+
+                                <div class="batch-mini-stat">
+                                    <span class="mini-val text-violet">@card.TotalStudents</span>
+                                    <span class="mini-label">طالب</span>
+                                </div>
+
+                                <div class="batch-mini-stat">
+                                    <span class="mini-val text-emerald">@card.SolvedPercentage%</span>
+                                    <span class="mini-label">حل</span>
+                                </div>
+                            </div>
+
+                            <div class="hw-progress-wrap">
+                                <div class="hw-progress-meta">
+                                    <span>نسبة الحل قبل الأرشفة</span>
+                                    <strong>@card.SolvedPercentage%</strong>
+                                </div>
+                                <div class="hw-progress">
+                                    <div class="hw-progress-bar" style="width:@card.SolvedPercentage%"></div>
+                                </div>
+                            </div>
+
+                            <div class="batch-alerts">
+                                <span class="alert-badge alert-amber">
+                                    <i class="bi bi-archive-fill"></i>
+                                    داخل الأرشيف
+                                </span>
+
+                                @if (card.TotalHomeworks > 0)
+                                {
+                                    <span class="alert-badge alert-emerald">
+                                        <i class="bi bi-journal-check"></i>
+                                        @card.TotalHomeworks واجب محفوظ
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="alert-badge alert-ghost">
+                                        <i class="bi bi-inbox"></i>
+                                        لا توجد واجبات
+                                    </span>
+                                }
+                            </div>
+
+                            <div class="batch-actions">
+                                <a asp-area="Admin"
+                                   asp-controller="HomeworkManagement"
+                                   asp-action="BatchHomeworks"
+                                   asp-route-batchId="@card.BatchId"
+                                   asp-route-archived="true"
+                                   class="batch-open-btn">
+                                    <i class="bi bi-journal-text"></i>
+                                    فتح واجبات الدفعة
+                                </a>
+
+                                @if (User.IsInRole("Owner") || User.IsInRole("Developer"))
+                                {
+                                    <a asp-area="Admin"
+                                       asp-controller="HomeworkManagement"
+                                       asp-action="ManageArchiveAccessByBatch"
+                                       asp-route-batchId="@card.BatchId"
+                                       class="batch-access-btn">
+                                        <i class="bi bi-shield-lock-fill"></i>
+                                        صلاحيات الأرشيف
+                                    </a>
+
+                                    <form asp-area="Admin"
+                                          asp-controller="HomeworkManagement"
+                                          asp-action="RestoreHomeworkSetsByBatches"
+                                          method="post"
+                                          class="restore-form">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="selectedBatchIds" value="@card.BatchId" />
+
+                                        <button type="submit"
+                                                class="batch-restore-btn"
+                                                onclick="return confirm('سيتم إخراج واجبات هذه الدفعة من الأرشيف. هل تريد المتابعة؟')">
+                                            <i class="bi bi-arrow-counterclockwise"></i>
+                                            استرجاع الدفعة
+                                        </button>
+                                    </form>
+                                }
+                            </div>
+
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="no-results" id="noResults">
+                <i class="bi bi-search"></i>
+                <div class="batches-empty-title">لا توجد نتائج مطابقة</div>
+                <div class="batches-empty-sub">جرّب البحث باسم دفعة أو دورة مختلفة</div>
+            </div>
+        }
+    </div>
+
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const searchInput = document.getElementById("batchSearch");
+            const cards = Array.from(document.querySelectorAll(".batch-card"));
+            const noResults = document.getElementById("noResults");
+
+            if (!searchInput) {
+                return;
+            }
+
+            searchInput.addEventListener("input", function () {
+                const value = (this.value || "").toLowerCase().trim();
+                let visibleCount = 0;
+
+                cards.forEach(function (card) {
+                    const text = card.getAttribute("data-search") || "";
+                    const isVisible = text.includes(value);
+
+                    card.style.display = isVisible ? "" : "none";
+
+                    if (isVisible) {
+                        visibleCount++;
+                    }
+                });
+
+                if (noResults) {
+                    noResults.style.display = visibleCount === 0 ? "block" : "none";
+                }
+            });
+        });
+    </script>
+}

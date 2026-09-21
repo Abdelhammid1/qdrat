@@ -1,0 +1,177 @@
+@model QdratNew.ViewModels.Students.ExamQuestionContentVm
+@using QdratNew.Helpers
+
+
+@{
+    var q = Model.Question;
+    var isRTL = q?.IsRTL ?? true;
+    Func<string, string> ToSafe = s => NumberHelper.ToIndicNumbersSafe(s);
+    Func<string, string> T = key => isRTL ? key : key switch
+    {
+        "القيمة الأولى" => "Value A",
+        "القيمة الثانية" => "Value B",
+        _ => key
+    };
+}
+
+@{
+    var passagePlainLength = System.Text.RegularExpressions.Regex.Replace(q.VerbalPassageContent ?? "", "<[^>]*>", string.Empty).Length;
+    var isLongPassage = passagePlainLength > 650;
+}
+
+@if (q == null)
+{
+    <div class="qx-error-state">⚠️ لم يتم تحميل السؤال بشكل صحيح.</div>
+    return;
+}
+
+        @* ─── القطعة اللفظية ─── *@
+        @if (q.VerbalPassageType == QdratNew.Enums.PassageType.Audio)
+        {
+            <div class="qx-passage qx-passage--audio">
+                <audio controls controlsList="nodownload" style="width:100%;">
+                    <source src="@q.VerbalPassageMediaUrl" />
+                </audio>
+            </div>
+        }
+        else if (q.VerbalPassageType == QdratNew.Enums.PassageType.Video)
+        {
+            <div class="qx-passage qx-passage--video">
+                <video controls style="width:100%; max-height:300px; border-radius:12px;">
+                    <source src="@q.VerbalPassageMediaUrl" />
+                </video>
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(q.VerbalPassageContent))
+        {
+            @* المحتوى قادم من محرر نصوص غني (Rich Text) قد يحمل ألوان/أحجام خط عشوائية من الإدارة —
+               نطبّع طول القطعة هنا فقط لتفعيل التمرير عند الحاجة؛ تطبيع الألوان والحجم نفسه مسؤولية CSS
+               في qx-passage__body (انظر _UnifiedExamStyles) حتى يبقى مقروءًا دائمًا بغض النظر عن التنسيق المحفوظ. *@
+          
+            <div class="qx-passage qx-passage--text @(isLongPassage ? "qx-passage--long" : "")">
+                <div class="qx-passage__title">
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                        <path d="M2.5 3a.5.5 0 0 0 0 1h11a.5.5 0 0 0 0-1h-11zm5 3a.5.5 0 0 0 0 1h6a.5.5 0 0 0 0-1h-6zm0 3a.5.5 0 0 0 0 1h6a.5.5 0 0 0 0-1h-6zm-5 3a.5.5 0 0 0 0 1h11a.5.5 0 0 0 0-1h-11zm.79-5.373.112-.112c.145-.147.338-.22.53-.22.19 0 .383.073.53.22l.326.33.326-.33c.145-.147.338-.22.53-.22.19 0 .382.073.53.22l.112.112-.476.48-.326-.33-.326.33-.48-.48z"/>
+                    </svg>
+                    <span>@(string.IsNullOrWhiteSpace(q.VerbalPassageTitle) ? "القطعة اللفظية" : q.VerbalPassageTitle)</span>
+                    @if (isLongPassage)
+                    {
+                        <span class="qx-passage__scroll-hint">قابلة للتمرير ↕</span>
+                    }
+                </div>
+                <div class="qx-passage__body smart-text" style="direction:@(isRTL ? "rtl" : "ltr")">
+                    @Html.Raw(q.VerbalPassageContent ?? "")
+                </div>
+            </div>
+        }
+
+        @* ─── بطاقة السؤال ─── *@
+        @{
+            var safeTitle = q.IsQuantitative
+                ? NumberHelper.ToIndicNumbersSafe(q.Title ?? "")
+                : q.Title ?? "";
+
+            safeTitle = safeTitle
+                .Replace("<style",    "&lt;style")
+                .Replace("</style>",  "&lt;/style&gt;")
+                .Replace("<script",   "&lt;script")
+                .Replace("</script>", "&lt;/script&gt;");
+            safeTitle = System.Net.WebUtility.HtmlDecode(safeTitle);
+        }
+
+        <div class="qx-question-card">
+            <div class="qx-question-card__body smart-text">
+                @Html.Raw(safeTitle)
+            </div>
+
+            @* ─── مقارنة نصية ─── *@
+            @if (q.DisplayType == QdratNew.Enums.QuestionDisplayType.ComparisonText)
+            {
+                <div class="qx-comparison">
+                    <div class="qx-comparison__col">
+                        <span class="qx-comparison__label">@T("القيمة الأولى")</span>
+                        <div class="qx-comparison__val">@Html.Raw(ToSafe(q.ComparisonValue1))</div>
+                    </div>
+                    <div class="qx-comparison__divider"></div>
+                    <div class="qx-comparison__col">
+                        <span class="qx-comparison__label">@T("القيمة الثانية")</span>
+                        <div class="qx-comparison__val">@Html.Raw(ToSafe(q.ComparisonValue2))</div>
+                    </div>
+                </div>
+            }
+            else if (q.DisplayType == QdratNew.Enums.QuestionDisplayType.ComparisonWithImage)
+            {
+                <div class="qx-comparison qx-comparison--with-img">
+                    <div class="qx-comparison__img-wrap">
+                        <img src="@q.ImageUrl" class="qx-comparison__img" alt="" />
+                    </div>
+                    <div class="qx-comparison__col">
+                        <span class="qx-comparison__label">@T("القيمة الأولى")</span>
+                        <div class="qx-comparison__val">@Html.Raw(ToSafe(q.ComparisonValue1))</div>
+                    </div>
+                    <div class="qx-comparison__divider"></div>
+                    <div class="qx-comparison__col">
+                        <span class="qx-comparison__label">@T("القيمة الثانية")</span>
+                        <div class="qx-comparison__val">@Html.Raw(ToSafe(q.ComparisonValue2))</div>
+                    </div>
+                </div>
+            }
+            else if (!string.IsNullOrWhiteSpace(q.ImageUrl))
+            {
+                <div class="qx-question-img-wrap">
+                    <img src="@q.ImageUrl" class="qx-question-img" alt="" />
+                </div>
+            }
+        </div>
+
+        @* ─── الخيارات ─── *@
+        @if (q.Options != null && q.Options.Any())
+        {
+            <div class="qx-options" role="radiogroup">
+                @for (int i = 0; i < q.Options.Count; i++)
+                {
+                    var option = q.Options[i];
+                    var isSelected = Model.UseOptionIndex
+                        ? Model.SelectedOptionIndex == i
+                        : (Model.SelectedAnswer ?? "") == option.Text;
+                    var optionValue = Model.UseOptionIndex ? i.ToString(System.Globalization.CultureInfo.InvariantCulture) : option.Text;
+
+                    <label class="qx-option @(isSelected ? "qx-option--selected" : "") @(isRTL ? "qx-option--rtl" : "")">
+                        <input type="radio"
+                               name="@Model.OptionFieldName"
+                               value="@optionValue"
+                               class="qx-option__radio"
+                               @(isSelected ? "checked" : "") />
+
+                        <span class="qx-option__content">
+                            @if (!string.IsNullOrWhiteSpace(option.ImageUrl) && string.IsNullOrWhiteSpace(option.Text))
+                            {
+                                <img src="@option.ImageUrl" class="qx-option__img" alt="" />
+                            }
+                            else if (string.IsNullOrWhiteSpace(option.ImageUrl) && !string.IsNullOrWhiteSpace(option.Text))
+                            {
+                                <span class="qx-option__text smart-text">@Html.Raw(ToSafe(option.Text))</span>
+                            }
+                            else if (!string.IsNullOrWhiteSpace(option.ImageUrl) && !string.IsNullOrWhiteSpace(option.Text))
+                            {
+                                <span class="qx-option__combo">
+                                    <img src="@option.ImageUrl" class="qx-option__img qx-option__img--inline" alt="" />
+                                    <span class="qx-option__text smart-text">@Html.Raw(ToSafe(option.Text))</span>
+                                </span>
+                            }
+                        </span>
+
+                        <span class="qx-option__check" aria-hidden="true">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/>
+                            </svg>
+                        </span>
+                    </label>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="qx-no-options">⚠️ لا توجد اختيارات متاحة لهذا السؤال.</div>
+        }
+

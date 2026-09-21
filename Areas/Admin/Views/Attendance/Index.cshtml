@@ -1,0 +1,1239 @@
+﻿@model QdratNew.ViewModels.Attendance.AdminAttendanceIndexVM
+@using Microsoft.AspNetCore.Authorization
+@using QdratNew.Security.AdminPermissions
+@inject IAuthorizationService AuthorizationService
+
+@{
+    ViewData["Title"] = "دفعات الحضور والانصراف";
+    var canArchive = (await AuthorizationService.AuthorizeAsync(User, AdminPermissionPolicies.Attendance_Archive)).Succeeded;
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet" />
+
+    <style>
+        :root {
+            --ink: #0D1B2A;
+            --ink-2: #2C3E50;
+            --ink-3: #5A6A7A;
+            --ink-4: #8FA0B0;
+            --ink-5: #C8D5E0;
+            --canvas: #F3F6FA;
+            --surface: #FFFFFF;
+            --surface-2: #F8FAFC;
+            --surface-3: #EEF2F7;
+            --border: #DDE4EC;
+            --blue: #1B5EAE;
+            --blue-2: #2471D0;
+            --blue-bg: #E8F1FB;
+            --blue-dark: #103E7A;
+            --emerald: #0D7A5B;
+            --emerald-bg: #E4F5EE;
+            --amber: #985D09;
+            --amber-bg: #FDF0D8;
+            --rose: #BF1030;
+            --rose-bg: #FDEAEE;
+            --violet: #5535B5;
+            --violet-bg: #EDE8F9;
+            --r-sm: 6px;
+            --r-md: 10px;
+            --r-lg: 14px;
+            --r-xl: 20px;
+            --sh-xs: 0 1px 3px rgba(13,27,42,.06);
+            --sh-sm: 0 2px 8px rgba(13,27,42,.08);
+            --sh-md: 0 4px 18px rgba(13,27,42,.10);
+            --ease: cubic-bezier(.25,.46,.45,.94);
+        }
+
+        .attendance-page {
+            background: var(--canvas);
+            min-height: 100vh;
+            padding: 32px 28px 64px;
+            direction: rtl;
+            font-family: 'Cairo';
+            color: var(--ink-2);
+        }
+
+        .attendance-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-bottom: 28px;
+        }
+
+        .attendance-brand {
+            display: flex;
+            align-items: center;
+            gap: 13px;
+        }
+
+        .attendance-brand-icon {
+            width: 46px;
+            height: 46px;
+            background: var(--blue);
+            border-radius: var(--r-lg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 20px;
+            box-shadow: 0 4px 14px rgba(27,94,174,.28);
+        }
+
+        .attendance-brand-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--ink);
+            line-height: 1.15;
+        }
+
+        .attendance-brand-sub {
+            font-size: 16px;
+            color: var(--ink-4);
+            margin-top: 2px;
+        }
+
+        .attendance-alert {
+            border: none;
+            border-radius: var(--r-lg);
+            padding: 14px 18px;
+            font-size: 17px;
+            font-weight: 700;
+            box-shadow: var(--sh-xs);
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .attendance-alert-success {
+            background: var(--emerald-bg);
+            color: var(--emerald);
+        }
+
+        .attendance-alert-danger {
+            background: var(--rose-bg);
+            color: var(--rose);
+        }
+
+        .attendance-kpis {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 13px;
+            margin-bottom: 24px;
+        }
+
+        @@media (max-width: 1200px) {
+            .attendance-kpis {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @@media (max-width: 960px) {
+            .attendance-kpis {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @@media (max-width: 480px) {
+            .attendance-kpis {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .kpi-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            padding: 18px 19px;
+            display: flex;
+            align-items: center;
+            gap: 13px;
+            box-shadow: var(--sh-xs);
+            transition: transform .2s var(--ease), box-shadow .2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+            .kpi-card::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                right: 0;
+                width: 4px;
+                height: 100%;
+                border-radius: 0 var(--r-xl) var(--r-xl) 0;
+            }
+
+            .kpi-card:hover {
+                transform: translateY(-3px);
+                box-shadow: var(--sh-sm);
+            }
+
+        .kpi-blue::after {
+            background: var(--blue);
+        }
+
+        .kpi-emerald::after {
+            background: var(--emerald);
+        }
+
+        .kpi-amber::after {
+            background: var(--amber);
+        }
+
+        .kpi-rose::after {
+            background: var(--rose);
+        }
+
+        .kpi-amber-2::after {
+            background: var(--amber);
+        }
+
+        /* ── Archive Portal ── */
+        .archive-portal-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            box-shadow: var(--sh-sm);
+            margin-bottom: 22px;
+            overflow: hidden;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            align-items: center;
+            gap: 14px;
+            padding: 20px;
+            text-decoration: none;
+            color: inherit;
+            transition: transform .18s var(--ease), box-shadow .18s, border-color .18s;
+        }
+        .archive-portal-card:hover { color: inherit; transform: translateY(-3px); box-shadow: var(--sh-md); border-color: #E0B463; }
+        .archive-portal-main { display: flex; align-items: center; gap: 14px; min-width: 0; }
+        .archive-portal-icon {
+            width: 52px; height: 52px; border-radius: var(--r-lg);
+            display: flex; align-items: center; justify-content: center;
+            background: var(--amber-bg); color: var(--amber); font-size: 23px; flex-shrink: 0;
+        }
+        .archive-portal-title { font-size: 18px; font-weight: 800; color: var(--ink); margin-bottom: 3px; }
+        .archive-portal-sub { font-size: 14px; color: var(--ink-4); line-height: 1.55; }
+        .archive-portal-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+        .archive-portal-count {
+            display: inline-flex; align-items: center; gap: 6px;
+            border-radius: 30px; background: var(--amber-bg); color: var(--amber);
+            padding: 7px 12px; font-size: 14px; font-weight: 800;
+        }
+        .archive-portal-open {
+            display: inline-flex; align-items: center; gap: 7px;
+            border-radius: var(--r-md); background: var(--ink); color: #fff;
+            padding: 10px 14px; font-size: 14px; font-weight: 800;
+        }
+        @@media (max-width: 768px) {
+            .archive-portal-card { grid-template-columns: 1fr; }
+            .archive-portal-meta { justify-content: flex-start; }
+        }
+
+        /* ── Archive Manager ── */
+        .archive-manager {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            margin-bottom: 22px;
+            box-shadow: var(--sh-xs);
+            padding: 0 !important;
+            overflow: hidden;
+        }
+        .archive-manager-toggle {
+            width: 100%; border: none; background: var(--surface);
+            padding: 18px; cursor: pointer;
+            display: flex; align-items: center; justify-content: space-between; gap: 14px;
+            text-align: right; transition: background .15s var(--ease);
+        }
+        .archive-manager-toggle:hover { background: var(--surface-2); }
+        .archive-manager-toggle-main { display: flex; align-items: center; gap: 10px; }
+        .archive-manager-toggle-icon {
+            width: 38px; height: 38px; border-radius: var(--r-md);
+            background: var(--amber-bg); color: var(--amber);
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 16px; flex-shrink: 0;
+        }
+        .archive-manager-toggle-text { display: flex; flex-direction: column; gap: 2px; }
+        .archive-manager-title    { font-size: 16px; font-weight: 800; color: var(--ink); }
+        .archive-manager-subtitle { font-size: 13px; font-weight: 600; color: var(--ink-4); }
+        .archive-manager-toggle-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .archive-manager-chevron {
+            width: 34px; height: 34px; border-radius: var(--r-sm);
+            background: var(--surface-3); color: var(--ink-3);
+            display: inline-flex; align-items: center; justify-content: center;
+            transition: transform .2s var(--ease), background .15s;
+        }
+        .archive-manager.is-open .archive-manager-chevron { transform: rotate(180deg); background: var(--amber-bg); color: var(--amber); }
+        .archive-manager-body { display: none; padding: 0 18px 18px; border-top: 1px solid var(--surface-3); }
+        .archive-manager.is-open .archive-manager-body { display: block; }
+        .archive-manager-body-inner { padding-top: 16px; }
+        .archive-manager-grid { display: grid; grid-template-columns: minmax(240px,1fr) auto; gap: 14px; align-items: end; }
+        .archive-batches {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(200px,1fr));
+            gap: 8px; max-height: 170px; overflow-y: auto;
+            padding: 10px; background: var(--surface-2);
+            border: 1px solid var(--border); border-radius: var(--r-md);
+        }
+        .archive-batch-check { display: flex; align-items: center; gap: 7px; font-size: 14px; color: var(--ink-2); }
+        .archive-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .archive-submit {
+            border: none; border-radius: var(--r-md); padding: 10px 16px;
+            font-size: 15px; font-weight: 700; color: #fff; background: var(--ink); cursor: pointer;
+        }
+        .archive-submit.restore { background: var(--emerald); }
+        .att-count-badge { font-size: 14px; color: var(--ink-4); }
+        .att-count-badge strong { color: var(--blue); font-weight: 700; }
+        @@media (max-width: 768px) {
+            .archive-manager-grid { grid-template-columns: 1fr; }
+            .archive-manager-toggle { align-items: flex-start; }
+            .archive-manager-toggle-left { width: 100%; justify-content: space-between; }
+        }
+
+        .btn-archive-history {
+            display: inline-flex; align-items: center; gap: 5px;
+            font-size: 13px; font-weight: 700;
+            padding: 5px 11px; border-radius: var(--r-sm);
+            background: var(--amber-bg); color: var(--amber);
+            border: 1px solid #F5C28A; text-decoration: none;
+            transition: background .14s;
+            margin-top: 8px; width: 100%; justify-content: center;
+        }
+        .btn-archive-history:hover { background: #F5C28A; color: var(--amber); }
+
+        .kpi-ico {
+            width: 42px;
+            height: 42px;
+            border-radius: var(--r-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .ico-blue {
+            background: var(--blue-bg);
+            color: var(--blue);
+        }
+
+        .ico-emerald {
+            background: var(--emerald-bg);
+            color: var(--emerald);
+        }
+
+        .ico-amber {
+            background: var(--amber-bg);
+            color: var(--amber);
+        }
+
+        .ico-rose {
+            background: var(--rose-bg);
+            color: var(--rose);
+        }
+
+        .kpi-label {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--ink-4);
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            margin-bottom: 3px;
+        }
+
+        .kpi-val {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--ink);
+            line-height: 1;
+        }
+
+        .attendance-filter-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            padding: 18px 22px 21px;
+            box-shadow: var(--sh-xs);
+            margin-bottom: 22px;
+        }
+
+        .attendance-filter-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--ink-4);
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            margin-bottom: 14px;
+        }
+
+        .attendance-filter-grid {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 12px;
+            align-items: end;
+        }
+
+        @@media (max-width: 768px) {
+            .attendance-filter-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .attendance-field label {
+            display: block;
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--ink-3);
+            margin-bottom: 5px;
+        }
+
+        .attendance-select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: var(--r-md);
+            font-size: 18px;
+            background: var(--surface-2);
+            color: var(--ink);
+            transition: border-color .16s, box-shadow .16s;
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238FA0B0' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: left 10px center;
+            padding-left: 30px;
+        }
+
+            .attendance-select:focus {
+                outline: none;
+                border-color: var(--blue-2);
+                box-shadow: 0 0 0 3px rgba(36,113,208,.11);
+                background-color: var(--surface);
+            }
+
+        .filter-btn-row {
+            display: flex;
+            gap: 7px;
+        }
+
+        .btn-filter {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 9px 20px;
+            height: 42px;
+            background: var(--blue);
+            color: #fff;
+            border: none;
+            border-radius: var(--r-md);
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background .15s, transform .12s;
+        }
+
+            .btn-filter:hover {
+                background: var(--blue-dark);
+                color: #fff;
+                transform: translateY(-1px);
+            }
+
+        .btn-reset {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            padding: 8px 14px;
+            height: 42px;
+            border: 1px solid var(--border);
+            border-radius: var(--r-md);
+            font-size: 17px;
+            color: var(--ink-3);
+            background: var(--surface);
+            text-decoration: none;
+            transition: all .15s;
+        }
+
+            .btn-reset:hover {
+                background: var(--rose-bg);
+                border-color: #F5BBC4;
+                color: var(--rose);
+            }
+
+        .attendance-batches-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            overflow: visible;
+            box-shadow: var(--sh-sm);
+            margin-bottom: 24px;
+        }
+
+        .archived-batches-card {
+            background: var(--surface);
+            border: 1px solid #F5C28A;
+            border-radius: var(--r-xl);
+            overflow: visible;
+            box-shadow: var(--sh-sm);
+            margin-bottom: 24px;
+        }
+
+        .archived-batches-topbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 18px;
+            border-bottom: 1px solid #FDE9C8;
+            flex-wrap: wrap;
+            background: #FFFBF4;
+            border-radius: var(--r-xl) var(--r-xl) 0 0;
+        }
+
+        .batch-card.batch-archived {
+            border-color: #F5C28A;
+            opacity: .88;
+        }
+
+        .batch-card.batch-archived::before {
+            background: var(--amber);
+        }
+
+        .batch-card.batch-archived:hover {
+            opacity: 1;
+            border-color: var(--amber);
+        }
+
+        .archived-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 13px;
+            font-weight: 700;
+            padding: 3px 9px;
+            border-radius: 30px;
+            background: var(--amber-bg);
+            color: var(--amber);
+            border: 1px solid #F5C28A;
+        }
+
+        .batch-open-btn.btn-archived {
+            background: var(--amber);
+            box-shadow: 0 3px 10px rgba(152,93,9,.20);
+        }
+
+        .batch-open-btn.btn-archived:hover {
+            background: #7a4905;
+        }
+
+        .attendance-batches-topbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--surface-3);
+            flex-wrap: wrap;
+        }
+
+        .table-section-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--ink);
+            margin-left: 10px;
+        }
+
+            .table-section-title i {
+                color: var(--blue);
+            }
+
+        .attendance-search-wrap {
+            position: relative;
+            flex: 1;
+            min-width: 220px;
+            max-width: 390px;
+        }
+
+            .attendance-search-wrap i {
+                position: absolute;
+                right: 11px;
+                top: 50%;
+                transform: translateY(-50%);
+                color: var(--ink-4);
+                font-size: 17px;
+                pointer-events: none;
+            }
+
+            .attendance-search-wrap input {
+                width: 100%;
+                padding: 7px 32px 7px 12px;
+                border: 1px solid var(--border);
+                border-radius: var(--r-md);
+                font-size: 18px;
+                background: var(--surface-2);
+                color: var(--ink);
+                transition: border-color .15s, box-shadow .15s;
+            }
+
+                .attendance-search-wrap input:focus {
+                    outline: none;
+                    border-color: var(--blue-2);
+                    box-shadow: 0 0 0 3px rgba(36,113,208,.1);
+                    background: var(--surface);
+                }
+
+        .attendance-count-badge {
+            margin-right: auto;
+            font-size: 16px;
+            color: var(--ink-4);
+        }
+
+            .attendance-count-badge strong {
+                color: var(--blue);
+                font-weight: 700;
+            }
+
+        .batches-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+            padding: 18px;
+        }
+
+        @@media (max-width: 1200px) {
+            .batches-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @@media (max-width: 768px) {
+            .batches-grid {
+                grid-template-columns: 1fr;
+                padding: 14px;
+            }
+        }
+
+        .batch-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            box-shadow: var(--sh-xs);
+            transition: transform .18s var(--ease), box-shadow .18s, border-color .18s;
+            overflow: hidden;
+            position: relative;
+        }
+
+            .batch-card::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                right: 0;
+                width: 5px;
+                height: 100%;
+                background: var(--blue);
+            }
+
+            .batch-card:hover {
+                transform: translateY(-4px);
+                box-shadow: var(--sh-md);
+                border-color: #B6D3F4;
+            }
+
+        .batch-card-body {
+            padding: 18px 18px 16px;
+        }
+
+        .batch-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .batch-title-wrap {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+
+        .batch-avatar {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: var(--blue-bg);
+            color: var(--blue);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 17px;
+            flex-shrink: 0;
+        }
+
+        .batch-title {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--ink);
+            margin-bottom: 3px;
+        }
+
+        .batch-sub {
+            font-size: 15px;
+            color: var(--ink-4);
+            line-height: 1.5;
+        }
+
+        .student-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 5px 11px;
+            border-radius: 30px;
+            font-size: 16px;
+            font-weight: 700;
+            white-space: nowrap;
+            background: var(--violet-bg);
+            color: var(--violet);
+        }
+
+        .batch-mini-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .batch-mini-stat {
+            background: var(--surface-2);
+            border: 1px solid var(--surface-3);
+            border-radius: var(--r-md);
+            padding: 10px 8px;
+            text-align: center;
+        }
+
+        .mini-val {
+            display: block;
+            font-size: 19px;
+            font-weight: 800;
+            color: var(--ink);
+            line-height: 1.1;
+        }
+
+        .mini-label {
+            display: block;
+            font-size: 14px;
+            color: var(--ink-4);
+            margin-top: 3px;
+        }
+
+        .text-emerald {
+            color: var(--emerald) !important;
+        }
+
+        .text-rose {
+            color: var(--rose) !important;
+        }
+
+        .attendance-progress-wrap {
+            margin-bottom: 14px;
+        }
+
+        .attendance-progress-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            font-size: 15px;
+            color: var(--ink-4);
+            margin-bottom: 6px;
+        }
+
+            .attendance-progress-meta strong {
+                color: var(--ink);
+                font-size: 16px;
+            }
+
+        .attendance-progress {
+            width: 100%;
+            height: 9px;
+            border-radius: 30px;
+            background: var(--surface-3);
+            overflow: hidden;
+        }
+
+        .attendance-progress-bar {
+            height: 100%;
+            background: var(--blue);
+            border-radius: 30px;
+            transition: width .3s ease;
+        }
+
+        .batch-foot-stats {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            color: var(--ink-4);
+            font-size: 15px;
+            margin-bottom: 16px;
+        }
+
+            .batch-foot-stats span {
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+            }
+
+        .batch-open-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            width: 100%;
+            background: var(--blue);
+            color: #fff;
+            border: none;
+            border-radius: var(--r-md);
+            padding: 10px 14px;
+            font-size: 18px;
+            font-weight: 700;
+            text-decoration: none;
+            transition: background .16s var(--ease), transform .14s, box-shadow .16s;
+            box-shadow: 0 3px 10px rgba(27,94,174,.20);
+        }
+
+            .batch-open-btn:hover {
+                color: #fff;
+                background: var(--blue-dark);
+                transform: translateY(-2px);
+                box-shadow: 0 6px 18px rgba(27,94,174,.28);
+            }
+
+        .attendance-empty {
+            text-align: center;
+            padding: 56px 16px;
+            color: var(--ink-4);
+        }
+
+            .attendance-empty i {
+                font-size: 20px;
+                display: block;
+                margin-bottom: 12px;
+                color: var(--ink-5);
+            }
+
+        .attendance-empty-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--ink-3);
+        }
+
+        .attendance-empty-sub {
+            font-size: 16px;
+            margin-top: 4px;
+        }
+
+        @@media (max-width: 768px) {
+            .attendance-page {
+                padding: 22px 14px 48px;
+            }
+
+            .attendance-batches-topbar {
+                align-items: stretch;
+            }
+
+            .attendance-search-wrap {
+                max-width: 100%;
+                width: 100%;
+            }
+
+            .attendance-count-badge {
+                margin-right: 0;
+            }
+
+            .filter-btn-row {
+                width: 100%;
+            }
+
+            .btn-filter,
+            .btn-reset {
+                width: 100%;
+            }
+        }
+    </style>
+}
+
+<div class="attendance-page">
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="attendance-alert attendance-alert-success">
+            <i class="bi bi-check-circle-fill"></i>
+            @TempData["Success"]
+        </div>
+    }
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="attendance-alert attendance-alert-danger">
+            <i class="bi bi-exclamation-circle-fill"></i>
+            @TempData["Error"]
+        </div>
+    }
+
+    <div class="attendance-topbar">
+        <div class="attendance-brand">
+            <div class="attendance-brand-icon">
+                <i class="bi bi-calendar2-check-fill"></i>
+            </div>
+            <div>
+                <div class="attendance-brand-title">الحضور والانصراف</div>
+                <div class="attendance-brand-sub">
+                    اختر الدفعة أولًا، ثم انتقل إلى محاضراتها لتسجيل الحضور والانصراف.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="attendance-kpis">
+
+        <div class="kpi-card kpi-blue">
+            <div class="kpi-ico ico-blue">
+                <i class="bi bi-collection"></i>
+            </div>
+            <div>
+                <div class="kpi-label">الدفعات</div>
+                <div class="kpi-val">@Model.TotalBatches</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-emerald">
+            <div class="kpi-ico ico-emerald">
+                <i class="bi bi-people"></i>
+            </div>
+            <div>
+                <div class="kpi-label">إجمالي الطلاب</div>
+                <div class="kpi-val">@Model.TotalStudents</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-amber">
+            <div class="kpi-ico ico-amber">
+                <i class="bi bi-easel2"></i>
+            </div>
+            <div>
+                <div class="kpi-label">إجمالي المحاضرات</div>
+                <div class="kpi-val">@Model.TotalLectures</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-rose">
+            <div class="kpi-ico ico-rose">
+                <i class="bi bi-exclamation-triangle"></i>
+            </div>
+            <div>
+                <div class="kpi-label">لم تسجل بعد</div>
+                <div class="kpi-val">@Model.PendingAttendanceLectures</div>
+            </div>
+        </div>
+
+        <div class="kpi-card kpi-amber-2">
+            <div class="kpi-ico ico-amber">
+                <i class="bi bi-archive-fill"></i>
+            </div>
+            <div>
+                <div class="kpi-label">مؤرشفة</div>
+                <div class="kpi-val">@Model.ArchivedBatchCount</div>
+            </div>
+        </div>
+
+    </div>
+
+    @* Archive Portal *@
+    @if (canArchive)
+    {
+        <a asp-area="Admin" asp-controller="Attendance" asp-action="ArchivedAttendance" class="archive-portal-card">
+            <div class="archive-portal-main">
+                <div class="archive-portal-icon"><i class="bi bi-archive-fill"></i></div>
+                <div>
+                    <div class="archive-portal-title">أرشيف الحضور</div>
+                    <div class="archive-portal-sub">عرض الدفعات المؤرشفة، والانتقال إلى سجلات حضورها للاطلاع عليها (قراءة فقط).</div>
+                </div>
+            </div>
+            <div class="archive-portal-meta">
+                <span class="archive-portal-count">
+                    <i class="bi bi-folder2"></i>
+                    @Model.ArchivedBatchCount دفعة
+                </span>
+                <span class="archive-portal-open">
+                    عرض الأرشيف
+                    <i class="bi bi-arrow-left"></i>
+                </span>
+            </div>
+        </a>
+    }
+
+    @* Archive Manager *@
+    @if (canArchive)
+    {
+    <div class="archive-manager" id="archiveManagerSection">
+        <button type="button" class="archive-manager-toggle" id="archiveManagerToggle"
+                aria-expanded="false" aria-controls="archiveManagerBody">
+            <div class="archive-manager-toggle-main">
+                <span class="archive-manager-toggle-icon"><i class="bi bi-archive-fill"></i></span>
+                <span class="archive-manager-toggle-text">
+                    <span class="archive-manager-title">إدارة الأرشيف حسب الدفعات</span>
+                    <span class="archive-manager-subtitle">اضغط لعرض الدفعات وخيارات أرشفتها أو إخراجها من الأرشيف</span>
+                </span>
+            </div>
+            <div class="archive-manager-toggle-left">
+                <span class="att-count-badge">في الأرشيف: <strong>@Model.ArchivedBatchCount</strong> دفعة</span>
+                <span class="archive-manager-chevron"><i class="bi bi-chevron-down"></i></span>
+            </div>
+        </button>
+        <div class="archive-manager-body" id="archiveManagerBody">
+            <div class="archive-manager-body-inner">
+                <form asp-area="Admin" asp-controller="Attendance" asp-action="ArchiveBatches" method="post">
+                    @Html.AntiForgeryToken()
+                    <div class="archive-manager-grid">
+                        <div class="archive-batches">
+                            @foreach (var batch in Model.AllBatchesForArchive)
+                            {
+                                <label class="archive-batch-check">
+                                    <input type="checkbox" name="selectedBatchIds" value="@batch.Value" />
+                                    <span>@batch.Text</span>
+                                </label>
+                            }
+                        </div>
+                        <div class="archive-actions">
+                            <button type="submit" class="archive-submit"
+                                    onclick="return confirm('سيتم أرشفة الدفعات المحددة وقفل سجلات حضورها. هل تريد المتابعة؟')">
+                                <i class="bi bi-box-arrow-in-down"></i>
+                                أرشفة المحدد
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    }
+
+    <form method="get"
+          asp-area="Admin"
+          asp-controller="Attendance"
+          asp-action="Index"
+          class="attendance-filter-card">
+
+        <div class="attendance-filter-title">
+            <i class="bi bi-sliders" style="color:var(--blue)"></i>
+            تصفية النتائج
+        </div>
+
+        <div class="attendance-filter-grid">
+            <div class="attendance-field">
+                <label>
+                    <i class="bi bi-person-badge" style="color:var(--violet);margin-left:4px"></i>
+                    فلترة حسب المدرب
+                </label>
+
+                <select name="instructorId" class="attendance-select">
+                    <option value="">كل المدربين</option>
+                    @foreach (var item in Model.Instructors)
+                    {
+                        if (item.Selected)
+                        {
+                            <option value="@item.Value" selected>@item.Text</option>
+                        }
+                        else
+                        {
+                            <option value="@item.Value">@item.Text</option>
+                        }
+                    }
+                </select>
+            </div>
+
+            <div class="attendance-field">
+                <div class="filter-btn-row">
+                    <button type="submit" class="btn-filter">
+                        <i class="bi bi-funnel"></i>
+                        تطبيق
+                    </button>
+
+                    <a asp-area="Admin"
+                       asp-controller="Attendance"
+                       asp-action="Index"
+                       class="btn-reset">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                        إلغاء
+                    </a>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    <div class="attendance-batches-card">
+
+        <div class="attendance-batches-topbar">
+            <div class="table-section-title">
+                <i class="bi bi-grid-3x3-gap-fill"></i>
+                الدفعات المرتبطة بمحاضرات
+            </div>
+
+            <div class="attendance-search-wrap">
+                <i class="bi bi-search"></i>
+                <input type="text"
+                       id="batchSearch"
+                       placeholder="ابحث في اسم الدفعة أو الدورة أو المدرب..." />
+            </div>
+
+            <div class="attendance-count-badge">
+                إجمالي: <strong>@Model.BatchCards.Count</strong> دفعة
+            </div>
+        </div>
+
+        @if (!Model.BatchCards.Any())
+        {
+            <div class="attendance-empty">
+                <i class="bi bi-inbox"></i>
+                <div class="attendance-empty-title">لا توجد دفعات مرتبطة بمحاضرات حتى الآن</div>
+                <div class="attendance-empty-sub">ستظهر هنا الدفعات التي تحتوي على محاضرات مسجلة في النظام</div>
+            </div>
+        }
+        else
+        {
+            <div class="batches-grid" id="batchesGrid">
+                @foreach (var batch in Model.BatchCards)
+                {
+                    <div class="batch-card"
+                         data-search="@($"{batch.BatchName} {batch.CourseTitle} {batch.InstructorSummary}".ToLower())">
+
+                        <div class="batch-card-body">
+
+                            <div class="batch-head">
+                                <div class="batch-title-wrap">
+                                    <div class="batch-avatar">
+                                        <i class="bi bi-people-fill"></i>
+                                    </div>
+
+                                    <div>
+                                        <div class="batch-title">@batch.BatchName</div>
+                                        <div class="batch-sub">@batch.CourseTitle</div>
+                                        <div class="batch-sub">المدرب: @batch.InstructorSummary</div>
+                                    </div>
+                                </div>
+
+                                <span class="student-pill">
+                                    <i class="bi bi-person"></i>
+                                    @batch.TotalStudents طالب
+                                </span>
+                            </div>
+
+                            <div class="batch-mini-grid">
+                                <div class="batch-mini-stat">
+                                    <span class="mini-val">@batch.TotalLectures</span>
+                                    <span class="mini-label">محاضرة</span>
+                                </div>
+
+                                <div class="batch-mini-stat">
+                                    <span class="mini-val text-emerald">@batch.RecordedLectures</span>
+                                    <span class="mini-label">مسجلة</span>
+                                </div>
+
+                                <div class="batch-mini-stat">
+                                    <span class="mini-val text-rose">@batch.PendingLectures</span>
+                                    <span class="mini-label">متبقية</span>
+                                </div>
+                            </div>
+
+                            <div class="attendance-progress-wrap">
+                                <div class="attendance-progress-meta">
+                                    <span>متوسط الحضور</span>
+                                    <strong>@batch.AttendancePercentage%</strong>
+                                </div>
+
+                                <div class="attendance-progress">
+                                    <div class="attendance-progress-bar"
+                                         style="width:@batch.AttendancePercentage%;">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="batch-foot-stats">
+                                <span>
+                                    <i class="bi bi-clock-history"></i>
+                                    تأخير: @batch.LateArrivalCount
+                                </span>
+
+                                <span>
+                                    <i class="bi bi-box-arrow-left"></i>
+                                    إذن مبكر: @batch.EarlyLeavePermissionCount
+                                </span>
+                            </div>
+
+                            <a asp-area="Admin"
+                               asp-controller="Attendance"
+                               asp-action="Lectures"
+                               asp-route-batchId="@batch.BatchId"
+                               asp-route-instructorId="@Model.InstructorId"
+                               class="batch-open-btn">
+                                <i class="bi bi-calendar2-week"></i>
+                                فتح محاضرات الدفعة
+                            </a>
+
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+
+    </div>
+
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+
+            // Archive manager toggle
+            const archiveSection = document.getElementById("archiveManagerSection");
+            const archiveToggle  = document.getElementById("archiveManagerToggle");
+            if (archiveSection && archiveToggle) {
+                const shouldOpenArchive = @Model.ShowArchived.ToString().ToLowerInvariant();
+                if (shouldOpenArchive) {
+                    archiveSection.classList.add("is-open");
+                    archiveToggle.setAttribute("aria-expanded", "true");
+                }
+                archiveToggle.addEventListener("click", function () {
+                    const isOpen = archiveSection.classList.contains("is-open");
+                    archiveSection.classList.toggle("is-open", !isOpen);
+                    archiveToggle.setAttribute("aria-expanded", (!isOpen).toString());
+                });
+            }
+
+            const searchInput = document.getElementById("batchSearch");
+            const cards = Array.from(document.querySelectorAll("#batchesGrid .batch-card"));
+
+            if (searchInput) {
+                searchInput.addEventListener("input", function () {
+                    const value = (this.value || "").toLowerCase().trim();
+                    cards.forEach(function (card) {
+                        const text = card.getAttribute("data-search") || "";
+                        card.style.display = text.includes(value) ? "" : "none";
+                    });
+                });
+            }
+
+        });
+    </script>
+}

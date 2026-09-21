@@ -1,0 +1,234 @@
+﻿@model QdratNew.ViewModels.Exam.ExamReviewViewModel
+@using QdratNew.Helpers
+
+@{
+    ViewData["Title"] = "📘 مراجعة أسئلة المؤشر";
+    int totalQ = Model.TotalQuestions;
+    int correctCount = Model.Questions.Count(q => q.IsCorrect);
+    int wrongCount = totalQ - correctCount;
+    double percent = totalQ > 0 ? Math.Round(correctCount * 100.0 / totalQ, 1) : 0;
+}
+
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+
+<div class="container py-4">
+
+    <!-- 🟦 العنوان -->
+    <div class="text-center mb-5">
+        <h2 class="fw-bold text-primary">
+            <i class="fa-solid fa-book-open-reader me-2"></i> مراجعة أسئلة المؤشر: @Model.LessonTitle
+        </h2>
+        <h5 class="text-secondary">المحور: @Model.SectionTitle</h5>
+        <h6 class="text-muted mt-2">نتيجتك: <span class="fw-bold text-success">@NumberHelper.ToIndicNumbersSafe(percent.ToString())%</span></h6>
+    </div>
+
+    <!-- 🟩 الكروت الإحصائية -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3 col-6">
+            <div class="card text-center shadow-sm">
+                <div class="card-body">
+                    <h6>إجمالي الأسئلة</h6>
+                    <h3>@NumberHelper.ToIndicNumbersSafe(totalQ.ToString())</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card text-center shadow-sm text-success">
+                <div class="card-body">
+                    <h6>إجابات صحيحة</h6>
+                    <h3>@NumberHelper.ToIndicNumbersSafe(correctCount.ToString())</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card text-center shadow-sm text-danger">
+                <div class="card-body">
+                    <h6>إجابات خاطئة</h6>
+                    <h3>@NumberHelper.ToIndicNumbersSafe(wrongCount.ToString())</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card text-center shadow-sm">
+                <div class="card-body">
+                    <h6>الوقت الإجمالي</h6>
+                    <h3>@NumberHelper.ToIndicNumbersSafe(Model.TimeSpentMinutes.ToString()) دقيقة</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🧠 عرض الأسئلة -->
+    <div class="row g-3">
+        @foreach (var item in Model.Questions.Select((q, i) => new { q, i }))
+        {
+            var q = item.q;
+            var index = item.i + 1;
+            Func<string, string> convert = s => q.IsQuantitative ? NumberHelper.ToIndicNumbersSafe(s) : s;
+
+            <div class="col-md-6">
+                <div class="card shadow-sm mb-3 question-card">
+                    <div class="card-header bg-qdrat text-white fw-bold">
+                        @Html.Raw(convert($"سؤال {NumberHelper.ToIndicNumbersSafe(index.ToString())}: {q.QuestionTitle}"))
+                    </div>
+                    <div class="card-body">
+
+                        <!-- القطعة اللفظية -->
+                        @if (!string.IsNullOrWhiteSpace(q.VerbalPassageContent))
+                        {
+                            <details class="mb-3 passage" open>
+                                <summary class="fw-semibold">📘 القطعة المرتبطة</summary>
+                                <div class="mt-2">@Html.Raw(convert(q.VerbalPassageContent))</div>
+                            </details>
+                        }
+
+                        <!-- صورة السؤال -->
+                        @if (!string.IsNullOrWhiteSpace(q.ImageUrl))
+                        {
+                            <div class="text-center mb-3">
+                                <img src="@Url.Content(q.ImageUrl)" class="img-fluid rounded-3 shadow-sm" style="max-height: 200px;" alt="صورة السؤال" />
+                            </div>
+                        }
+
+                        <!-- مقارنة -->
+                        @if (q.DisplayType == QdratNew.Enums.QuestionDisplayType.ComparisonText)
+                        {
+                            <div class="row mb-3 text-center">
+                                <div class="col-md-6 border-end">
+                                    <strong>القيمة الأولى:</strong>
+                                    <div>@Html.Raw(convert(q.ComparisonValue1))</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <strong>القيمة الثانية:</strong>
+                                    <div>@Html.Raw(convert(q.ComparisonValue2))</div>
+                                </div>
+                            </div>
+                        }
+                        else if (q.DisplayType == QdratNew.Enums.QuestionDisplayType.ComparisonWithImage)
+                        {
+                            <div class="row mb-3 text-center align-items-center">
+                                <div class="col-md-4">
+                                    <img src="@Url.Content(q.ImageUrl)" class="img-fluid" style="max-height: 150px;" />
+                                </div>
+                                <div class="col-md-4 border-end">
+                                    <strong>القيمة الأولى:</strong>
+                                    <div>@Html.Raw(convert(q.ComparisonValue1))</div>
+                                </div>
+                                <div class="col-md-4">
+                                    <strong>القيمة الثانية:</strong>
+                                    <div>@Html.Raw(convert(q.ComparisonValue2))</div>
+                                </div>
+                            </div>
+                        }
+
+                        <!-- الاختيارات -->
+                        @if (q.Options != null && q.Options.Count > 0)
+                        {
+                            <ul class="list-group mb-3 options-list">
+                                @foreach (var opt in q.Options)
+                                {
+                                    var optText = opt.Text ?? "";
+                                    var isSelected = optText?.Trim() == q.StudentAnswer?.Trim();
+                                    var isCorrect = optText?.Trim() == q.CorrectAnswer?.Trim();
+                                    var liClass = isCorrect ? "list-group-item-success" :
+                                    (isSelected ? "list-group-item-danger" : "");
+
+                                    <li class="list-group-item d-flex align-items-center @liClass">
+                                        @if (!string.IsNullOrWhiteSpace(opt.ImageUrl))
+                                        {
+                                            <img src="@Url.Content(opt.ImageUrl)" class="img-fluid me-2" style="max-height: 50px;" />
+                                        }
+                                        else
+                                        {
+                                            <span>@Html.Raw(convert(optText))</span>
+                                        }
+
+                                        @if (isSelected)
+                                        {
+                                            <span class="badge bg-primary ms-auto">إجابتك</span>
+                                        }
+                                        @if (isCorrect)
+                                        {
+                                            <span class="badge bg-success ms-2">الإجابة الصحيحة</span>
+                                        }
+                                    </li>
+                                }
+                            </ul>
+                        }
+                        else
+                        {
+                            <div class="alert alert-light mb-3">لا توجد اختيارات لهذا السؤال.</div>
+                        }
+
+                        <!-- النتيجة -->
+                        <p class="fw-bold mb-2">
+                            <strong>النتيجة:</strong>
+                            <span class="@(q.IsCorrect ? "text-success" : "text-danger")">
+                                @(q.IsCorrect ? "✔️ صحيح" : "❌ خطأ")
+                            </span>
+                        </p>
+
+                        <!-- الوقت -->
+                        <p class="small text-muted">
+                            <strong>⏱️ الوقت:</strong>
+                            @NumberHelper.ToIndicNumbersSafe(Math.Round(q.TimeTakenSeconds).ToString()) ثانية
+                        </p>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- 🔙 الرجوع -->
+    <div class="text-center mt-5">
+        <a asp-action="PlacementExamReport" asp-route-assignmentId="@Model.ExamAssignmentId"
+           class="btn btn-outline-primary btn-lg rounded-pill px-4 shadow-sm">
+            <i class="fa-solid fa-arrow-left me-2"></i> العودة إلى تقرير الاختبار
+        </a>
+    </div>
+
+</div>
+
+<style>
+    .question-card {
+        border-radius: 12px;
+        transition: all 0.2s ease;
+    }
+
+        .question-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+    .options-list .list-group-item {
+        border: none;
+        border-bottom: 1px solid #eee;
+    }
+
+        .options-list .list-group-item:last-child {
+            border-bottom: none;
+        }
+
+    .list-group-item-success {
+        background-color: #e1f8e1 !important;
+    }
+
+    .list-group-item-danger {
+        background-color: #ffe2e2 !important;
+    }
+
+    .passage summary {
+        cursor: pointer;
+    }
+
+    .passage[open] summary::after {
+        content: "▲";
+        float: left;
+    }
+
+    .passage summary::after {
+        content: "▼";
+        float: left;
+        color: #888;
+    }
+</style>

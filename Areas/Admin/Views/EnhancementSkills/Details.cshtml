@@ -1,0 +1,1041 @@
+@model QdratNew.ViewModels.EnhancementSkills.EnhancementDetailsVm
+
+@{
+    ViewData["Title"] = $"تفاصيل: {Model.Title}";
+
+    var groupedAxes = Model.IndicatorSummaries
+        .GroupBy(i => i.SectionTitle)
+        .OrderBy(g => g.Key)
+        .ToList();
+
+    var totalStudents  = Model.Students.Count;
+    var totalActual    = Model.IndicatorSummaries.Sum(i => i.ActualCount);
+    var totalRequested = Model.IndicatorSummaries.Sum(i => i.RequestedCount);
+    int qPctFill       = totalRequested > 0 ? Math.Min(100, (int)Math.Round(totalActual * 100.0 / totalRequested)) : 0;
+
+    string StripHtml(string html) =>
+        string.IsNullOrEmpty(html) ? "" :
+        System.Text.RegularExpressions.Regex.Replace(html, "<[^>]*>", " ").Trim();
+
+    string JsStr(string s) => (s ?? "")
+        .Replace("\\","\\\\").Replace("'","\\'")
+        .Replace("\n","\\n").Replace("\r","").Replace("\"","\\\"");
+}
+
+@section Styles {
+<style>
+/* ── نبدأ بـ !important لأن الـ Layout يحمّل styles بعدنا ── */
+
+/* ================================================================
+   HERO — يبقى داكن (جزء الـ Header)
+================================================================ */
+.es-hero {
+    background: linear-gradient(135deg,#0e2247 0%,#162d5c 50%,#0e2247 100%) !important;
+    border: 1px solid rgba(76,166,168,.2) !important;
+    border-radius: 14px;
+    padding: 24px 28px 20px;
+    margin-bottom: 20px;
+    position: relative;
+    overflow: hidden;
+}
+.es-hero-title  { font-size:1.5rem; font-weight:800; color:#fff !important; margin-bottom:6px; line-height:1.3; }
+.es-hero-meta   { display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; font-size:.84rem; color:#94a3b8 !important; }
+.es-hero-dates  { margin-top:12px; display:flex; flex-wrap:wrap; gap:14px; font-size:.77rem; color:#94a3b8 !important; }
+.es-hero-dates  strong { color:#e2e8f0 !important; }
+
+/* ── Badges ── */
+.es-badge { display:inline-flex; align-items:center; gap:5px; padding:4px 11px; border-radius:30px; font-size:.74rem; font-weight:700; }
+.es-badge-sent    { background:rgba(34,197,94,.15)!important;  color:#16a34a!important; border:1px solid rgba(34,197,94,.3)!important; }
+.es-badge-pending { background:rgba(245,158,11,.15)!important; color:#b45309!important; border:1px solid rgba(245,158,11,.3)!important; }
+.es-badge-method  { background:rgba(76,166,168,.15)!important; color:#4CA6A8!important; border:1px solid rgba(76,166,168,.35)!important; }
+
+/* ================================================================
+   STATS CARDS — فاتحة بيضاء
+================================================================ */
+.es-stat-card {
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 12px !important;
+    padding: 18px 16px !important;
+    text-align: center !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,.07) !important;
+    transition: transform .18s, box-shadow .18s;
+}
+.es-stat-card:hover { transform:translateY(-3px); box-shadow:0 6px 20px rgba(0,0,0,.1) !important; }
+.es-stat-val { font-size:2rem; font-weight:800; line-height:1; margin-bottom:4px; }
+.es-stat-lbl { font-size:.74rem; color:#64748b !important; }
+.c-teal   { color:#4CA6A8  !important; }
+.c-purple { color:#818cf8  !important; }
+.c-green  { color:#16a34a  !important; }
+.c-orange { color:#b45309  !important; }
+.c-red    { color:#dc2626  !important; }
+
+/* ── SEND BANNER ── */
+.es-send-banner {
+    background: linear-gradient(135deg,rgba(245,158,11,.07),rgba(245,158,11,.03)) !important;
+    border: 1px solid rgba(245,158,11,.3) !important;
+    border-radius: 10px;
+    padding: 13px 20px;
+    margin-bottom: 20px;
+    display: flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;
+}
+.es-send-banner-ttl { font-weight:700; color:#b45309 !important; font-size:.87rem; }
+.es-send-banner small { color:#64748b !important; font-size:.75rem; display:block; margin-top:2px; }
+
+/* ── DIVIDER ── */
+.es-divider {
+    display:flex; align-items:center; gap:9px;
+    margin-bottom:16px; font-size:.96rem; font-weight:700; color:#f8fafc;
+}
+.es-divider::after { content:''; flex:1; height:1px; background:rgba(255,255,255,.08); }
+.es-divider-sub    { font-size:.75rem; font-weight:400; color:#94a3b8; }
+
+/* ================================================================
+   AXIS CARD — أبيض فاتح بالكامل
+================================================================ */
+.es-axis-card {
+    background: #ffffff !important;
+    border: 1px solid #dde3ec !important;
+    border-radius: 14px !important;
+    box-shadow: 0 2px 12px rgba(0,0,0,.08) !important;
+    overflow: hidden;
+    display: flex; flex-direction:column;
+    height: 100%;
+    transition: box-shadow .18s, transform .18s;
+}
+.es-axis-card:hover { box-shadow:0 6px 24px rgba(0,0,0,.12) !important; transform:translateY(-2px); }
+
+/* Card header: teal accent */
+.es-axis-head {
+    background: linear-gradient(135deg,#4CA6A8 0%,#3a9496 100%) !important;
+    padding: 12px 16px !important;
+    display: flex; justify-content:space-between; align-items:center; gap:8px;
+    border-bottom: none !important;
+}
+.es-axis-name {
+    display:flex; align-items:center; gap:7px;
+    font-size:.93rem; font-weight:700; color:#fff !important;
+}
+.es-axis-pill {
+    background: rgba(255,255,255,.22) !important;
+    color: #fff !important;
+    border: 1px solid rgba(255,255,255,.4) !important;
+    border-radius: 20px; padding:2px 10px;
+    font-size:.71rem; font-weight:700; white-space:nowrap;
+}
+
+/* ── INDICATOR ROW ── */
+.es-ind-item {
+    padding: 11px 16px !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    background: #ffffff !important;
+    transition: background .14s;
+}
+.es-ind-item:last-child { border-bottom: none !important; }
+.es-ind-item:hover      { background: #f8fafc !important; }
+
+.es-ind-top    { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:7px; }
+.es-ind-name   { flex:1; font-size:.87rem; font-weight:600; color:#1e293b !important; display:flex; align-items:center; gap:6px; }
+.es-ind-name::before {
+    content:''; display:inline-block; width:7px; height:7px;
+    border-radius:50%; background:#4CA6A8; opacity:.65; flex-shrink:0;
+}
+.es-ind-controls { display:flex; align-items:center; gap:6px; flex-shrink:0; flex-wrap:wrap; }
+
+/* count chip */
+.es-qchip       { display:inline-flex; align-items:center; gap:3px; padding:3px 9px; border-radius:20px; font-size:.71rem; font-weight:700; white-space:nowrap; }
+.es-qchip-ok    { background:#dcfce7 !important; color:#15803d !important; border:1px solid #86efac !important; }
+.es-qchip-part  { background:#fef3c7 !important; color:#92400e !important; border:1px solid #fcd34d !important; }
+.es-qchip-empty { background:#fee2e2 !important; color:#b91c1c !important; border:1px solid #fca5a5 !important; }
+
+/* progress bar */
+.es-mini-bar      { height:4px; background:#e2e8f0 !important; border-radius:2px; overflow:hidden; margin-top:4px; }
+.es-mini-bar-fill { height:100%; border-radius:2px; transition:width .6s ease; }
+
+/* ── ADD BUTTON (inline next to indicator) ── */
+.es-btn-add-inline {
+    display: inline-flex; align-items:center; gap:4px;
+    padding: 3px 10px;
+    border-radius: 7px;
+    border: 1px solid rgba(76,166,168,.45) !important;
+    background: rgba(76,166,168,.08) !important;
+    color: #4CA6A8 !important;
+    font-size: .72rem; font-weight:700;
+    cursor: pointer; transition:all .14s;
+    font-family: 'Cairo','Tajawal',sans-serif;
+    white-space: nowrap;
+}
+.es-btn-add-inline:hover { background:rgba(76,166,168,.18) !important; border-style:solid; }
+.es-btn-add-inline:disabled { opacity:.4; cursor:not-allowed; }
+/* حالة "مُرسَل" — بدون disabled حتى يشتغل onclick ويظهر تنبيه */
+.es-sent { opacity:.38 !important; cursor:not-allowed !important; }
+
+/* expand button */
+.es-btn-expand {
+    display:inline-flex; align-items:center; gap:4px;
+    padding:3px 9px; border-radius:7px;
+    border:1px solid #dde3ec !important; background:#f8fafc !important;
+    color:#64748b !important; font-size:.71rem; cursor:pointer;
+    transition:all .14s; font-family:'Cairo','Tajawal',sans-serif;
+}
+.es-btn-expand:hover { background:#e8f0fe !important; color:#4CA6A8 !important; border-color:rgba(76,166,168,.4) !important; }
+.es-btn-expand .caret { transition:transform .2s; display:inline-block; }
+.es-btn-expand.open .caret { transform:rotate(180deg); }
+
+/* ================================================================
+   QUESTION PANEL — فاتح، Bootstrap cols داخلياً
+================================================================ */
+.es-q-panel { display:none; padding:6px 12px 10px; }
+.es-q-panel.open { display:block; }
+
+/* each question row = Bootstrap row */
+.es-q-row {
+    background: #f8fafc !important;
+    border: 1px solid #e8edf2 !important;
+    border-radius: 9px !important;
+    margin-bottom: 7px !important;
+    padding: 9px 10px !important;
+    transition: background .12s, border-color .12s;
+}
+.es-q-row:hover { background:#eff6ff !important; border-color:rgba(76,166,168,.3) !important; }
+
+.es-q-num {
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:22px; height:22px;
+    background:rgba(76,166,168,.12) !important;
+    color:#4CA6A8 !important;
+    border-radius:5px; font-size:.67rem; font-weight:700;
+}
+.es-q-text        { font-size:.82rem; color:#1e293b !important; line-height:1.55; }
+.es-q-text p      { margin:0 !important; color:#1e293b !important; }
+.es-q-text *      { color:#1e293b !important; max-width:100%; }
+.es-q-text img    { max-height:70px; width:auto; border-radius:4px; margin-top:4px; }
+.es-q-text strong { font-weight:700 !important; }
+
+.diff-tag         { display:inline-block; padding:1px 7px; border-radius:4px; font-size:.67rem; font-weight:700; margin-top:4px; }
+.diff-easy        { background:#dcfce7 !important; color:#15803d !important; }
+.diff-medium      { background:#fef3c7 !important; color:#92400e !important; }
+.diff-hard        { background:#fee2e2 !important; color:#b91c1c !important; }
+
+/* icon action buttons */
+.es-ibtn {
+    width:30px; height:30px; border-radius:7px;
+    border:1px solid #e2e8f0 !important; background:#ffffff !important; color:#64748b !important;
+    display:inline-flex; align-items:center; justify-content:center;
+    cursor:pointer; transition:all .14s; font-size:.75rem; flex-shrink:0; padding:0;
+}
+.es-ibtn:hover               { background:rgba(76,166,168,.1) !important; color:#4CA6A8 !important; border-color:rgba(76,166,168,.4) !important; }
+.es-ibtn.es-ibtn-del:hover   { background:#fee2e2 !important; color:#dc2626 !important; border-color:#fca5a5 !important; }
+.es-ibtn.es-ibtn-prev:hover  { background:rgba(99,102,241,.1) !important; color:#6366f1 !important; border-color:rgba(99,102,241,.4) !important; }
+.es-ibtn:disabled            { opacity:.35; cursor:not-allowed; pointer-events:none; }
+/* أزرار أفقية */
+.es-q-actions { display:flex; flex-direction:row; gap:5px; align-items:center; flex-shrink:0; }
+
+/* add more button (bottom of question list) */
+.es-btn-add-more {
+    display:inline-flex; align-items:center; justify-content:center; gap:5px;
+    width:100%; margin-top:8px; padding:7px 12px; border-radius:8px;
+    border:1px dashed rgba(76,166,168,.5) !important; background:rgba(76,166,168,.04) !important;
+    color:#4CA6A8 !important; font-size:.76rem; font-weight:700;
+    cursor:pointer; transition:all .15s; font-family:'Cairo','Tajawal',sans-serif;
+}
+.es-btn-add-more:hover { background:rgba(76,166,168,.1) !important; border-style:solid; }
+.es-btn-add-more:disabled { opacity:.38; cursor:not-allowed; pointer-events:none; }
+
+/* card footer */
+.es-axis-foot {
+    padding:8px 16px !important; border-top:1px solid #f1f5f9 !important;
+    display:flex; justify-content:space-between; align-items:center;
+    font-size:.75rem; color:#64748b !important; background:#f8fafc !important;
+}
+
+/* ================================================================
+   SEND CTA
+================================================================ */
+.es-send-cta { position:sticky; bottom:18px; display:flex; justify-content:center; margin:22px 0 28px; z-index:100; }
+.es-send-btn {
+    background:linear-gradient(135deg,#16a34a,#22c55e) !important;
+    color:#fff !important; border:none; border-radius:13px;
+    padding:13px 42px; font-size:.97rem; font-weight:800;
+    font-family:'Cairo','Tajawal',sans-serif; cursor:pointer;
+    display:inline-flex; align-items:center; gap:10px;
+    transition:all .2s; box-shadow:0 4px 22px rgba(34,197,94,.35) !important;
+}
+.es-send-btn:hover  { transform:translateY(-3px); box-shadow:0 8px 30px rgba(34,197,94,.5) !important; }
+.es-send-btn:active { transform:translateY(0); }
+
+/* ================================================================
+   STUDENTS TABLE — أبيض فاتح، بدون عمود التواصل
+================================================================ */
+.es-students-card {
+    background: #ffffff !important;
+    border: 1px solid #dde3ec !important;
+    border-radius: 14px !important;
+    box-shadow: 0 2px 12px rgba(0,0,0,.07) !important;
+    overflow: hidden; margin-top: 20px;
+}
+.es-students-head {
+    padding:13px 18px; border-bottom:1px solid #f1f5f9 !important;
+    display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;
+    background:#ffffff !important;
+}
+.es-students-ttl { font-weight:700; font-size:.93rem; color:#1e293b !important; display:flex; align-items:center; gap:8px; }
+
+.es-search {
+    background:#f8fafc !important; border:1px solid #e2e8f0 !important;
+    border-radius:8px; padding:6px 13px; color:#1e293b !important;
+    font-family:'Cairo','Tajawal',sans-serif; font-size:.81rem; outline:none;
+    min-width:170px; transition:border-color .15s;
+}
+.es-search:focus { border-color:#4CA6A8 !important; background:#fff !important; }
+.es-search::placeholder { color:#94a3b8 !important; }
+
+.es-students-table { width:100%; border-collapse:collapse; }
+.es-students-table th {
+    padding:10px 15px; font-size:.75rem; color:#64748b !important; font-weight:700;
+    background:#f8fafc !important; border-bottom:1px solid #e2e8f0 !important;
+    text-align:right; white-space:nowrap;
+}
+.es-students-table td {
+    padding:11px 15px; font-size:.83rem; color:#1e293b !important;
+    border-bottom:1px solid #f1f5f9 !important; text-align:right;
+    background:#ffffff !important;
+}
+.es-students-table tr:last-child td { border-bottom:none !important; }
+.es-students-table tbody tr:hover td { background:#f8fafc !important; }
+
+/* progress bar for table (dark track for contrast on white) */
+.es-tbl-bar       { height:5px; background:#e2e8f0 !important; border-radius:2px; overflow:hidden; margin-bottom:2px; }
+.es-tbl-bar-fill  { height:100%; border-radius:2px; }
+
+/* ================================================================
+   DRAWER MODAL — أبيض فاتح
+================================================================ */
+.es-overlay {
+    position:fixed; inset:0; background:rgba(0,0,0,.65);
+    z-index:1060; display:flex; align-items:flex-end; justify-content:center;
+    opacity:0; pointer-events:none; transition:opacity .24s;
+    backdrop-filter:blur(3px);
+}
+.es-overlay.open { opacity:1; pointer-events:all; }
+.es-drawer {
+    background:#ffffff !important; border:1px solid #e2e8f0 !important;
+    border-radius:20px 20px 0 0 !important;
+    width:100%; max-width:700px; max-height:88vh;
+    display:flex; flex-direction:column;
+    transform:translateY(100%);
+    transition:transform .3s cubic-bezier(.32,.72,0,1);
+    box-shadow:0 -8px 40px rgba(0,0,0,.15) !important;
+}
+.es-overlay.open .es-drawer { transform:translateY(0); }
+.es-drawer-handle { width:38px; height:4px; background:#e2e8f0 !important; border-radius:2px; margin:12px auto 0; flex-shrink:0; }
+.es-drawer-top    { padding:14px 20px 12px; border-bottom:1px solid #f1f5f9 !important; flex-shrink:0; background:#fff !important; }
+.es-drawer-ttl    { font-size:.95rem; font-weight:700; color:#1e293b !important; margin-bottom:10px; }
+.es-drawer-search {
+    width:100%; background:#f8fafc !important; border:1px solid #e2e8f0 !important;
+    border-radius:8px; padding:8px 12px; color:#1e293b !important;
+    font-family:'Cairo','Tajawal',sans-serif; font-size:.82rem; outline:none;
+}
+.es-drawer-search:focus       { border-color:#4CA6A8 !important; background:#fff !important; }
+.es-drawer-search::placeholder { color:#94a3b8 !important; }
+.es-drawer-body   { overflow-y:auto; flex:1; padding:4px 0; background:#fff !important; }
+.es-drawer-foot   { padding:12px 20px; border-top:1px solid #f1f5f9 !important; display:flex; justify-content:space-between; align-items:center; flex-shrink:0; background:#fff !important; }
+.es-drawer-info   { font-size:.74rem; color:#64748b !important; }
+
+.es-bank-item {
+    padding:11px 20px; display:flex; align-items:flex-start; gap:11px;
+    cursor:pointer; transition:background .11s;
+    border-bottom:1px solid #f8fafc !important;
+    background:#fff !important;
+}
+.es-bank-item:hover { background:#f0fafb !important; }
+.es-bank-item.taken { opacity:.35; pointer-events:none; }
+.es-bank-num {
+    min-width:26px; height:26px; background:rgba(76,166,168,.12) !important;
+    color:#4CA6A8 !important; border-radius:6px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:.69rem; font-weight:800; flex-shrink:0; margin-top:2px;
+}
+.es-bank-txt  { flex:1; font-size:.82rem; color:#1e293b !important; line-height:1.5; }
+.es-bank-txt p { margin:0 !important; color:#1e293b !important; }
+.es-bank-txt * { color:#1e293b !important; }
+.es-bank-txt img { max-height:55px; border-radius:4px; }
+.es-bank-meta { display:flex; gap:6px; margin-top:5px; flex-wrap:wrap; }
+.es-bank-sel  { color:#4CA6A8 !important; font-size:1.1rem; margin-top:3px; flex-shrink:0; }
+.es-loading   { text-align:center; padding:44px 20px; color:#64748b; display:flex; flex-direction:column; align-items:center; gap:10px; }
+.es-empty     { text-align:center; padding:44px 20px; color:#94a3b8; font-size:.87rem; }
+.es-close-btn {
+    background:#f1f5f9 !important; border:1px solid #e2e8f0 !important; color:#64748b !important;
+    border-radius:8px; padding:7px 16px; font-family:'Cairo','Tajawal',sans-serif;
+    cursor:pointer; font-size:.81rem; transition:all .14s;
+}
+.es-close-btn:hover { background:#e2e8f0 !important; color:#1e293b !important; }
+
+/* ── TOAST ── */
+.es-toast {
+    position:fixed; bottom:26px; left:50%;
+    transform:translateX(-50%) translateY(68px);
+    background:#1a2f58; border:1px solid rgba(76,166,168,.4);
+    border-radius:12px; padding:11px 20px;
+    color:#f8fafc; font-size:.87rem; font-weight:600;
+    font-family:'Cairo','Tajawal',sans-serif; z-index:2000;
+    transition:transform .3s ease, opacity .3s; opacity:0;
+    white-space:nowrap; display:flex; align-items:center; gap:8px;
+    box-shadow:0 6px 22px rgba(0,0,0,.45);
+}
+.es-toast.show { transform:translateX(-50%) translateY(0); opacity:1; }
+.es-toast.ok   { border-color:rgba(34,197,94,.45); }
+.es-toast.err  { border-color:rgba(239,68,68,.45); }
+</style>
+}
+
+<!-- ══════════════════════════════════════════════════════
+     HERO HEADER
+══════════════════════════════════════════════════════ -->
+<div class="es-hero mb-4">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+        <div>
+            <div class="es-hero-title">
+                <i class="fas fa-brain me-2" style="color:#4CA6A8"></i>@Model.Title
+            </div>
+            <div class="es-hero-meta mt-2">
+                <span><i class="fas fa-users me-1" style="opacity:.5"></i>@Model.BatchName</span>
+                <span style="opacity:.2">|</span>
+                @if (Model.GenerationMethod == 1)
+                {
+                    <span class="es-badge es-badge-method"><i class="fas fa-layer-group"></i> محاور / مؤشرات</span>
+                }
+                else
+                {
+                    <span class="es-badge es-badge-method"><i class="fas fa-file-alt"></i> @(Model.ProfessionalModelTitle ?? "نموذج احترافي")</span>
+                }
+                <span style="opacity:.2">|</span>
+                @if (Model.IsSent)
+                {
+                    <span class="es-badge es-badge-sent"><i class="fas fa-check-circle"></i> مُرسَل</span>
+                }
+                else
+                {
+                    <span class="es-badge es-badge-pending"><i class="fas fa-clock"></i> لم يُرسَل بعد</span>
+                }
+                @if (!string.IsNullOrWhiteSpace(Model.Description))
+                {
+                    <span style="opacity:.2">|</span>
+                    <span style="color:#cbd5e1">@Model.Description</span>
+                }
+            </div>
+            <div class="es-hero-dates">
+                <span><i class="fas fa-calendar-plus me-1"></i> أُنشئ: <strong>@Model.CreatedAt.ToString("yyyy/MM/dd")</strong></span>
+                @if (Model.EndAt.HasValue)
+                {
+                    <span><i class="fas fa-calendar-times me-1"></i> ينتهي: <strong>@Model.EndAt.Value.ToString("yyyy/MM/dd")</strong></span>
+                }
+                @if (Model.ScheduledSendAt.HasValue && !Model.IsSent)
+                {
+                    <span><i class="fas fa-clock me-1"></i> مجدول: <strong style="color:#f59e0b">@Model.ScheduledSendAt.Value.ToString("yyyy/MM/dd HH:mm")</strong></span>
+                }
+                @if (Model.SentAt.HasValue)
+                {
+                    <span><i class="fas fa-paper-plane me-1"></i> أُرسل: <strong style="color:#4ade80">@Model.SentAt.Value.ToString("yyyy/MM/dd HH:mm")</strong></span>
+                }
+            </div>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a asp-action="Edit" asp-route-id="@Model.SetId" class="btn btn-sm btn-outline-light">
+                <i class="fas fa-edit me-1"></i> تعديل
+            </a>
+            @if (!Model.IsSent)
+            {
+                <form asp-action="Regenerate" method="post" class="d-inline"
+                      onsubmit="return confirm('سيُحذف الأسئلة الحالية وتُولَّد مجموعة جديدة. هل تريد المتابعة؟')">
+                    <input type="hidden" name="id" value="@Model.SetId" />
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-sm btn-outline-info">
+                        <i class="fas fa-redo me-1"></i> إعادة التوليد
+                    </button>
+                </form>
+            }
+            <a asp-action="Index" class="btn btn-sm btn-outline-secondary">
+                <i class="fas fa-arrow-right me-1"></i> رجوع
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- ALERTS -->
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mb-3">
+        <i class="fas fa-check-circle me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show mb-3">
+        <i class="fas fa-exclamation-circle me-2"></i>@TempData["Error"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- ══════════════════════════════════════════════════════
+     STATS — Bootstrap 12-col — أبيض فاتح
+══════════════════════════════════════════════════════ -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="es-stat-card">
+            <div class="es-stat-val c-teal">@totalStudents</div>
+            <div class="es-stat-lbl"><i class="fas fa-users me-1"></i>الطلاب</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="es-stat-card">
+            <div class="es-stat-val c-purple">@Model.QuestionsPerStudent</div>
+            <div class="es-stat-lbl"><i class="fas fa-question-circle me-1"></i>سؤال / طالب</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        @{ var qColorCls = qPctFill >= 100 ? "c-green" : (qPctFill > 50 ? "c-orange" : "c-red"); }
+        <div class="es-stat-card">
+            <div class="es-stat-val @qColorCls">@totalActual</div>
+            <div class="es-stat-lbl"><i class="fas fa-clipboard-list me-1"></i>مولّدة / @totalRequested مطلوب</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="es-stat-card">
+            @if (Model.IsSent)
+            {
+                <div class="es-stat-val c-green" style="font-size:1.6rem"><i class="fas fa-check-circle"></i></div>
+                <div class="es-stat-lbl">تم الإرسال</div>
+            }
+            else
+            {
+                <div class="es-stat-val c-orange" style="font-size:1.6rem"><i class="fas fa-hourglass-half"></i></div>
+                <div class="es-stat-lbl">انتظار الإرسال</div>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SEND BANNER
+══════════════════════════════════════════════════════ -->
+@if (!Model.IsSent)
+{
+    <div class="es-send-banner">
+        <div>
+            <div class="es-send-banner-ttl"><i class="fas fa-exclamation-triangle me-2"></i>لم تُرسَل هذه المجموعة بعد</div>
+            <small>راجع الأسئلة وعدّلها، ثم اضغط "إرسال الآن"</small>
+        </div>
+        @if (Model.IndicatorSummaries.Any(i => i.ActualCount > 0))
+        {
+            <form asp-action="Send" method="post" onsubmit="return confirm('إرسال المجموعة لجميع الطلاب؟')">
+                <input type="hidden" name="id" value="@Model.SetId" />
+                @Html.AntiForgeryToken()
+                <button type="submit" class="es-send-btn" style="font-size:.87rem;padding:9px 22px">
+                    <i class="fas fa-paper-plane"></i> إرسال الآن
+                </button>
+            </form>
+        }
+        else
+        {
+            <span style="color:#dc2626;font-size:.8rem"><i class="fas fa-times-circle me-1"></i>لا توجد أسئلة مولّدة</span>
+        }
+    </div>
+}
+
+<!-- ══════════════════════════════════════════════════════
+     AXIS CARDS — Bootstrap 12-col
+══════════════════════════════════════════════════════ -->
+@if (Model.GenerationMethod == 1 && groupedAxes.Any())
+{
+    <div class="es-divider">
+        <i class="fas fa-layer-group" style="color:#4CA6A8"></i>
+        المحاور والمؤشرات
+        <span class="es-divider-sub">(@groupedAxes.Count محور · @Model.IndicatorSummaries.Count مؤشر)</span>
+    </div>
+
+    <div class="row g-3 mb-4">
+        @foreach (var axis in groupedAxes)
+        {
+            var axisInds  = axis.ToList();
+            var axisTotal = axisInds.Sum(i => i.ActualCount);
+            var axisReq   = axisInds.Sum(i => i.RequestedCount);
+            var axisColor = axisTotal >= axisReq ? "#15803d" : (axisTotal > 0 ? "#b45309" : "#dc2626");
+
+            <div class="col-12 col-md-6">
+                <div class="es-axis-card">
+
+                    <!-- ── CARD HEADER: اسم المحور ── -->
+                    <div class="es-axis-head">
+                        <div class="es-axis-name">
+                            <i class="fas fa-sitemap" style="opacity:.85"></i>
+                            @axis.Key
+                        </div>
+                        <span class="es-axis-pill">@axisInds.Count مؤشر</span>
+                    </div>
+
+                    <!-- ── INDICATORS ── -->
+                    @foreach (var ind in axisInds)
+                    {
+                        var pct     = ind.RequestedCount > 0 ? Math.Min(100,(int)Math.Round(ind.ActualCount*100.0/ind.RequestedCount)) : 0;
+                        var chipCls = ind.ActualCount >= ind.RequestedCount ? "es-qchip-ok" :
+                                      ind.ActualCount > 0 ? "es-qchip-part" : "es-qchip-empty";
+                        var barClr  = ind.ActualCount >= ind.RequestedCount ? "#22c55e" :
+                                      ind.ActualCount > 0 ? "#f59e0b" : "#ef4444";
+                        var panelId = $"qpanel_{ind.LessonId}";
+                        var btnId   = $"expbtn_{ind.LessonId}";
+
+                        <div class="es-ind-item">
+
+                            <!-- الصف العلوي: الاسم + عداد + إضافة سؤال + عرض -->
+                            <div class="es-ind-top">
+                                <div class="es-ind-name">@ind.LessonTitle</div>
+                                <div class="es-ind-controls">
+                                    <span class="es-qchip @chipCls">@ind.ActualCount / @ind.RequestedCount</span>
+
+                                    <!-- زر إضافة سؤال — دائماً ظاهر بجوار اسم المؤشر -->
+                                    <button class="es-btn-add-inline @(Model.IsSent ? "es-sent" : "")"
+                                            type="button"
+                                            title="@(Model.IsSent ? "لا يمكن الإضافة بعد الإرسال" : "إضافة سؤال من بنك الأسئلة")"
+                                            onclick="@(!Model.IsSent ? $"openDrawer({ind.LessonId},'{JsStr(ind.LessonTitle)}',{Model.SetId},null)" : "alertSent()")">
+                                        <i class="fas fa-plus" style="font-size:.68rem"></i> إضافة سؤال
+                                    </button>
+
+                                    @if (ind.Questions.Any())
+                                    {
+                                        <button class="es-btn-expand" id="@btnId"
+                                                onclick="togglePanel('@panelId','@btnId')"
+                                                type="button">
+                                            <span class="lbl">عرض (@ind.Questions.Count)</span>
+                                            <i class="fas fa-chevron-down caret" style="font-size:.62rem"></i>
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+
+                            <!-- شريط التقدم -->
+                            <div class="es-mini-bar">
+                                <div class="es-mini-bar-fill" style="width:@(pct)%;background:@barClr"></div>
+                            </div>
+
+                            <!-- قائمة الأسئلة (Bootstrap cols داخلياً) -->
+                            @if (ind.Questions.Any())
+                            {
+                                <div class="es-q-panel" id="@panelId">
+                                    @{ int qn = 0; }
+                                    @foreach (var q in ind.Questions)
+                                    {
+                                        qn++;
+                                        var dc = q.Difficulty == "Easy" ? "diff-easy" :
+                                                 q.Difficulty == "Hard" ? "diff-hard" : "diff-medium";
+                                        var dl = q.Difficulty == "Easy" ? "سهل" :
+                                                 q.Difficulty == "Hard" ? "صعب" : "متوسط";
+                                        var plain    = StripHtml(q.Title);
+                                        var jsPreview = JsStr(plain.Length > 55 ? plain.Substring(0,55)+"…" : plain);
+
+                                        <!-- كل سؤال = Bootstrap row -->
+                                        <div class="row align-items-start g-0 es-q-row">
+
+                                            <!-- رقم السؤال -->
+                                            <div class="col-auto ps-0 pe-2 pt-1">
+                                                <span class="es-q-num">@qn</span>
+                                            </div>
+
+                                            <!-- نص السؤال (HTML) + مستوى الصعوبة -->
+                                            <div class="col">
+                                                <div class="es-q-text">@Html.Raw(q.Title)</div>
+                                                <span class="diff-tag @dc">@dl</span>
+                                            </div>
+
+                                            <!-- أزرار الإجراء: معاينة + استبدال + حذف — أفقية -->
+                                            <div class="col-auto ps-2 pt-1">
+                                                <div class="es-q-actions">
+                                                    <!-- زر المعاينة -->
+                                                    <button class="es-ibtn es-ibtn-prev"
+                                                            type="button"
+                                                            title="معاينة السؤال"
+                                                            onclick="previewQ('@q.QuestionId')">
+                                                        <i class="fas fa-eye"></i>
+                                                    </button>
+                                                    <!-- زر الاستبدال -->
+                                                    <button class="es-ibtn @(Model.IsSent ? "es-sent" : "")"
+                                                            type="button"
+                                                            title="@(Model.IsSent ? "لا يمكن التعديل بعد الإرسال" : "استبدال بسؤال آخر من البنك")"
+                                                            onclick="@(!Model.IsSent ? $"openDrawer({ind.LessonId},'{JsStr(ind.LessonTitle)}',{Model.SetId},'{q.QuestionId}')" : "alertSent()")">
+                                                        <i class="fas fa-exchange-alt"></i>
+                                                    </button>
+                                                    <!-- زر الحذف -->
+                                                    <button class="es-ibtn es-ibtn-del @(Model.IsSent ? "es-sent" : "")"
+                                                            type="button"
+                                                            title="@(Model.IsSent ? "لا يمكن الحذف بعد الإرسال" : "حذف السؤال")"
+                                                            onclick="@(!Model.IsSent ? $"removeQ('{q.QuestionId}',{Model.SetId},'{jsPreview}')" : "alertSent()")">
+                                                        <i class="fas fa-trash-alt"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+
+                                    <!-- زر إضافة المزيد (أسفل القائمة) -->
+                                    <button class="es-btn-add-more @(Model.IsSent ? "es-sent" : "")"
+                                            type="button"
+                                            onclick="@(!Model.IsSent ? $"openDrawer({ind.LessonId},'{JsStr(ind.LessonTitle)}',{Model.SetId},null)" : "alertSent()")">
+                                        <i class="fas fa-plus"></i> إضافة سؤال آخر من البنك
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    <!-- CARD FOOTER: إجمالي المحور -->
+                    <div class="es-axis-foot">
+                        <span>إجمالي أسئلة المحور</span>
+                        <strong style="color:@axisColor">@axisTotal / @axisReq</strong>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- زر الإرسال الثابت في الأسفل -->
+    @if (!Model.IsSent && Model.IndicatorSummaries.Any(i => i.ActualCount > 0))
+    {
+        <div class="es-send-cta">
+            <form asp-action="Send" method="post" onsubmit="return confirm('إرسال المجموعة لجميع الطلاب الآن؟')">
+                <input type="hidden" name="id" value="@Model.SetId" />
+                @Html.AntiForgeryToken()
+                <button type="submit" class="es-send-btn">
+                    <i class="fas fa-paper-plane"></i> إرسال المهارات التعزيزية للطلاب
+                </button>
+            </form>
+        </div>
+    }
+}
+
+<!-- ══════════════════════════════════════════════════════
+     STUDENTS TABLE — أبيض فاتح — بدون عمود التواصل
+══════════════════════════════════════════════════════ -->
+@if (Model.IsSent && Model.Students.Any())
+{
+    <div class="es-divider">
+        <i class="fas fa-users" style="color:#4CA6A8"></i>
+        الطلاب
+        <span class="es-divider-sub">(@Model.Students.Count طالب)</span>
+    </div>
+
+    <div class="es-students-card">
+        <div class="es-students-head">
+            <div class="es-students-ttl">
+                <i class="fas fa-list-check" style="color:#4CA6A8"></i>
+                تقرير الطلاب
+            </div>
+            <input type="text" id="studSearch" class="es-search" placeholder="بحث في الطلاب…" />
+        </div>
+        <div style="overflow-x:auto">
+            <table class="es-students-table" id="studTable">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>الطالب</th>
+                        <th>الأسئلة</th>
+                        <th>أجاب</th>
+                        <th>صحيح</th>
+                        <th>التقدم</th>
+                        <th>إجراء</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{ int sn = 0; }
+                    @foreach (var s in Model.Students.OrderByDescending(x => x.AnsweredPercentage))
+                    {
+                        sn++;
+                        var pc = s.AnsweredPercentage;
+                        var bc = pc == 100 ? "#16a34a" : "#4CA6A8";
+                        <tr>
+                            <td style="color:#94a3b8;font-size:.73rem;font-weight:600">@sn</td>
+                            <td style="font-weight:700;color:#1e293b">@s.FullName</td>
+                            <td>
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary" style="font-size:.75rem">@s.TotalQuestions</span>
+                            </td>
+                            <td>
+                                <span class="es-qchip @(pc==100?"es-qchip-ok":"es-qchip-part")">@s.AnsweredQuestions</span>
+                            </td>
+                            <td>
+                                <span class="es-qchip es-qchip-ok">@s.CorrectAnswers</span>
+                            </td>
+                            <td style="min-width:110px">
+                                <div class="es-tbl-bar">
+                                    <div class="es-tbl-bar-fill" style="width:@(pc)%;background:@bc"></div>
+                                </div>
+                                <small style="color:#64748b;font-size:.69rem">@pc%</small>
+                            </td>
+                            <td>
+                                <form asp-action="ResendToStudent" method="post" class="d-inline">
+                                    <input type="hidden" name="setId" value="@Model.SetId" />
+                                    <input type="hidden" name="studentId" value="@s.StudentId" />
+                                    <input type="hidden" name="questionsCount" value="@Model.QuestionsPerStudent" />
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="es-ibtn"
+                                            title="إعادة إرسال أسئلة للطالب"
+                                            onclick="return confirm('إعادة إرسال للطالب @s.FullName؟')">
+                                        <i class="fas fa-redo" style="font-size:.7rem"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@if (!Model.IsSent && !Model.IndicatorSummaries.Any())
+{
+    <div class="es-students-card" style="margin-top:0">
+        <div style="padding:52px 20px;text-align:center">
+            <i class="fas fa-brain fa-3x d-block mb-3" style="opacity:.15;color:#94a3b8"></i>
+            <div style="font-size:.93rem;color:#64748b;margin-bottom:5px">لم يتم توليد أسئلة لهذه المجموعة</div>
+            <small style="color:#94a3b8">تأكد من وجود أسئلة تعزيزية معتمدة في المؤشرات المختارة</small>
+        </div>
+    </div>
+}
+
+<!-- ══════════════════════════════════════════════════════
+     DRAWER: بنك الأسئلة
+══════════════════════════════════════════════════════ -->
+<div class="es-overlay" id="bankOverlay" onclick="overlayClick(event)">
+    <div class="es-drawer">
+        <div class="es-drawer-handle"></div>
+        <div class="es-drawer-top">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="es-drawer-ttl" id="drawerTitle">بنك الأسئلة</div>
+                <button class="es-close-btn" onclick="closeDrawer()" type="button">
+                    <i class="fas fa-times me-1"></i>إغلاق
+                </button>
+            </div>
+            <input type="text" class="es-drawer-search" id="drawerSearch"
+                   placeholder="ابحث في الأسئلة…" oninput="filterBank(this.value)" />
+        </div>
+        <div class="es-drawer-body" id="drawerBody">
+            <div class="es-loading">
+                <i class="fas fa-spinner fa-spin fa-2x" style="color:#4CA6A8"></i>
+                <span style="color:#64748b">جاري التحميل…</span>
+            </div>
+        </div>
+        <div class="es-drawer-foot">
+            <span class="es-drawer-info" id="drawerInfo"></span>
+            <button class="es-close-btn" onclick="closeDrawer()" type="button">إلغاء</button>
+        </div>
+    </div>
+</div>
+
+<div class="es-toast" id="estoast"></div>
+
+<!-- ══════════════════════════════════════════════════════
+     MODAL: معاينة السؤال
+══════════════════════════════════════════════════════ -->
+<div class="modal fade" id="esQuestionPreviewModal" tabindex="-1" dir="rtl" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content" style="background:#ffffff !important; border:1px solid #dde3ec !important; border-radius:14px !important;">
+            <div class="modal-header" style="background:linear-gradient(135deg,#4CA6A8 0%,#3a9496 100%) !important; border-radius:13px 13px 0 0 !important; border-bottom:none !important;">
+                <h5 class="modal-title d-flex align-items-center gap-2" style="color:#fff !important; font-size:.95rem; font-weight:700;">
+                    <i class="fas fa-eye"></i> معاينة السؤال
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+            </div>
+            <div class="modal-body p-0" id="esPreviewBody" style="background:#ffffff !important;">
+                <div class="text-center p-5" style="color:#94a3b8;">
+                    <i class="fas fa-spinner fa-spin fa-2x d-block mb-2" style="color:#4CA6A8"></i>
+                    جارٍ التحميل…
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+let drLesson  = null, drSet = null, drReplace = null, bankAll = [];
+
+/* ── QUESTION PREVIEW ── */
+let _previewModal = null;
+function previewQ(qId) {
+    const body = document.getElementById('esPreviewBody');
+    body.innerHTML = `<div class="text-center p-5" style="color:#94a3b8;">
+        <i class="fas fa-spinner fa-spin fa-2x d-block mb-2" style="color:#4CA6A8"></i>جارٍ التحميل…</div>`;
+
+    if (!_previewModal) {
+        _previewModal = new bootstrap.Modal(document.getElementById('esQuestionPreviewModal'));
+    }
+    _previewModal.show();
+
+    fetch(`/Admin/EnhancementSkills/PreviewQuestion?id=${qId}`)
+        .then(r => {
+            if (!r.ok) throw new Error('not_ok');
+            return r.text();
+        })
+        .then(html => { body.innerHTML = html; })
+        .catch(() => {
+            body.innerHTML = `<div class="text-center p-4" style="color:#dc2626;">
+                <i class="fas fa-exclamation-triangle fa-2x d-block mb-2"></i>
+                تعذر تحميل معاينة السؤال.</div>`;
+        });
+}
+
+const afToken = () =>
+    document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '';
+
+function stripHtml(h) {
+    const d = document.createElement('div');
+    d.innerHTML = h || '';
+    return (d.textContent || d.innerText || '').trim();
+}
+
+function alertSent() {
+    alert('لا يمكن التعديل بعد إرسال المجموعة للطلاب.');
+}
+
+/* ── TOGGLE PANEL ── */
+function togglePanel(pid, bid) {
+    const p = document.getElementById(pid);
+    const b = document.getElementById(bid);
+    if (!p || !b) return;
+    const open = p.classList.contains('open');
+    p.classList.toggle('open', !open);
+    b.classList.toggle('open', !open);
+    const lbl = b.querySelector('.lbl');
+    if (lbl) lbl.textContent = open
+        ? `عرض (${p.querySelectorAll('.es-q-row').length})`
+        : `إخفاء`;
+}
+
+/* ── OPEN DRAWER ── */
+function openDrawer(lessonId, lessonTitle, setId, replaceGuid) {
+    drLesson = lessonId; drSet = setId; drReplace = replaceGuid ?? null;
+    document.getElementById('drawerTitle').textContent =
+        drReplace ? `استبدال سؤال — ${lessonTitle}` : `إضافة سؤال — ${lessonTitle}`;
+    document.getElementById('drawerSearch').value = '';
+    document.getElementById('drawerInfo').textContent = '';
+    document.getElementById('drawerBody').innerHTML =
+        '<div class="es-loading"><i class="fas fa-spinner fa-spin fa-2x" style="color:#4CA6A8"></i>' +
+        '<span style="color:#64748b">جاري التحميل…</span></div>';
+    document.getElementById('bankOverlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+
+    fetch(`/Admin/EnhancementSkills/GetBankQuestions?lessonId=${lessonId}&setId=${setId}` +
+          (drReplace ? `&replaceQuestionId=${drReplace}` : ''))
+        .then(r => r.json())
+        .then(d => { bankAll = d; renderBank(d); })
+        .catch(() => {
+            document.getElementById('drawerBody').innerHTML =
+                '<div class="es-empty"><i class="fas fa-exclamation-triangle fa-2x d-block mb-2" style="color:#ef4444"></i>حدث خطأ أثناء التحميل</div>';
+        });
+}
+
+/* ── RENDER BANK ── */
+function renderBank(list) {
+    const body = document.getElementById('drawerBody');
+    const info = document.getElementById('drawerInfo');
+    if (!list || !list.length) {
+        body.innerHTML = '<div class="es-empty"><i class="fas fa-inbox fa-2x d-block mb-2"></i>لا توجد أسئلة متاحة في هذا المؤشر</div>';
+        info.textContent = ''; return;
+    }
+    const avail = list.filter(q => !q.alreadyAssigned).length;
+    info.textContent = `${avail} سؤال متاح (${list.length} إجمالاً)`;
+    body.innerHTML = list.map((q, i) => {
+        const dc = q.difficulty === 'Easy' ? 'diff-easy' : q.difficulty === 'Hard' ? 'diff-hard' : 'diff-medium';
+        const dl = q.difficulty === 'Easy' ? 'سهل' : q.difficulty === 'Hard' ? 'صعب' : 'متوسط';
+        const tk = (q.alreadyAssigned && !drReplace) ? 'taken' : '';
+        const tag = q.alreadyAssigned ? '<span class="es-qchip es-qchip-part" style="font-size:.63rem">مُضاف</span>' : '';
+        return `<div class="es-bank-item ${tk}" onclick="pickQ('${q.id}',this)"
+                     data-plain="${stripHtml(q.title).replace(/"/g,'&quot;')}">
+                    <div class="es-bank-num">${i+1}</div>
+                    <div class="es-bank-txt">${q.title}
+                        <div class="es-bank-meta"><span class="diff-tag ${dc}">${dl}</span>${tag}</div>
+                    </div>
+                    <i class="fas fa-plus-circle es-bank-sel"></i>
+                </div>`;
+    }).join('');
+}
+
+/* ── FILTER ── */
+function filterBank(t) {
+    const s = t.trim().toLowerCase();
+    if (!s) { renderBank(bankAll); return; }
+    renderBank(bankAll.filter(q => stripHtml(q.title).toLowerCase().includes(s)));
+}
+
+/* ── PICK ── */
+function pickQ(qId, el) {
+    const plain = el.dataset.plain || '';
+    const prev  = plain.length > 65 ? plain.substring(0,65)+'…' : plain;
+    const msg   = drReplace
+        ? `استبدال السؤال الحالي بـ:\n"${prev}"؟`
+        : `إضافة السؤال:\n"${prev}"\nلجميع الطلاب؟`;
+    if (!confirm(msg)) return;
+
+    const fd = new FormData();
+    fd.append('__RequestVerificationToken', afToken());
+    fd.append('setId', drSet);
+    let url;
+    if (drReplace) {
+        url = '/Admin/EnhancementSkills/ReplaceQuestion';
+        fd.append('oldQuestionId', drReplace);
+        fd.append('newQuestionId', qId);
+    } else {
+        url = '/Admin/EnhancementSkills/AddQuestionFromBank';
+        fd.append('lessonId', drLesson);
+        fd.append('questionId', qId);
+    }
+    fetch(url, { method:'POST', body:fd })
+        .then(r => r.json())
+        .then(res => {
+            closeDrawer();
+            toast(res.success ? '✅ '+res.message : '⚠️ '+(res.message||'حدث خطأ'), res.success?'ok':'err');
+            if (res.success) setTimeout(() => location.reload(), 1100);
+        })
+        .catch(() => toast('⚠️ خطأ في الاتصال','err'));
+}
+
+/* ── REMOVE ── */
+function removeQ(qId, setId, prev) {
+    if (!confirm(`حذف السؤال:\n"${prev}"\nمن جميع الطلاب؟`)) return;
+    const fd = new FormData();
+    fd.append('__RequestVerificationToken', afToken());
+    fd.append('setId', setId);
+    fd.append('questionId', qId);
+    fetch('/Admin/EnhancementSkills/RemoveQuestion', { method:'POST', body:fd })
+        .then(r => r.json())
+        .then(res => {
+            toast(res.success ? '🗑️ '+res.message : '⚠️ '+(res.message||'حدث خطأ'), res.success?'ok':'err');
+            if (res.success) setTimeout(() => location.reload(), 900);
+        })
+        .catch(() => toast('⚠️ خطأ في الاتصال','err'));
+}
+
+/* ── CLOSE ── */
+function closeDrawer() {
+    document.getElementById('bankOverlay').classList.remove('open');
+    document.body.style.overflow = '';
+}
+function overlayClick(e) { if (e.target.id==='bankOverlay') closeDrawer(); }
+
+/* ── STUDENTS SEARCH ── */
+document.getElementById('studSearch')?.addEventListener('input', function() {
+    const q = this.value.toLowerCase();
+    document.querySelectorAll('#studTable tbody tr').forEach(r => {
+        r.style.display = r.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+});
+
+/* ── TOAST ── */
+let _tt;
+function toast(msg, cls='ok') {
+    const el = document.getElementById('estoast');
+    el.textContent = msg; el.className = `es-toast ${cls} show`;
+    clearTimeout(_tt); _tt = setTimeout(() => el.classList.remove('show'), 3200);
+}
+</script>
+}

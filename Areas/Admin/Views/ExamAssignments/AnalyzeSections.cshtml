@@ -1,0 +1,138 @@
+﻿@model QdratNew.ViewModels.Section.BatchSectionsAnalysisViewModel
+
+@{
+    ViewData["Title"] = "تحليل المحاور المنتهية";
+}
+
+<h2 class="mb-4">📊 تحليل المحاور المكتملة</h2>
+
+<form method="get" asp-action="AnalyzeSections">
+    <div class="row g-3 align-items-center mb-4">
+        <div class="col-md-6">
+            <label for="batchId" class="form-label">اختر الدفعة:</label>
+            <select class="form-select" id="batchId" name="batchId" onchange="this.form.submit()">
+                <option value="">— اختر دفعة —</option>
+                @foreach (var batch in Model.AllBatches)
+                {
+                    <option value="@batch.Value" selected="@(Model.BatchId.ToString() == batch.Value ? "selected" : null)">
+                        @batch.Text
+                    </option>
+
+                }
+            </select>
+        </div>
+    </div>
+</form>
+
+@if (Model.BatchId > 0 && Model.Sections != null && Model.Sections.Any())
+{
+    <div class="alert alert-info">
+        <strong>📌 الدفعة:</strong> @Model.BatchName — عدد المحاور المكتملة: <strong>@Model.Sections.Count</strong>
+    </div>
+
+    <table id="sectionsTable" class="table table-bordered text-center">
+        <thead class="table-dark">
+            <tr>
+                <th>المحور</th>
+                <th>عدد المؤشرات المكتملة</th>
+                <th>أسئلة مراجعة متاحة</th>
+                <th>تم إرسال واجب؟</th>
+                <th>تم إرسال اختبار؟</th>
+                <th>توليد اختبار</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var sec in Model.Sections)
+            {
+                <tr>
+                    <td>@sec.SectionTitle</td>
+                    <td>@sec.CompletedLessonsCount</td>
+                    <td>@sec.ReviewQuestionsCount</td>
+                    <td>
+                        @if (sec.IsHomeworkGenerated)
+                        {
+                            <span class="badge bg-success">✅ نعم</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-warning text-dark">❌ لا</span>
+                        }
+                    </td>
+                    <td>
+                        @if (sec.IsExamGenerated)
+                        {
+                            <span class="badge bg-success">✅ نعم</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-warning text-dark">❌ لا</span>
+                        }
+                    </td>
+                    <td>
+                        @if (!sec.IsExamGenerated && sec.ReviewQuestionsCount > 0)
+                        {
+                        <form asp-controller="ExamGenerator" asp-action="GenerateFromSection" method="post">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="batchId" value="@Model.BatchId" />
+                            <input type="hidden" name="sectionId" value="@sec.SectionId" />
+                            <button type="submit" class="btn btn-sm btn-primary">توليد اختبار</button>
+                        </form>
+
+                        }
+                        else
+                        {
+                            <span class="text-muted">—</span>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+else if (Model.BatchId > 0)
+{
+    <div class="alert alert-warning">⚠️ لا توجد محاور مكتملة لهذه الدفعة حتى الآن.</div>
+}
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script>
+        $(document).ready(function () {
+            $('#sectionsTable').DataTable({
+                language: {
+                    url: '//cdn.datatables.net/plug-ins/1.13.4/i18n/ar.json'
+                },
+                pageLength: 20
+            });
+        });
+    </script>
+
+    <script>
+        $(document).ready(function () {
+            $('#sectionsTable').DataTable({
+                language: {
+                    url: '//cdn.datatables.net/plug-ins/1.13.4/i18n/ar.json'
+                },
+                pageLength: 10
+            });
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const msg = urlParams.get("msg");
+            const type = urlParams.get("type") || "info";
+
+            if (msg) {
+                Swal.fire({
+                    title: 'تنبيه',
+                    text: msg,
+                    icon: type,
+                    confirmButtonText: 'حسنًا'
+                });
+            }
+        });
+    </script>
+
+
+
+
+
+}

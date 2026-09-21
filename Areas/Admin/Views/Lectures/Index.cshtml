@@ -1,0 +1,540 @@
+@model QdratNew.ViewModels.Lecture.LectureBatchesIndexViewModel
+
+@{
+    ViewData["Title"] = "إدارة المحاضرات";
+    var yesterday      = DateTime.Today.AddDays(-1);
+    var yesterdayCount = Model.Batches.Count(b => b.LastLectureDate.HasValue && b.LastLectureDate.Value.Date == yesterday);
+}
+
+<style>
+    :root {
+        --lc-primary:      #4361ee;
+        --lc-primary-soft: #eef0fd;
+        --lc-success:      #2ec4b6;
+        --lc-success-soft: #eaf8f7;
+        --lc-warning:      #f4a261;
+        --lc-warning-soft: #fef3eb;
+        --lc-danger:       #e63946;
+        --lc-danger-soft:  #fdeaea;
+        --lc-purple:       #7b2d8b;
+        --lc-purple-soft:  #f3eaf6;
+        --lc-surface:      #ffffff;
+        --lc-surface-2:    #f7f8fc;
+        --lc-border:       #e8eaf0;
+        --lc-text:         #1a1d2e;
+        --lc-text-muted:   #6b7280;
+        --lc-radius:       14px;
+        --lc-radius-sm:    8px;
+        --lc-shadow:       0 2px 12px rgba(67,97,238,.08);
+        --lc-shadow-md:    0 8px 32px rgba(67,97,238,.12);
+        --lc-font:         'Cairo', 'Segoe UI', sans-serif;
+        --lc-ease:         cubic-bezier(.4,0,.2,1);
+    }
+
+    .lc-page { direction: rtl; font-family: var(--lc-font); color: var(--lc-text); }
+
+    /* ── Hero ─────────────────────────────────────── */
+    .lc-hero {
+        background: linear-gradient(135deg, var(--lc-primary) 0%, #6b8ef5 100%);
+        border-radius: var(--lc-radius);
+        padding: 28px 32px;
+        margin-bottom: 28px;
+        position: relative; overflow: hidden;
+        color: #fff;
+        display: flex; align-items: center;
+        justify-content: space-between; gap: 20px;
+    }
+    .lc-hero::before {
+        content: ''; position: absolute;
+        inset-inline-start: -60px; top: -60px;
+        width: 220px; height: 220px; border-radius: 50%;
+        background: rgba(255,255,255,.07); pointer-events: none;
+    }
+    .lc-hero::after {
+        content: ''; position: absolute;
+        inset-inline-start: 40px; bottom: -80px;
+        width: 160px; height: 160px; border-radius: 50%;
+        background: rgba(255,255,255,.05); pointer-events: none;
+    }
+    .lc-hero-content { position: relative; z-index: 1; flex: 1; min-width: 0; }
+    .lc-hero-badge {
+        display: inline-flex; align-items: center; gap: 6px;
+        background: rgba(255,255,255,.2); border: 1px solid rgba(255,255,255,.3);
+        border-radius: 20px; padding: 4px 14px;
+        font-size: .78rem; font-weight: 600; margin-bottom: 10px;
+    }
+    .lc-hero-title { font-size: 1.6rem; font-weight: 800; margin: 0 0 8px; line-height: 1.3; }
+    .lc-hero-meta {
+        font-size: .88rem; opacity: .85;
+        display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    }
+    .lc-hero-meta span { display: flex; align-items: center; gap: 5px; }
+    .lc-hero-actions { display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; position: relative; z-index: 1; }
+    @@media (max-width: 600px) {
+        .lc-hero { flex-direction: column; align-items: flex-start; }
+        .lc-hero-actions { flex-direction: row; }
+    }
+
+    /* ── Stats Grid ───────────────────────────────── */
+    .lc-stats {
+        display: grid; grid-template-columns: repeat(4,1fr);
+        gap: 16px; margin-bottom: 28px;
+    }
+    @@media (max-width: 900px) { .lc-stats { grid-template-columns: repeat(2,1fr); } }
+    @@media (max-width: 500px) { .lc-stats { grid-template-columns: 1fr; } }
+
+    .lc-stat {
+        background: var(--lc-surface); border: 1px solid var(--lc-border);
+        border-radius: var(--lc-radius); padding: 20px 22px;
+        display: flex; align-items: center; gap: 16px;
+        box-shadow: var(--lc-shadow); cursor: default;
+        transition: transform .2s var(--lc-ease), box-shadow .2s var(--lc-ease);
+    }
+    .lc-stat:hover { transform: translateY(-3px); box-shadow: var(--lc-shadow-md); }
+    .lc-stat-icon {
+        width: 52px; height: 52px; border-radius: 12px;
+        display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .lc-stat-icon.blue   { background: var(--lc-primary-soft); color: var(--lc-primary); }
+    .lc-stat-icon.teal   { background: var(--lc-success-soft); color: var(--lc-success); }
+    .lc-stat-icon.orange { background: var(--lc-warning-soft); color: var(--lc-warning); }
+    .lc-stat-icon.purple { background: var(--lc-purple-soft);  color: var(--lc-purple);  }
+    .lc-stat-val { font-size: 1.7rem; font-weight: 800; line-height: 1; }
+    .lc-stat-lbl { font-size: .8rem; color: var(--lc-text-muted); margin-top: 3px; }
+
+    /* ── Filter Tabs Bar ──────────────────────────── */
+    .lc-filter-bar {
+        display: flex; align-items: center;
+        justify-content: space-between; gap: 12px;
+        margin-bottom: 20px; flex-wrap: wrap;
+    }
+    .lc-section-heading {
+        font-size: 1.05rem; font-weight: 800;
+        display: flex; align-items: center; gap: 8px;
+    }
+    .lc-section-heading-icon {
+        width: 34px; height: 34px; border-radius: 8px;
+        background: var(--lc-primary-soft); color: var(--lc-primary);
+        display: flex; align-items: center; justify-content: center;
+    }
+    .lc-badge {
+        display: inline-flex; align-items: center; gap: 5px;
+        padding: 4px 12px; border-radius: 20px;
+        font-size: .78rem; font-weight: 700;
+    }
+    .lc-badge.blue   { background: var(--lc-primary-soft); color: #2c46b8; }
+    .lc-badge.green  { background: var(--lc-success-soft); color: #1a8077; }
+    .lc-badge.yellow { background: var(--lc-warning-soft); color: #b05a00; }
+    .lc-badge.grey   { background: #f0f0f5; color: #6b7280; }
+
+    .lc-tabs {
+        display: flex; gap: 4px;
+        background: var(--lc-surface-2);
+        border: 1px solid var(--lc-border);
+        border-radius: 10px; padding: 4px;
+        flex-wrap: wrap;
+    }
+    .lc-tab {
+        padding: 7px 18px; border-radius: 7px;
+        font-size: .83rem; font-weight: 600;
+        cursor: pointer; transition: all .18s;
+        border: none; background: transparent;
+        color: var(--lc-text-muted); white-space: nowrap;
+        font-family: var(--lc-font);
+        display: flex; align-items: center; gap: 7px;
+    }
+    .lc-tab:hover { color: var(--lc-text); }
+    .lc-tab.active {
+        background: var(--lc-primary); color: #fff;
+        box-shadow: 0 2px 8px rgba(67,97,238,.3);
+    }
+    .lc-tab-count {
+        padding: 1px 8px; border-radius: 10px;
+        font-size: .74rem; font-weight: 700;
+    }
+    .lc-tab.active .lc-tab-count { background: rgba(255,255,255,.25); }
+    .lc-tab:not(.active) .lc-tab-count { background: var(--lc-border); color: var(--lc-text-muted); }
+
+    /* ── Batch Card ───────────────────────────────── */
+    .lc-cards-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 18px;
+    }
+    @@media (max-width: 1100px) { .lc-cards-grid { grid-template-columns: repeat(2, 1fr); } }
+    @@media (max-width: 640px)  { .lc-cards-grid { grid-template-columns: 1fr; } }
+
+    .lc-batch-card {
+        background: var(--lc-surface);
+        border: 1px solid var(--lc-border);
+        border-radius: var(--lc-radius);
+        box-shadow: var(--lc-shadow);
+        overflow: hidden;
+        transition: transform .2s var(--lc-ease), box-shadow .2s var(--lc-ease);
+        display: flex; flex-direction: column;
+    }
+    .lc-batch-card:hover { transform: translateY(-4px); box-shadow: var(--lc-shadow-md); }
+    .lc-batch-card.lc-hidden { display: none !important; }
+
+    /* Card top accent stripe */
+    .lc-card-stripe {
+        height: 4px;
+        background: linear-gradient(90deg, var(--lc-primary), #6b8ef5);
+    }
+    .lc-card-stripe.has-today    { background: linear-gradient(90deg, var(--lc-warning), #fbbf24); }
+    .lc-card-stripe.has-upcoming { background: linear-gradient(90deg, var(--lc-success), #34d399); }
+
+    .lc-card-top {
+        padding: 18px 20px 14px;
+        display: flex; align-items: flex-start;
+        justify-content: space-between; gap: 12px;
+        border-bottom: 1px solid var(--lc-border);
+    }
+    .lc-card-avatar {
+        width: 46px; height: 46px; border-radius: 12px;
+        background: linear-gradient(135deg, var(--lc-primary), #6b8ef5);
+        color: #fff; font-weight: 900; font-size: .95rem;
+        display: inline-flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
+    }
+    .lc-card-info { flex: 1; min-width: 0; }
+    .lc-card-batch-name { font-weight: 800; font-size: .97rem; line-height: 1.3; }
+    .lc-card-course {
+        font-size: .78rem; color: var(--lc-text-muted);
+        margin-top: 3px; white-space: nowrap;
+        overflow: hidden; text-overflow: ellipsis;
+    }
+    .lc-card-instructor {
+        font-size: .76rem; color: var(--lc-text-muted);
+        margin-top: 2px; display: flex; align-items: center; gap: 4px;
+    }
+
+    /* Mini stat boxes inside card */
+    .lc-card-minis {
+        padding: 14px 20px;
+        display: grid; grid-template-columns: repeat(3, 1fr);
+        gap: 8px; border-bottom: 1px solid var(--lc-border);
+    }
+    .lc-mini {
+        background: var(--lc-surface-2);
+        border: 1px solid var(--lc-border);
+        border-radius: 10px; padding: 10px 8px;
+        text-align: center;
+    }
+    .lc-mini-val { font-size: 1.25rem; font-weight: 900; line-height: 1; }
+    .lc-mini-val.total  { color: var(--lc-primary); }
+    .lc-mini-val.today  { color: var(--lc-warning); }
+    .lc-mini-val.coming { color: var(--lc-success); }
+    .lc-mini-lbl { font-size: .71rem; color: var(--lc-text-muted); font-weight: 600; margin-top: 3px; }
+
+    /* Card footer */
+    .lc-card-foot {
+        padding: 12px 20px;
+        display: flex; align-items: center;
+        justify-content: space-between; gap: 10px;
+        flex: 1;
+    }
+    .lc-last-date {
+        font-size: .77rem; color: var(--lc-text-muted);
+        display: flex; align-items: center; gap: 5px;
+    }
+    .lc-card-actions { display: flex; gap: 8px; }
+
+    .lc-btn {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 7px 14px; border-radius: 8px;
+        font-size: .82rem; font-weight: 700; font-family: var(--lc-font);
+        cursor: pointer; border: none;
+        transition: all .16s var(--lc-ease);
+        text-decoration: none; white-space: nowrap;
+    }
+    .lc-btn-primary { background: var(--lc-primary); color: #fff; box-shadow: 0 2px 8px rgba(67,97,238,.25); }
+    .lc-btn-primary:hover { background: #3451d1; color: #fff; text-decoration: none; transform: translateY(-1px); }
+    .lc-btn-outline { background: transparent; color: var(--lc-success); border: 1.5px solid var(--lc-success) !important; }
+    .lc-btn-outline:hover { background: var(--lc-success-soft); text-decoration: none; }
+    .lc-btn-hero-solid {
+        background: #fff; color: var(--lc-primary);
+        font-weight: 700; padding: 9px 20px;
+        box-shadow: 0 2px 8px rgba(67,97,238,.2);
+    }
+    .lc-btn-hero-solid:hover { background: #f0f4ff; color: var(--lc-primary); text-decoration: none; transform: translateY(-1px); }
+
+    /* ── Alerts ───────────────────────────────────── */
+    .lc-alert {
+        padding: 13px 18px; border-radius: var(--lc-radius-sm);
+        font-size: .88rem; font-weight: 600;
+        display: flex; align-items: center; gap: 10px; margin-bottom: 20px;
+    }
+    .lc-alert.success { background: var(--lc-success-soft); color: #1a8077; border-right: 4px solid var(--lc-success); }
+    .lc-alert.danger  { background: var(--lc-danger-soft);  color: #b52a31; border-right: 4px solid var(--lc-danger); }
+
+    /* ── Empty ────────────────────────────────────── */
+    .lc-empty { text-align: center; padding: 50px 20px; color: var(--lc-text-muted); }
+    .lc-empty-icon { font-size: 2.8rem; margin-bottom: 12px; opacity: .45; }
+    .lc-empty-text { font-size: .9rem; font-weight: 600; }
+
+    /* Dark mode */
+    @@media (prefers-color-scheme: dark) {
+        :root {
+            --lc-surface:    #1e2235;
+            --lc-surface-2:  #252a40;
+            --lc-border:     #2e3452;
+            --lc-text:       #e0e3ef;
+            --lc-text-muted: #8b92b0;
+        }
+    }
+</style>
+
+<div class="lc-page">
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="lc-alert success">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+            @TempData["Success"]
+        </div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="lc-alert danger">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            @TempData["Error"]
+        </div>
+    }
+
+    <!-- ── Hero ─────────────────────────────────── -->
+    <div class="lc-hero">
+        <div class="lc-hero-content">
+            <div class="lc-hero-badge">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+                لوحة المحاضرات
+            </div>
+            <h1 class="lc-hero-title">إدارة المحاضرات</h1>
+            <div class="lc-hero-meta">
+                <span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+                    @Model.TotalBatches دفعة نشطة
+                </span>
+                <span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    @DateTime.Today.ToString("yyyy/MM/dd")
+                </span>
+            </div>
+        </div>
+        <div class="lc-hero-actions">
+            <a asp-area="Admin" asp-controller="Lectures" asp-action="Create" class="lc-btn lc-btn-hero-solid">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                إضافة محاضرة
+            </a>
+        </div>
+    </div>
+
+    <!-- ── Stats ─────────────────────────────────── -->
+    <div class="lc-stats">
+        <div class="lc-stat">
+            <div class="lc-stat-icon blue">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+            </div>
+            <div>
+                <div class="lc-stat-val">@Model.TotalBatches</div>
+                <div class="lc-stat-lbl">إجمالي الدفعات</div>
+            </div>
+        </div>
+        <div class="lc-stat">
+            <div class="lc-stat-icon teal">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+            </div>
+            <div>
+                <div class="lc-stat-val">@Model.TotalLectures</div>
+                <div class="lc-stat-lbl">إجمالي المحاضرات</div>
+            </div>
+        </div>
+        <div class="lc-stat">
+            <div class="lc-stat-icon orange">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+            <div>
+                <div class="lc-stat-val">@Model.TodayLectures</div>
+                <div class="lc-stat-lbl">محاضرات اليوم</div>
+            </div>
+        </div>
+        <div class="lc-stat">
+            <div class="lc-stat-icon purple">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            </div>
+            <div>
+                <div class="lc-stat-val">@Model.UpcomingLectures</div>
+                <div class="lc-stat-lbl">محاضرات قادمة</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Filter Tabs + Cards ───────────────────── -->
+    <div class="lc-filter-bar">
+        <div class="lc-section-heading">
+            <div class="lc-section-heading-icon">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+            </div>
+            الدفعات
+            <span class="lc-badge blue" id="lc-vis-count">@Model.Batches.Count دفعة</span>
+        </div>
+
+        <div class="lc-tabs">
+            <button class="lc-tab active" onclick="lcFilter('all',this)">
+                كل المحاضرات
+                <span class="lc-tab-count">@Model.Batches.Count</span>
+            </button>
+            <button class="lc-tab" onclick="lcFilter('today',this)">
+                اليوم
+                <span class="lc-tab-count">@Model.Batches.Count(b => b.TodayLectures > 0)</span>
+            </button>
+            <button class="lc-tab" onclick="lcFilter('yesterday',this)">
+                أمس
+                <span class="lc-tab-count">@yesterdayCount</span>
+            </button>
+            <button class="lc-tab" onclick="lcFilter('upcoming',this)">
+                قادمة
+                <span class="lc-tab-count">@Model.Batches.Count(b => b.UpcomingLectures > 0)</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- No results -->
+    <div id="lc-no-results" style="display:none;">
+        <div style="background:var(--lc-surface);border:1px solid var(--lc-border);border-radius:var(--lc-radius);box-shadow:var(--lc-shadow);">
+            <div class="lc-empty">
+                <div class="lc-empty-icon">🔍</div>
+                <div class="lc-empty-text">لا توجد دفعات تنطبق على هذا الفلتر.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cards Grid -->
+    @if (!Model.Batches.Any())
+    {
+        <div style="background:var(--lc-surface);border:1px solid var(--lc-border);border-radius:var(--lc-radius);box-shadow:var(--lc-shadow);">
+            <div class="lc-empty">
+                <div class="lc-empty-icon">📭</div>
+                <div class="lc-empty-text">لا توجد دفعات متاحة حالياً.</div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="lc-cards-grid" id="lc-cards-grid">
+            @foreach (var b in Model.Batches)
+            {
+                bool isToday     = b.TodayLectures > 0;
+                bool isYesterday = b.LastLectureDate.HasValue && b.LastLectureDate.Value.Date == yesterday;
+                bool isUpcoming  = b.UpcomingLectures > 0;
+                string initials  = b.BatchName.Length >= 2 ? b.BatchName.Substring(0, 2) : b.BatchName;
+
+                string stripeClass = isToday ? "has-today" : isUpcoming ? "has-upcoming" : "";
+
+                <div class="lc-batch-card"
+                     data-today="@(isToday ? "1" : "0")"
+                     data-yesterday="@(isYesterday ? "1" : "0")"
+                     data-upcoming="@(isUpcoming ? "1" : "0")">
+
+                    <!-- Top accent stripe -->
+                    <div class="lc-card-stripe @stripeClass"></div>
+
+                    <!-- Card header -->
+                    <div class="lc-card-top">
+                        <div style="display:flex;align-items:flex-start;gap:12px;flex:1;min-width:0;">
+                            <div class="lc-card-avatar">@initials</div>
+                            <div class="lc-card-info">
+                                <div class="lc-card-batch-name">@b.BatchName</div>
+                                <div class="lc-card-course">@b.CourseName</div>
+                                @if (!string.IsNullOrWhiteSpace(b.InstructorSummary))
+                                {
+                                    <div class="lc-card-instructor">
+                                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                                        @b.InstructorSummary
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                        <span class="lc-badge blue" style="flex-shrink:0;">@b.TotalStudents طالب</span>
+                    </div>
+
+                    <!-- Mini stats -->
+                    <div class="lc-card-minis">
+                        <div class="lc-mini">
+                            <div class="lc-mini-val total">@b.TotalLectures</div>
+                            <div class="lc-mini-lbl">محاضرة</div>
+                        </div>
+                        <div class="lc-mini">
+                            <div class="lc-mini-val today">@b.TodayLectures</div>
+                            <div class="lc-mini-lbl">اليوم</div>
+                        </div>
+                        <div class="lc-mini">
+                            <div class="lc-mini-val coming">@b.UpcomingLectures</div>
+                            <div class="lc-mini-lbl">قادمة</div>
+                        </div>
+                    </div>
+
+                    <!-- Footer -->
+                    <div class="lc-card-foot">
+                        <div class="lc-last-date">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                            @if (b.LastLectureDate.HasValue)
+                            {
+                                <span>@b.LastLectureDate.Value.ToString("yyyy/MM/dd")</span>
+                            }
+                            else
+                            {
+                                <span>لا يوجد</span>
+                            }
+                        </div>
+                        <div class="lc-card-actions">
+                            <a asp-area="Admin" asp-controller="Lectures"
+                               asp-action="Lectures" asp-route-batchId="@b.BatchId"
+                               class="lc-btn lc-btn-primary">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                فتح
+                            </a>
+                            <a asp-area="Admin" asp-controller="Lectures"
+                               asp-action="Create" asp-route-batchId="@b.BatchId"
+                               class="lc-btn lc-btn-outline">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                إضافة
+                            </a>
+                        </div>
+                    </div>
+
+                </div>
+            }
+        </div>
+    }
+
+</div>
+
+@section Scripts {
+<script>
+function lcFilter(filter, btn) {
+    document.querySelectorAll('.lc-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+
+    const cards   = document.querySelectorAll('.lc-batch-card');
+    const noRes   = document.getElementById('lc-no-results');
+    const counter = document.getElementById('lc-vis-count');
+    let visible   = 0;
+
+    cards.forEach(card => {
+        let show = false;
+        switch (filter) {
+            case 'all':       show = true; break;
+            case 'today':     show = card.dataset.today     === '1'; break;
+            case 'yesterday': show = card.dataset.yesterday === '1'; break;
+            case 'upcoming':  show = card.dataset.upcoming  === '1'; break;
+        }
+        card.classList.toggle('lc-hidden', !show);
+        if (show) visible++;
+    });
+
+    if (counter) counter.textContent = visible + ' دفعة';
+    if (noRes)   noRes.style.display  = visible === 0 ? 'block' : 'none';
+}
+</script>
+}

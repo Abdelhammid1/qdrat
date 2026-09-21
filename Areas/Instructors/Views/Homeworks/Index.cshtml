@@ -1,0 +1,121 @@
+﻿@{
+    ViewData["Title"] = "واجبات الطلاب";
+    Layout = "~/Views/Shared/_Layout.cshtml"; // ✳️ عدّله حسب Layout الخاص بالمدرب
+}
+
+<h2 class="text-primary mb-4">📚 واجبات الطلاب</h2>
+
+<div class="row text-center mb-4">
+    <div class="col-md-3">
+        <div class="card border-primary">
+            <div class="card-body">
+                <h5 class="card-title">📄 إجمالي الواجبات</h5>
+                <h4 id="totalCount">—</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-success">
+            <div class="card-body">
+                <h5 class="card-title">✅ الواجبات المكتملة</h5>
+                <h4 id="completedCount">—</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-info">
+            <div class="card-body">
+                <h5 class="card-title">📊 متوسط الدرجة</h5>
+                <h4 id="avgScore">—</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card border-dark">
+            <div class="card-body">
+                <h5 class="card-title">👨‍🎓 عدد الطلاب</h5>
+                <h4 id="studentCount">—</h4>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-4">
+        <label>فلترة حسب الدفعة:</label>
+        <select id="batchFilter" class="form-select">
+            <option value="">كل الدفعات</option>
+        </select>
+    </div>
+</div>
+
+<table id="batchStatsTable" class="table table-bordered w-100">
+    <thead>
+        <tr>
+            <th>الدفعة</th>
+            <th>عدد الطلاب</th>
+            <th>عدد الواجبات</th>
+            <th>نسبة الإكمال</th>
+            <th>عرض الطلاب</th>
+        </tr>
+    </thead>
+</table>
+
+
+@section Scripts {
+    <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+    <script>
+        let table;
+
+        async function loadBatches() {
+            const res = await fetch('/Instructors/Homeworks/GetBatches');
+            const batches = await res.json();
+            const filter = document.getElementById('batchFilter');
+
+            batches.forEach(b => {
+                const option = document.createElement("option");
+                option.value = b.id;
+                option.textContent = b.name;
+                filter.appendChild(option);
+            });
+        }
+
+        function loadBatchStatsTable(batchId = "") {
+            if (table) table.destroy();
+
+            table = $('#batchStatsTable').DataTable({
+                ajax: {
+                    url: `/Instructors/Homeworks/GetBatchHomeworkStats${batchId ? `?batchId=${batchId}` : ''}`,
+                    dataSrc: ''
+                },
+                columns: [
+                    { data: 'batchName' },
+                    { data: 'studentCount' },
+                    { data: 'homeworkCount' },
+                    {
+                        data: 'completionRate',
+                        render: r => `${r.toFixed(1)} %`
+                    },
+                    {
+                        data: 'batchId',
+                        render: id => `<a href="/Instructors/Homeworks/StudentHomeworks?batchId=${id}" class="btn btn-sm btn-outline-primary" title="عرض الطلاب في هذه الدفعة">📋 عرض الطلاب</a>`
+                    }
+                ],
+                language: {
+                    url: "//cdn.datatables.net/plug-ins/1.13.4/i18n/ar.json"
+                }
+            });
+        }
+
+        document.addEventListener("DOMContentLoaded", async () => {
+            await loadBatches();
+            loadBatchStatsTable();
+
+            document.getElementById("batchFilter").addEventListener("change", e => {
+                const batchId = e.target.value;
+                loadBatchStatsTable(batchId);
+            });
+        });
+    </script>
+}
+

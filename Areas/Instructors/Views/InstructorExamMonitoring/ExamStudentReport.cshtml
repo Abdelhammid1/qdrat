@@ -1,0 +1,206 @@
+@model QdratNew.ViewModels.Homework.HomeworkAnalyticsViewModel
+
+@{
+    ViewData["Title"] = "تقرير أداء الطالب";
+}
+
+@section Styles {
+    <link href="~/css/instructor/instructor-exams.css" rel="stylesheet" asp-append-version="true" />
+}
+
+<div class="report-container">
+
+    <div class="report-header">
+        <div>
+            <div class="report-title">تقرير تحليل أداء الطالب</div>
+            <div class="text-muted small">
+                اسم الطالب: @Model.StudentName |
+                الدفعة: @Model.BatchName |
+                اختبار: @Model.HomeworkSetId
+            </div>
+        </div>
+        <button class="btn-report" onclick="printReport()">
+            <i class="fas fa-file-pdf me-1"></i> تحميل PDF
+        </button>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card-box stat-card stat-main text-center">
+                <h2>@($"{Model.ScorePercentage.ToString("0.0")}%")</h2>
+                <small>النتيجة الإجمالية</small>
+            </div>
+        </div>
+        <div class="col-md-2 col-6">
+            <div class="card-box stat-card text-center">
+                <h3>@Model.TotalQuestions</h3>
+                <small>إجمالي</small>
+            </div>
+        </div>
+        <div class="col-md-2 col-6">
+            <div class="card-box stat-card stat-green text-center">
+                <h3>@Model.CorrectAnswers</h3>
+                <small>صحيح</small>
+            </div>
+        </div>
+        <div class="col-md-2 col-6">
+            <div class="card-box stat-card stat-red text-center">
+                <h3>@Model.WrongAnswers</h3>
+                <small>خطأ</small>
+            </div>
+        </div>
+        <div class="col-md-2 col-6">
+            <div class="card-box stat-card stat-gray text-center">
+                <h3>@Model.SkippedAnswers</h3>
+                <small>متخطاه</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-6">
+            <div class="card-box chart-card text-center h-100">
+                <h5>تطور المستوى</h5>
+                <div class="circle">
+                    <div class="circle-fill" id="circleFill"></div>
+                    <div class="circle-text" id="circleText">
+                        <h2>@($"{Model.ScorePercentage.ToString("0.0")}%")</h2>
+                    </div>
+                </div>
+                <div class="mt-2 text-muted small">@Model.ParentReport.Progress</div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card-box h-100 behavior-card">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0">تحليل السلوك أثناء الحل</h5>
+                    <span class="behavior-badge @Model.BehaviorLevel.ToString()">@Model.BehaviorLevel</span>
+                </div>
+                <div class="behavior-metric">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>متوسط زمن الحل</span>
+                        <strong>@($"{Model.AvgTimePerQuestion.ToString("0.0")} دقيقة")</strong>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar bg-info"
+                             style="width:@(Math.Min(Model.AvgTimePerQuestion * 10, 100))%"></div>
+                    </div>
+                </div>
+                <div class="behavior-text mt-3">@Model.BehaviorAnalysisText</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card-box chart-card text-center h-100">
+                <h5>توزيع الإجابات</h5>
+                <canvas id="donutChart"></canvas>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card-box chart-card text-center h-100">
+                <h5>تطور أداء الطالب</h5>
+                <canvas id="progressChart"></canvas>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card-box h-100">
+                <h5>الأداء حسب المحاور</h5>
+                @foreach (var s in Model.SectionsPerformance)
+                {
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-1">
+                            <small>@s.SectionTitle</small>
+                            <small class="fw-bold">@s.Accuracy %</small>
+                        </div>
+                        <div class="progress">
+                            <div class="progress-bar bg-success" style="width:@s.Accuracy%"></div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-md-6">
+            <div class="card-box h-100">
+                <h5>💡 توصيات مخصصة</h5>
+                @if (Model?.ParentReport?.HomeRecommendations != null && Model.ParentReport.HomeRecommendations.Any())
+                {
+                    foreach (var item in Model.ParentReport.HomeRecommendations)
+                    {
+                        <div class="rec-item">
+                            <span class="badge bg-light text-dark">💡</span>
+                            <span>@item</span>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="text-muted">لا توجد توصيات حالياً</div>
+                }
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card-box h-100">
+                <h5>👨‍👩‍👦 تقرير ولي الأمر</h5>
+                <div class="mb-2"><strong>المستوى:</strong> @Model.ParentReport.Level</div>
+                <div class="mb-2"><strong>الالتزام:</strong> @Model.ParentReport.Commitment</div>
+                <div class="mb-2"><strong>التقدم:</strong> @Model.ParentReport.Progress</div>
+                <div class="alert alert-light mt-3">@Model.ParentReport.ParentInsight</div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+@section Scripts {
+    <script>
+        const percent = @Math.Round(Model.ScorePercentage, 1);
+        document.getElementById("circleFill").style.background =
+            `conic-gradient(var(--ex-primary) ${percent * 3.6}deg, var(--ex-border) 0deg)`;
+    </script>
+    <script>
+        new Chart(document.getElementById("donutChart"), {
+            type: 'doughnut',
+            data: {
+                labels: ["صحيح", "خطأ", "متروك"],
+                datasets: [{
+                    data: [@Model.CorrectAnswers, @Model.WrongAnswers, @Model.SkippedAnswers],
+                    backgroundColor: ["#16A34A", "#DC2626", "#94A3B8"],
+                    borderWidth: 3,
+                    borderColor: '#fff'
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, cutout: '60%',
+                       plugins: { legend: { position: 'bottom' } } }
+        });
+    </script>
+    <script>
+        const scores = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ProgressScores));
+        const labels = scores.map((_, i) => "اختبار " + (i + 1));
+        new Chart(document.getElementById("progressChart"), {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: scores,
+                    borderColor: "#4CA6A8",
+                    backgroundColor: "rgba(76,166,168,0.1)",
+                    fill: true, tension: 0.4,
+                    pointBorderColor: '#fff', pointBorderWidth: 2
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false,
+                       plugins: { legend: { display: false } } }
+        });
+    </script>
+    <script>
+        function printReport() {
+            const printWindow = window.open(window.location.href + "&print=true", "_blank");
+            if (!printWindow) alert("المتصفح يمنع فتح نافذة جديدة. تأكد من تعطيل Popup Blocker.");
+        }
+    </script>
+}

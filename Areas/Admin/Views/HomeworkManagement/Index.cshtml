@@ -1,0 +1,706 @@
+@model QdratNew.ViewModels.Homework.HomeworkManagementIndexViewModel
+@using Microsoft.AspNetCore.Authorization
+@using QdratNew.Security.AdminPermissions
+@inject IAuthorizationService AuthorizationService
+
+@{
+    ViewData["Title"] = "إدارة الواجبات";
+    var totalArchivedHomeworks = Model.ArchivedHomeworks?.Count ?? 0;
+    var canArchiveHomework      = (await AuthorizationService.AuthorizeAsync(User, AdminPermissionPolicies.Homework_Archive)).Succeeded;
+    var canGenerateHomework     = (await AuthorizationService.AuthorizeAsync(User, AdminPermissionPolicies.AdminLessonCompletions_GenerateHomework)).Succeeded;
+    var canViewBatchReport      = (await AuthorizationService.AuthorizeAsync(User, AdminPermissionPolicies.Homework_Reports)).Succeeded;
+}
+
+@section Styles {
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet" />
+    <style>
+        :root {
+            --ink: #0D1B2A;
+            --ink-2: #2C3E50;
+            --ink-3: #5A6A7A;
+            --ink-4: #8FA0B0;
+            --ink-5: #C8D5E0;
+            --canvas: #F3F6FA;
+            --surface: #FFFFFF;
+            --surface-2: #F8FAFC;
+            --surface-3: #EEF2F7;
+            --border: #DDE4EC;
+            --blue: #1B5EAE;
+            --blue-2: #2471D0;
+            --blue-bg: #E8F1FB;
+            --blue-dark: #103E7A;
+            --emerald: #0D7A5B;
+            --emerald-bg: #E4F5EE;
+            --amber: #985D09;
+            --amber-bg: #FDF0D8;
+            --rose: #BF1030;
+            --rose-bg: #FDEAEE;
+            --violet: #5535B5;
+            --violet-bg: #EDE8F9;
+            --r-sm: 6px;
+            --r-md: 10px;
+            --r-lg: 14px;
+            --r-xl: 20px;
+            --sh-xs: 0 1px 3px rgba(13,27,42,.06);
+            --sh-sm: 0 2px 8px rgba(13,27,42,.08);
+            --sh-md: 0 4px 18px rgba(13,27,42,.10);
+            --ease: cubic-bezier(.25,.46,.45,.94);
+        }
+
+        .hw-page {
+            background: var(--canvas);
+            min-height: 100vh;
+            padding: 32px 28px 64px;
+            direction: rtl;
+            font-family: 'Cairo', sans-serif;
+            color: var(--ink-2);
+        }
+
+        /* ── Topbar ── */
+        .hw-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 14px;
+            margin-bottom: 28px;
+        }
+
+        .hw-brand { display: flex; align-items: center; gap: 13px; }
+        .hw-brand-icon {
+            width: 46px; height: 46px;
+            background: var(--blue);
+            border-radius: var(--r-lg);
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; font-size: 20px;
+            box-shadow: 0 4px 14px rgba(27,94,174,.28);
+        }
+        .hw-brand-title { font-size: 20px; font-weight: 700; color: var(--ink); line-height: 1.15; }
+        .hw-brand-sub   { font-size: 15px; color: var(--ink-4); margin-top: 2px; }
+
+        .btn-add {
+            display: inline-flex; align-items: center; gap: 7px;
+            padding: 10px 20px;
+            background: var(--blue); color: #fff;
+            border: none; border-radius: var(--r-md);
+            font-size: 15px; font-weight: 700;
+            text-decoration: none;
+            transition: background .15s, transform .12s;
+            box-shadow: 0 3px 10px rgba(27,94,174,.22);
+        }
+        .btn-add:hover { background: var(--blue-dark); color: #fff; transform: translateY(-1px); }
+
+        /* ── KPI Cards ── */
+        .hw-kpis {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 13px;
+            margin-bottom: 24px;
+        }
+        @@media (max-width: 960px) { .hw-kpis { grid-template-columns: repeat(2, 1fr); } }
+        @@media (max-width: 480px) { .hw-kpis { grid-template-columns: 1fr; } }
+
+        .kpi-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            padding: 18px 19px;
+            display: flex; align-items: center; gap: 13px;
+            box-shadow: var(--sh-xs);
+            transition: transform .2s var(--ease), box-shadow .2s;
+            position: relative; overflow: hidden;
+        }
+        .kpi-card::after {
+            content: ''; position: absolute; top: 0; right: 0;
+            width: 4px; height: 100%;
+            border-radius: 0 var(--r-xl) var(--r-xl) 0;
+        }
+        .kpi-card:hover { transform: translateY(-3px); box-shadow: var(--sh-sm); }
+        .kpi-blue::after   { background: var(--blue); }
+        .kpi-emerald::after{ background: var(--emerald); }
+        .kpi-amber::after  { background: var(--amber); }
+        .kpi-rose::after   { background: var(--rose); }
+        .kpi-ico {
+            width: 42px; height: 42px; border-radius: var(--r-md);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px; flex-shrink: 0;
+        }
+        .ico-blue    { background: var(--blue-bg);    color: var(--blue); }
+        .ico-emerald { background: var(--emerald-bg); color: var(--emerald); }
+        .ico-amber   { background: var(--amber-bg);   color: var(--amber); }
+        .ico-rose    { background: var(--rose-bg);    color: var(--rose); }
+        .kpi-label { font-size: 13px; font-weight: 700; color: var(--ink-4); letter-spacing:.04em; text-transform:uppercase; margin-bottom:3px; }
+        .kpi-val   { font-size: 22px; font-weight: 700; color: var(--ink); line-height: 1; }
+
+        /* ── Archive Manager ── */
+        .archive-manager {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            margin-bottom: 22px;
+            box-shadow: var(--sh-xs);
+            padding: 0 !important;
+            overflow: hidden;
+        }
+        .archive-manager-toggle {
+            width: 100%; border: none; background: var(--surface);
+            padding: 18px; cursor: pointer;
+            display: flex; align-items: center; justify-content: space-between; gap: 14px;
+            text-align: right; transition: background .15s var(--ease);
+        }
+        .archive-manager-toggle:hover { background: var(--surface-2); }
+        .archive-manager-toggle-main { display: flex; align-items: center; gap: 10px; }
+        .archive-manager-toggle-icon {
+            width: 38px; height: 38px; border-radius: var(--r-md);
+            background: var(--amber-bg); color: var(--amber);
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 16px; flex-shrink: 0;
+        }
+        .archive-manager-toggle-text { display: flex; flex-direction: column; gap: 2px; }
+        .archive-manager-title    { font-size: 16px; font-weight: 800; color: var(--ink); }
+        .archive-manager-subtitle { font-size: 13px; font-weight: 600; color: var(--ink-4); }
+        .archive-manager-toggle-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .archive-manager-chevron {
+            width: 34px; height: 34px; border-radius: var(--r-sm);
+            background: var(--surface-3); color: var(--ink-3);
+            display: inline-flex; align-items: center; justify-content: center;
+            transition: transform .2s var(--ease), background .15s;
+        }
+        .archive-manager.is-open .archive-manager-chevron { transform: rotate(180deg); background: var(--amber-bg); color: var(--amber); }
+        .archive-manager-body { display: none; padding: 0 18px 18px; border-top: 1px solid var(--surface-3); }
+        .archive-manager.is-open .archive-manager-body { display: block; }
+        .archive-manager-body-inner { padding-top: 16px; }
+        .archive-manager-grid { display: grid; grid-template-columns: minmax(240px,1fr) auto; gap: 14px; align-items: end; }
+        .archive-batches {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(180px,1fr));
+            gap: 8px; max-height: 170px; overflow-y: auto;
+            padding: 10px; background: var(--surface-2);
+            border: 1px solid var(--border); border-radius: var(--r-md);
+        }
+        .archive-batch-check { display: flex; align-items: center; gap: 7px; font-size: 14px; color: var(--ink-2); }
+        .archive-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .archive-submit {
+            border: none; border-radius: var(--r-md); padding: 10px 16px;
+            font-size: 15px; font-weight: 700; color: #fff; background: var(--ink); cursor: pointer;
+        }
+        .archive-submit.restore { background: var(--emerald); }
+        .hw-count-badge { font-size: 14px; color: var(--ink-4); }
+        .hw-count-badge strong { color: var(--blue); font-weight: 700; }
+        .archive-portal-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            box-shadow: var(--sh-sm);
+            margin-bottom: 22px;
+            overflow: hidden;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            align-items: center;
+            gap: 14px;
+            padding: 20px;
+            text-decoration: none;
+            color: inherit;
+            transition: transform .18s var(--ease), box-shadow .18s, border-color .18s;
+        }
+        .archive-portal-card:hover { color: inherit; transform: translateY(-3px); box-shadow: var(--sh-md); border-color: #E0B463; }
+        .archive-portal-main { display: flex; align-items: center; gap: 14px; min-width: 0; }
+        .archive-portal-icon {
+            width: 52px; height: 52px; border-radius: var(--r-lg);
+            display: flex; align-items: center; justify-content: center;
+            background: var(--amber-bg); color: var(--amber); font-size: 23px;
+            flex-shrink: 0;
+        }
+        .archive-portal-title { font-size: 18px; font-weight: 800; color: var(--ink); margin-bottom: 3px; }
+        .archive-portal-sub { font-size: 14px; color: var(--ink-4); line-height: 1.55; }
+        .archive-portal-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+        .archive-portal-count {
+            display: inline-flex; align-items: center; gap: 6px;
+            border-radius: 30px; background: var(--amber-bg); color: var(--amber);
+            padding: 7px 12px; font-size: 14px; font-weight: 800;
+        }
+        .archive-portal-open {
+            display: inline-flex; align-items: center; gap: 7px;
+            border-radius: var(--r-md); background: var(--ink); color: #fff;
+            padding: 10px 14px; font-size: 14px; font-weight: 800;
+        }
+        @@media (max-width: 768px) {
+            .archive-portal-card { grid-template-columns: 1fr; }
+            .archive-portal-meta { justify-content: flex-start; }
+        }
+        /* ── Batches section ── */
+        .batches-section-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            overflow: visible;
+            box-shadow: var(--sh-sm);
+        }
+
+        .batches-section-topbar {
+            display: flex; align-items: center; gap: 10px;
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--surface-3);
+            flex-wrap: wrap;
+        }
+
+        .section-title {
+            display: flex; align-items: center; gap: 8px;
+            font-size: 18px; font-weight: 800; color: var(--ink);
+            margin-left: 10px;
+        }
+        .section-title i { color: var(--blue); }
+
+        .batch-search-wrap {
+            position: relative; flex: 1; min-width: 220px; max-width: 390px;
+        }
+        .batch-search-wrap i {
+            position: absolute; right: 11px; top: 50%; transform: translateY(-50%);
+            color: var(--ink-4); font-size: 17px; pointer-events: none;
+        }
+        .batch-search-wrap input {
+            width: 100%; padding: 7px 32px 7px 12px;
+            border: 1px solid var(--border); border-radius: var(--r-md);
+            font-size: 15px; background: var(--surface-2); color: var(--ink);
+            transition: border-color .15s, box-shadow .15s;
+        }
+        .batch-search-wrap input:focus {
+            outline: none; border-color: var(--blue-2);
+            box-shadow: 0 0 0 3px rgba(36,113,208,.1); background: var(--surface);
+        }
+
+        .total-badge { margin-right: auto; font-size: 14px; color: var(--ink-4); }
+        .total-badge strong { color: var(--blue); font-weight: 700; }
+
+        /* ── Batch Cards Grid ── */
+        .batches-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+            padding: 18px;
+        }
+        @@media (max-width: 1200px) { .batches-grid { grid-template-columns: repeat(2,1fr); } }
+        @@media (max-width: 768px)  { .batches-grid { grid-template-columns: 1fr; padding: 14px; } }
+
+        .batch-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r-xl);
+            box-shadow: var(--sh-xs);
+            transition: transform .18s var(--ease), box-shadow .18s, border-color .18s;
+            overflow: hidden; position: relative;
+        }
+        .batch-card::before {
+            content: ''; position: absolute; top: 0; right: 0;
+            width: 5px; height: 100%; background: var(--blue);
+        }
+        .batch-card:hover { transform: translateY(-4px); box-shadow: var(--sh-md); border-color: #B6D3F4; }
+        .batch-card.has-critical::before { background: var(--rose); }
+        .batch-card.has-late::before     { background: var(--amber); }
+
+        .batch-card-body { padding: 18px 18px 16px; }
+
+        .batch-head {
+            display: flex; justify-content: space-between; align-items: flex-start;
+            gap: 12px; margin-bottom: 14px;
+        }
+        .batch-title-wrap { display: flex; align-items: flex-start; gap: 10px; }
+        .batch-avatar {
+            width: 38px; height: 38px; border-radius: 50%;
+            background: var(--blue-bg); color: var(--blue);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 17px; flex-shrink: 0;
+        }
+        .batch-title { font-size: 17px; font-weight: 800; color: var(--ink); margin-bottom: 3px; }
+        .batch-sub   { font-size: 13px; color: var(--ink-4); line-height: 1.5; }
+
+        .student-pill {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 4px 10px; border-radius: 30px;
+            font-size: 13px; font-weight: 700; white-space: nowrap;
+            background: var(--violet-bg); color: var(--violet);
+        }
+
+        /* mini stats grid */
+        .batch-mini-grid {
+            display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; margin-bottom: 12px;
+        }
+        .batch-mini-stat {
+            background: var(--surface-2); border: 1px solid var(--surface-3);
+            border-radius: var(--r-md); padding: 9px 7px; text-align: center;
+        }
+        .mini-val   { display: block; font-size: 18px; font-weight: 800; color: var(--ink); line-height: 1.1; }
+        .mini-label { display: block; font-size: 12px; color: var(--ink-4); margin-top: 2px; }
+        .text-emerald { color: var(--emerald) !important; }
+        .text-rose    { color: var(--rose)    !important; }
+        .text-amber   { color: var(--amber)   !important; }
+
+        /* progress */
+        .hw-progress-wrap { margin-bottom: 12px; }
+        .hw-progress-meta {
+            display: flex; justify-content: space-between; align-items: center;
+            font-size: 13px; color: var(--ink-4); margin-bottom: 5px;
+        }
+        .hw-progress-meta strong { color: var(--ink); font-size: 14px; }
+        .hw-progress {
+            width: 100%; height: 8px; border-radius: 30px;
+            background: var(--surface-3); overflow: hidden;
+        }
+        .hw-progress-bar {
+            height: 100%; background: var(--blue);
+            border-radius: 30px; transition: width .3s ease;
+        }
+
+        /* alert badges */
+        .batch-alerts { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 14px; }
+        .alert-badge {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 4px 10px; border-radius: 30px;
+            font-size: 12px; font-weight: 700;
+        }
+        .alert-amber { background: var(--amber-bg); color: var(--amber); }
+        .alert-rose  { background: var(--rose-bg);  color: var(--rose);  }
+        .alert-ghost { background: var(--surface-3); color: var(--ink-4); }
+
+        /* open button */
+        .batch-open-btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+            width: 100%; background: var(--blue); color: #fff;
+            border: none; border-radius: var(--r-md); padding: 10px 14px;
+            font-size: 15px; font-weight: 700; text-decoration: none;
+            transition: background .16s var(--ease), transform .14s, box-shadow .16s;
+            box-shadow: 0 3px 10px rgba(27,94,174,.20);
+        }
+        .batch-open-btn:hover { color: #fff; background: var(--blue-dark); transform: translateY(-2px); box-shadow: 0 6px 18px rgba(27,94,174,.28); }
+
+        .batch-card-actions { display: flex; flex-direction: column; gap: 8px; }
+        .batch-report-btn { background: var(--surface-3); color: var(--blue); box-shadow: none; border: 1.5px solid var(--blue); }
+        .batch-report-btn:hover { background: var(--blue-bg); color: var(--blue); box-shadow: 0 4px 12px rgba(27,94,174,.15); }
+
+        /* empty */
+        .batches-empty { text-align: center; padding: 56px 16px; color: var(--ink-4); }
+        .batches-empty i { font-size: 22px; display: block; margin-bottom: 12px; color: var(--ink-5); }
+        .batches-empty-title { font-size: 18px; font-weight: 600; color: var(--ink-3); }
+        .batches-empty-sub   { font-size: 14px; margin-top: 4px; }
+
+        @@media (max-width: 768px) {
+            .hw-page { padding: 22px 14px 48px; }
+            .batch-search-wrap { max-width: 100%; width: 100%; }
+            .total-badge { margin-right: 0; }
+            @@media(max-width:768px) { .archive-manager-grid { grid-template-columns: 1fr; } .archive-manager-toggle { align-items: flex-start; } .archive-manager-toggle-left { width: 100%; justify-content: space-between; } }
+        }
+    </style>
+}
+
+<div class="hw-page">
+
+    @if (TempData["Success"] != null)
+    {
+        <div style="border:none;border-radius:var(--r-lg);padding:14px 18px;font-size:15px;font-weight:700;box-shadow:var(--sh-xs);margin-bottom:18px;display:flex;align-items:center;gap:8px;background:var(--emerald-bg);color:var(--emerald)">
+            <i class="bi bi-check-circle-fill"></i> @TempData["Success"]
+        </div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div style="border:none;border-radius:var(--r-lg);padding:14px 18px;font-size:15px;font-weight:700;box-shadow:var(--sh-xs);margin-bottom:18px;display:flex;align-items:center;gap:8px;background:var(--rose-bg);color:var(--rose)">
+            <i class="bi bi-exclamation-circle-fill"></i> @TempData["Error"]
+        </div>
+    }
+
+    @* Topbar *@
+    <div class="hw-topbar">
+        <div class="hw-brand">
+            <div class="hw-brand-icon"><i class="bi bi-journal-check"></i></div>
+            <div>
+                <div class="hw-brand-title">إدارة الواجبات</div>
+                <div class="hw-brand-sub">اختر الدفعة لعرض واجباتها وإحصائياتها</div>
+            </div>
+        </div>
+        @if (canGenerateHomework)
+        {
+            <a asp-area="Admin"
+               asp-controller="AdminLessonCompletions"
+               asp-action="CreateExtraHomework"
+               class="btn-add">
+                <i class="bi bi-plus-circle-fill"></i>
+                إضافة واجب يدوي
+            </a>
+        }
+    </div>
+
+    @* KPI *@
+    <div class="hw-kpis">
+        <div class="kpi-card kpi-blue">
+            <div class="kpi-ico ico-blue"><i class="bi bi-collection-fill"></i></div>
+            <div>
+                <div class="kpi-label">الدفعات</div>
+                <div class="kpi-val">@Model.TotalBatches</div>
+            </div>
+        </div>
+        <div class="kpi-card kpi-emerald">
+            <div class="kpi-ico ico-emerald"><i class="bi bi-clipboard2-check-fill"></i></div>
+            <div>
+                <div class="kpi-label">إجمالي الواجبات</div>
+                <div class="kpi-val">@Model.TotalHomeworksCount</div>
+            </div>
+        </div>
+        <div class="kpi-card kpi-amber">
+            <div class="kpi-ico ico-amber"><i class="bi bi-clock-history"></i></div>
+            <div>
+                <div class="kpi-label">متأخر 24 ساعة</div>
+                <div class="kpi-val">@Model.TotalLate24hStudents</div>
+            </div>
+        </div>
+        <div class="kpi-card kpi-rose">
+            <div class="kpi-ico ico-rose"><i class="bi bi-exclamation-triangle-fill"></i></div>
+            <div>
+                <div class="kpi-label">حالات حرجة (3 أيام)</div>
+                <div class="kpi-val">@Model.TotalCriticalStudents</div>
+            </div>
+        </div>
+    </div>
+
+    @* Archive Portal *@
+    @if (canArchiveHomework)
+    {
+    <a asp-area="Admin"
+       asp-controller="HomeworkManagement"
+       asp-action="Archived"
+       class="archive-portal-card">
+        <div class="archive-portal-main">
+            <div class="archive-portal-icon"><i class="bi bi-archive-fill"></i></div>
+            <div>
+                <div class="archive-portal-title">الأرشيف</div>
+                <div class="archive-portal-sub">فتح صفحة الأرشيف لعرض الدفعات المؤرشفة في كروت، ومنها تظهر واجبات الدفعة وإجراءاتها.</div>
+            </div>
+        </div>
+        <div class="archive-portal-meta">
+            <span class="archive-portal-count">
+                <i class="bi bi-folder2"></i>
+                @totalArchivedHomeworks واجب
+            </span>
+            <span class="archive-portal-open">
+                فتح الأرشيف
+                <i class="bi bi-arrow-left"></i>
+            </span>
+        </div>
+    </a>
+    }
+
+    @* Archive Manager *@
+    @if (canArchiveHomework)
+    {
+    <div class="archive-manager" id="archiveManagerSection">
+        <button type="button" class="archive-manager-toggle" id="archiveManagerToggle"
+                aria-expanded="false" aria-controls="archiveManagerBody">
+            <div class="archive-manager-toggle-main">
+                <span class="archive-manager-toggle-icon"><i class="bi bi-archive-fill"></i></span>
+                <span class="archive-manager-toggle-text">
+                    <span class="archive-manager-title">إدارة الأرشيف حسب الدفعات</span>
+                    <span class="archive-manager-subtitle">اضغط لعرض الدفعات وخيارات أرشفة الواجبات أو إخراجها من الأرشيف</span>
+                </span>
+            </div>
+            <div class="archive-manager-toggle-left">
+                <span class="hw-count-badge">داخل الأرشيف: <strong>@totalArchivedHomeworks</strong> واجب</span>
+                <span class="archive-manager-chevron"><i class="bi bi-chevron-down"></i></span>
+            </div>
+        </button>
+        <div class="archive-manager-body" id="archiveManagerBody">
+            <div class="archive-manager-body-inner">
+                <form asp-action="ArchiveHomeworkSetsByBatches" method="post">
+                    @Html.AntiForgeryToken()
+                    <div class="archive-manager-grid">
+                        <div class="archive-batches">
+                            @foreach (var batch in Model.Batches)
+                            {
+                                <label class="archive-batch-check">
+                                    <input type="checkbox" name="selectedBatchIds" value="@batch.Value" />
+                                    <span>@batch.Text</span>
+                                </label>
+                            }
+                        </div>
+                        <div class="archive-actions">
+                            <button type="submit" class="archive-submit"
+                                    onclick="return confirm('سيتم نقل واجبات الدفعات المحددة إلى الأرشيف. هل تريد المتابعة؟')">
+                                <i class="bi bi-box-arrow-in-down"></i>
+                                أرشفة المحدد
+                            </button>
+                            <button type="submit"
+                                    formaction="@Url.Action("RestoreHomeworkSetsByBatches","HomeworkManagement")"
+                                    class="archive-submit restore"
+                                    onclick="return confirm('سيتم إخراج واجبات الدفعات المحددة من الأرشيف. هل تريد المتابعة؟')">
+                                <i class="bi bi-arrow-counterclockwise"></i>
+                                إخراج من الأرشيف
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    }
+
+    @* Batches Grid *@
+    <div class="batches-section-card">
+        <div class="batches-section-topbar">
+            <div class="section-title">
+                <i class="bi bi-grid-3x3-gap-fill"></i>
+                دفعات الواجبات
+            </div>
+            <div class="batch-search-wrap">
+                <i class="bi bi-search"></i>
+                <input type="text" id="batchSearch" placeholder="ابحث في اسم الدفعة أو الدورة..." />
+            </div>
+            <div class="total-badge">
+                إجمالي: <strong>@Model.BatchCards.Count</strong> دفعة
+            </div>
+        </div>
+
+        @if (!Model.BatchCards.Any())
+        {
+            <div class="batches-empty">
+                <i class="bi bi-inbox"></i>
+                <div class="batches-empty-title">لا توجد دفعات تحتوي على واجبات</div>
+                <div class="batches-empty-sub">أضف واجبات للدفعات لتظهر هنا</div>
+            </div>
+        }
+        else
+        {
+            <div class="batches-grid" id="batchesGrid">
+                @foreach (var card in Model.BatchCards)
+                {
+                    var cardClass = card.Critical3daysCount > 0 ? "has-critical"
+                                 : card.Late24hCount > 0 ? "has-late"
+                                 : "";
+                    <div class="batch-card @cardClass"
+                         data-search="@($"{card.BatchName} {card.CourseTitle}".ToLower())">
+                        <div class="batch-card-body">
+
+                            <div class="batch-head">
+                                <div class="batch-title-wrap">
+                                    <div class="batch-avatar"><i class="bi bi-people-fill"></i></div>
+                                    <div>
+                                        <div class="batch-title">@card.BatchName</div>
+                                        <div class="batch-sub">@card.CourseTitle</div>
+                                    </div>
+                                </div>
+                                <span class="student-pill">
+                                    <i class="bi bi-person"></i>
+                                    @card.TotalStudents طالب
+                                </span>
+                            </div>
+
+                            <div class="batch-mini-grid">
+                                <div class="batch-mini-stat">
+                                    <span class="mini-val">@card.TotalHomeworks</span>
+                                    <span class="mini-label">واجب</span>
+                                </div>
+                                <div class="batch-mini-stat">
+                                    <span class="mini-val text-emerald">@card.TotalSubmitted</span>
+                                    <span class="mini-label">تم التسليم</span>
+                                </div>
+                                <div class="batch-mini-stat">
+                                    <span class="mini-val text-rose">@(card.TotalAssigned - card.TotalSubmitted)</span>
+                                    <span class="mini-label">لم يُسلّم</span>
+                                </div>
+                            </div>
+
+                            <div class="hw-progress-wrap">
+                                <div class="hw-progress-meta">
+                                    <span>نسبة الحل</span>
+                                    <strong>@card.SolvedPercentage%</strong>
+                                </div>
+                                <div class="hw-progress">
+                                    <div class="hw-progress-bar" style="width:@card.SolvedPercentage%"></div>
+                                </div>
+                            </div>
+
+                            <div class="batch-alerts">
+                                @if (card.Late24hCount > 0)
+                                {
+                                    <span class="alert-badge alert-amber">
+                                        <i class="bi bi-clock-history"></i>
+                                        @card.Late24hCount متأخر 24 ساعة
+                                    </span>
+                                }
+                                @if (card.Critical3daysCount > 0)
+                                {
+                                    <span class="alert-badge alert-rose">
+                                        <i class="bi bi-exclamation-triangle-fill"></i>
+                                        @card.Critical3daysCount حالة حرجة (3 أيام)
+                                    </span>
+                                }
+                                @if (card.Late24hCount == 0 && card.Critical3daysCount == 0)
+                                {
+                                    <span class="alert-badge alert-ghost">
+                                        <i class="bi bi-check-circle"></i>
+                                        لا تأخير
+                                    </span>
+                                }
+                            </div>
+
+                            <div class="batch-card-actions">
+                                <a asp-area="Admin"
+                                   asp-controller="HomeworkManagement"
+                                   asp-action="BatchHomeworks"
+                                   asp-route-batchId="@card.BatchId"
+                                   class="batch-open-btn">
+                                    <i class="bi bi-journal-text"></i>
+                                    عرض واجبات الدفعة
+                                </a>
+                                @if (canViewBatchReport)
+                                {
+                                    <a asp-area="Admin"
+                                       asp-controller="HomeworkManagement"
+                                       asp-action="BatchPerformanceReport"
+                                       asp-route-batchId="@card.BatchId"
+                                       class="batch-open-btn batch-report-btn">
+                                        <i class="bi bi-graph-up-arrow"></i>
+                                        تقرير الأداء
+                                    </a>
+                                }
+                            </div>
+
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            // بحث في الدفعات
+            const searchInput = document.getElementById("batchSearch");
+            const cards = Array.from(document.querySelectorAll(".batch-card"));
+            if (searchInput) {
+                searchInput.addEventListener("input", function () {
+                    const val = (this.value || "").toLowerCase().trim();
+                    cards.forEach(function (c) {
+                        const text = c.getAttribute("data-search") || "";
+                        c.style.display = text.includes(val) ? "" : "none";
+                    });
+                });
+            }
+
+            // Archive manager toggle
+            const archiveSection = document.getElementById("archiveManagerSection");
+            const archiveToggle  = document.getElementById("archiveManagerToggle");
+            if (archiveSection && archiveToggle) {
+                const shouldOpenArchive = @Model.ShowArchived.ToString().ToLowerInvariant();
+                if (shouldOpenArchive) {
+                    archiveSection.classList.add("is-open");
+                    archiveToggle.setAttribute("aria-expanded", "true");
+                }
+                archiveToggle.addEventListener("click", function () {
+                    const isOpen = archiveSection.classList.contains("is-open");
+                    archiveSection.classList.toggle("is-open", !isOpen);
+                    archiveToggle.setAttribute("aria-expanded", (!isOpen).toString());
+                });
+            }
+        });
+    </script>
+}

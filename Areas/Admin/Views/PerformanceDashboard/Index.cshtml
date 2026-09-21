@@ -1,0 +1,203 @@
+﻿@model QdratNew.ViewModels.Dashboard.PerformanceDashboardViewModel
+@using QdratNew.Helpers
+
+@{
+    ViewData["Title"] = "📊 لوحة تحليل اختبارات مؤشر الأداء";
+}
+
+<!-- 🎨 تحسينات CSS -->
+<style>
+    .dashboard-card {
+        border-radius: 12px;
+        box-shadow: 0 3px 12px rgba(0,0,0,0.05);
+        background: linear-gradient(145deg, #ffffff, #f8fafc);
+        border: 1px solid #e2e8f0;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+
+        .dashboard-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 18px rgba(0,0,0,0.1);
+        }
+
+    .dashboard-icon {
+        font-size: 30px;
+        opacity: 0.8;
+    }
+
+    .card-metric {
+        font-size: 1.8rem;
+        font-weight: bold;
+    }
+
+    .card-title {
+        font-size: 1rem;
+        color: #6c757d;
+        margin-bottom: 6px;
+    }
+
+    /* 🟦 جدول الدفعات */
+    table {
+        border-collapse: separate !important;
+        border-spacing: 0 6px !important;
+    }
+
+    thead {
+        background-color: #f1f5f9;
+        color: #0d6efd;
+    }
+
+    tbody tr {
+        background-color: #fff;
+        border-radius: 8px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+        transition: all 0.2s ease;
+    }
+
+        tbody tr:hover {
+            background-color: #f9fbff;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+</style>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<div class="container-fluid mt-4" dir="rtl">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-bold text-primary mb-0">
+            <i class="bi bi-activity"></i> لوحة تحليل اختبارات مؤشر الأداء
+        </h3>
+        <small class="text-muted">آخر تحديث: @DateTime.Now.ToString("yyyy/MM/dd HH:mm")</small>
+    </div>
+
+    <!-- 🟩 الكروت الرئيسية -->
+    <div class="row g-3 mb-4 text-center">
+        <div class="col-md-3 col-6">
+            <div class="dashboard-card p-3 border-success border-2">
+                <i class="bi bi-journal-check text-success dashboard-icon mb-2"></i>
+                <div class="card-title">اختبارات هذا الأسبوع</div>
+                <div class="card-metric text-success">@Model.TotalExamsThisWeek</div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="dashboard-card p-3 border-info border-2">
+                <i class="bi bi-people text-info dashboard-icon mb-2"></i>
+                <div class="card-title">عدد الدفعات</div>
+                <div class="card-metric text-info">@Model.TotalBatches</div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="dashboard-card p-3 border-primary border-2">
+                <i class="bi bi-person-badge text-primary dashboard-icon mb-2"></i>
+                <div class="card-title">عدد الطلاب</div>
+                <div class="card-metric text-primary">@Model.TotalStudents</div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="dashboard-card p-3 border-warning border-2">
+                <i class="bi bi-bar-chart-line text-warning dashboard-icon mb-2"></i>
+                <div class="card-title">نسبة النجاح العامة</div>
+                <div class="card-metric text-warning">@Model.SuccessRate.ToString("0.0")%</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🟦 جدول الدفعات -->
+    <div class="card shadow-sm mt-4">
+        <div class="card-header bg-light fw-bold">
+            <i class="bi bi-calendar-check text-primary"></i> الدفعات التي تم إجراء اختبار المؤشر لها
+        </div>
+        <div class="card-body">
+            <table class="table table-hover table-bordered text-center align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>الدفعة</th>
+                        <th>عدد الاختبارات</th>
+                        <th>تاريخ آخر اختبار</th>
+                        <th>الخيارات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.ActiveBatches != null && Model.ActiveBatches.Any())
+                    {
+                        foreach (var b in Model.ActiveBatches.GroupBy(x => x.BatchId).Select(g => g.First()))
+                        {
+                            <tr>
+                                <td>@b.BatchName</td>
+                                <td>@Model.ActiveBatches.Count(x => x.BatchId == b.BatchId)</td>
+                                <td>@b.CreatedAt.ToString("yyyy/MM/dd")</td>
+                                <td class="d-flex justify-content-center gap-2">
+                                    <button class="btn btn-outline-primary btn-sm toggle-exams" data-batch="@b.BatchId">
+                                        <i class="bi bi-list-ul"></i> التفاصيل
+                                    </button>
+
+                              
+                                </td>
+
+                            </tr>
+                            <tr id="batch-row-@b.BatchId" class="d-none">
+                                <td colspan="4">
+                                    <div id="batch-exams-@b.BatchId" class="p-2 text-center text-muted">
+                                        ⏳ جارٍ تحميل الاختبارات...
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="4" class="text-muted">⚠️ لا توجد بيانات دفعات بعد.</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 🧠 نافذة التفاصيل -->
+    <div class="modal fade" id="batchModal" tabindex="-1" aria-labelledby="batchModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title"><i class="bi bi-graph-up"></i> تحليل أداء الدفعة</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="batchModalBody">
+                    <div class="text-center text-muted">جارٍ تحميل البيانات...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/dashboard-performance.js"></script>
+
+    <script>
+        $(document).ready(function () {
+        $(".toggle-exams").on("click", function () {
+            const batchId = $(this).data("batch");
+            const row = $("#batch-row-" + batchId);
+            const container = $("#batch-exams-" + batchId);
+
+            if (row.hasClass("d-none")) {
+                row.removeClass("d-none");
+                container.html("⏳ جارٍ تحميل الاختبارات...");
+                $.get(`/Admin/PerformanceDashboard/LoadBatchExams?batchId=${batchId}`, function (data) {
+                    container.html(data);
+                });
+            } else {
+                row.addClass("d-none");
+            }
+        });
+    });
+
+
+
+       
+
+        </script>
+}

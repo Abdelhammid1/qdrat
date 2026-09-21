@@ -1,0 +1,161 @@
+@model List<QdratNew.ViewModels.IntegrityViolations.IntegrityViolationRowVM>
+@using Microsoft.AspNetCore.Authorization
+@using QdratNew.Security.AdminPermissions
+@using QdratNew.Enums
+@inject IAuthorizationService AuthorizationService
+
+@{
+    ViewData["Title"] = "مخالفات النزاهة — ترجمة المتصفح";
+    var canResolve = (await AuthorizationService.AuthorizeAsync(User, AdminPermissionPolicies.IntegrityViolations_Resolve)).Succeeded;
+    bool showResolved = ViewBag.ShowResolved ?? false;
+    IntegrityAttemptType? filterAttemptType = ViewBag.FilterAttemptType;
+    int? filterAttemptEntityId = ViewBag.FilterAttemptEntityId;
+    bool isFiltered = filterAttemptType.HasValue || filterAttemptEntityId.HasValue;
+
+    string AttemptTypeLabel(IntegrityAttemptType t) => t switch
+    {
+        IntegrityAttemptType.Homework => "الواجب",
+        IntegrityAttemptType.Exam => "الاختبار",
+        IntegrityAttemptType.EnhancementSkill => "المهارات التعزيزية",
+        IntegrityAttemptType.Placement => "تحديد المستوى",
+        IntegrityAttemptType.PerformanceIndicator => "مؤشر الأداء",
+        IntegrityAttemptType.MinistrySim => "معمل القياس",
+        _ => t.ToString()
+    };
+}
+
+@section Styles {
+    <style>
+        :root {
+            --ink: #0D1B2A; --ink-2: #2C3E50; --ink-3: #5A6A7A; --ink-4: #8FA0B0;
+            --canvas: #F3F6FA; --surface: #FFFFFF; --border: #DDE4EC;
+            --blue: #1B5EAE; --blue-bg: #E8F1FB;
+            --rose: #BF1030; --rose-bg: #FDEAEE;
+            --emerald: #0D7A5B; --emerald-bg: #E4F5EE;
+            --r-md: 10px; --r-lg: 14px;
+            --sh-sm: 0 2px 8px rgba(13,27,42,.08);
+        }
+
+        .iv-page { background: var(--canvas); min-height: 100vh; padding: 32px 28px 64px; direction: rtl; font-family: 'Cairo', sans-serif; color: var(--ink-2); }
+
+        .iv-topbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin-bottom: 24px; }
+        .iv-title { font-size: 20px; font-weight: 700; color: var(--ink); }
+        .iv-sub { font-size: 14px; color: var(--ink-4); margin-top: 4px; }
+
+        .iv-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--sh-sm); overflow: hidden; }
+
+        .iv-toolbar { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+
+        table.iv-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+        table.iv-table th, table.iv-table td { padding: 10px 12px; text-align: right; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        table.iv-table th { color: var(--ink-3); font-weight: 600; background: #FAFBFD; font-size: 12.5px; }
+
+        .iv-badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+        .iv-badge.blocked { background: var(--rose-bg); color: var(--rose); }
+        .iv-badge.resolved { background: var(--emerald-bg); color: var(--emerald); }
+        .iv-type-chip { background: var(--blue-bg); color: var(--blue); padding: 2px 9px; border-radius: 7px; font-size: 12px; font-weight: 600; }
+
+        .iv-empty { padding: 48px 20px; text-align: center; color: var(--ink-4); }
+    </style>
+}
+
+<div class="iv-page">
+    <div class="iv-topbar">
+        <div>
+            <div class="iv-title">مخالفات النزاهة — استخدام ترجمة المتصفح</div>
+            <div class="iv-sub">المحاولات الموقوفة تلقائيًا نتيجة رصد ترجمة المتصفح أثناء الحل — إعادة الفتح هنا فقط.</div>
+        </div>
+    </div>
+
+    @if (TempData["Message"] != null)
+    {
+        <div class="alert alert-success">@TempData["Message"]</div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger">@TempData["Error"]</div>
+    }
+
+    @if (isFiltered)
+    {
+        <div class="alert alert-info d-flex justify-content-between align-items-center">
+            <span>
+                عرض مُصفّى @(filterAttemptType.HasValue ? $"— {AttemptTypeLabel(filterAttemptType.Value)}" : "")
+                @(filterAttemptEntityId.HasValue ? $"(رقم {filterAttemptEntityId.Value})" : "")
+            </span>
+            <a asp-action="Index" asp-route-showResolved="@showResolved" class="btn btn-sm btn-outline-secondary">إزالة التصفية</a>
+        </div>
+    }
+
+    <div class="iv-card">
+        <div class="iv-toolbar">
+            <a asp-action="Index" asp-route-showResolved="false" asp-route-attemptType="@filterAttemptType" asp-route-attemptEntityId="@filterAttemptEntityId" class="btn btn-sm @(showResolved ? "btn-outline-secondary" : "btn-primary")">الموقوفة فقط</a>
+            <a asp-action="Index" asp-route-showResolved="true" asp-route-attemptType="@filterAttemptType" asp-route-attemptEntityId="@filterAttemptEntityId" class="btn btn-sm @(showResolved ? "btn-primary" : "btn-outline-secondary")">عرض الكل (بما فيها المعاد فتحها)</a>
+        </div>
+
+        @if (!Model.Any())
+        {
+            <div class="iv-empty">لا توجد مخالفات مسجّلة حاليًا.</div>
+        }
+        else
+        {
+            <div style="overflow-x:auto;">
+                <table class="iv-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>الطالب</th>
+                            <th>المسار</th>
+                            <th>معرّف المحاولة</th>
+                            <th>وقت الرصد</th>
+                            <th>IP</th>
+                            <th>الحالة</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in Model)
+                        {
+                            <tr>
+                                <td>@row.Id</td>
+                                <td>
+                                    @(row.StudentName ?? "—")
+                                    <div style="color:var(--ink-4); font-size:11.5px;">#@row.StudentId</div>
+                                </td>
+                                <td><span class="iv-type-chip">@AttemptTypeLabel(row.AttemptType)</span></td>
+                                <td>@row.AttemptEntityId</td>
+                                <td>@row.DetectedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                                <td>@(row.IpAddress ?? "—")</td>
+                                <td>
+                                    @if (row.IsResolved)
+                                    {
+                                        <span class="iv-badge resolved">@(row.SelfResolved ? "أُعيد فتحها ذاتيًا (طالب)" : "تمت إعادة الفتح")</span>
+                                        @if (row.ResolvedAt.HasValue)
+                                        {
+                                            <div style="color:var(--ink-4); font-size:11.5px;">@row.ResolvedAt.Value.ToString("yyyy-MM-dd HH:mm")</div>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="iv-badge blocked">موقوفة</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (!row.IsResolved && canResolve)
+                                    {
+                                        <form asp-action="Resolve" method="post" style="display:flex; gap:6px; align-items:center;">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@row.Id" />
+                                            <input type="text" name="note" placeholder="ملاحظة (اختياري)" class="form-control form-control-sm" style="width:150px;" />
+                                            <button type="submit" class="btn btn-sm btn-outline-primary" onclick="return confirm('تأكيد إعادة فتح هذه المحاولة؟');">إعادة فتح</button>
+                                        </form>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>

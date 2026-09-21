@@ -1,0 +1,112 @@
+@model QdratNew.ViewModels.Students.MinistrySimExamSolveVm
+@using QdratNew.Helpers
+@{
+    var q = Model.Question;
+    var isRTL = q?.IsRTL ?? true;
+    Func<string, string> ToSafe = s => NumberHelper.ToIndicNumbersSafe(s);
+}
+
+@if (q == null)
+{
+    <div class="qx-error-state">⚠️ لم يتم تحميل السؤال بشكل صحيح.</div>
+    return;
+}
+
+<div class="qx-shell @(isRTL ? "qx-rtl" : "qx-ltr")" dir="@(isRTL ? "rtl" : "ltr")">
+
+    <form method="post" asp-action="SubmitAnswer" autocomplete="off">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="examId" value="@Model.MinistrySimExamId" />
+        <input type="hidden" name="stageNumber" value="@Model.StageNumber" />
+        <input type="hidden" name="stageQuestionId" value="@Model.StageQuestionId" />
+        <input type="hidden" name="currentQuestionId" value="@Model.CurrentQuestionId" />
+        <input type="hidden" name="review" value="@(Model.IsReviewVisible ? "true" : "false")" />
+
+        <div class="qx-header">
+            <div class="qx-question-badge">
+                <span class="qx-question-badge__label">السؤال</span>
+                <span class="qx-question-badge__num">@ToSafe(Model.CurrentIndex.ToString())</span>
+                <span class="qx-question-badge__sep">/</span>
+                <span class="qx-question-badge__total">@ToSafe(Model.Total.ToString())</span>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(q.SectionTitle))
+            {
+                <div class="qx-section-chip">المحور: @q.SectionTitle</div>
+            }
+
+            @if (Model.IsFlaggedForReview)
+            {
+                <span class="qx-flag-badge">🚩 معلَّم للمراجعة</span>
+            }
+        </div>
+
+        @await Html.PartialAsync("_ExamQuestionContent", new QdratNew.ViewModels.Students.ExamQuestionContentVm
+        {
+            Question = q,
+            OptionFieldName = "selectedOptionIndex",
+            UseOptionIndex = true,
+            SelectedOptionIndex = Model.SelectedOptionIndex
+        })
+
+        <div class="qx-nav-bar">
+            <button type="submit" name="nav" value="prev" class="qx-nav-btn qx-nav-btn--prev" @(Model.CurrentIndex <= 1 ? "disabled" : "")>
+                السابق
+            </button>
+
+            <button type="submit" name="nav" value="@(Model.IsFlaggedForReview ? "unflag" : "flag")" class="qx-nav-btn qx-nav-btn--flag">
+                @(Model.IsFlaggedForReview ? "إلغاء علامة المراجعة" : "ضع علامة للمراجعة")
+            </button>
+
+            <button type="submit" name="nav" value="@(Model.CurrentIndex >= Model.Total ? "review" : "next")" class="qx-nav-btn qx-nav-btn--next">
+                @(Model.CurrentIndex >= Model.Total ? "مراجعة الأسئلة" : "التالي")
+            </button>
+        </div>
+
+        @if (Model.IsReviewVisible && Model.ReviewQuestions.Count > 0)
+        {
+            <section class="mse-review" aria-labelledby="mse-review-title" dir="rtl">
+                <h5 id="mse-review-title">مراجعة أسئلة المرحلة @Model.StageNumber</h5>
+                <p>اضغط رقم السؤال لحفظ إجابتك الحالية والانتقال إليه. يمكنك المراجعة حتى انتهاء وقت المرحلة أو إنهائها.</p>
+                <div class="mse-review-legend">
+                    <span>✓ مجاب</span><span>○ غير مجاب</span><span>⚑ للمراجعة</span>
+                </div>
+                <div class="mse-review-grid">
+                    @foreach (var item in Model.ReviewQuestions)
+                    {
+                        var isCurrent = item.QuestionId == Model.CurrentQuestionId;
+                        var status = item.IsAnswered ? "مجاب" : "غير مجاب";
+                        var label = $"السؤال {item.Number} — {status}" + (item.IsFlaggedForReview ? " — معلّم للمراجعة" : "");
+                        <button type="submit" name="nav" value="review:@item.QuestionId"
+                                class="mse-review-question @(item.IsAnswered ? "is-answered" : "") @(isCurrent ? "is-current" : "")"
+                                aria-label="@label" title="@label" aria-current="@(isCurrent ? "true" : "false")">
+                            <span>@ToSafe(item.Number.ToString())</span>
+                            <small aria-hidden="true">@(item.IsFlaggedForReview ? "⚑" : item.IsAnswered ? "✓" : "○")</small>
+                        </button>
+                    }
+                </div>
+                <p class="mse-review-note">حالات الأزرار تعكس الإجابات المحفوظة. الإطار الأزرق يحدد السؤال الحالي.</p>
+            </section>
+        }
+    </form>
+</div>
+
+@await Html.PartialAsync("_UnifiedExamStyles")
+
+<style>
+    .qx-flag-badge{background:#fef3c7;color:#d97706;border-radius:50px;padding:.3rem .9rem;font-size:.8rem;font-weight:700;}
+    .mse-review{margin-top:1.5rem;padding:1.25rem;background:#fff;border:1px solid var(--qx-border);border-radius:16px;text-align:right;}
+    .mse-review h5{font-weight:700;color:var(--qx-primary);}
+    .mse-review p{font-size:.9rem;line-height:1.8;color:#4b5563;}
+    .mse-review-legend{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;font-size:.85rem;}
+    .mse-review-grid{display:flex;flex-wrap:wrap;gap:.65rem;}
+    .mse-review-question{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:48px;min-height:54px;border:1px solid #9ca3af;border-radius:10px;background:#f9fafb;color:#374151;font-weight:700;cursor:pointer;}
+    .mse-review-question.is-answered{background:#d1fae5;border-color:#059669;color:#065f46;}
+    .mse-review-question.is-current{outline:3px solid var(--qx-primary);outline-offset:2px;}
+    .mse-review-question:focus-visible{outline:3px solid #111827;outline-offset:2px;}
+    .mse-review-question small{font-size:.8rem;}
+    .mse-review .mse-review-note{margin:1rem 0 0;font-size:.8rem;}
+    @@media (max-width:600px){.qx-nav-bar{flex-wrap:wrap;}.qx-nav-btn--next{font-size:.78rem;padding:.55rem .75rem;}}
+</style>
+
+@await Html.PartialAsync("_ExamOptionSelectionScript")

@@ -1,0 +1,385 @@
+﻿@model QdratNew.ViewModels.Lesson.LessonCompletionFormViewModel
+@{
+    ViewData["Title"] = "تسجيل المؤشرات المنتهية";
+}
+
+<div class="container mt-4" dir="rtl">
+    <h2 class="text-center text-primary mb-4">تسجيل المؤشرات المنتهية للدفعة</h2>
+
+    <form asp-action="SaveCompletedLessons" method="post">
+        @Html.AntiForgeryToken()
+        <div class="form-group">
+            <label for="CompletionTitle">عنوان تسجيل المؤشرات</label>
+            <input asp-for="CompletionTitle" class="form-control" />
+            <span asp-validation-for="CompletionTitle" class="text-danger"></span>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <label class="form-label">اختر الدفعة</label>
+                <select asp-for="SelectedBatchId" class="form-select" asp-items="Model.BatchList" id="SelectedBatchId">
+                    <option disabled selected>-- اختر دفعة --</option>
+                </select>
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label">اختر القسم</label>
+                <select asp-for="SelectedCurriculumId" class="form-select" asp-items="Model.CurriculumList" id="SelectedCurriculumId">
+                    <option disabled selected>-- اختر المنهج --</option>
+                </select>
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label">اختر المحور</label>
+                <select asp-for="SelectedSectionId" class="form-select" asp-items="Model.SectionList" id="SelectedSectionId">
+                    <option disabled selected>-- اختر المحور --</option>
+                </select>
+            </div>
+
+          
+        </div>
+
+        <div class="row mt-4">
+            <!-- المؤشرات المتاحة -->
+            <div class="col-md-5">
+                <h5 class="text-center text-muted">المؤشرات المتاحة</h5>
+                <ul id="availableLessons" class="list-group" style="min-height: 300px;">
+                    <!-- يتم تعبئتها -->
+                </ul>
+            </div>
+
+            <!-- زر النقل -->
+            <div class="col-md-2 text-center d-flex align-items-center justify-content-center">
+                <button type="button" id="moveToCompleted" class="btn btn-outline-success">
+                    <i class="fa fa-arrow-left fa-2x"></i>
+                </button>
+            </div>
+
+            <!-- المؤشرات المنتهية -->
+            <div class="col-md-5">
+                <h5 class="text-center text-muted">المؤشرات المنتهية</h5>
+                <ul id="completedLessons" class="list-group" style="min-height: 300px;">
+                    <!-- يتم نقلها هنا -->
+                </ul>
+            </div>
+        </div>
+
+        <input type="hidden" id="CompletedLessonIds" name="CompletedLessonIds" />
+
+        <div class="text-center mt-4">
+            <button type="submit" class="btn btn-success px-5 py-2">
+                <i class="fa fa-save"></i> حفظ الدروس المنتهية
+            </button>
+        </div>
+    </form>
+</div>
+
+
+@section Scripts {
+    <script>
+        document.getElementById("SelectedBatchId").addEventListener("change", function () {
+            const batchId = this.value;
+            const curriculumDropdown = document.getElementById("SelectedCurriculumId");
+            const sectionDropdown = document.getElementById("SelectedSectionId");
+            const container = document.getElementById("availableLessons");
+
+            curriculumDropdown.innerHTML = '<option>جاري التحميل...</option>';
+            sectionDropdown.innerHTML = '<option disabled selected>-- اختر المحور --</option>';
+            container.innerHTML = '';
+
+            fetch(`/Admin/BatchLessonCompletions/GetCurriculaByBatch?batchId=${batchId}`)
+                .then(res => res.json())
+                .then(data => {
+                    curriculumDropdown.innerHTML = '<option disabled selected>-- اختر المنهج --</option>';
+                    data.forEach(item => {
+                        curriculumDropdown.innerHTML += `<option value="${item.id}">${item.title}</option>`;
+                    });
+                });
+        });
+
+        document.getElementById("SelectedCurriculumId").addEventListener("change", function () {
+            const curriculumId = this.value;
+            const sectionDropdown = document.getElementById("SelectedSectionId");
+            const container = document.getElementById("availableLessons");
+
+            sectionDropdown.innerHTML = '<option>جاري التحميل...</option>';
+            container.innerHTML = '';
+
+            fetch(`/Admin/BatchLessonCompletions/GetSectionsByCurriculum?curriculumId=${curriculumId}`)
+                .then(res => res.json())
+                .then(data => {
+                    sectionDropdown.innerHTML = '<option disabled selected>-- اختر المحور --</option>';
+                    data.forEach(section => {
+                        sectionDropdown.innerHTML += `<option value="${section.id}">${section.title}</option>`;
+                    });
+                });
+        });
+
+        document.getElementById("SelectedSectionId").addEventListener("change", function () {
+            const sectionId = this.value;
+            const container = document.getElementById("availableLessons");
+
+            container.innerHTML = '<li class="list-group-item text-center">... جاري التحميل</li>';
+
+            fetch(`/Admin/BatchLessonCompletions/GetLessonsBySection?sectionId=${sectionId}`)
+                .then(res => res.json())
+                .then(data => {
+                    container.innerHTML = '';
+                    if (data.length === 0) {
+                        container.innerHTML = '<li class="list-group-item text-center text-danger">لا يوجد مؤشرات مرتبطة بهذا المحور</li>';
+                        return;
+                    }
+                    data.forEach(lesson => {
+                        container.innerHTML += `
+                            <li class="list-group-item d-flex justify-content-between align-items-center" data-id="${lesson.id}">
+                                ${lesson.title}
+                                <button type="button" class="btn btn-sm btn-outline-primary move-btn"><i class="fas fa-plus"></i></button>
+                            </li>`;
+                    });
+                });
+        });
+
+        document.addEventListener("click", function (e) {
+            if (e.target.closest(".move-btn")) {
+                const item = e.target.closest("li");
+                const id = item.dataset.id;
+                const alreadyExists = document.querySelector(`#completedLessons li[data-id='${id}']`);
+                if (alreadyExists) return;
+
+                e.target.remove();
+
+                const returnBtn = document.createElement("button");
+                returnBtn.type = "button";
+                returnBtn.className = "btn btn-sm btn-outline-danger return-btn";
+                returnBtn.innerHTML = `<i class="fas fa-minus"></i>`;
+                item.appendChild(returnBtn);
+
+                item.classList.add("bg-light");
+                document.getElementById("completedLessons").appendChild(item);
+                updateHiddenField();
+            }
+
+            if (e.target.closest(".return-btn")) {
+                const item = e.target.closest("li");
+                const id = item.dataset.id;
+                const alreadyExists = document.querySelector(`#availableLessons li[data-id='${id}']`);
+                if (alreadyExists) return;
+
+                e.target.remove();
+
+                const sendBtn = document.createElement("button");
+                sendBtn.type = "button";
+                sendBtn.className = "btn btn-sm btn-outline-primary move-btn";
+                sendBtn.innerHTML = `<i class="fas fa-plus"></i>`;
+                item.appendChild(sendBtn);
+
+                item.classList.remove("bg-light");
+                document.getElementById("availableLessons").appendChild(item);
+                updateHiddenField();
+            }
+        });
+
+        function updateHiddenField() {
+            const completed = document.querySelectorAll("#completedLessons li");
+            const ids = Array.from(completed).map(li => li.dataset.id);
+            document.getElementById("CompletedLessonIds").value = ids.join(',');
+        }
+
+        document.addEventListener("DOMContentLoaded", function () {
+            const selectedBatch = document.getElementById("SelectedBatchId").value;
+            const selectedCurriculum = document.getElementById("SelectedCurriculumId").value;
+            const selectedSection = document.getElementById("SelectedSectionId").value;
+
+            if (selectedBatch) {
+                document.getElementById("SelectedBatchId").dispatchEvent(new Event('change'));
+            }
+
+            setTimeout(() => {
+                if (selectedCurriculum) {
+                    document.getElementById("SelectedCurriculumId").dispatchEvent(new Event('change'));
+                }
+
+                if (selectedSection) {
+                    document.getElementById("SelectedSectionId").dispatchEvent(new Event('change'));
+                }
+            }, 500);
+        });
+    </script>
+}
+
+
+
+
+
+@* 
+@section Scripts {
+    <script>
+        // عند اختيار الدفعة
+        document.getElementById("SelectedBatchId").addEventListener("change", function () {
+            const batchId = this.value;
+            const curriculumDropdown = document.getElementById("SelectedCurriculumId");
+            const sectionDropdown = document.getElementById("SelectedSectionId");
+            const unitDropdown = document.getElementById("SelectedUnitId");
+            const container = document.getElementById("availableLessons");
+
+            curriculumDropdown.innerHTML = '<option>جاري التحميل...</option>';
+            sectionDropdown.innerHTML = '<option disabled selected>-- اختر المحور --</option>';
+            unitDropdown.innerHTML = '<option disabled selected>-- اختر الوحدة --</option>';
+            container.innerHTML = '';
+
+            fetch(`/Admin/BatchLessonCompletions/GetCurriculaByBatch?batchId=${batchId}`)
+                .then(res => res.json())
+                .then(data => {
+                    curriculumDropdown.innerHTML = '<option disabled selected>-- اختر المنهج --</option>';
+                    data.forEach(item => {
+                        curriculumDropdown.innerHTML += `<option value="${item.id}">${item.title}</option>`;
+                    });
+                });
+        });
+
+        // عند اختيار المنهج
+        document.getElementById("SelectedCurriculumId").addEventListener("change", function () {
+            const curriculumId = this.value;
+            const sectionDropdown = document.getElementById("SelectedSectionId");
+            const unitDropdown = document.getElementById("SelectedUnitId");
+            const container = document.getElementById("availableLessons");
+
+            sectionDropdown.innerHTML = '<option>جاري التحميل...</option>';
+            unitDropdown.innerHTML = '<option disabled selected>-- اختر الوحدة --</option>';
+            container.innerHTML = '';
+
+            fetch(`/Admin/BatchLessonCompletions/GetSectionsByCurriculum?curriculumId=${curriculumId}`)
+                .then(res => res.json())
+                .then(data => {
+                    sectionDropdown.innerHTML = '<option disabled selected>-- اختر المحور --</option>';
+                    data.forEach(section => {
+                        sectionDropdown.innerHTML += `<option value="${section.id}">${section.title}</option>`;
+                    });
+                });
+        });
+
+        // عند اختيار المحور
+        document.getElementById("SelectedSectionId").addEventListener("change", function () {
+            const sectionId = this.value;
+            const unitDropdown = document.getElementById("SelectedUnitId");
+            const container = document.getElementById("availableLessons");
+
+            unitDropdown.innerHTML = '<option>جاري التحميل...</option>';
+            container.innerHTML = '';
+
+            fetch(`/Admin/BatchLessonCompletions/GetUnitsBySection?sectionId=${sectionId}`)
+                .then(res => res.json())
+                .then(data => {
+                    unitDropdown.innerHTML = '<option disabled selected>-- اختر الوحدة --</option>';
+                    data.forEach(unit => {
+                        unitDropdown.innerHTML += `<option value="${unit.id}">${unit.title}</option>`;
+                    });
+                });
+        });
+
+        // عند اختيار الوحدة
+        document.getElementById("SelectedUnitId").addEventListener("change", function () {
+            const unitId = this.value;
+            const container = document.getElementById("availableLessons");
+            container.innerHTML = '<li class="list-group-item text-center">... جاري التحميل</li>';
+
+            fetch(`/Admin/BatchLessonCompletions/GetLessonsByUnit?unitId=${unitId}`)
+                .then(res => res.json())
+                .then(data => {
+                    container.innerHTML = '';
+                    if (data.length === 0) {
+                        container.innerHTML = '<li class="list-group-item text-center text-danger">لا يوجد مؤشرات مرتبطة بهذه الوحدة</li>';
+                        return;
+                    }
+                    data.forEach(lesson => {
+                        container.innerHTML += `
+                            <li class="list-group-item d-flex justify-content-between align-items-center" data-id="${lesson.id}">
+                                ${lesson.title}
+                                <button type="button" class="btn btn-sm btn-outline-primary move-btn"><i class="fas fa-plus"></i></button>
+                            </li>`;
+                    });
+                });
+        });
+
+        // منطق النقل بين القوائم
+        document.addEventListener("click", function (e) {
+            // ➕ النقل إلى المؤشرات المنتهية
+            if (e.target.closest(".move-btn")) {
+                const item = e.target.closest("li");
+                const id = item.dataset.id;
+                const alreadyExists = document.querySelector(`#completedLessons li[data-id='${id}']`);
+                if (alreadyExists) return;
+
+                e.target.remove(); // إزالة زر الإضافة +
+
+                const returnBtn = document.createElement("button");
+                returnBtn.type = "button";
+                returnBtn.className = "btn btn-sm btn-outline-danger return-btn";
+                returnBtn.innerHTML = `<i class="fas fa-minus"></i>`;
+                item.appendChild(returnBtn);
+
+                item.classList.add("bg-light");
+                document.getElementById("completedLessons").appendChild(item);
+                updateHiddenField();
+            }
+
+            // ➖ الرجوع إلى المؤشرات المتاحة
+            if (e.target.closest(".return-btn")) {
+                const item = e.target.closest("li");
+                const id = item.dataset.id;
+                const alreadyExists = document.querySelector(`#availableLessons li[data-id='${id}']`);
+                if (alreadyExists) return;
+
+                e.target.remove(); // إزالة زر الرجوع -
+
+                const sendBtn = document.createElement("button");
+                sendBtn.type = "button";
+                sendBtn.className = "btn btn-sm btn-outline-primary move-btn";
+                sendBtn.innerHTML = `<i class="fas fa-plus"></i>`;
+                item.appendChild(sendBtn);
+
+                item.classList.remove("bg-light");
+                document.getElementById("availableLessons").appendChild(item);
+                updateHiddenField();
+            }
+        });
+
+        // تحديث الحقل المخفي
+        function updateHiddenField() {
+            const completed = document.querySelectorAll("#completedLessons li");
+            const ids = Array.from(completed).map(li => li.dataset.id);
+            document.getElementById("CompletedLessonIds").value = ids.join(',');
+
+
+                    document.addEventListener("DOMContentLoaded", function () {
+            const selectedBatch = document.getElementById("SelectedBatchId").value;
+            const selectedCurriculum = document.getElementById("SelectedCurriculumId").value;
+            const selectedSection = document.getElementById("SelectedSectionId").value;
+            const selectedUnit = document.getElementById("SelectedUnitId").value;
+
+            if (selectedBatch) {
+                document.getElementById("SelectedBatchId").dispatchEvent(new Event('change'));
+            }
+
+            setTimeout(() => {
+                if (selectedCurriculum) {
+                    document.getElementById("SelectedCurriculumId").dispatchEvent(new Event('change'));
+                }
+
+                if (selectedSection) {
+                    document.getElementById("SelectedSectionId").dispatchEvent(new Event('change'));
+                }
+
+                if (selectedUnit) {
+                    document.getElementById("SelectedUnitId").dispatchEvent(new Event('change'));
+                }
+            }, 500); // ⏱️ تأخير بسيط حتى تكتمل الخطوات
+        });
+
+
+
+        }
+    </script>
+}
+
+ *@

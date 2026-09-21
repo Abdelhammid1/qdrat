@@ -1,0 +1,1223 @@
+﻿@inject QdratNew.Interfaces.IUserAccountDropdownService AccountDropdownService
+@inject Microsoft.AspNetCore.Http.IHttpContextAccessor HttpContextAccessor
+@using QdratNew.Helpers
+@inject QdratNew.Services.Interfaces.IUserContextService UserContext
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    @await Component.InvokeAsync("SiteMetaData")
+    @RenderSection("Styles", required: false)
+    <link rel="icon" type="image/x-icon" href="~/favicon.ico" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css" />
+    <link href="~/css/homework-report.css" rel="stylesheet" />
+    <link href="~/css/stitch-report.css" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.5/css/jquery.dataTables.min.css" />
+    <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.1/css/buttons.dataTables.min.css" />
+    <link href="~/css/site.css" rel="stylesheet" asp-append-version="true" />
+    <link href="~/libs/datatables/css/datatables.bootstrap5.min.css" rel="stylesheet" />
+    <link href="~/css/qdrat.css" rel="stylesheet" asp-append-version="true" />
+    <link href="~/css/admin-sidebar.css" rel="stylesheet" />
+
+    <style>
+        /* ============================================================
+                                           QDRAT ADMIN SHELL — Design System Variables
+                                        ============================================================ */
+        :root {
+            --sidebar-w: 260px;
+            --sidebar-collapsed-w: 64px;
+            --topbar-h: 56px;
+            --brand-900: #0f1623;
+            --brand-800: #161f30;
+            --brand-700: #1d2a40;
+            --brand-600: #243350;
+            --brand-accent: #3b82f6;
+            --brand-accent-glow: rgba(59, 130, 246, 0.18);
+            --brand-accent-hover: #2563eb;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --divider: rgba(255,255,255,0.06);
+            --item-hover-bg: rgba(255,255,255,0.055);
+            --item-active-bg: rgba(59,130,246,0.15);
+            --topbar-bg: #ffffff;
+            --topbar-border: #e2e8f0;
+            --topbar-shadow: 0 1px 3px rgba(0,0,0,0.07);
+            --content-bg: #f4f6fb;
+            --radius-md: 8px;
+            --radius-lg: 12px;
+            --transition-fast: 0.18s cubic-bezier(.4,0,.2,1);
+            --transition-med: 0.28s cubic-bezier(.4,0,.2,1);
+        }
+
+        /* ============================================================
+                                           RESET & BASE
+                                        ============================================================ */
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            font-family: 'Cairo', sans-serif;
+            font-size: 14px;
+            background: var(--content-bg);
+            color: #1e293b;
+            overflow-x: hidden;
+        }
+
+        /* ============================================================
+                                           LAYOUT SHELL
+                                        ============================================================ */
+        .admin-shell {
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* ============================================================
+                                           SIDEBAR
+                                        ============================================================ */
+        #qdratSidebar {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: var(--sidebar-w);
+            height: 100vh;
+            background: var(--brand-900);
+            display: flex;
+            flex-direction: column;
+            z-index: 1040;
+            transition: width var(--transition-med);
+            overflow: hidden;
+            border-left: 1px solid var(--divider);
+        }
+
+            #qdratSidebar.collapsed {
+                width: var(--sidebar-collapsed-w);
+            }
+
+        /* ---- Sidebar Header ---- */
+        .sidebar-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 14px;
+            height: var(--topbar-h);
+            border-bottom: 1px solid var(--divider);
+            flex-shrink: 0;
+            gap: 10px;
+        }
+
+        .sidebar-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            overflow: hidden;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .sidebar-logo-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: var(--brand-accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 15px;
+            color: #fff;
+        }
+
+        .sidebar-logo-text {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-primary);
+            white-space: nowrap;
+            opacity: 1;
+            transition: opacity var(--transition-med);
+        }
+
+        #qdratSidebar.collapsed .sidebar-logo-text,
+        #qdratSidebar.collapsed .link-label,
+        #qdratSidebar.collapsed .sidebar-section-label,
+        #qdratSidebar.collapsed .nav-arrow {
+            opacity: 0;
+            pointer-events: none;
+            width: 0;
+            overflow: hidden;
+        }
+
+        .sidebar-toggle-btn {
+            width: 30px;
+            height: 30px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: background var(--transition-fast), color var(--transition-fast);
+        }
+
+            .sidebar-toggle-btn:hover {
+                background: var(--item-hover-bg);
+                color: var(--text-primary);
+            }
+
+        /* ---- Sidebar Nav Body ---- */
+        .sidebar-nav-body {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 10px 0 0;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255,255,255,0.1) transparent;
+        }
+
+            .sidebar-nav-body::-webkit-scrollbar {
+                width: 3px;
+            }
+
+            .sidebar-nav-body::-webkit-scrollbar-thumb {
+                background: rgba(255,255,255,0.1);
+                border-radius: 2px;
+            }
+
+        /* ---- Section Labels ---- */
+        .sidebar-section-label {
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            padding: 14px 18px 5px;
+            white-space: nowrap;
+            transition: opacity var(--transition-med);
+        }
+
+        /* ---- Nav Items ---- */
+        .sidebar-nav-list {
+            list-style: none;
+            margin: 0;
+            padding: 0 8px;
+        }
+
+            .sidebar-nav-list .nav-item {
+                margin-bottom: 1px;
+            }
+
+            .sidebar-nav-list .nav-link {
+                display: flex;
+                align-items: center;
+                gap: 11px;
+                padding: 8px 10px;
+                border-radius: var(--radius-md);
+                color: var(--text-secondary);
+                text-decoration: none;
+                white-space: nowrap;
+                font-size: 13px;
+                font-weight: 500;
+                transition: background var(--transition-fast), color var(--transition-fast);
+                position: relative;
+                cursor: pointer;
+                border: none;
+                background: transparent;
+                width: 100%;
+                text-align: right;
+            }
+
+                .sidebar-nav-list .nav-link:hover {
+                    background: var(--item-hover-bg);
+                    color: var(--text-primary);
+                }
+
+                .sidebar-nav-list .nav-link.active {
+                    background: var(--item-active-bg);
+                    color: var(--brand-accent);
+                    font-weight: 600;
+                }
+
+                    .sidebar-nav-list .nav-link.active .nav-icon {
+                        color: var(--brand-accent);
+                    }
+
+        /* ---- Nav Icon ---- */
+        .nav-icon {
+            font-size: 15px;
+            width: 20px;
+            text-align: center;
+            flex-shrink: 0;
+            transition: color var(--transition-fast);
+        }
+
+        /* ---- Nav Arrow (collapse indicator) ---- */
+        .nav-arrow {
+            margin-right: auto;
+            margin-left: 0;
+            font-size: 10px;
+            color: var(--text-muted);
+            transition: transform var(--transition-fast), opacity var(--transition-med);
+        }
+
+        .nav-link[aria-expanded="true"] .nav-arrow {
+            transform: rotate(90deg);
+            color: var(--text-secondary);
+        }
+
+        /* ---- Sub-Menu ---- */
+        .sidebar-submenu {
+            list-style: none;
+            margin: 2px 0 4px;
+            padding: 0 0 0 10px;
+        }
+
+            .sidebar-submenu .nav-link {
+                font-size: 12.5px;
+                padding: 6px 10px;
+                color: var(--text-muted);
+                gap: 8px;
+            }
+
+                .sidebar-submenu .nav-link:hover {
+                    color: var(--text-primary);
+                    background: var(--item-hover-bg);
+                }
+
+                .sidebar-submenu .nav-link.active {
+                    color: var(--brand-accent);
+                    background: var(--item-active-bg);
+                }
+
+        /* Sub-section labels inside collapse */
+        .submenu-label {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: .06em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            padding: 8px 10px 3px 10px;
+            display: block;
+        }
+
+        /* ---- Sidebar Footer ---- */
+        .sidebar-footer {
+            border-top: 1px solid var(--divider);
+            padding: 8px;
+            flex-shrink: 0;
+            background: var(--brand-900);
+            max-height: 45vh;
+            overflow: hidden;
+        }
+
+        .sidebar-footer-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .sidebar-footer-content {
+            max-height: calc(45vh - 50px);
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding-top: 6px;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(148,163,184,.35) transparent;
+        }
+
+            .sidebar-footer-content::-webkit-scrollbar {
+                width: 5px;
+            }
+
+            .sidebar-footer-content::-webkit-scrollbar-thumb {
+                background: rgba(148,163,184,.35);
+                border-radius: 999px;
+            }
+
+        .sidebar-footer-toggle {
+            width: 100%;
+            min-height: 42px;
+        }
+
+            .sidebar-footer-toggle[aria-expanded="true"] .nav-arrow {
+                transform: rotate(-90deg);
+            }
+
+        /* ---- Collapse Base Control ---- */
+        #qdratSidebar .collapse:not(.show) {
+            display: none;
+        }
+
+        #qdratSidebar .collapse.show {
+            display: block;
+        }
+
+        /* Collapsed tooltip hint */
+        #qdratSidebar.collapsed,
+        #qdratSidebar.collapsed:hover,
+        body.sidebar-is-collapsed #qdratSidebar,
+        body.sidebar-is-collapsed #qdratSidebar:hover {
+            width: var(--sidebar-collapsed-w) !important;
+            overflow: visible;
+        }
+
+            #qdratSidebar.collapsed .sidebar-nav-body,
+            body.sidebar-is-collapsed #qdratSidebar .sidebar-nav-body {
+                overflow-y: auto;
+                overflow-x: visible;
+            }
+
+                /*
+                   عند طي القائمة نخفي فقط القوائم المفتوحة مباشرة داخل جسم المنيو أو الفوتر
+                   إذا لم تكن Flyout.
+                   لا نخفي الـ collapse الداخلي الموجود داخل Flyout حتى تعمل قوائم
+                   _AdminFooterDropdownPartial أثناء الطي.
+                */
+                #qdratSidebar.collapsed .sidebar-nav-body > .collapse.show:not(.qdrat-flyout-panel),
+                body.sidebar-is-collapsed #qdratSidebar .sidebar-nav-body > .collapse.show:not(.qdrat-flyout-panel),
+                #qdratSidebar.collapsed .sidebar-footer > .sidebar-nav-list > .nav-item > .collapse.show:not(.qdrat-flyout-panel),
+                body.sidebar-is-collapsed #qdratSidebar .sidebar-footer > .sidebar-nav-list > .nav-item > .collapse.show:not(.qdrat-flyout-panel) {
+                    display: none !important;
+                }
+
+            #qdratSidebar.collapsed .qdrat-flyout-panel .collapse.show,
+            body.sidebar-is-collapsed #qdratSidebar .qdrat-flyout-panel .collapse.show {
+                display: block !important;
+                position: static !important;
+                width: auto !important;
+                max-height: none !important;
+                overflow: visible !important;
+                padding: 0 !important;
+                margin: 2px 0 4px 0 !important;
+                background: transparent !important;
+                border: 0 !important;
+                border-radius: 0 !important;
+                box-shadow: none !important;
+            }
+
+            #qdratSidebar.collapsed .sidebar-logo-text,
+            #qdratSidebar.collapsed .link-label,
+            #qdratSidebar.collapsed .sidebar-section-label,
+            #qdratSidebar.collapsed .nav-arrow,
+            body.sidebar-is-collapsed #qdratSidebar .sidebar-logo-text,
+            body.sidebar-is-collapsed #qdratSidebar .link-label,
+            body.sidebar-is-collapsed #qdratSidebar .sidebar-section-label,
+            body.sidebar-is-collapsed #qdratSidebar .nav-arrow {
+                display: none !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                width: 0 !important;
+                overflow: hidden !important;
+            }
+
+            #qdratSidebar.collapsed .sidebar-footer {
+                padding: 8px 6px;
+                max-height: none;
+                overflow: visible;
+            }
+
+            #qdratSidebar.collapsed .nav-link {
+                justify-content: center;
+            }
+
+                #qdratSidebar.collapsed .nav-link .link-label {
+                    display: none;
+                }
+
+            #qdratSidebar.collapsed .sidebar-nav-list .nav-link {
+                padding: 10px;
+            }
+
+            #qdratSidebar.collapsed .sidebar-section-label {
+                display: none;
+            }
+
+            /* ============================================================
+                   Collapsed Sidebar Flyout Submenus
+                   - يظهر بجانب الشريط عند الطي
+                   - يعمل مع القوائم الرئيسية وقائمة أدوات الإدارة
+                ============================================================ */
+            #qdratSidebar.collapsed .qdrat-flyout-panel.show {
+                display: block !important;
+                position: fixed;
+                right: var(--sidebar-collapsed-w);
+                width: 276px;
+                max-height: min(76vh, 560px);
+                overflow-y: auto;
+                overflow-x: hidden;
+                padding: 8px;
+                background: var(--brand-800);
+                border: 1px solid var(--divider);
+                border-radius: 14px;
+                box-shadow: 0 18px 45px rgba(0,0,0,.32);
+                z-index: 2500;
+                scrollbar-width: thin;
+                scrollbar-color: rgba(148,163,184,.35) transparent;
+            }
+
+                #qdratSidebar.collapsed .qdrat-flyout-panel.show::-webkit-scrollbar {
+                    width: 5px;
+                }
+
+                #qdratSidebar.collapsed .qdrat-flyout-panel.show::-webkit-scrollbar-thumb {
+                    background: rgba(148,163,184,.35);
+                    border-radius: 999px;
+                }
+
+                #qdratSidebar.collapsed .qdrat-flyout-panel.show .sidebar-submenu,
+                #qdratSidebar.collapsed .qdrat-flyout-panel.show .submenu-label {
+                    display: block !important;
+                }
+
+                #qdratSidebar.collapsed .qdrat-flyout-panel.show .sidebar-submenu {
+                    margin: 0;
+                    padding: 0;
+                }
+
+                #qdratSidebar.collapsed .qdrat-flyout-panel.show .submenu-label {
+                    color: var(--text-muted);
+                    padding: 8px 10px 4px;
+                }
+
+                #qdratSidebar.collapsed .qdrat-flyout-panel.show .nav-link {
+                    justify-content: flex-start;
+                    padding: 8px 10px;
+                    gap: 9px;
+                }
+
+                    #qdratSidebar.collapsed .qdrat-flyout-panel.show .nav-link .link-label,
+                    #qdratSidebar.collapsed .qdrat-flyout-panel.show .link-label {
+                        display: inline-block !important;
+                        width: auto !important;
+                        opacity: 1 !important;
+                        pointer-events: auto !important;
+                        overflow: visible !important;
+                    }
+
+                #qdratSidebar.collapsed .qdrat-flyout-panel.show .nav-arrow {
+                    display: inline-block !important;
+                    width: auto !important;
+                    opacity: 1 !important;
+                    pointer-events: auto !important;
+                    overflow: visible !important;
+                }
+
+                #qdratSidebar.collapsed .qdrat-flyout-panel.show .nav-icon {
+                    width: 20px;
+                }
+
+            #qdratSidebar.collapsed .nav-link[aria-expanded="true"] {
+                background: var(--item-active-bg);
+                color: var(--brand-accent);
+            }
+
+        /* ============================================================
+                                           TOPBAR
+                                        ============================================================ */
+        #qdratTopbar {
+            position: fixed;
+            top: 0;
+            right: var(--sidebar-w);
+            left: 0;
+            height: var(--topbar-h);
+            background: var(--topbar-bg);
+            border-bottom: 1px solid var(--topbar-border);
+            box-shadow: var(--topbar-shadow);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            z-index: 1030;
+            transition: right var(--transition-med);
+            gap: 12px;
+        }
+
+            #qdratTopbar.sidebar-collapsed-offset {
+                right: var(--sidebar-collapsed-w);
+            }
+
+        .topbar-start {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .topbar-end {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Breadcrumb in topbar */
+        .topbar-breadcrumb {
+            font-size: 13px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+            .topbar-breadcrumb .separator {
+                color: #cbd5e1;
+                font-size: 10px;
+            }
+
+            .topbar-breadcrumb .current {
+                color: #334155;
+                font-weight: 600;
+            }
+
+        /* Role switcher */
+        #roleSwitcher {
+            font-family: 'Cairo', sans-serif;
+            font-size: 12.5px;
+            border: 1px solid #e2e8f0;
+            border-radius: 7px;
+            padding: 4px 10px;
+            background: #f8fafc;
+            color: #334155;
+            cursor: pointer;
+            min-width: 140px;
+            transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+        }
+
+            #roleSwitcher:focus {
+                outline: none;
+                border-color: var(--brand-accent);
+                box-shadow: 0 0 0 3px var(--brand-accent-glow);
+            }
+
+        /* Topbar icon button */
+        .topbar-icon-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            border: none;
+            background: transparent;
+            color: #64748b;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background var(--transition-fast), color var(--transition-fast);
+            font-size: 15px;
+        }
+
+            .topbar-icon-btn:hover {
+                background: #f1f5f9;
+                color: #334155;
+            }
+
+        /* ============================================================
+                                           MAIN CONTENT
+                                        ============================================================ */
+        #qdratMain {
+            margin-right: var(--sidebar-w);
+            margin-top: var(--topbar-h);
+            min-height: calc(100vh - var(--topbar-h));
+            background: var(--content-bg);
+            transition: margin-right var(--transition-med);
+            padding: 24px;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+            #qdratMain.sidebar-collapsed-offset {
+                margin-right: var(--sidebar-collapsed-w);
+            }
+
+        /* ============================================================
+                                           MODAL: Smart Analysis
+                                        ============================================================ */
+        #smartAnalysisModal .modal-content {
+            border: none;
+            border-radius: var(--radius-lg);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+        }
+
+        /* ============================================================
+                                           RESPONSIVE
+                                        ============================================================ */
+        @@media (max-width: 768px) {
+            #qdratSidebar {
+                transform: translateX(100%);
+                transition: transform var(--transition-med), width var(--transition-med);
+            }
+
+                #qdratSidebar.mobile-open {
+                    transform: translateX(0);
+                    width: var(--sidebar-w) !important;
+                }
+
+            #qdratTopbar {
+                right: 0 !important;
+            }
+
+            #qdratMain {
+                margin-right: 0 !important;
+            }
+
+            .sidebar-overlay {
+                display: block;
+            }
+        }
+
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 1039;
+            backdrop-filter: blur(2px);
+        }
+
+            .sidebar-overlay.active {
+                display: block;
+            }
+
+        /* ============================================================
+                                           UTILITIES
+                                        ============================================================ */
+        .animate-dropdown {
+            animation: dropdownFadeIn .18s ease forwards;
+        }
+
+        @@keyframes dropdownFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-6px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Collapse transition */
+        .sidebar-collapse-content {
+            overflow: hidden;
+            transition: max-height .3s ease;
+        }
+
+        .settings-fixed {
+            /* no longer fixed — now flows in sidebar footer */
+        }
+
+        /* ============================================================
+                                           PRINT
+                                        ============================================================
+           #qdratMain scrolls (overflow-y:auto) inside a viewport-height
+           shell, so by default the browser only prints whatever is
+           currently visible on screen and never flows onto extra pages.
+           Unlock the scroll containers and hide the chrome so print
+           renders the full content across as many pages as it needs. */
+        @@media print {
+            html, body {
+                height: auto !important;
+                overflow: visible !important;
+            }
+
+            .admin-shell {
+                height: auto !important;
+                overflow: visible !important;
+            }
+
+            #qdratSidebar,
+            #qdratTopbar,
+            .sidebar-overlay,
+            #impBar {
+                display: none !important;
+            }
+
+            #qdratMain {
+                margin: 0 !important;
+                padding: 0 !important;
+                height: auto !important;
+                min-height: 0 !important;
+                overflow: visible !important;
+            }
+        }
+    </style>
+</head>
+<body>
+@await Html.PartialAsync("~/Views/Shared/_ImpersonationBanner.cshtml")
+
+
+
+
+    <!-- Mobile overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeMobileSidebar()"></div>
+
+    <!-- =====================================================
+         SIDEBAR
+    ====================================================== -->
+    <aside id="qdratSidebar">
+
+        <!-- Header -->
+        <div class="sidebar-header">
+            <div class="sidebar-logo">
+                <div class="sidebar-logo-icon">
+                    <i class="fas fa-graduation-cap"></i>
+                </div>
+                <span class="sidebar-logo-text">معهد قدرات للتدريب </span>
+            </div>
+            <button class="sidebar-toggle-btn" onclick="toggleSidebar()" title="طي القائمة">
+                <i class="fas fa-bars"></i>
+            </button>
+        </div>
+
+        <!-- Nav Body -->
+        <nav class="sidebar-nav-body">
+
+            <!-- Home -->
+            <ul class="sidebar-nav-list">
+                <li class="nav-item">
+                    <a class="nav-link" asp-area="Admin"
+                       asp-controller="@(User.IsInRole("Employee") ? "EmployeeDashboard" : "AdminOperationsDashboard")"
+                       asp-action="Index">
+                        <i class="fas fa-house nav-icon"></i>
+                        <span class="link-label">الرئيسية</span>
+                    </a>
+                </li>
+            </ul>
+
+            <!-- Admin Sidebar Partial (all sections) -->
+            @Html.Partial("_AdminSidebarPartial")
+
+        </nav>
+
+        <!-- Footer (settings / lectures / links) -->
+        <div class="sidebar-footer">
+            @Html.Partial("_AdminFooterDropdownPartial")
+        </div>
+
+    </aside>
+
+    <!-- =====================================================
+         TOPBAR
+    ====================================================== -->
+    <header id="qdratTopbar">
+
+        <!-- Start: mobile toggle + breadcrumb -->
+        <div class="topbar-start">
+            <button class="topbar-icon-btn d-md-none" onclick="openMobileSidebar()">
+                <i class="fas fa-bars"></i>
+            </button>
+            <div class="topbar-breadcrumb d-none d-sm-flex">
+                <span>لوحة التحكم</span>
+            </div>
+        </div>
+
+        <!-- End: role switcher + account + notifications -->
+        <div class="topbar-end">
+            @{
+                var path = Context.Request.Path.ToString().ToLower();
+                var isAdminArea = path.Contains("/admin");
+                var isInstructorArea = path.Contains("/instructors");
+            }
+
+            @if (User.Identity != null && User.Identity.IsAuthenticated)
+            {
+                try
+                {
+                    @* Role Switcher *@
+                    @if (UserContext.HasMultipleRoles)
+                    {
+                        <select id="roleSwitcher">
+                            @foreach (var role in UserContext.AvailableRoles)
+                            {
+                                <option value="@role" selected="@(role == UserContext.ActiveRole)">
+                                    @(RoleNamesHelper.RoleDisplay.TryGetValue(role, out var ar) ? ar : role)
+                                </option>
+                            }
+                        </select>
+                    }
+
+                    @* Account Dropdown *@
+                    var accountDropdownModel = await AccountDropdownService.GetDropdownViewModelAsync(User);
+                    if (accountDropdownModel != null)
+                    {
+                        @await Html.PartialAsync("_UnifiedAccountMenu", accountDropdownModel)
+                    }
+                }
+                catch
+                {
+                    <div class="text-danger small"><i class="fas fa-exclamation-triangle me-1"></i>خطأ تحميل بيانات الحساب</div>
+                }
+            }
+            else
+            {
+                <partial name="_LoginPartial" />
+            }
+
+            <div id="notification-widget-container"></div>
+            @await Component.InvokeAsync("AdminNotificationIcons")
+
+            <!-- Site Logo -->
+            <a href="~/" class="d-flex align-items-center ms-2" style="text-decoration:none;">
+                <img src="/uploads/settings/SiteLogoPath_20250710061621.png"
+                     alt="شعار المنصة"
+                     style="height:36px;width:auto;object-fit:contain;" />
+            </a>
+        </div>
+    </header>
+
+    <!-- =====================================================
+         SMART ANALYSIS MODAL
+    ====================================================== -->
+    <div class="modal fade" id="smartAnalysisModal" tabindex="-1" aria-labelledby="smartAnalysisTitle" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header" style="background: linear-gradient(135deg, #1d4ed8, #3b82f6); color: #fff;">
+                    <h5 class="modal-title fw-bold d-flex align-items-center gap-2" id="smartAnalysisTitle">
+                        <i class="fas fa-sparkles"></i>
+                        تحليل ذكي
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+                </div>
+                <div class="modal-body" id="smartAnalysisContent">
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-circle-notch fa-spin fa-2x mb-3 d-block text-primary"></i>
+                        جاري تحميل التحليل...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- =====================================================
+         MAIN CONTENT
+    ====================================================== -->
+    <main id="qdratMain">
+        @RenderBody()
+    </main>
+
+    <!-- =====================================================
+         SCRIPTS
+    ====================================================== -->
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.5/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <script>
+        const SIDEBAR_KEY = 'qdrat-sidebar-collapsed';
+
+        function getSidebarShell() {
+            return {
+                sidebar: document.getElementById('qdratSidebar'),
+                topbar: document.getElementById('qdratTopbar'),
+                main: document.getElementById('qdratMain')
+            };
+        }
+
+        function toggleSidebar() {
+            const shell = getSidebarShell();
+            if (!shell.sidebar || !shell.topbar || !shell.main) return;
+
+            const willCollapse = !shell.sidebar.classList.contains('collapsed');
+
+            if (willCollapse) {
+                closeAllSidebarCollapses(shell.sidebar);
+                clearFlyoutPositions(shell.sidebar);
+                shell.sidebar.classList.add('collapsed');
+                shell.topbar.classList.add('sidebar-collapsed-offset');
+                shell.main.classList.add('sidebar-collapsed-offset');
+                document.body.classList.add('sidebar-is-collapsed');
+            } else {
+                closeAllSidebarCollapses(shell.sidebar);
+                clearFlyoutPositions(shell.sidebar);
+                shell.sidebar.classList.remove('collapsed');
+                shell.topbar.classList.remove('sidebar-collapsed-offset');
+                shell.main.classList.remove('sidebar-collapsed-offset');
+                document.body.classList.remove('sidebar-is-collapsed');
+                openActiveParentsOnly(shell.sidebar);
+            }
+
+            localStorage.setItem(SIDEBAR_KEY, willCollapse ? 'true' : 'false');
+        }
+
+        function openMobileSidebar() {
+            document.getElementById('qdratSidebar')?.classList.add('mobile-open');
+            document.getElementById('sidebarOverlay')?.classList.add('active');
+        }
+
+        function closeMobileSidebar() {
+            document.getElementById('qdratSidebar')?.classList.remove('mobile-open');
+            document.getElementById('sidebarOverlay')?.classList.remove('active');
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            restoreSidebarState();
+            initializeSidebarMenuBehavior();
+            activateCurrentSidebarLink();
+            initializeTooltips();
+            initializeRoleSwitcher();
+        });
+
+        function restoreSidebarState() {
+            const shell = getSidebarShell();
+            if (!shell.sidebar || !shell.topbar || !shell.main) return;
+
+            if (localStorage.getItem(SIDEBAR_KEY) === 'true') {
+                shell.sidebar.classList.add('collapsed');
+                shell.topbar.classList.add('sidebar-collapsed-offset');
+                shell.main.classList.add('sidebar-collapsed-offset');
+                document.body.classList.add('sidebar-is-collapsed');
+                closeAllSidebarCollapses(shell.sidebar);
+                clearFlyoutPositions(shell.sidebar);
+            } else {
+                document.body.classList.remove('sidebar-is-collapsed');
+            }
+        }
+
+        function neutralizeBootstrapCollapseInsideSidebar(sidebar) {
+            if (typeof bootstrap === 'undefined' || !bootstrap.Collapse) return;
+
+            sidebar.querySelectorAll('.collapse').forEach(function (collapseEl) {
+                const instance = bootstrap.Collapse.getInstance(collapseEl);
+                if (instance) {
+                    instance.dispose();
+                }
+            });
+        }
+
+        function initializeSidebarMenuBehavior() {
+            const sidebar = document.getElementById('qdratSidebar');
+            if (!sidebar) return;
+
+            neutralizeBootstrapCollapseInsideSidebar(sidebar);
+
+            sidebar.addEventListener('click', function (event) {
+                const trigger = event.target.closest('[data-qdrat-toggle="sidebar-collapse"]');
+                if (!trigger || !sidebar.contains(trigger)) return;
+
+                const target = resolveCollapseTarget(trigger);
+                if (!target) return;
+
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
+
+                toggleSidebarCollapse(sidebar, trigger, target);
+            }, true);
+
+            document.addEventListener('click', function (event) {
+                if (!sidebar.classList.contains('collapsed')) return;
+                if (sidebar.contains(event.target)) return;
+                closeSidebarFlyouts(sidebar);
+            });
+
+            window.addEventListener('resize', function () {
+                if (!sidebar.classList.contains('collapsed')) return;
+                const opened = sidebar.querySelector('.qdrat-flyout-panel.show');
+                if (!opened) return;
+                const trigger = resolveTriggerForCollapse(sidebar, opened);
+                if (trigger) positionFlyoutPanel(trigger, opened);
+            });
+        }
+
+        function resolveCollapseTarget(trigger) {
+            const selector = trigger.getAttribute('data-qdrat-target') || trigger.getAttribute('href');
+            if (!selector || !selector.startsWith('#')) return null;
+            return document.querySelector(selector);
+        }
+
+        function resolveTriggerForCollapse(sidebar, collapseEl) {
+            if (!collapseEl || !collapseEl.id) return null;
+            return sidebar.querySelector('[href="#' + collapseEl.id + '"], [data-qdrat-target="#' + collapseEl.id + '"]');
+        }
+
+        function toggleSidebarCollapse(sidebar, trigger, target) {
+            const isOpen = target.classList.contains('show');
+
+            if (isOpen) {
+                closeCollapse(target, trigger);
+                return;
+            }
+
+            closeSiblingCollapses(sidebar, trigger, target);
+            openCollapse(sidebar, trigger, target);
+        }
+
+        function openCollapse(sidebar, trigger, target) {
+            target.classList.add('show');
+            trigger.setAttribute('aria-expanded', 'true');
+
+            if (sidebar.classList.contains('collapsed') && shouldRenderAsFlyout(sidebar, trigger, target)) {
+                target.classList.add('qdrat-flyout-panel');
+                positionFlyoutPanel(trigger, target);
+            } else {
+                target.classList.remove('qdrat-flyout-panel');
+                target.style.removeProperty('top');
+            }
+        }
+
+        function closeCollapse(target, trigger) {
+            target.classList.remove('show');
+            target.classList.remove('qdrat-flyout-panel');
+            target.style.removeProperty('top');
+
+            if (trigger) {
+                trigger.setAttribute('aria-expanded', 'false');
+            }
+
+            target.querySelectorAll('.collapse.show').forEach(function (child) {
+                const childTrigger = resolveTriggerForCollapse(document.getElementById('qdratSidebar'), child);
+                closeCollapse(child, childTrigger);
+            });
+        }
+
+        function closeSiblingCollapses(sidebar, trigger, target) {
+            const parentFlyout = trigger.closest('.qdrat-flyout-panel');
+            const currentList = trigger.closest('ul.sidebar-submenu, ul.sidebar-nav-list');
+
+            if (!currentList) return;
+
+            currentList.querySelectorAll(':scope > li > .collapse.show').forEach(function (opened) {
+                if (opened === target) return;
+                if (opened.contains(target)) return;
+
+                const openedTrigger = resolveTriggerForCollapse(sidebar, opened);
+                closeCollapse(opened, openedTrigger);
+            });
+
+            if (parentFlyout) {
+                parentFlyout.querySelectorAll('.collapse.show').forEach(function (opened) {
+                    if (opened === target) return;
+                    if (opened.contains(target)) return;
+                    if (!opened.parentElement || opened.parentElement.parentElement !== currentList) return;
+
+                    const openedTrigger = resolveTriggerForCollapse(sidebar, opened);
+                    closeCollapse(opened, openedTrigger);
+                });
+            }
+        }
+
+        function shouldRenderAsFlyout(sidebar, trigger, target) {
+            if (trigger.closest('.qdrat-flyout-panel')) return false;
+            if (target.closest('.qdrat-flyout-panel')) return false;
+            return true;
+        }
+
+        function positionFlyoutPanel(trigger, panel) {
+            const triggerRect = trigger.getBoundingClientRect();
+            const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+            const panelHeight = Math.min(560, Math.floor(viewportHeight * 0.76));
+            const minTop = 8;
+            const maxTop = Math.max(minTop, viewportHeight - panelHeight - 8);
+            const top = Math.min(Math.max(triggerRect.top - 6, minTop), maxTop);
+
+            panel.style.top = top + 'px';
+        }
+
+        function closeSidebarFlyouts(sidebar) {
+            sidebar.querySelectorAll('.qdrat-flyout-panel.show').forEach(function (panel) {
+                const trigger = resolveTriggerForCollapse(sidebar, panel);
+                closeCollapse(panel, trigger);
+            });
+        }
+
+        function clearFlyoutPositions(sidebar) {
+            sidebar.querySelectorAll('.collapse').forEach(function (collapseEl) {
+                collapseEl.classList.remove('qdrat-flyout-panel');
+                collapseEl.style.removeProperty('top');
+            });
+        }
+
+        function closeAllSidebarCollapses(sidebar) {
+            sidebar.querySelectorAll('.collapse.show').forEach(function (collapseEl) {
+                collapseEl.classList.remove('show');
+                collapseEl.classList.remove('qdrat-flyout-panel');
+                collapseEl.style.removeProperty('top');
+            });
+
+            sidebar.querySelectorAll('[data-qdrat-toggle="sidebar-collapse"][aria-expanded="true"]').forEach(function (trigger) {
+                trigger.setAttribute('aria-expanded', 'false');
+            });
+        }
+
+        function openActiveParentsOnly(sidebar) {
+            sidebar.querySelectorAll('.nav-link.active').forEach(function (link) {
+                let parent = link.closest('.collapse');
+                while (parent) {
+                    parent.classList.add('show');
+                    const trigger = resolveTriggerForCollapse(sidebar, parent);
+                    if (trigger) trigger.setAttribute('aria-expanded', 'true');
+                    parent = parent.parentElement ? parent.parentElement.closest('.collapse') : null;
+                }
+            });
+        }
+
+        function activateCurrentSidebarLink() {
+            const sidebar = document.getElementById('qdratSidebar');
+            if (!sidebar) return;
+
+            const path = window.location.pathname.toLowerCase();
+
+            sidebar.querySelectorAll('.nav-link').forEach(function (link) {
+                const href = link.getAttribute('href') || '';
+                if (!href || href === '#' || href.startsWith('#')) return;
+
+                if (path.includes(href.toLowerCase())) {
+                    link.classList.add('active');
+
+                    if (!sidebar.classList.contains('collapsed')) {
+                        let parent = link.closest('.collapse');
+                        while (parent) {
+                            parent.classList.add('show');
+                            const trigger = resolveTriggerForCollapse(sidebar, parent);
+                            if (trigger) trigger.setAttribute('aria-expanded', 'true');
+                            parent = parent.parentElement ? parent.parentElement.closest('.collapse') : null;
+                        }
+                    }
+                }
+            });
+        }
+
+        function initializeTooltips() {
+            if (typeof bootstrap === 'undefined' || !bootstrap.Tooltip) return;
+
+            document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+                new bootstrap.Tooltip(el);
+            });
+        }
+
+        function initializeRoleSwitcher() {
+            document.getElementById('roleSwitcher')?.addEventListener('change', function () {
+                fetch('/Account/SwitchRole', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.value)
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data && data.redirectUrl) {
+                        window.location.href = data.redirectUrl;
+                    }
+                })
+                .catch(function (err) {
+                    console.error('Role switch failed', err);
+                });
+            });
+        }
+    </script>
+
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

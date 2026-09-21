@@ -1,0 +1,143 @@
+@model QdratNew.ViewModels.Partner.Homework.HomeworkAutoGenerateVM
+
+@{
+    ViewData["Title"] = "توليد واجب تلقائي";
+}
+
+@section Styles {
+    <link href="~/css/instructor/instructor-drafts.css" rel="stylesheet" asp-append-version="true" />
+}
+
+<div class="instructor-page">
+
+    <div class="hw-page-header">
+        <h3 class="hw-page-title">
+            <i class="fas fa-cog"></i>
+            توليد واجب تلقائي
+        </h3>
+        <a asp-action="Create" class="hw-back-btn ms-auto">
+            <i class="fas fa-arrow-right"></i> رجوع
+        </a>
+    </div>
+
+    <div asp-validation-summary="All" class="alert alert-danger"></div>
+
+    <form asp-action="AutoGenerate" method="post" class="draft-form-card">
+
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="CourseId" />
+
+        <div class="mb-4">
+            <label class="draft-field-label">عنوان الواجب</label>
+            <input asp-for="Title" class="form-control" placeholder="أدخل عنوان الواجب..." />
+        </div>
+
+        <div class="mb-4">
+            <label class="draft-field-label">المنهج</label>
+            <select id="curriculumSelect" class="form-select">
+                <option value="">-- اختر المنهج --</option>
+            </select>
+        </div>
+
+        <div class="mb-4">
+            <label class="draft-field-label">المحور</label>
+            <select id="sectionSelect" class="form-select">
+                <option value="">-- اختر المحور --</option>
+            </select>
+        </div>
+
+        <div class="draft-section-block mb-4">
+            <div class="section-header">
+                <i class="fas fa-list-check"></i>
+                المؤشرات وعدد الأسئلة
+            </div>
+            <div class="section-body">
+                <div id="lessonsContainer"></div>
+                <div id="noLessonsMsg" class="text-muted d-none">
+                    <i class="fas fa-info-circle me-1"></i> لا توجد مؤشرات
+                </div>
+            </div>
+        </div>
+
+        <div id="lessonInputs"></div>
+
+        <div class="mb-4">
+            <label class="draft-field-label">مصدر الأسئلة</label>
+            <div class="d-flex gap-3 mt-1">
+                <div class="form-check">
+                    <input asp-for="UsePlatformQuestionBank" class="form-check-input" />
+                    <label class="form-check-label">بنك المنصة</label>
+                </div>
+                <div class="form-check">
+                    <input asp-for="UsePrivateQuestionBank" class="form-check-input" />
+                    <label class="form-check-label">بنك المدرسة</label>
+                </div>
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary px-5">
+            <i class="fas fa-bolt me-1"></i> توليد الواجب
+        </button>
+
+    </form>
+
+</div>
+
+@section Scripts {
+    <script>
+        const courseId = parseInt(document.querySelector("input[name='CourseId']").value || "0");
+
+        fetch(`/Instructors/InstructorHomeworkDrafts/GetCurriculums?courseId=${courseId}`)
+            .then(r => r.json())
+            .then(data => {
+                const select = document.getElementById("curriculumSelect");
+                data.forEach(c => select.add(new Option(c.name, c.id)));
+            });
+
+        document.getElementById("curriculumSelect")
+            .addEventListener("change", async function () {
+                const curriculumId = this.value;
+                const sectionSelect = document.getElementById("sectionSelect");
+                sectionSelect.innerHTML = '<option value="">-- اختر المحور --</option>';
+                if (!curriculumId) return;
+                const res = await fetch(`/Instructors/InstructorHomeworkDrafts/GetSections?curriculumId=${curriculumId}`);
+                const sections = await res.json();
+                sections.forEach(s => sectionSelect.add(new Option(s.name, s.id)));
+            });
+
+        let lessonIndex = 0;
+        document.getElementById("sectionSelect")
+            .addEventListener("change", async function () {
+                const sectionId = this.value;
+                const container = document.getElementById("lessonsContainer");
+                const inputs = document.getElementById("lessonInputs");
+                container.innerHTML = "";
+                inputs.innerHTML = "";
+                lessonIndex = 0;
+                if (!sectionId) return;
+                const res = await fetch(`/Instructors/InstructorHomeworkDrafts/GetActiveLessons?sectionId=${sectionId}`);
+                const lessons = await res.json();
+                if (!lessons.length) {
+                    document.getElementById("noLessonsMsg").classList.remove("d-none");
+                    return;
+                }
+                document.getElementById("noLessonsMsg").classList.add("d-none");
+                lessons.forEach(l => {
+                    const index = lessonIndex++;
+                    container.insertAdjacentHTML("beforeend", `
+                        <div class="lesson-row">
+                            <div>
+                                <div class="lesson-name">${l.title}</div>
+                            </div>
+                            <div>
+                                <input type="number" class="form-control lesson-count-input"
+                                       min="0" value="0" placeholder="عدد الأسئلة"
+                                       name="LessonQuestionCounts[${index}].QuestionCount" />
+                                <input type="hidden" name="LessonQuestionCounts[${index}].LessonId" value="${l.id}" />
+                            </div>
+                        </div>
+                    `);
+                });
+            });
+    </script>
+}

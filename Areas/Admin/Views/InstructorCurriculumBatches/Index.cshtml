@@ -1,0 +1,174 @@
+﻿@model IEnumerable<QdratNew.ViewModels.Instructor.InstructorCurriculumBatchViewModel>
+
+@{
+    ViewData["Title"] = "إدارة الربط بين المدربين والمناهج والدفعات";
+}
+
+<h2 class="text-black mb-4"><i class="fas fa-tasks"></i> إدارة الربط المدربين والمناهج والدفعات</h2>
+
+<a asp-action="Create" class="btn btn-dark mb-3">
+    <i class="fas fa-plus"></i> إضافة ربط جديد
+</a>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success">@TempData["SuccessMessage"]</div>
+}
+
+@if (TempData["WarningMessage"] != null)
+{
+    <div class="alert alert-warning">@TempData["WarningMessage"]</div>
+}
+
+<div id="toastContainer" class="lecture-sync-toast-container"></div>
+
+<table id="relationsTable" class="table table-bordered table-striped">
+    <thead class="table-dark">
+        <tr>
+            <th>📚 اسم المنهج</th>
+            <th>🎯 اسم الدفعة</th>
+            <th>👨‍🏫 اسم المدرب</th>
+            <th>🚻 جنس الدفعة</th> <!-- ✅ العمود الجديد -->
+            <th>🔄 حالة المحاضرات</th>
+            <th>⚙️ العمليات</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var item in Model)
+        {
+            <tr data-link-id="@item.Id">
+                <td>@item.CurriculumName</td>
+                <td>@item.BatchName</td>
+                <td>@item.InstructorName</td>
+                <td>@item.BatchGenderName</td> <!-- ✅ عرض الجنس -->
+                <td class="lecture-sync-cell" data-link-id="@item.Id">
+                    <span class="sync-badge sync-loading"><i class="fas fa-spinner fa-spin"></i> جارٍ التحقق...</span>
+                </td>
+                <td>
+                    <a asp-action="Edit" asp-route-id="@item.Id" class="btn btn-primary btn-sm me-2">
+                        <i class="fas fa-edit"></i> تعديل
+                    </a>
+                    <a asp-action="Delete" asp-route-id="@item.Id" class="btn btn-danger btn-sm" onclick="return confirm('هل أنت متأكد من حذف هذا الربط؟');">
+                        <i class="fas fa-trash"></i> حذف
+                    </a>
+                </td>
+
+            </tr>
+        }
+    </tbody>
+</table>
+
+@Html.AntiForgeryToken()
+
+<style>
+    .lecture-sync-toast-container { position: fixed; bottom: 20px; left: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
+    .lecture-sync-toast-container .toast { background: #161b26; color: #fff; border-radius: 12px; padding: 10px 16px; font-size: 13px; font-weight: 800; display: flex; align-items: center; gap: 8px; box-shadow: 0 1px 3px rgba(22,27,38,.08); animation: syncToastIn .25s ease; }
+    .lecture-sync-toast-container .toast.success { background: #064e3b; }
+    .lecture-sync-toast-container .toast.error { background: #7f1d1d; }
+    @@keyframes syncToastIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+
+    .sync-badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: .78rem; font-weight: 700; white-space: nowrap; }
+    .sync-badge.sync-loading { background: #eef0f3; color: #4c5566; }
+    .sync-badge.sync-ok { background: #e6f7ee; color: #2fa86a; }
+    .sync-badge.sync-warning { background: #fff6ea; color: #e0a63b; }
+    .sync-resync-btn { border: none; background: #e0a63b; color: #fff; border-radius: 8px; padding: 3px 10px; font-size: .75rem; font-weight: 700; cursor: pointer; margin-inline-start: 6px; }
+    .sync-resync-btn:disabled { opacity: .6; cursor: not-allowed; }
+</style>
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            $('#relationsTable').DataTable({
+                language: {
+                    "lengthMenu": "عرض _MENU_ سجلات لكل صفحة",
+                    "zeroRecords": "لا توجد نتائج مطابقة",
+                    "info": "عرض الصفحة _PAGE_ من _PAGES_",
+                    "infoEmpty": "لا توجد سجلات متاحة",
+                    "infoFiltered": "(تمت التصفية من إجمالي _MAX_ سجل)",
+                    "search": "🔎 بحث:",
+                    "paginate": {
+                        "first": "الأول",
+                        "last": "الأخير",
+                        "next": "التالي",
+                        "previous": "السابق"
+                    }
+                }
+            });
+        });
+
+        function showSyncToast(message, type) {
+            var container = document.getElementById('toastContainer');
+            var toast = document.createElement('div');
+            toast.className = 'toast ' + (type || '');
+            toast.innerHTML = '<i class="fas ' + (type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle') + '"></i> ' + message;
+            container.appendChild(toast);
+            setTimeout(function () { toast.remove(); }, 3000);
+        }
+
+        function renderSyncCell(cell, item) {
+            if (item.isFullySynced) {
+                cell.innerHTML = '<span class="sync-badge sync-ok"><i class="fas fa-check-circle"></i> كل المحاضرات متزامنة</span>';
+                return;
+            }
+            cell.innerHTML =
+                '<span class="sync-badge sync-warning"><i class="fas fa-exclamation-triangle"></i> ' + item.outOfSyncCount + ' محاضرة غير متزامنة</span>' +
+                '<button type="button" class="sync-resync-btn" data-link-id="' + item.id + '">إعادة مزامنة الآن</button>';
+        }
+
+        function loadSyncStatuses() {
+            fetch('@Url.Action("GetOutOfSyncSummary")', { method: 'GET' })
+                .then(function (r) { return r.json(); })
+                .then(function (result) {
+                    if (!result.success) return;
+                    result.data.forEach(function (item) {
+                        var cell = document.querySelector('.lecture-sync-cell[data-link-id="' + item.id + '"]');
+                        if (cell) renderSyncCell(cell, item);
+                    });
+                })
+                .catch(function () {
+                    document.querySelectorAll('.lecture-sync-cell .sync-badge.sync-loading').forEach(function (badge) {
+                        badge.parentElement.innerHTML = '<span class="sync-badge sync-warning"><i class="fas fa-times-circle"></i> تعذّر التحقق</span>';
+                    });
+                });
+        }
+
+        document.addEventListener('click', function (e) {
+            var btn = e.target.closest('.sync-resync-btn');
+            if (!btn) return;
+
+            var linkId = btn.getAttribute('data-link-id');
+            var token = document.querySelector('input[name="__RequestVerificationToken"]');
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري المزامنة...';
+
+            fetch('@Url.Action("ResyncLectures")', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'RequestVerificationToken': token ? token.value : ''
+                },
+                body: new URLSearchParams({ id: linkId, __RequestVerificationToken: token ? token.value : '' })
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (result) {
+                    if (result.success) {
+                        showSyncToast(result.message, 'success');
+                        var cell = document.querySelector('.lecture-sync-cell[data-link-id="' + linkId + '"]');
+                        if (cell) cell.innerHTML = '<span class="sync-badge sync-ok"><i class="fas fa-check-circle"></i> كل المحاضرات متزامنة</span>';
+                    } else {
+                        showSyncToast(result.message || 'حدث خطأ أثناء المزامنة.', 'error');
+                        btn.disabled = false;
+                        btn.innerHTML = 'إعادة مزامنة الآن';
+                    }
+                })
+                .catch(function () {
+                    showSyncToast('تعذّر الاتصال بالخادم. حاول مرة أخرى.', 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = 'إعادة مزامنة الآن';
+                });
+        });
+
+        loadSyncStatuses();
+    </script>
+}

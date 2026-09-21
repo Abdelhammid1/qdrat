@@ -1,0 +1,239 @@
+﻿@model QdratNew.ViewModels.Section.SectionAIDashboardViewModel
+
+@{
+    ViewData["Title"] = "تحليل المحاور التعليمية (بالذكاء الاصطناعي)";
+}
+
+<h2 class="text-primary mb-4"><i class="fas fa-brain"></i> لوحة الذكاء الاصطناعي للمحاور التعليمية</h2>
+
+<form method="get" class="mb-4 row">
+
+    <div class="col-md-4">
+        <label>تصفية حسب المنهج الدراسي</label>
+        <select name="curriculumId" class="form-control" onchange="this.form.submit()">
+            <option value="">-- جميع المناهج --</option>
+            @foreach (var curriculum in Model.CurriculumList)
+            {
+                var isSelected = Model.SelectedCurriculumId?.ToString() == curriculum.Value;
+                <option value="@curriculum.Value" selected="@(isSelected ? "selected" : null)">
+                    @curriculum.Text
+                </option>
+            }
+
+
+        </select>
+    </div>
+
+    <div class="col-md-4">
+        <label>تصفية حسب الدفعة</label>
+        <select name="batchId" class="form-control" onchange="this.form.submit()">
+            <option value="">-- جميع الدفعات --</option>
+            @foreach (var batch in Model.BatchList)
+            {
+                var isSelected = Model.SelectedBatchId?.ToString() == batch.Value;
+                <option value="@batch.Value" selected="@(isSelected ? "selected" : null)">
+                    @batch.Text
+                </option>
+            }
+
+
+
+        </select>
+    </div>
+</form>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <h5 class="text-center mb-2">توزيع مستويات الصعوبة</h5>
+        <div style="max-width: 280px; margin: 0 auto;">
+            <canvas id="difficultyPieChart" width="280" height="280"></canvas>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <h5 class="text-center">نسب النجاح حسب المحور</h5>
+        <canvas id="successBarChart"></canvas>
+    </div>
+</div>
+
+
+
+
+
+<hr />
+
+<div class="row text-center mb-4">
+
+    <div class="col-lg-2 col-md-4 mb-3">
+        <div class="card text-white bg-primary dashboard-card shadow-sm">
+            <div class="card-body">
+                <h6 class="card-title">📈 المحاور التي شارك فيها الطلاب</h6>
+                <p class="card-text display-6">@Model.TotalSectionsWithPerformance</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-2 col-md-4 mb-3">
+        <div class="card text-white bg-info dashboard-card shadow-sm">
+            <div class="card-body">
+                <h6 class="card-title">📚 عدد المحاور الكلية</h6>
+                <p class="card-text display-6">@Model.TotalSectionsInDatabase</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-2 col-md-4 mb-3">
+        <div class="card text-white bg-success dashboard-card shadow-sm">
+            <div class="card-body">
+                <h6 class="card-title">📊 نسبة التغطية</h6>
+                <p class="card-text display-6">@Model.CoverageRate %</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-2 col-md-4 mb-3">
+        <div class="card text-white bg-dark dashboard-card shadow-sm">
+            <div class="card-body">
+                <h6 class="card-title">✅ المحاور السهلة</h6>
+                <p class="card-text display-6">
+                    @Model.DifficultyDistribution.FirstOrDefault(d => d.Label == "سهل")?.Count ?? 0
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-2 col-md-4 mb-3">
+        <div class="card text-white bg-warning dashboard-card shadow-sm">
+            <div class="card-body">
+                <h6 class="card-title">⚖️ المحاور المتوسطة</h6>
+                <p class="card-text display-6">
+                    @Model.DifficultyDistribution.FirstOrDefault(d => d.Label == "متوسط")?.Count ?? 0
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-2 col-md-4 mb-3">
+        <div class="card text-white bg-danger dashboard-card shadow-sm">
+            <div class="card-body">
+                <h6 class="card-title">❗ المحاور الصعبة</h6>
+                <p class="card-text display-6">
+                    @Model.DifficultyDistribution.FirstOrDefault(d => d.Label == "صعب")?.Count ?? 0
+                </p>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<hr />
+
+<table class="table table-bordered table-hover text-center" id="sectionsAnalysisTable">
+    <thead class="table-dark">
+        <tr>
+            <th>📚 المحور</th>
+            <th>📘 المنهج</th>
+            <th>📌 عدد التقييمات</th>
+            <th>✅ نسبة النجاح</th>
+            <th>❌ نسبة الرسوب</th>
+            <th>🧠 تحليل الصعوبة</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var s in Model.SectionAnalytics)
+        {
+            <tr>
+                <td>@s.SectionTitle</td>
+                <td>@s.CurriculumTitle</td>
+                <td>@s.TotalQuestions</td>
+                <td>@s.SuccessRate %</td>
+                <td>@s.FailureRate %</td>
+                <td>@s.DifficultyLevel</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        // Pie Chart
+        const pieCtx = document.getElementById('difficultyPieChart');
+        const pieChart = new Chart(pieCtx, {
+            type: 'pie',
+            data: {
+                labels: @Html.Raw(Json.Serialize(Model.DifficultyDistribution.Select(d => d.Label))),
+                datasets: [{
+                    data: @Html.Raw(Json.Serialize(Model.DifficultyDistribution.Select(d => d.Count))),
+                    backgroundColor: ['#28a745', '#ffc107', '#dc3545']
+                }]
+            }
+        });
+
+        // Bar Chart
+        const barCtx = document.getElementById('successBarChart');
+        const barChart = new Chart(barCtx, {
+            type: 'bar',
+            data: {
+                labels: @Html.Raw(Json.Serialize(Model.SuccessRatesPerSection.Select(s => s.SectionTitle))),
+                datasets: [{
+                    label: 'نسبة النجاح %',
+                    data: @Html.Raw(Json.Serialize(Model.SuccessRatesPerSection.Select(s => s.SuccessRate))),
+                    backgroundColor: '#007bff'
+                }]
+            },
+            options: {
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100
+                    }
+                }
+            }
+        });
+
+        // DataTables
+        $(document).ready(function () {
+            $('#sectionsAnalysisTable').DataTable({
+                language: {
+                    search: "🔍 بحث:",
+                    lengthMenu: "عرض _MENU_ صفوف",
+                    zeroRecords: "لا توجد نتائج",
+                    info: "عرض _START_ إلى _END_ من أصل _TOTAL_",
+                    infoEmpty: "لا توجد بيانات",
+                    paginate: {
+                        first: "الأول",
+                        last: "الأخير",
+                        next: "التالي",
+                        previous: "السابق"
+                    }
+                },
+                responsive: true
+            });
+        });
+    </script>
+    <script>
+    const coverageCtx = document.getElementById('coverageCircle');
+    new Chart(coverageCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['مستخدم', 'غير مستخدم'],
+            datasets: [{
+                data: [@Model.TotalSectionsWithPerformance, @(Model.TotalSectionsInDatabase - Model.TotalSectionsWithPerformance)],
+                backgroundColor: ['#0d6efd', '#dee2e6'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            cutout: '70%',
+            plugins: {
+                legend: {
+                    display: false
+                }
+            }
+        }
+    });
+</script>
+
+}

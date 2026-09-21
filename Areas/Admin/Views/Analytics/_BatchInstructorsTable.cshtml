@@ -1,0 +1,224 @@
+@model QdratNew.ViewModels.Admin.Analytics.BatchPerformanceDetailsVM
+@* ═══════════════════════════════════════════════════════════════════
+   _BatchInstructorsTable — Instructors performance + grouped bar chart
+   Identity: Teal/cyan accent · Chart: Horizontal bar — instructor scores
+   فلسفة: "المدرب هو محرك الدفعة — أظهر مَن يحتاج دعمًا"
+═══════════════════════════════════════════════════════════════════ *@
+@{
+    var hasInst = Model?.Instructors != null && Model.Instructors.Any();
+}
+<style>
+    .bit-section { margin-bottom: 24px; }
+    .bit-card {
+        background:    var(--bpd-surface);
+        border:        1.5px solid var(--bpd-border);
+        border-radius: var(--bpd-radius);
+        padding:       26px 28px;
+        box-shadow:    var(--bpd-shadow-sm);
+    }
+    /* Section header accent — teal */
+    .bit-hd-ico {
+        background: var(--bpd-teal-bg);
+        color:      var(--bpd-teal);
+    }
+    .bit-hd-title { color: var(--bpd-teal); }
+
+    /* Avatar */
+    .bit-avatar {
+        width:          36px;
+        height:         36px;
+        border-radius:  50%;
+        background:     var(--bpd-teal-bg);
+        color:          var(--bpd-teal);
+        display:        flex;
+        align-items:    center;
+        justify-content:center;
+        font-size:      13px;
+        font-weight:    900;
+        flex-shrink:    0;
+        border:         2px solid var(--bpd-teal-mid);
+    }
+
+    /* Chart container */
+    .bit-chart-wrap {
+        background:    #f8fafc;
+        border:        1.5px solid var(--bpd-border);
+        border-radius: var(--bpd-radius-sm);
+        padding:       18px 20px;
+        margin-bottom: 20px;
+    }
+    .bit-chart-label {
+        font-size:   12.5px;
+        font-weight: 800;
+        color:       var(--bpd-muted);
+        margin-bottom: 12px;
+        display:     flex;
+        align-items: center;
+        gap:         6px;
+    }
+    .bit-chart-label i { color: var(--bpd-teal); }
+</style>
+
+<div class="bit-section">
+    <div class="bit-card">
+
+        @* ── Section header ── *@
+        <div class="bpd-sec-hd">
+            <div class="bpd-sec-ico bit-hd-ico">
+                <i class="bi bi-person-badge-fill"></i>
+            </div>
+            <div>
+                <div class="bpd-sec-title bit-hd-title">ملخص أداء المدربين</div>
+            </div>
+        </div>
+        <div class="bpd-sec-sub">كفاءة كل مدرب بناءً على نتائج طلابه — مرتبة من الأضعف إلى الأقوى</div>
+
+        @if (!hasInst)
+        {
+            <div class="bpd-empty">
+                <i class="bi bi-person-badge"></i>
+                <div class="bpd-empty-t">لا توجد بيانات مدربين لهذه الدفعة</div>
+                <div class="bpd-empty-s">لم يتم تعيين مدربين أو لا توجد محاولات مسجلة</div>
+            </div>
+        }
+        else
+        {
+            @* ── Chart ── *@
+            <div class="bit-chart-wrap">
+                <div class="bit-chart-label">
+                    <i class="bi bi-bar-chart-line-fill"></i>
+                    مقارنة متوسط أداء المدربين (%)
+                </div>
+                <canvas id="instBarChart" style="max-height:220px;width:100%;"></canvas>
+            </div>
+
+            @* ── Table ── *@
+            <div class="bpd-tbl-wrap">
+                <table class="table bpd-tbl text-center">
+                    <thead>
+                        <tr>
+                            <th style="text-align:right;">المدرب</th>
+                            <th>متوسط الأداء</th>
+                            <th>الدروس الضعيفة</th>
+                            <th>أسئلة عالية الخطأ</th>
+                            <th>الحالة</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var inst in Model!.Instructors)
+                        {
+                            var iColor  = inst.AvgScore >= 70 ? "var(--bpd-success)" : inst.AvgScore >= 50 ? "var(--bpd-warning)" : "var(--bpd-danger)";
+                            var iBadge  = inst.AvgScore >= 70 ? "badge-s" : inst.AvgScore >= 50 ? "badge-w" : "badge-d";
+                            var iStatus = inst.AvgScore >= 70 ? "جيد" : inst.AvgScore >= 50 ? "متوسط" : "يحتاج دعمًا";
+                            var iIcon   = inst.AvgScore >= 70 ? "bi-check-circle-fill" : inst.AvgScore >= 50 ? "bi-dash-circle-fill" : "bi-exclamation-triangle-fill";
+                            <tr>
+                                <td style="text-align:right;">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="bit-avatar">
+                                            @(string.IsNullOrWhiteSpace(inst.InstructorName) ? "م" : inst.InstructorName[0].ToString())
+                                        </div>
+                                        <span style="font-weight:800;font-size:13.5px;">@inst.InstructorName</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="bpd-score" style="color:@iColor;">@inst.AvgScore.ToString("0.#")%</div>
+                                    <div class="bpd-bar">
+                                        <div class="bpd-bar-fill" style="width:@inst.AvgScore%;background:@iColor;"></div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="bpd-badge @(inst.WeakLessonsCount > 0 ? "badge-w" : "badge-s")">
+                                        <i class="bi @(inst.WeakLessonsCount > 0 ? "bi-exclamation-triangle-fill" : "bi-check-circle-fill")"></i>
+                                        @inst.WeakLessonsCount
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="bpd-badge @(inst.HighRiskQuestionsCount > 0 ? "badge-d" : "badge-s")">
+                                        <i class="bi @(inst.HighRiskQuestionsCount > 0 ? "bi-question-diamond-fill" : "bi-check-circle-fill")"></i>
+                                        @inst.HighRiskQuestionsCount
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="bpd-badge @iBadge">
+                                        <i class="bi @iIcon"></i> @iStatus
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+@if (hasInst)
+{
+    <script>
+    (function () {
+        var labels = [
+            @Html.Raw(string.Join(",", Model!.Instructors.Select(i =>
+                "'" + i.InstructorName.Replace("'","\'").Replace("\\","\\\\") + "'")))
+        ];
+        var scores = [
+            @Html.Raw(string.Join(",", Model!.Instructors.Select(i =>
+                i.AvgScore.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))))
+        ];
+        var colors = scores.map(function(v) {
+            return v >= 70 ? '#22c55e' : v >= 50 ? '#f59e0b' : '#ef4444';
+        });
+        var borders = scores.map(function(v) {
+            return v >= 70 ? '#16a34a' : v >= 50 ? '#d97706' : '#dc2626';
+        });
+
+        var ctx = document.getElementById('instBarChart');
+        if (!ctx || typeof Chart === 'undefined') return;
+
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels:   labels,
+                datasets: [{
+                    label:           'متوسط الأداء %',
+                    data:            scores,
+                    backgroundColor: colors,
+                    borderColor:     borders,
+                    borderWidth:     1.5,
+                    borderRadius:    6,
+                    borderSkipped:   false
+                }]
+            },
+            options: {
+                indexAxis:  'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        rtl: true,
+                        callbacks: {
+                            label: function(c) { return ' الأداء: ' + c.parsed.x.toFixed(1) + '%'; }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        min: 0, max: 100,
+                        grid: { color: '#f1f5f9' },
+                        ticks: {
+                            font:     { family: 'Cairo', size: 11 },
+                            color:    '#94a3b8',
+                            callback: function(v) { return v + '%'; }
+                        }
+                    },
+                    y: {
+                        grid:  { display: false },
+                        ticks: { font: { family: 'Cairo', size: 12, weight: '700' }, color: '#374151' }
+                    }
+                },
+                animation: { duration: 900 }
+            }
+        });
+    }());
+    </script>
+}

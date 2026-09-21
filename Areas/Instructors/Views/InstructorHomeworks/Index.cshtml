@@ -1,0 +1,307 @@
+﻿@model IEnumerable<QdratNew.ViewModels.Instructor.Homework.HomeworkListVM>
+
+@{
+    ViewData["Title"] = "الواجبات المرسلة";
+}
+
+@section Styles {
+    <link href="~/css/instructor/instructor-homeworks.css" rel="stylesheet" asp-append-version="true" />
+}
+
+<div class="container mt-4" dir="rtl">
+
+    <div class="instructor-card">
+
+        <div class="card-title-box mb-3">
+            <h3>الواجبات المرسلة</h3>
+        </div>
+
+        <div class="table-responsive">
+
+            <table class="instructor-table">
+
+                <thead class="table-light">
+
+                    <tr>
+                        <th>العنوان</th>
+                        <th>الدفعات</th>
+                        <th>تاريخ الإرسال</th>
+                        <th>وقت الإرسال للطلاب</th>
+                        <th>عدد الطلاب</th>
+                        <th>الطلاب الذين حلوا</th>
+                        <th>إجراءات</th>
+                    </tr>
+
+                </thead>
+
+                <tbody>
+
+                    @foreach (var h in Model)
+                    {
+                        <tr>
+
+                            <td class="fw-semibold">
+                                @h.Title
+                            </td>
+
+                            <td>
+
+                                @if (h.Batches != null && h.Batches.Count == 1)
+                                {
+                                    <span class="badge bg-primary">
+                                        @h.Batches.First()
+                                    </span>
+                                }
+                                else if (h.Batches != null && h.Batches.Count > 1)
+                                {
+
+                                    <button class="btn btn-sm btn-outline-secondary"
+                                            data-batches='@Html.Raw(System.Text.Json.JsonSerializer.Serialize(h.Batches))'
+                                            onclick="openBatchesModal(this)">
+
+                                        عرض الدفعات (@h.Batches.Count)
+
+                                    </button>
+
+                                }
+
+                            </td>
+
+                            <td>
+                                @h.CreatedAt.ToString("yyyy/MM/dd")
+                            </td>
+
+                            <td>
+                                @if (h.StartAt.HasValue)
+                                {
+                                    <span>@h.StartAt.Value.ToString("yyyy/MM/dd HH:mm")</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">فوري</span>
+                                }
+                            </td>
+
+                            <td>
+                                @h.TotalStudents
+                            </td>
+
+                            <td class="text-success fw-bold">
+                                @h.SubmittedStudents
+                            </td>
+
+                            <td>
+
+                                <a asp-action="Students"
+                                   asp-route-homeworkSetId="@h.HomeworkSetId"
+                                   class="btn btn-sm btn-outline-primary">
+
+                                    <i class="fa fa-users"></i>
+
+                                </a>
+
+                     
+
+                                <a asp-action="Resend"
+                                   asp-route-homeworkSetId="@h.HomeworkSetId"
+                                   class="btn btn-sm btn-outline-warning">
+
+                                    <i class="fa fa-repeat"></i>
+
+                                </a>
+
+                                @if (!h.IsClosed)
+                                {
+                                    <form asp-action="Close"
+                                          method="post"
+                                          style="display:inline"
+                                          onsubmit="return confirmClose(this);">
+
+                                        <input type="hidden"
+                                               name="homeworkSetId"
+                                               value="@h.HomeworkSetId" />
+
+                                        <button class="btn btn-sm btn-outline-dark">
+
+                                            <i class="fa fa-lock"></i>
+
+                                        </button>
+
+                                    </form>
+                                }
+                                else
+                                {
+                                    <form asp-action="Reopen"
+                                          method="post"
+                                          style="display:inline"
+                                          onsubmit="return confirmReopen(this);">
+
+                                        <input type="hidden"
+                                               name="homeworkSetId"
+                                               value="@h.HomeworkSetId" />
+
+                                        <button class="btn btn-sm btn-outline-success">
+
+                                            <i class="fa fa-unlock"></i>
+
+                                        </button>
+
+                                    </form>
+                                }
+
+                                <form asp-action="Delete"
+                                      method="post"
+                                      style="display:inline"
+                                      onsubmit="return confirmDelete(this);">
+
+                                    <input type="hidden"
+                                           name="homeworkSetId"
+                                           value="@h.HomeworkSetId" />
+
+                                    <button class="btn btn-sm btn-outline-danger">
+
+                                        <i class="fa fa-trash"></i>
+
+                                    </button>
+
+                                </form>
+
+                            </td>
+
+                        </tr>
+                    }
+
+                </tbody>
+
+            </table>
+
+        </div>
+    </div>
+</div>
+
+
+<!-- =============================== -->
+<!-- Modal واحد فقط -->
+<!-- =============================== -->
+
+<div class="modal fade" id="batchesModal" tabindex="-1">
+
+    <div class="modal-dialog modal-dialog-centered">
+
+        <div class="modal-content">
+
+            <div class="modal-header">
+
+                <h5 class="modal-title">
+                    الدفعات المرسل لها الواجب
+                </h5>
+
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+
+            </div>
+
+            <div class="modal-body">
+
+                <ul class="list-group" id="batchesList"></ul>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+@section Scripts {
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script>
+
+
+        function openBatchesModal(btn){
+
+        const batches = JSON.parse(btn.getAttribute("data-batches"));
+
+        const list = document.getElementById("batchesList");
+
+        list.innerHTML = "";
+
+        batches.forEach(b => {
+
+        const li = document.createElement("li");
+
+        li.className = "list-group-item";
+
+        li.innerText = b;
+
+        list.appendChild(li);
+
+        });
+
+        const modal = new bootstrap.Modal(document.getElementById('batchesModal'));
+
+        modal.show();
+
+        }
+
+
+        function confirmClose(form){
+
+        Swal.fire({
+        title:'إغلاق الواجب',
+        icon:'warning',
+        showCancelButton:true,
+        confirmButtonText:'نعم',
+        cancelButtonText:'إلغاء'
+        }).then((result)=>{
+        if(result.isConfirmed){
+        form.submit();
+        }
+        });
+
+        return false;
+        }
+
+
+        function confirmReopen(form){
+
+        Swal.fire({
+        title:'إعادة فتح الواجب',
+        icon:'info',
+        showCancelButton:true,
+        confirmButtonText:'نعم',
+        cancelButtonText:'إلغاء'
+        }).then((result)=>{
+        if(result.isConfirmed){
+        form.submit();
+        }
+        });
+
+        return false;
+        }
+
+
+        function confirmDelete(form){
+
+        Swal.fire({
+        title:'حذف الواجب نهائياً',
+        icon:'error',
+        showCancelButton:true,
+        confirmButtonText:'حذف',
+        cancelButtonText:'إلغاء'
+        }).then((result)=>{
+        if(result.isConfirmed){
+        form.submit();
+        }
+        });
+
+        return false;
+        }
+
+    </script>
+
+}

@@ -1,0 +1,121 @@
+﻿@using QdratNew.ViewModels.Exam
+@model ReplaceQuestionVm
+
+@{
+    ViewData["Title"] = "استبدال سؤال";
+}
+
+@functions {
+    string ShortPlainText(string html, int length = 20)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return "—";
+
+        var plain = System.Text.RegularExpressions.Regex
+            .Replace(html, "<.*?>", string.Empty)
+            .Trim();
+
+        return plain.Length <= length
+            ? plain
+            : plain.Substring(0, length) + "...";
+    }
+}
+
+<h4 class="mb-3">
+    استبدال سؤال – @Model.LessonTitle
+    <small class="text-muted">(@Model.Difficulty)</small>
+</h4>
+
+@if (!Model.Candidates.Any())
+{
+    <div class="alert alert-warning">
+        لا توجد أسئلة بديلة مناسبة.
+    </div>
+}
+else
+{
+    <form asp-action="ReplaceQuestion" method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="examId" value="@Model.ExamId" />
+        <input type="hidden" name="oldQuestionId" value="@Model.OldQuestionId" />
+
+        <table id="replaceTable" class="table table-bordered table-sm text-center w-100">
+            <thead class="table-dark">
+                <tr>
+                    <th>المعاينة</th>
+                    <th>السؤال</th>
+                    <th>الإجراء</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var q in Model.Candidates)
+                {
+                    <tr>
+                        <td>
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-info"
+                                    onclick="showQuestionPreview('@q.QuestionId')">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </td>
+                        <td class="text-muted">
+                            @ShortPlainText(q.Title, 20)
+                        </td>
+                        <td>
+                            <button type="submit"
+                                    name="newQuestionId"
+                                    value="@q.QuestionId"
+                                    class="btn btn-sm btn-outline-primary">
+                                اختيار
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </form>
+}
+
+<a asp-action="Review"
+   asp-route-examId="@Model.ExamId"
+   class="btn btn-link mt-3">
+    ← العودة للمراجعة
+</a>
+
+<!-- Modal Preview -->
+<div class="modal fade" id="questionPreviewModal" tabindex="-1" dir="rtl">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content text-end">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-eye me-2"></i> معاينة السؤال
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="questionPreviewModalBody"></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+
+    <script>
+        $('#replaceTable').DataTable({
+            language: {
+                url: "//cdn.datatables.net/plug-ins/1.13.5/i18n/ar.json"
+            },
+            pageLength: 25,
+            order: []
+        });
+
+        function showQuestionPreview(id) {
+            fetch(`/Admin/Questions/Preview/${id}`)
+                .then(r => r.text())
+                .then(html => {
+                    document.getElementById('questionPreviewModalBody').innerHTML = html;
+                    new bootstrap.Modal(document.getElementById('questionPreviewModal')).show();
+                });
+        }
+    </script>
+}
