@@ -99,19 +99,19 @@ namespace QdratNew.Areas.Admin.Controllers
 
         // ✅ عرض صفحة إضافة منهج جديد
         // ✅ عرض صفحة إضافة منهج جديد
-        public IActionResult Create()
+        public async Task<IActionResult> Create()
         {
             var model = new CurriculumViewModel
             {
                 IsRTL = true, // ✅ default عربي
 
-                Courses = _context.Courses
+                Courses = await _context.Courses
                                   .Select(c => new SelectListItem
                                   {
                                       Value = c.Id.ToString(),
                                       Text = c.Name
                                   })
-                                  .ToList()
+                                  .ToListAsync()
             };
 
             return View(model);
@@ -119,7 +119,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult Create(CurriculumViewModel model)
+        public async Task<IActionResult> Create(CurriculumViewModel model)
         {
             ModelState.Remove("CourseNames");
             ModelState.Remove("Modules");
@@ -128,12 +128,12 @@ namespace QdratNew.Areas.Admin.Controllers
             if (!ModelState.IsValid)
             {
                 // إعادة تحميل الدورات لو حصل خطأ
-                model.Courses = _context.Courses
+                model.Courses = await _context.Courses
                                         .Select(c => new SelectListItem
                                         {
                                             Value = c.Id.ToString(),
                                             Text = c.Name
-                                        }).ToList();
+                                        }).ToListAsync();
 
                 return View(model);
             }
@@ -150,7 +150,7 @@ namespace QdratNew.Areas.Admin.Controllers
             };
 
             _context.Curriculums.Add(curriculum);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
             _cache.Remove("CurriculumsCache");
 
             // ربط المنهج بالدورات المختارة
@@ -164,7 +164,7 @@ namespace QdratNew.Areas.Admin.Controllers
                         CurriculumId = curriculum.Id
                     });
                 }
-                _context.SaveChanges();
+                await _context.SaveChangesAsync();
                 _cache.Remove("CurriculumsCache");
 
             }
@@ -222,11 +222,11 @@ namespace QdratNew.Areas.Admin.Controllers
         // ✅ عرض صفحة تعديل منهج
         // ✅ عرض صفحة تعديل منهج
         // ✅ عرض صفحة تعديل منهج
-        public IActionResult Edit(int id)
+        public async Task<IActionResult> Edit(int id)
         {
-            var curriculum = _context.Curriculums
+            var curriculum = await _context.Curriculums
                                      .Include(c => c.CourseCurriculums)
-                                     .FirstOrDefault(c => c.Id == id);
+                                     .FirstOrDefaultAsync(c => c.Id == id);
 
             if (curriculum == null)
                 return NotFound();
@@ -240,13 +240,13 @@ namespace QdratNew.Areas.Admin.Controllers
                 CurriculumTypeName = curriculum.CurriculumTypeName,
                 IsRTL = curriculum.IsRTL, // ✅ NEW
                 CourseIds = curriculum.CourseCurriculums.Select(cc => cc.CourseId).ToList(), // ✅ الدورات المرتبطة
-                Courses = _context.Courses
+                Courses = await _context.Courses
                                   .Select(c => new SelectListItem
                                   {
                                       Value = c.Id.ToString(),
                                       Text = c.Name
                                   })
-                                  .ToList()
+                                  .ToListAsync()
             };
 
             return View(model);
@@ -254,7 +254,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult Edit(int id, CurriculumViewModel model)
+        public async Task<IActionResult> Edit(int id, CurriculumViewModel model)
         {
             ModelState.Remove("CourseNames");
             ModelState.Remove("Modules");
@@ -276,9 +276,9 @@ namespace QdratNew.Areas.Admin.Controllers
                 return View(model);
             }
 
-            var curriculum = _context.Curriculums
+            var curriculum = await _context.Curriculums
                                      .Include(c => c.CourseCurriculums)
-                                     .FirstOrDefault(c => c.Id == id);
+                                     .FirstOrDefaultAsync(c => c.Id == id);
 
             if (curriculum == null)
                 return NotFound();
@@ -291,13 +291,13 @@ namespace QdratNew.Areas.Admin.Controllers
             curriculum.IsQuantitative = model.IsQuantitative;
 
             _context.Update(curriculum);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
             _cache.Remove("CurriculumsCache");
 
             // تحديث الروابط Many-to-Many
-            var oldLinks = _context.CourseCurriculums
+            var oldLinks = await _context.CourseCurriculums
                                    .Where(cc => cc.CurriculumId == curriculum.Id)
-                                   .ToList();
+                                   .ToListAsync();
             _context.CourseCurriculums.RemoveRange(oldLinks);
 
             if (model.CourseIds != null && model.CourseIds.Any())
@@ -312,7 +312,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 }
             }
 
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
             _cache.Remove("CurriculumsCache");
 
             return RedirectToAction(nameof(Index));
@@ -320,14 +320,14 @@ namespace QdratNew.Areas.Admin.Controllers
 
 
         // ✅ حذف المنهج
-        public IActionResult Delete(int id)
+        public async Task<IActionResult> Delete(int id)
         {
-            var curriculum = _context.Curriculums.Find(id);
+            var curriculum = await _context.Curriculums.FindAsync(id);
             if (curriculum == null)
                 return NotFound();
 
             _context.Curriculums.Remove(curriculum);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
             _cache.Remove("CurriculumsCache");
 
             return RedirectToAction(nameof(Index));
