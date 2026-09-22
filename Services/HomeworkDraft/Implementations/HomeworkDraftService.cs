@@ -4,6 +4,7 @@ using QdratNew.Entities;
 using QdratNew.Services.HomeworkDraft.Interfaces;
 using QdratNew.ViewModels.Partner.Homework;
 using QdratNew.ViewModels.Partner.HomeworkDraft;
+using System.Threading.Tasks;
 
 namespace QdratNew.Services.HomeworkDraft.Implementations
 {
@@ -19,14 +20,14 @@ namespace QdratNew.Services.HomeworkDraft.Implementations
         // ===============================
         // 📄 قائمة المسودات
         // ===============================
-        public List<HomeworkDraftListVM> GetDrafts(
+        public async Task<List<HomeworkDraftListVM>> GetDrafts(
             int partnerId,
             int subscriptionPeriodId)
         {
             // =========================
             // جلب المسودات الأساسية
             // =========================
-            var drafts = _context.HomeworkDrafts
+            var drafts = await _context.HomeworkDrafts
                 .AsNoTracking()
                 .Where(d =>
                     d.PartnerId == partnerId &&
@@ -44,19 +45,19 @@ namespace QdratNew.Services.HomeworkDraft.Implementations
                         .Select(q => (int?)q.Question.Lesson.Section.CurriculumId)
                         .FirstOrDefault()
                 })
-                .ToList();
+                .ToListAsync();
 
             // =========================
             // جلب أسماء الدورات مرة واحدة
             // =========================
-            var allCourseCurriculums = _context.CourseCurriculums
+            var allCourseCurriculums = await _context.CourseCurriculums
                 .AsNoTracking()
                 .Select(cc => new
                 {
                     cc.CurriculumId,
                     CourseName = cc.Course.Name
                 })
-                .ToList();
+                .ToListAsync();
 
             // =========================
             // بناء Lookup في الذاكرة
@@ -99,7 +100,7 @@ namespace QdratNew.Services.HomeworkDraft.Implementations
         // ===============================
         // 💾 حفظ مسودة
         // ===============================
-        public int SaveDraft(
+        public async Task<int> SaveDraft(
             SaveHomeworkDraftVM model,
             int partnerId,
             int subscriptionPeriodId)
@@ -116,7 +117,7 @@ namespace QdratNew.Services.HomeworkDraft.Implementations
             };
 
             _context.HomeworkDrafts.Add(draft);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
 
             int order = 1;
             foreach (var qId in model.QuestionIds)
@@ -129,7 +130,7 @@ namespace QdratNew.Services.HomeworkDraft.Implementations
                 });
             }
 
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
             return draft.Id;
         }
 
@@ -138,7 +139,7 @@ namespace QdratNew.Services.HomeworkDraft.Implementations
         // ===============================
         // 🤖 توليد تلقائي
         // ===============================
-        public int GenerateAutoDraft(
+        public async Task<int> GenerateAutoDraft(
          int partnerId,
          int subscriptionPeriodId,
          HomeworkAutoGenerateVM model)
@@ -162,12 +163,12 @@ namespace QdratNew.Services.HomeworkDraft.Implementations
             };
 
             _context.HomeworkDrafts.Add(draft);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
 
             // =========================================
             // 2️⃣ جلب الأسئلة المؤهلة فقط (تقليل حجم البيانات)
             // =========================================
-            var allQuestions = _context.Questions
+            var allQuestions = await _context.Questions
                 .AsNoTracking()
                 .Where(q =>
                     q.LessonId != null &&
@@ -178,7 +179,7 @@ namespace QdratNew.Services.HomeworkDraft.Implementations
                     q.Id,
                     q.LessonId
                 })
-                .ToList();
+                .ToListAsync();
             // =========================================
             // 3️⃣ فلترة الأسئلة في الذاكرة حسب المؤشرات المختارة
             // =========================================
@@ -223,13 +224,13 @@ namespace QdratNew.Services.HomeworkDraft.Implementations
                 }
             }
 
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
 
             // =========================================
             // 5️⃣ تحقق نهائي
             // =========================================
-            bool hasAny = _context.HomeworkDraftQuestions
-                .Any(q => q.HomeworkDraftId == draft.Id);
+            bool hasAny = await _context.HomeworkDraftQuestions
+                .AnyAsync(q => q.HomeworkDraftId == draft.Id);
 
             if (!hasAny)
                 throw new InvalidOperationException("لم يتم توليد أي أسئلة في المسودة.");
@@ -239,7 +240,7 @@ namespace QdratNew.Services.HomeworkDraft.Implementations
 
 
 
-        public int GenerateDraftFromProfessionalModel(
+        public async Task<int> GenerateDraftFromProfessionalModel(
             int partnerId,
             int subscriptionPeriodId,
             HomeworkGenerateFromProfessionalModelVM model)
@@ -250,18 +251,18 @@ namespace QdratNew.Services.HomeworkDraft.Implementations
             // =====================================
             // جلب الأسئلة من النموذج الاحترافي
             // =====================================
-            var questionIds = _context.ProfessionalModelQuestions
+            var questionIds = await _context.ProfessionalModelQuestions
          .Where(x => x.Model.Id == model.ProfessionalModelId)
          .Select(x => x.QuestionId)
          .Where(q => q.HasValue)
          .Select(q => q.Value)
-         .ToList();
+         .ToListAsync();
 
 
             if (!questionIds.Any())
                 throw new InvalidOperationException("النموذج الاحترافي لا يحتوي على أسئلة.");
 
-            return SaveDraft(
+            return await SaveDraft(
                 new SaveHomeworkDraftVM
                 {
                     Title = model.Title,
@@ -271,22 +272,22 @@ namespace QdratNew.Services.HomeworkDraft.Implementations
                 subscriptionPeriodId
             );
         }
-        public ReplaceHomeworkDraftQuestionVM GetReplaceCandidates(
+        public async Task<ReplaceHomeworkDraftQuestionVM> GetReplaceCandidates(
     int draftId,
     Guid oldQuestionId,
     int lessonId)
         {
-            var old = _context.Questions
+            var old = await _context.Questions
                 .Where(q => q.Id == oldQuestionId)
                 .Select(q => q.Title)
-                .FirstOrDefault();
+                .FirstOrDefaultAsync();
 
-            var usedIds = _context.HomeworkDraftQuestions
+            var usedIds = await _context.HomeworkDraftQuestions
                 .Where(x => x.HomeworkDraftId == draftId)
                 .Select(x => x.QuestionId)
-                .ToList();
+                .ToListAsync();
 
-            var candidates = _context.Questions
+            var candidates = (await _context.Questions
                 .Where(q =>
                     q.LessonId == lessonId &&
                     q.IsComplete &&
@@ -296,7 +297,7 @@ namespace QdratNew.Services.HomeworkDraft.Implementations
                     q.Id,
                     q.Title
                 })
-                .ToList()               // 👈 DB
+                .ToListAsync())               // 👈 DB
                 .Where(q => !usedIds.Contains(q.Id)) // 👈 Memory
                 .Select(q => new ReplaceCandidateQuestionVM
                 {
@@ -316,7 +317,7 @@ namespace QdratNew.Services.HomeworkDraft.Implementations
         }
 
 
-        public void ReplaceQuestion(
+        public async Task ReplaceQuestion(
             int draftId,
             Guid oldQuestionId,
             Guid newQuestionId)
@@ -325,16 +326,16 @@ namespace QdratNew.Services.HomeworkDraft.Implementations
                 throw new InvalidOperationException("لم يتم اختيار سؤال بديل.");
 
             // 1️⃣ تأكد أن السؤال الجديد موجود
-            var newQuestionExists = _context.Questions
+            var newQuestionExists = await _context.Questions
                 .AsNoTracking()
-                .Any(q => q.Id == newQuestionId);
+                .AnyAsync(q => q.Id == newQuestionId);
 
             if (!newQuestionExists)
                 throw new InvalidOperationException("السؤال البديل غير موجود.");
 
             // 2️⃣ السؤال القديم داخل المسودة
-            var oldDraftQuestion = _context.HomeworkDraftQuestions
-                .FirstOrDefault(x =>
+            var oldDraftQuestion = await _context.HomeworkDraftQuestions
+                .FirstOrDefaultAsync(x =>
                     x.HomeworkDraftId == draftId &&
                     x.QuestionId == oldQuestionId);
 
@@ -342,8 +343,8 @@ namespace QdratNew.Services.HomeworkDraft.Implementations
                 throw new InvalidOperationException("السؤال المراد استبداله غير موجود داخل المسودة.");
 
             // 3️⃣ منع التكرار
-            var alreadyExists = _context.HomeworkDraftQuestions
-                .Any(x =>
+            var alreadyExists = await _context.HomeworkDraftQuestions
+                .AnyAsync(x =>
                     x.HomeworkDraftId == draftId &&
                     x.QuestionId == newQuestionId);
 
@@ -354,7 +355,7 @@ namespace QdratNew.Services.HomeworkDraft.Implementations
 
             // 4️⃣ حذف القديم
             _context.HomeworkDraftQuestions.Remove(oldDraftQuestion);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
 
             // 5️⃣ إضافة الجديد
             _context.HomeworkDraftQuestions.Add(new HomeworkDraftQuestion
@@ -364,20 +365,20 @@ namespace QdratNew.Services.HomeworkDraft.Implementations
                 Order = order
             });
 
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
         }
 
 
-        public List<ReplaceCandidateQuestionVM> GetAddCandidates(
+        public async Task<List<ReplaceCandidateQuestionVM>> GetAddCandidates(
     int draftId,
     int lessonId)
         {
-            var used = _context.HomeworkDraftQuestions
+            var used = await _context.HomeworkDraftQuestions
                 .Where(x => x.HomeworkDraftId == draftId)
                 .Select(x => x.QuestionId)
-                .ToList();
+                .ToListAsync();
 
-            return _context.Questions
+            return (await _context.Questions
                 .Where(q =>
                     q.LessonId == lessonId &&
                     q.IsComplete &&
@@ -387,7 +388,7 @@ namespace QdratNew.Services.HomeworkDraft.Implementations
                     q.Id,
                     q.Title
                 })
-                .ToList()
+                .ToListAsync())
                 .Where(q => !used.Contains(q.Id))
                 .Select(q => new ReplaceCandidateQuestionVM
                 {
@@ -397,20 +398,20 @@ namespace QdratNew.Services.HomeworkDraft.Implementations
                 .ToList();
         }
 
-        public void AddQuestion(int draftId, Guid questionId)
+        public async Task AddQuestion(int draftId, Guid questionId)
         {
-            bool exists = _context.HomeworkDraftQuestions
-                .Any(x =>
+            bool exists = await _context.HomeworkDraftQuestions
+                .AnyAsync(x =>
                     x.HomeworkDraftId == draftId &&
                     x.QuestionId == questionId);
 
             if (exists)
                 throw new InvalidOperationException("هذا السؤال موجود بالفعل داخل المسودة.");
 
-            var maxOrder = _context.HomeworkDraftQuestions
+            var maxOrder = await _context.HomeworkDraftQuestions
                 .Where(x => x.HomeworkDraftId == draftId)
                 .Select(x => (int?)x.Order)
-                .Max() ?? 0;
+                .MaxAsync() ?? 0;
 
             _context.HomeworkDraftQuestions.Add(new HomeworkDraftQuestion
             {
@@ -419,28 +420,28 @@ namespace QdratNew.Services.HomeworkDraft.Implementations
                 Order = maxOrder + 1
             });
 
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
         }
 
 
         // ===============================
         // 👁️ مراجعة المسودة
         // ===============================
-        public HomeworkDraftPreviewVM GetDraftForPreview(int draftId)
+        public async Task<HomeworkDraftPreviewVM> GetDraftForPreview(int draftId)
         {
-            var draft = _context.HomeworkDrafts
+            var draft = await _context.HomeworkDrafts
                 .Where(d => d.Id == draftId)
                 .Select(d => new
                 {
                     d.Id,
                     d.Title
                 })
-                .FirstOrDefault();
+                .FirstOrDefaultAsync();
 
             if (draft == null)
                 throw new InvalidOperationException("المسودة غير موجودة.");
 
-            var questions = _context.HomeworkDraftQuestions
+            var questions = await _context.HomeworkDraftQuestions
                 .Where(q => q.HomeworkDraftId == draftId)
                 .Select(q => new
                 {
@@ -450,7 +451,7 @@ namespace QdratNew.Services.HomeworkDraft.Implementations
                     LessonTitle = q.Question.Lesson.Title,
                     CurriculumId = q.Question.Lesson.Section.CurriculumId
                 })
-                .ToList();
+                .ToListAsync();
 
             if (!questions.Any())
                 throw new InvalidOperationException("لا توجد أسئلة داخل المسودة.");
@@ -458,10 +459,10 @@ namespace QdratNew.Services.HomeworkDraft.Implementations
             // اسم الدورة
             var curriculumId = questions.First().CurriculumId;
 
-            var courseName = _context.CourseCurriculums
+            var courseName = await _context.CourseCurriculums
                 .Where(cc => cc.CurriculumId == curriculumId)
                 .Select(cc => cc.Course.Name)
-                .FirstOrDefault() ?? string.Empty;
+                .FirstOrDefaultAsync() ?? string.Empty;
 
             var lessonGroups = questions
                 .GroupBy(q => new { q.LessonId, q.LessonTitle })

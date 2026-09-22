@@ -1,52 +1,53 @@
 ﻿using QdratNew.ViewModels.Partner.Homework;
 using QdratNew.ViewModels.Partner.HomeworkDraft;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace QdratNew.Services.HomeworkDraft.Interfaces
 {
     public interface IHomeworkDraftService
     {
         // 📄 قائمة المسودات
-        List<HomeworkDraftListVM> GetDrafts(
+        Task<List<HomeworkDraftListVM>> GetDrafts(
             int partnerId,
             int subscriptionPeriodId
         );
 
         // 💾 حفظ مسودة يدوية
-        int SaveDraft(
+        Task<int> SaveDraft(
             SaveHomeworkDraftVM model,
             int partnerId,
             int subscriptionPeriodId
         );
 
         // 🤖 توليد تلقائي
-        int GenerateAutoDraft(
+        Task<int> GenerateAutoDraft(
         int partnerId,
         int subscriptionPeriodId,
         HomeworkAutoGenerateVM model
     );
 
         // 🧠 توليد من نموذج احترافي
-        int GenerateDraftFromProfessionalModel(
+        Task<int> GenerateDraftFromProfessionalModel(
             int partnerId,
             int subscriptionPeriodId,
             HomeworkGenerateFromProfessionalModelVM model
         );
 
         // 👁️ معاينة المسودة
-        HomeworkDraftPreviewVM GetDraftForPreview(int draftId);
+        Task<HomeworkDraftPreviewVM> GetDraftForPreview(int draftId);
 
 
 
         // ===============================
         // ➕ إضافة سؤال
         // ===============================
-        List<ReplaceCandidateQuestionVM> GetAddCandidates(
+        Task<List<ReplaceCandidateQuestionVM>> GetAddCandidates(
             int draftId,
             int lessonId
         );
 
-        void AddQuestion(
+        Task AddQuestion(
             int draftId,
             Guid questionId
         );
@@ -54,13 +55,13 @@ namespace QdratNew.Services.HomeworkDraft.Interfaces
         // ===============================
         // 🔁 استبدال سؤال
         // ===============================
-        ReplaceHomeworkDraftQuestionVM GetReplaceCandidates(
+        Task<ReplaceHomeworkDraftQuestionVM> GetReplaceCandidates(
             int draftId,
             Guid oldQuestionId,
             int lessonId
         );
 
-        void ReplaceQuestion(
+        Task ReplaceQuestion(
             int draftId,
             Guid oldQuestionId,
             Guid newQuestionId

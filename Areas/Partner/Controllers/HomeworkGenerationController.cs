@@ -54,7 +54,7 @@ namespace QdratNew.Areas.Partner.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult FromProfessionalModel(
+        public async Task<IActionResult> FromProfessionalModel(
             HomeworkGenerateFromProfessionalModelVM model)
         {
             if (!ModelState.IsValid)
@@ -69,7 +69,7 @@ namespace QdratNew.Areas.Partner.Controllers
                 return RedirectToAction("Index", "ProfessionalModels");
             }
 
-            var draftId = _draftService.GenerateDraftFromProfessionalModel(
+            var draftId = await _draftService.GenerateDraftFromProfessionalModel(
                 ActivePartnerId,
                 ActiveSubscriptionPeriodId,
                 model);
@@ -94,12 +94,12 @@ namespace QdratNew.Areas.Partner.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult AutoGenerate(HomeworkAutoGenerateVM model)
+        public async Task<IActionResult> AutoGenerate(HomeworkAutoGenerateVM model)
         {
             if (!ModelState.IsValid)
                 return View(model);
 
-            var draftId = _draftService.GenerateAutoDraft(
+            var draftId = await _draftService.GenerateAutoDraft(
                 ActivePartnerId,
                 ActiveSubscriptionPeriodId,
                 model);

@@ -43,12 +43,12 @@ namespace QdratNew.Areas.Partner.Controllers
         // =========================
         // 📄 Draft List
         // =========================
-        public IActionResult Index()
+        public async Task<IActionResult> Index()
         {
             var guard = RequirePermission(SubscriptionContext.CanCreateHomework);
             if (guard != null) return guard;
 
-            var drafts = _draftService.GetDrafts(
+            var drafts = await _draftService.GetDrafts(
                 ActivePartnerId,
                 ActiveSubscriptionPeriodId
             );
@@ -63,9 +63,9 @@ namespace QdratNew.Areas.Partner.Controllers
 
 
         [HttpGet]
-        public IActionResult AddQuestion(int draftId, int lessonId)
+        public async Task<IActionResult> AddQuestion(int draftId, int lessonId)
         {
-            var questions = _draftService.GetAddCandidates(draftId, lessonId);
+            var questions = await _draftService.GetAddCandidates(draftId, lessonId);
 
             var model = new AddHomeworkDraftQuestionVM
             {
@@ -81,9 +81,9 @@ namespace QdratNew.Areas.Partner.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult ConfirmAddQuestion(int draftId, Guid questionId)
+        public async Task<IActionResult> ConfirmAddQuestion(int draftId, Guid questionId)
         {
-            _draftService.AddQuestion(draftId, questionId);
+            await _draftService.AddQuestion(draftId, questionId);
 
             TempData["Success"] = "تمت إضافة السؤال.";
             return RedirectToAction(nameof(Preview), new { id = draftId });
@@ -95,9 +95,9 @@ namespace QdratNew.Areas.Partner.Controllers
         // =========================
         // 👁️ Preview Draft
         // =========================
-        public IActionResult Preview(int id)
+        public async Task<IActionResult> Preview(int id)
         {
-            var draft = _draftService.GetDraftForPreview(id);
+            var draft = await _draftService.GetDraftForPreview(id);
             if (draft == null)
                 return NotFound();
 
@@ -106,12 +106,12 @@ namespace QdratNew.Areas.Partner.Controllers
 
 
         [HttpGet]
-        public IActionResult ReplaceQuestion(
+        public async Task<IActionResult> ReplaceQuestion(
             int draftId,
             Guid oldQuestionId,
             int lessonId)
         {
-            var model = _draftService.GetReplaceCandidates(
+            var model = await _draftService.GetReplaceCandidates(
                 draftId,
                 oldQuestionId,
                 lessonId
@@ -125,10 +125,10 @@ namespace QdratNew.Areas.Partner.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult ConfirmReplaceQuestion(
+        public async Task<IActionResult> ConfirmReplaceQuestion(
             ReplaceHomeworkDraftQuestionVM model)
         {
-            _draftService.ReplaceQuestion(
+            await _draftService.ReplaceQuestion(
                 model.DraftId,
                 model.OldQuestionId,
                 model.NewQuestionId
@@ -167,7 +167,7 @@ namespace QdratNew.Areas.Partner.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult AutoGenerate(HomeworkAutoGenerateVM model)
+        public async Task<IActionResult> AutoGenerate(HomeworkAutoGenerateVM model)
         {
             // 🔴 تحقق يدوي إضافي
             if (model.QuestionsPerLesson <= 0)
@@ -183,7 +183,7 @@ namespace QdratNew.Areas.Partner.Controllers
 
             try
             {
-                var draftId = _draftService.GenerateAutoDraft(
+                var draftId = await _draftService.GenerateAutoDraft(
                     ActivePartnerId,
                     ActiveSubscriptionPeriodId,
                     model
