@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using QdratNew.Data;
 using QdratNew.Entities;
 using QdratNew.ViewModels.Promo;
+using System.Threading.Tasks;
 
 namespace QdratNew.Areas.Public.Controllers
 {
@@ -18,14 +19,14 @@ namespace QdratNew.Areas.Public.Controllers
         }
 
         // الصفحة الترحيبية
-        public IActionResult Welcome()
+        public async Task<IActionResult> Welcome()
         {
-            var courseList = _context.Courses
+            var courseList = await _context.Courses
                 .Select(c => new SelectListItem
                 {
                     Value = c.Id.ToString(),
                     Text = c.Name
-                }).ToList();
+                }).ToListAsync();
 
             ViewBag.Courses = courseList;
             return View();
@@ -33,14 +34,14 @@ namespace QdratNew.Areas.Public.Controllers
 
         // بدء الاختبار
         [HttpPost]
-        public IActionResult StartExam(int courseId)
+        public async Task<IActionResult> StartExam(int courseId)
         {
-            var questions = _context.Questions
+            var questions = await _context.Questions
                 .Where(q => q.Lesson.Section.Curriculum.CourseCurriculums
                     .Any(cc => cc.CourseId == courseId))
                 .OrderBy(r => Guid.NewGuid())
                 .Take(20)
-                .ToList();
+                .ToListAsync();
 
             var session = new PromoExamSession
             {
@@ -48,7 +49,7 @@ namespace QdratNew.Areas.Public.Controllers
                 TempIdentifier = Guid.NewGuid().ToString()
             };
             _context.PromoExamSessions.Add(session);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
 
             HttpContext.Session.SetInt32("PromoSessionId", session.Id);
 
@@ -61,20 +62,20 @@ namespace QdratNew.Areas.Public.Controllers
                     QuestionId = q.Id
                 });
             }
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
 
             return RedirectToAction("Solve", new { sessionId = session.Id, index = 0 });
         }
 
         // عرض السؤال
-        public IActionResult Solve(int sessionId, int index = 0)
+        public async Task<IActionResult> Solve(int sessionId, int index = 0)
         {
-            var attempts = _context.PromoExamAttempts
+            var attempts = await _context.PromoExamAttempts
                 .Include(a => a.Question)
                     .ThenInclude(q => q.Options)
                 .Where(a => a.SessionId == sessionId)
                 .OrderBy(a => a.Id)
-                .ToList();
+                .ToListAsync();
 
             if (!attempts.Any())
                 return RedirectToAction("Welcome");
@@ -104,26 +105,26 @@ namespace QdratNew.Areas.Public.Controllers
 
 
         [HttpPost]
-        public IActionResult SubmitAnswerFetch(int SessionId, Guid q, string? SelectedOption, string nav)
+        public async Task<IActionResult> SubmitAnswerFetch(int SessionId, Guid q, string? SelectedOption, string nav)
         {
-            var attempt = _context.PromoExamAttempts
+            var attempt = await _context.PromoExamAttempts
                 .Include(a => a.Question)
                     .ThenInclude(qn => qn.Options) // ✅ هنا الأساس
-                .FirstOrDefault(a => a.SessionId == SessionId && a.QuestionId == q);
+                .FirstOrDefaultAsync(a => a.SessionId == SessionId && a.QuestionId == q);
 
             if (attempt != null)
             {
                 attempt.SelectedAnswer = SelectedOption ?? "";
                 attempt.IsCorrect = !string.IsNullOrEmpty(SelectedOption) && attempt.Question.CorrectAnswer == SelectedOption;
                 attempt.AttemptedAt = DateTime.Now;
-                _context.SaveChanges();
+                await _context.SaveChangesAsync();
             }
 
-            var allIds = _context.PromoExamAttempts
+            var allIds = await _context.PromoExamAttempts
                 .Where(a => a.SessionId == SessionId)
                 .OrderBy(a => a.Id)
                 .Select(a => a.QuestionId)
-                .ToList();
+                .ToListAsync();
 
             var currentIndex = allIds.IndexOf(q);
             int nextIndex = nav == "prev" ? currentIndex - 1 : currentIndex + 1;
@@ -135,10 +136,10 @@ namespace QdratNew.Areas.Public.Controllers
             if (nextIndex < 0) nextIndex = 0;
 
             var nextQuestionId = allIds[nextIndex];
-            var nextAttempt = _context.PromoExamAttempts
+            var nextAttempt = await _context.PromoExamAttempts
                 .Include(a => a.Question)
                     .ThenInclude(qn => qn.Options) // ✅ مهم جدًا هنا أيضًا
-                .FirstOrDefault(a => a.SessionId == SessionId && a.QuestionId == nextQuestionId);
+                .FirstOrDefaultAsync(a => a.SessionId == SessionId && a.QuestionId == nextQuestionId);
 
             if (nextAttempt == null)
                 return Content("<div class='alert alert-warning'>لم يتم تحميل السؤال التالي</div>", "text/html");
@@ -159,10 +160,10 @@ namespace QdratNew.Areas.Public.Controllers
 
 
         [HttpPost]
-        public IActionResult Start(int courseId)
+        public async Task<IActionResult> Start(int courseId)
         {
             // 🟢 جلب 20 سؤالًا عشوائيًا من الدورة المحددة
-            var questions = _context.Questions
+            var questions = await _context.Questions
                 .Include(q => q.Options)
                 .Include(q => q.Lesson)
                     .ThenInclude(l => l.Section)
@@ -172,7 +173,7 @@ namespace QdratNew.Areas.Public.Controllers
                     .Any(cc => cc.CourseId == courseId))
                 .OrderBy(r => Guid.NewGuid())
                 .Take(20)
-                .ToList();
+                .ToListAsync();
 
             if (!questions.Any())
             {
@@ -189,7 +190,7 @@ namespace QdratNew.Areas.Public.Controllers
             };
 
             _context.PromoExamSessions.Add(session);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
 
             // 🟢 إنشاء محاولات الأسئلة
             foreach (var q in questions)
@@ -201,7 +202,7 @@ namespace QdratNew.Areas.Public.Controllers
                 });
             }
 
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
 
             // 🟢 تجهيز أول سؤال للعرض
             var firstQuestion = questions.First();
@@ -223,11 +224,11 @@ namespace QdratNew.Areas.Public.Controllers
 
         // إرسال إجابة
         [HttpPost]
-        public IActionResult SubmitAnswer(int sessionId, Guid questionId, string selectedAnswer, int nextIndex)
+        public async Task<IActionResult> SubmitAnswer(int sessionId, Guid questionId, string selectedAnswer, int nextIndex)
         {
-            var attempt = _context.PromoExamAttempts
+            var attempt = await _context.PromoExamAttempts
                 .Include(a => a.Question)
-                .FirstOrDefault(a => a.SessionId == sessionId && a.QuestionId == questionId);
+                .FirstOrDefaultAsync(a => a.SessionId == sessionId && a.QuestionId == questionId);
 
             if (attempt != null)
             {
@@ -245,19 +246,19 @@ namespace QdratNew.Areas.Public.Controllers
                 }
 
                 attempt.AttemptedAt = DateTime.Now;
-                _context.SaveChanges();
+                await _context.SaveChangesAsync();
             }
 
 
             return RedirectToAction("Solve", new { sessionId, index = nextIndex });
         }
 
-        public IActionResult Result(int sessionId)
+        public async Task<IActionResult> Result(int sessionId)
         {
-            var attempts = _context.PromoExamAttempts
+            var attempts = await _context.PromoExamAttempts
                 .Include(a => a.Question)
                 .Where(a => a.SessionId == sessionId)
-                .ToList();
+                .ToListAsync();
 
             if (!attempts.Any())
                 return RedirectToAction("Welcome");
@@ -268,8 +269,8 @@ namespace QdratNew.Areas.Public.Controllers
             var skipped = attempts.Count(a => string.IsNullOrEmpty(a.SelectedAnswer));
 
             // ✅ التحقق من وجود نتيجة سابقة
-            var existingResult = _context.PromoExamResults
-                .FirstOrDefault(r => r.SessionId == sessionId);
+            var existingResult = await _context.PromoExamResults
+                .FirstOrDefaultAsync(r => r.SessionId == sessionId);
 
             if (existingResult == null)
             {
@@ -284,7 +285,7 @@ namespace QdratNew.Areas.Public.Controllers
                 };
 
                 _context.PromoExamResults.Add(result);
-                _context.SaveChanges();
+                await _context.SaveChangesAsync();
             }
             else
             {
@@ -293,7 +294,7 @@ namespace QdratNew.Areas.Public.Controllers
                 existingResult.WrongAnswers = wrong;
                 existingResult.SkippedQuestions = skipped;
                 existingResult.SubmittedAt = DateTime.Now;
-                _context.SaveChanges();
+                await _context.SaveChangesAsync();
             }
 
             // ✅ تجهيز ViewModel للعرض
@@ -320,7 +321,7 @@ namespace QdratNew.Areas.Public.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult RequestReport(PromoLeadInputViewModel vm)
+        public async Task<IActionResult> RequestReport(PromoLeadInputViewModel vm)
         {
             if (!ModelState.IsValid)
             {
@@ -341,7 +342,7 @@ namespace QdratNew.Areas.Public.Controllers
             };
 
             _context.PromoLeads.Add(lead);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
 
             return RedirectToAction("ThankYou");
         }
