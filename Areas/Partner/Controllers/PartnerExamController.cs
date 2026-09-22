@@ -771,7 +771,7 @@ namespace QdratNew.Areas.Partner.Controllers
         // =====================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult Preview(GenerateExamRequestVM request)
+        public async Task<IActionResult> Preview(GenerateExamRequestVM request)
         {
             if (!ModelState.IsValid)
                 return View("Generate", request);
@@ -779,7 +779,7 @@ namespace QdratNew.Areas.Partner.Controllers
             GeneratedExamResult generated;
             try
             {
-                generated = _examService.GeneratePreview(request);
+                generated = await _examService.GeneratePreview(request);
             }
             catch (Exception ex)
             {
@@ -798,7 +798,7 @@ namespace QdratNew.Areas.Partner.Controllers
         // =====================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult SaveDraft()
+        public async Task<IActionResult> SaveDraft()
         {
             if (!TempData.ContainsKey("GeneratedExam"))
                 return RedirectToAction(nameof(Generate));
@@ -807,7 +807,7 @@ namespace QdratNew.Areas.Partner.Controllers
             var generated = System.Text.Json.JsonSerializer
                 .Deserialize<GeneratedExamResult>(generatedJson)!;
 
-            var draftId = _examService.SaveDraft(generated, ActivePartnerId);
+            var draftId = await _examService.SaveDraft(generated, ActivePartnerId);
 
             return RedirectToAction(nameof(PreviewDraft), new { draftId });
         }
@@ -837,18 +837,18 @@ namespace QdratNew.Areas.Partner.Controllers
         // STEP 5: معاينة مسودة محفوظة
         // =====================================================
         [HttpGet]
-        public IActionResult PreviewDraft(int draftId)
+        public async Task<IActionResult> PreviewDraft(int draftId)
         {
-            var model = _examService.GetDraftForPreview(draftId);
+            var model = await _examService.GetDraftForPreview(draftId);
             return View(model);
         }
 
 
 
         [HttpGet]
-        public IActionResult AddQuestion(int draftId, int lessonId)
+        public async Task<IActionResult> AddQuestion(int draftId, int lessonId)
         {
-            var model = _examService.GetAddQuestionCandidates(draftId, lessonId);
+            var model = await _examService.GetAddQuestionCandidates(draftId, lessonId);
             return View(model);
         }
 
@@ -857,17 +857,17 @@ namespace QdratNew.Areas.Partner.Controllers
         // STEP 6: تجهيز الإرسال
         // =====================================================
         [HttpGet]
-        public IActionResult SendDraft(int draftId)
+        public async Task<IActionResult> SendDraft(int draftId)
         {
-            var vm = _examService.PrepareSendDraftVM(draftId, ActivePartnerId);
+            var vm = await _examService.PrepareSendDraftVM(draftId, ActivePartnerId);
             return View(vm);
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult SendDraft(SendExamDraftVM model)
+        public async Task<IActionResult> SendDraft(SendExamDraftVM model)
         {
-            _examService.SendDraftToBatch(model, ActivePartnerId);
+            await _examService.SendDraftToBatch(model, ActivePartnerId);
             return RedirectToAction(nameof(Drafts));
         }
 
@@ -875,12 +875,12 @@ namespace QdratNew.Areas.Partner.Controllers
         // STEP 8: استبدال سؤال داخل المسودة
         // =====================================================
         [HttpGet]
-        public IActionResult ReplaceQuestion(
+        public async Task<IActionResult> ReplaceQuestion(
           int draftId,
           Guid oldQuestionId,
           int lessonId)
         {
-            var model = _examService.GetReplaceCandidates(
+            var model = await _examService.GetReplaceCandidates(
                 draftId,
                 oldQuestionId,
                 lessonId);
@@ -892,12 +892,12 @@ namespace QdratNew.Areas.Partner.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult ConfirmReplaceQuestion(
+        public async Task<IActionResult> ConfirmReplaceQuestion(
       int draftId,
       Guid oldQuestionId,
       Guid newQuestionId)
         {
-            _examService.ReplaceQuestion(
+            await _examService.ReplaceQuestion(
                 draftId,
                 oldQuestionId,
                 newQuestionId);
@@ -1093,9 +1093,9 @@ namespace QdratNew.Areas.Partner.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult ConfirmAddQuestion(int draftId, Guid questionId)
+        public async Task<IActionResult> ConfirmAddQuestion(int draftId, Guid questionId)
         {
-            _examService.AddQuestionToDraft(draftId, questionId);
+            await _examService.AddQuestionToDraft(draftId, questionId);
             return RedirectToAction(nameof(PreviewDraft), new { draftId });
         }
 

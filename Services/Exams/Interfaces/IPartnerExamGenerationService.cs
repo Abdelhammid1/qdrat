@@ -3,6 +3,7 @@ using QdratNew.Services.Exams.Models;
 using QdratNew.ViewModels.Partner.Exam;
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace QdratNew.Services.Exams.Interfaces
 {
@@ -11,14 +12,14 @@ namespace QdratNew.Services.Exams.Interfaces
         // ===============================
         // 1️⃣ توليد مؤقت (Preview فقط)
         // ===============================
-        GeneratedExamResult GeneratePreview(
+        Task<GeneratedExamResult> GeneratePreview(
             GenerateExamRequestVM request
         );
 
         // ===============================
         // 2️⃣ حفظ المسودة
         // ===============================
-        int SaveDraft(
+        Task<int> SaveDraft(
             GeneratedExamResult generated,
             int partnerId
         );
@@ -26,36 +27,36 @@ namespace QdratNew.Services.Exams.Interfaces
         // ===============================
         // 3️⃣ عرض المسودات
         // ===============================
-        List<ExamDraftListVM> GetPartnerDrafts(
+        Task<List<ExamDraftListVM>> GetPartnerDrafts(
             int partnerId
         );
 
-        ExamDraftPreviewVM GetDraftForPreview(
+        Task<ExamDraftPreviewVM> GetDraftForPreview(
             int draftId
         );
 
         // ===============================
         // 4️⃣ تعديل المسودة
         // ===============================
-        ReplaceExamDraftQuestionVM GetReplaceCandidates(
+        Task<ReplaceExamDraftQuestionVM> GetReplaceCandidates(
          int draftId,
          Guid oldQuestionId,
          int lessonId
      );
 
 
-        void ReplaceQuestion(
+        Task ReplaceQuestion(
             int draftId,
             Guid oldQuestionId,
             Guid newQuestionId
         );
 
-        AddExamDraftQuestionVM GetAddQuestionCandidates(
+        Task<AddExamDraftQuestionVM> GetAddQuestionCandidates(
             int draftId,
             int lessonId
         );
 
-        void AddQuestionToDraft(
+        Task AddQuestionToDraft(
             int draftId,
             Guid questionId
         );
@@ -63,17 +64,17 @@ namespace QdratNew.Services.Exams.Interfaces
         // ===============================
         // 5️⃣ إرسال المسودة
         // ===============================
-        SendExamDraftVM PrepareSendDraftVM(
+        Task<SendExamDraftVM> PrepareSendDraftVM(
             int draftId,
             int partnerId
         );
 
-        void SendDraftToBatch(
+        Task SendDraftToBatch(
             SendExamDraftVM model,
             int partnerId
         );
 
-        void ConfirmStudentExam(
+        Task ConfirmStudentExam(
             ConfirmStudentExamVM model
         );
     }

@@ -8,6 +8,7 @@ using QdratNew.ViewModels.Partner.Exam;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace QdratNew.Services.Exams.Implementations
 {
@@ -23,7 +24,7 @@ namespace QdratNew.Services.Exams.Implementations
         // =====================================================
         // 1️⃣ Generate Preview (NO SAVE)  ✅ FIXED
         // =====================================================
-        public GeneratedExamResult GeneratePreview(GenerateExamRequestVM request)
+        public async Task<GeneratedExamResult> GeneratePreview(GenerateExamRequestVM request)
         {
             if (request == null)
                 throw new InvalidOperationException("بيانات التوليد غير صحيحة.");
@@ -50,7 +51,7 @@ namespace QdratNew.Services.Exams.Implementations
             // =====================================================
             // 2️⃣ جلب كل الأسئلة مرة واحدة فقط (SQL Server 2014 SAFE)
             // =====================================================
-            var allQuestions = _context.Questions
+            var allQuestions = await _context.Questions
        .AsNoTracking()
        .Where(q =>
            q.IsComplete &&
@@ -66,7 +67,7 @@ namespace QdratNew.Services.Exams.Implementations
            q.LessonId,
            LessonTitle = q.Lesson.Title
        })
-       .ToList();
+       .ToListAsync();
 
             // =====================================================
             // 3️⃣ تصفية في الذاكرة لتجنب Contains داخل SQL
@@ -146,7 +147,7 @@ namespace QdratNew.Services.Exams.Implementations
         // =====================================================
         // 2️⃣ Save Draft
         // =====================================================
-        public int SaveDraft(GeneratedExamResult generated, int partnerId)
+        public async Task<int> SaveDraft(GeneratedExamResult generated, int partnerId)
         {
             if (generated == null || generated.Questions == null || !generated.Questions.Any())
                 throw new InvalidOperationException("لا توجد أسئلة لحفظ المسودة.");
@@ -154,9 +155,9 @@ namespace QdratNew.Services.Exams.Implementations
             var strategy = _context.Database.CreateExecutionStrategy();
             int draftId = 0;
 
-            strategy.Execute(() =>
+            await strategy.ExecuteAsync(async () =>
             {
-                using var transaction = _context.Database.BeginTransaction();
+                await using var transaction = await _context.Database.BeginTransactionAsync();
 
                 var firstCurriculumId = generated.Questions
                     .Select(q => q.CurriculumId)
@@ -176,7 +177,7 @@ namespace QdratNew.Services.Exams.Implementations
                 };
 
                 _context.ExamDrafts.Add(draft);
-                _context.SaveChanges();
+                await _context.SaveChangesAsync();
 
                 int order = 1;
                 foreach (var q in generated.Questions)
@@ -189,8 +190,8 @@ namespace QdratNew.Services.Exams.Implementations
                     });
                 }
 
-                _context.SaveChanges();
-                transaction.Commit();
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
 
                 draftId = draft.Id;
             });
@@ -202,9 +203,9 @@ namespace QdratNew.Services.Exams.Implementations
         // =====================================================
         // 3️⃣ Drafts List
         // =====================================================
-        public List<ExamDraftListVM> GetPartnerDrafts(int partnerId)
+        public async Task<List<ExamDraftListVM>> GetPartnerDrafts(int partnerId)
         {
-            return _context.ExamDrafts
+            return await _context.ExamDrafts
                 .Where(d => d.PartnerId == partnerId && !d.IsArchived)
                 .OrderByDescending(d => d.CreatedAt)
                 .Select(d => new ExamDraftListVM
@@ -214,15 +215,15 @@ namespace QdratNew.Services.Exams.Implementations
                     CreatedAt = d.CreatedAt,
                     QuestionsCount = d.DraftQuestions.Count
                 })
-                .ToList();
+                .ToListAsync();
         }
 
         // =====================================================
         // 4️⃣ Preview Draft
         // =====================================================
-        public ExamDraftPreviewVM GetDraftForPreview(int draftId)
+        public async Task<ExamDraftPreviewVM> GetDraftForPreview(int draftId)
         {
-            var questions = _context.ExamDraftQuestions
+            var questions = await _context.ExamDraftQuestions
                 .Where(x => x.ExamDraftId == draftId)
                 .Select(x => new
                 {
@@ -233,7 +234,7 @@ namespace QdratNew.Services.Exams.Implementations
                     SectionTitle = x.Question.Section.Title,
                     Title = x.Question.Title
                 })
-                .ToList();
+                .ToListAsync();
 
             if (!questions.Any())
                 throw new InvalidOperationException("لا توجد أسئلة في هذه المسودة.");
@@ -252,7 +253,7 @@ namespace QdratNew.Services.Exams.Implementations
                 })
                 .ToList();
 
-            var draftInfo = _context.ExamDrafts
+            var draftInfo = await _context.ExamDrafts
                 .Where(d => d.Id == draftId)
                 .Select(d => new
                 {
@@ -263,7 +264,7 @@ namespace QdratNew.Services.Exams.Implementations
                         .FirstOrDefault(),
                     CurriculumName = d.Curriculum.Title
                 })
-                .FirstOrDefault();
+                .FirstOrDefaultAsync();
 
             return new ExamDraftPreviewVM
             {
@@ -276,7 +277,7 @@ namespace QdratNew.Services.Exams.Implementations
             };
         }
 
-        public ReplaceExamDraftQuestionVM GetReplaceCandidates(
+        public async Task<ReplaceExamDraftQuestionVM> GetReplaceCandidates(
     int draftId,
     Guid oldQuestionId,
     int lessonId)
@@ -284,15 +285,15 @@ namespace QdratNew.Services.Exams.Implementations
             // ===============================
             // 1️⃣ الأسئلة المستخدمة في المسودة
             // ===============================
-            var usedQuestionIds = _context.ExamDraftQuestions
+            var usedQuestionIds = await _context.ExamDraftQuestions
                 .Where(x => x.ExamDraftId == draftId)
                 .Select(x => x.QuestionId)
-                .ToList();
+                .ToListAsync();
 
             // ===============================
             // 2️⃣ جلب أسئلة من نفس الـ Lesson
             // ===============================
-            var candidates = _context.Questions
+            var candidates = (await _context.Questions
                 .Where(q =>
                     q.LessonId == lessonId &&
                     q.IsComplete &&
@@ -302,7 +303,7 @@ namespace QdratNew.Services.Exams.Implementations
                     q.Id,
                     q.Title
                 })
-                .ToList() // SQL Server 2014 SAFE
+                .ToListAsync()) // SQL Server 2014 SAFE
                 .Where(q =>
                     !usedQuestionIds.Contains(q.Id) &&
                     q.Id != oldQuestionId)
@@ -316,15 +317,15 @@ namespace QdratNew.Services.Exams.Implementations
             // ===============================
             // 3️⃣ بيانات العرض
             // ===============================
-            var lesson = _context.Lessons
+            var lesson = await _context.Lessons
                 .Where(l => l.Id == lessonId)
                 .Select(l => new { l.Id, l.Title })
-                .FirstOrDefault();
+                .FirstOrDefaultAsync();
 
-            var oldQuestionTitle = _context.Questions
+            var oldQuestionTitle = await _context.Questions
                 .Where(q => q.Id == oldQuestionId)
                 .Select(q => q.Title)
-                .FirstOrDefault();
+                .FirstOrDefaultAsync();
 
             return new ReplaceExamDraftQuestionVM
             {
@@ -339,22 +340,22 @@ namespace QdratNew.Services.Exams.Implementations
 
 
 
-        public void AddQuestionToDraft(
+        public async Task AddQuestionToDraft(
     int draftId,
     Guid questionId)
         {
-            var exists = _context.ExamDraftQuestions
-                .Any(x =>
+            var exists = await _context.ExamDraftQuestions
+                .AnyAsync(x =>
                     x.ExamDraftId == draftId &&
                     x.QuestionId == questionId);
 
             if (exists)
                 throw new InvalidOperationException("السؤال موجود بالفعل داخل المسودة.");
 
-            var maxOrder = _context.ExamDraftQuestions
+            var maxOrder = await _context.ExamDraftQuestions
                 .Where(x => x.ExamDraftId == draftId)
                 .Select(x => (int?)x.Order)
-                .Max() ?? 0;
+                .MaxAsync() ?? 0;
 
             _context.ExamDraftQuestions.Add(new ExamDraftQuestion
             {
@@ -363,7 +364,7 @@ namespace QdratNew.Services.Exams.Implementations
                 Order = maxOrder + 1
             });
 
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
         }
 
 
@@ -379,10 +380,10 @@ namespace QdratNew.Services.Exams.Implementations
 
 
 
-        public void ReplaceQuestion(int draftId, Guid oldQuestionId, Guid newQuestionId)
+        public async Task ReplaceQuestion(int draftId, Guid oldQuestionId, Guid newQuestionId)
         {
-            var item = _context.ExamDraftQuestions
-                .FirstOrDefault(x =>
+            var item = await _context.ExamDraftQuestions
+                .FirstOrDefaultAsync(x =>
                     x.ExamDraftId == draftId &&
                     x.QuestionId == oldQuestionId);
 
@@ -390,17 +391,17 @@ namespace QdratNew.Services.Exams.Implementations
                 throw new InvalidOperationException("السؤال غير موجود.");
 
             item.QuestionId = newQuestionId;
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
         }
 
         // =====================================================
         // 6️⃣ Send Draft
         // =====================================================
-        public SendExamDraftVM PrepareSendDraftVM(int draftId, int partnerId)
+        public async Task<SendExamDraftVM> PrepareSendDraftVM(int draftId, int partnerId)
         {
-            var draft = _context.ExamDrafts
+            var draft = await _context.ExamDrafts
                 .Include(d => d.Curriculum)
-                .FirstOrDefault(d =>
+                .FirstOrDefaultAsync(d =>
                     d.Id == draftId &&
                     !d.IsArchived);
 
@@ -410,12 +411,12 @@ namespace QdratNew.Services.Exams.Implementations
             if (draft.PartnerId != partnerId)
                 throw new InvalidOperationException("لا تملك صلاحية الوصول لهذه المسودة.");
 
-            var courseId = _context.CourseCurriculums
+            var courseId = await _context.CourseCurriculums
                 .Where(x => x.CurriculumId == draft.CurriculumId)
                 .Select(x => x.CourseId)
-                .FirstOrDefault();
+                .FirstOrDefaultAsync();
 
-            var batches = _context.Batches
+            var batches = await _context.Batches
                 .Where(b =>
                     b.CourseId == courseId &&
                     b.Branch.PartnerId == partnerId)
@@ -424,7 +425,7 @@ namespace QdratNew.Services.Exams.Implementations
                     BatchId = b.Id,
                     BatchName = b.Name
                 })
-                .ToList();
+                .ToListAsync();
 
             return new SendExamDraftVM
             {
@@ -437,7 +438,7 @@ namespace QdratNew.Services.Exams.Implementations
             };
         }
 
-        public void SendDraftToBatch(SendExamDraftVM model, int partnerId)
+        public async Task SendDraftToBatch(SendExamDraftVM model, int partnerId)
         {
             if (model == null || model.BatchIds == null || !model.BatchIds.Any())
                 throw new InvalidOperationException("يجب اختيار دفعة واحدة على الأقل.");
@@ -445,7 +446,7 @@ namespace QdratNew.Services.Exams.Implementations
             // ===============================
             // 1️⃣ جلب المسودة + الأسئلة
             // ===============================
-            var draftData = _context.ExamDrafts
+            var draftData = await _context.ExamDrafts
                 .Where(d =>
                     d.Id == model.DraftId &&
                     d.PartnerId == partnerId &&
@@ -458,7 +459,7 @@ namespace QdratNew.Services.Exams.Implementations
                         .Select(q => q.QuestionId)
                         .ToList()
                 })
-                .FirstOrDefault();
+                .FirstOrDefaultAsync();
 
             if (draftData == null)
                 throw new InvalidOperationException("المسودة غير موجودة أو لا تخص هذا الشريك.");
@@ -468,9 +469,9 @@ namespace QdratNew.Services.Exams.Implementations
             // فقط الدفعات التي تحتوي طلاب فعليًا
             // ===============================
             // 1️⃣ تحميل كل بيانات الربط مرة واحدة
-            var enrollments = _context.StudentBatchEnrollments
+            var enrollments = await _context.StudentBatchEnrollments
                 .Select(x => x.BatchId)
-                .ToList();
+                .ToListAsync();
 
             // 2️⃣ فلترة في الذاكرة (SQL 2014 SAFE)
             var validBatchIds = enrollments
@@ -486,12 +487,12 @@ namespace QdratNew.Services.Exams.Implementations
             // ===============================
             foreach (var batchId in validBatchIds)
             {
-                var batch = _context.Batches
+                var batch = await _context.Batches
                     .Where(b =>
                         b.Id == batchId &&
                         b.Branch.PartnerId == partnerId)
                     .Select(b => new { b.Id })
-                    .FirstOrDefault();
+                    .FirstOrDefaultAsync();
 
                 if (batch == null)
                     continue;
@@ -508,7 +509,7 @@ namespace QdratNew.Services.Exams.Implementations
                 };
 
                 _context.Exams.Add(exam);
-                _context.SaveChanges();
+                await _context.SaveChangesAsync();
 
                 // ===============================
                 // 5️⃣ Assignment
@@ -528,7 +529,7 @@ namespace QdratNew.Services.Exams.Implementations
                 };
 
                 _context.ExamAssignmentsToBatches.Add(assignment);
-                _context.SaveChanges();
+                await _context.SaveChangesAsync();
 
                 // ===============================
                 // 6️⃣ تثبيت الأسئلة (مرة واحدة)
@@ -548,15 +549,15 @@ namespace QdratNew.Services.Exams.Implementations
                 }
 
                 _context.ExamQuestions.AddRange(examQuestions);
-                _context.SaveChanges();
+                await _context.SaveChangesAsync();
 
                 // ===============================
                 // 7️⃣ جلب الطلاب الفعليين
                 // ===============================
-                var studentIds = _context.StudentBatchEnrollments
+                var studentIds = await _context.StudentBatchEnrollments
                     .Where(x => x.BatchId == batchId)
                     .Select(x => x.StudentID)
-                    .ToList();
+                    .ToListAsync();
 
                 if (!studentIds.Any())
                     continue;
@@ -580,25 +581,25 @@ namespace QdratNew.Services.Exams.Implementations
                 }
 
                 _context.ExamStudentStatuses.AddRange(statuses);
-                _context.SaveChanges();
+                await _context.SaveChangesAsync();
             }
         }
 
         // =====================================================
         // 4️⃣ Get Add Question Candidates (Lesson-based)
         // =====================================================
-        public AddExamDraftQuestionVM GetAddQuestionCandidates(
+        public async Task<AddExamDraftQuestionVM> GetAddQuestionCandidates(
             int draftId,
             int lessonId)
         {
             // 1️⃣ الأسئلة المستخدمة بالفعل في المسودة
-            var usedQuestionIds = _context.ExamDraftQuestions
+            var usedQuestionIds = await _context.ExamDraftQuestions
                 .Where(x => x.ExamDraftId == draftId)
                 .Select(x => x.QuestionId)
-                .ToList();
+                .ToListAsync();
 
             // 2️⃣ جلب أسئلة من نفس الـ Lesson وغير مستخدمة
-            var questions = _context.Questions
+            var questions = (await _context.Questions
                 .Where(q =>
                     q.LessonId == lessonId &&
                     q.IsComplete &&
@@ -608,7 +609,7 @@ namespace QdratNew.Services.Exams.Implementations
                     q.Id,
                     q.Title
                 })
-                .ToList() // SQL Server 2014 SAFE
+                .ToListAsync()) // SQL Server 2014 SAFE
                 .Where(q => !usedQuestionIds.Contains(q.Id))
                 .Select(q => new AddExamDraftQuestionItemVM
                 {
@@ -618,10 +619,10 @@ namespace QdratNew.Services.Exams.Implementations
                 .ToList();
 
             // 3️⃣ بيانات المحور
-            var lessonTitle = _context.Lessons
+            var lessonTitle = await _context.Lessons
                 .Where(l => l.Id == lessonId)
                 .Select(l => l.Title)
-                .FirstOrDefault();
+                .FirstOrDefaultAsync();
 
             return new AddExamDraftQuestionVM
             {
@@ -632,7 +633,7 @@ namespace QdratNew.Services.Exams.Implementations
             };
         }
 
-        public void ConfirmStudentExam(ConfirmStudentExamVM model)
+        public async Task ConfirmStudentExam(ConfirmStudentExamVM model)
         {
             if (model == null || model.QuestionIds == null || !model.QuestionIds.Any())
                 throw new InvalidOperationException("لا توجد أسئلة لإرسال الاختبار.");
@@ -649,7 +650,7 @@ namespace QdratNew.Services.Exams.Implementations
             };
 
             _context.Exams.Add(exam);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
 
             // ===============================
             // 2) Assignment لطالب
@@ -665,7 +666,7 @@ namespace QdratNew.Services.Exams.Implementations
             };
 
             _context.ExamAssignmentsToStudents.Add(assignment);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
 
             // ===============================
             // 3) تثبيت الأسئلة
@@ -681,7 +682,7 @@ namespace QdratNew.Services.Exams.Implementations
                 });
             }
 
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
 
             // ===============================
             // 4) StudentStatus
@@ -695,7 +696,7 @@ namespace QdratNew.Services.Exams.Implementations
                 AssignedAt = DateTime.Now
             });
 
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
         }
 
     }
