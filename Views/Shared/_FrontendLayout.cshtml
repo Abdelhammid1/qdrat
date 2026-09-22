@@ -239,18 +239,26 @@
                     <ul class="navbar-nav ms-auto align-items-lg-center">
 
                         @using QdratNew.Data
+                        @using Microsoft.EntityFrameworkCore
                         @inject ApplicationDbContext _context
 
                         @{
-                            var mainLinks = _context.FrontendCourses
+                            var mainLinks = await _context.FrontendCourses
                             .Where(c => c.IsActive && c.ShowAsMainLink)
                             .OrderBy(c => c.DisplayOrder)
-                            .ToList();
+                            .ToListAsync();
 
-                            var frontCourses = _context.FrontendCourses
+                            var frontCourses = await _context.FrontendCourses
                             .Where(c => c.IsActive && c.ShowInNavbar)
                             .OrderBy(c => c.DisplayOrder)
-                            .ToList();
+                            .ToListAsync();
+
+                            // one query for all active sub-courses (replaces per-link N+1 query)
+                            var subCourseLookup = (await _context.SubCourses
+                            .Where(s => s.IsActive)
+                            .OrderBy(s => s.DisplayOrder)
+                            .ToListAsync())
+                            .ToLookup(s => s.FrontendCourseId);
                         }
 
                         <!-- 🔹 قائمة الدورات العامة -->
@@ -295,10 +303,7 @@
                         {
                             foreach (var course in mainLinks)
                             {
-                                var subCourses = _context.SubCourses
-                                .Where(s => s.FrontendCourseId == course.Id && s.IsActive)
-                                .OrderBy(s => s.DisplayOrder)
-                                .ToList();
+                                var subCourses = subCourseLookup[course.Id].ToList();
 
                                 if (subCourses.Any())
                                 {
