@@ -1,191 +1,357 @@
-﻿@model QdratNew.ViewModels.Admin.FrontendLeadsIndexVM
+@model QdratNew.ViewModels.Admin.FrontendLeads.FrontendLeadsDashboardVM
+@using QdratNew.Enums
 
 @{
-    ViewData["Title"] = "طلبات التسجيل";
+    ViewData["Title"] = "طلبات الالتحاق";
+
+    var c = Model.Counts;
+    var riyadh = TimeSpan.FromHours(3);
+
+    // (المفتاح، التسمية) — نفس ترتيب القائمة في كل مكان
+    var statuses = new (FrontendLeadStatus Value, string Key, string Label)[]
+    {
+        (FrontendLeadStatus.New, "New", "جديد"),
+        (FrontendLeadStatus.Contacted, "Contacted", "تم التواصل"),
+        (FrontendLeadStatus.NeedFollowUp, "NeedFollowUp", "يحتاج متابعة"),
+        (FrontendLeadStatus.Converted, "Converted", "مؤكد"),
+        (FrontendLeadStatus.Rejected, "Rejected", "مرفوض")
+    };
+
+    string StatusLabel(FrontendLeadStatus s) => statuses.First(x => x.Value == s).Label;
+
+    // 05xxxxxxxx ← 9665xxxxxxxx (لرابط واتساب)
+    string WaNumber(string? phone)
+    {
+        var digits = new string((phone ?? "").Where(char.IsDigit).ToArray());
+        if (digits.StartsWith("966")) return digits;
+        return digits.StartsWith("0") ? "966" + digits.Substring(1) : "966" + digits;
+    }
+
+    long Ts(DateTime d) => new DateTimeOffset(DateTime.SpecifyKind(d, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
 }
 
-<h3 class="mb-4">طلبات التسجيل من الموقع</h3>
+@section Styles {
+    <link href="~/css/admin-frontend-leads.css" rel="stylesheet" asp-append-version="true" />
+}
 
-<!-- =======================
-   📊 STAT CARDS
-======================= -->
-<div class="row mb-4">
-    <div class="col-md-4">
-        <div class="card shadow-sm border-0">
-            <div class="card-body">
-                <h6 class="text-muted">إجمالي الطلبات</h6>
-                <h3 class="fw-bold">@Model.TotalCount</h3>
+<div class="fl-page" id="flPage"
+     data-update-url="@Url.Action("UpdateStatus")"
+     data-register-url="/register"
+     data-initial-status="@Model.InitialStatusFilter">
+
+    <form id="flAntiForgery" method="post" class="d-none">@Html.AntiForgeryToken()</form>
+
+    <!-- ① رأس الصفحة -->
+    <header class="fl-page__header">
+        <div class="fl-page__heading">
+            <span class="fl-page__icon" aria-hidden="true"><i class="fas fa-user-plus"></i></span>
+            <div>
+                <h1 class="fl-page__title">طلبات الالتحاق</h1>
+                <p class="fl-page__subtitle" id="flLastLead">تابع الطلبات الواردة من صفحة «سجل معنا» وتواصل مع أصحابها.</p>
             </div>
         </div>
-    </div>
+        <div class="fl-page__actions">
+            <button type="button" class="fl-btn fl-btn--ghost" id="flCopyLink">
+                <i class="fas fa-link" aria-hidden="true"></i> نسخ رابط التسجيل
+            </button>
+            <span id="flExportHost"></span>
+        </div>
+    </header>
 
-    <div class="col-md-4">
-        <div class="card shadow-sm border-0">
-            <div class="card-body">
-                <h6 class="text-muted">تم التواصل</h6>
-                <h3 class="fw-bold text-success">@Model.ContactedCount</h3>
+    <!-- ② كروت الإحصائيات — كل كارت يفلتر الجدول -->
+    <section class="fl-stats" aria-label="ملخص الطلبات (اضغط على كارت لتصفية الجدول)">
+        <button type="button" class="fl-stat fl-stat--total" data-filter-status="" aria-pressed="false">
+            <span class="fl-stat__icon" aria-hidden="true"><i class="fas fa-inbox"></i></span>
+            <span class="fl-stat__body">
+                <span class="fl-stat__label">إجمالي الطلبات</span>
+                <span class="fl-stat__value" data-count="TotalCount">@c.TotalCount</span>
+                <span class="fl-stat__sub">آخر 7 أيام: <span data-count="Last7DaysCount">@c.Last7DaysCount</span></span>
+            </span>
+        </button>
+        <button type="button" class="fl-stat fl-stat--new" data-filter-status="New" aria-pressed="false">
+            <span class="fl-stat__icon" aria-hidden="true"><i class="fas fa-bell"></i></span>
+            <span class="fl-stat__body">
+                <span class="fl-stat__label">جديد</span>
+                <span class="fl-stat__value" data-count="NewCount">@c.NewCount</span>
+                <span class="fl-stat__sub">+<span data-count="TodayCount">@c.TodayCount</span> اليوم</span>
+            </span>
+        </button>
+        <button type="button" class="fl-stat fl-stat--contacted" data-filter-status="Contacted" aria-pressed="false">
+            <span class="fl-stat__icon" aria-hidden="true"><i class="fas fa-phone"></i></span>
+            <span class="fl-stat__body">
+                <span class="fl-stat__label">تم التواصل</span>
+                <span class="fl-stat__value" data-count="ContactedCount">@c.ContactedCount</span>
+                <span class="fl-stat__sub" data-share="ContactedCount"></span>
+            </span>
+        </button>
+        <button type="button" class="fl-stat fl-stat--followup" data-filter-status="NeedFollowUp" aria-pressed="false">
+            <span class="fl-stat__icon" aria-hidden="true"><i class="fas fa-clock"></i></span>
+            <span class="fl-stat__body">
+                <span class="fl-stat__label">يحتاج متابعة</span>
+                <span class="fl-stat__value" data-count="NeedFollowUpCount">@c.NeedFollowUpCount</span>
+                <span class="fl-stat__sub" data-share="NeedFollowUpCount"></span>
+            </span>
+        </button>
+        <button type="button" class="fl-stat fl-stat--converted" data-filter-status="Converted" aria-pressed="false">
+            <span class="fl-stat__icon" aria-hidden="true"><i class="fas fa-check-circle"></i></span>
+            <span class="fl-stat__body">
+                <span class="fl-stat__label">مؤكد</span>
+                <span class="fl-stat__value" data-count="ConvertedCount">@c.ConvertedCount</span>
+                <span class="fl-stat__sub" data-share="ConvertedCount"></span>
+            </span>
+        </button>
+        <button type="button" class="fl-stat fl-stat--rejected" data-filter-status="Rejected" aria-pressed="false">
+            <span class="fl-stat__icon" aria-hidden="true"><i class="fas fa-times-circle"></i></span>
+            <span class="fl-stat__body">
+                <span class="fl-stat__label">مرفوض</span>
+                <span class="fl-stat__value" data-count="RejectedCount">@c.RejectedCount</span>
+                <span class="fl-stat__sub" data-share="RejectedCount"></span>
+            </span>
+        </button>
+    </section>
+
+    @if (!Model.Leads.Any())
+    {
+        <div class="fl-card">
+            <div class="fl-empty">
+                <div class="fl-empty__icon" aria-hidden="true"><i class="fas fa-inbox"></i></div>
+                <p class="fl-empty__title">لا توجد طلبات بعد</p>
+                <p class="mb-0">شارك رابط صفحة التسجيل وستظهر الطلبات هنا فور وصولها.</p>
             </div>
         </div>
-    </div>
-
-    <div class="col-md-4">
-        <div class="card shadow-sm border-0">
-            <div class="card-body">
-                <h6 class="text-muted">لم يتم التواصل</h6>
-                <h3 class="fw-bold text-warning">@Model.NotContactedCount</h3>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- =======================
-   🔍 FILTER BUTTONS
-======================= -->
-<div class="mb-3">
-    <a asp-action="Index" asp-route-filter="all"
-       class="btn btn-sm @(Model.CurrentFilter == "all" ? "btn-primary" : "btn-outline-primary")">
-        الكل
-    </a>
-
-    <a asp-action="Index" asp-route-filter="contacted"
-       class="btn btn-sm @(Model.CurrentFilter == "contacted" ? "btn-success" : "btn-outline-success")">
-        تم التواصل
-    </a>
-
-    <a asp-action="Index" asp-route-filter="not-contacted"
-       class="btn btn-sm @(Model.CurrentFilter == "not-contacted" ? "btn-warning" : "btn-outline-warning")">
-        لم يتم التواصل
-    </a>
-</div>
-
-<!-- =======================
-   📋 TABLE
-======================= -->
-<div class="card shadow-sm border-0">
-    <div class="card-body p-0">
-        <table id="leadsTable" class="table table-hover mb-0">
-            <thead class="table-light">
-                <tr>
-                    <th>الاسم</th>
-                    <th>الهاتف</th>
-                    <th>الدورة</th>
-                    <th>تاريخ الإرسال</th>
-                    <th>الحالة</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var item in Model.Leads)
-                {
-                    <tr>
-                        <td>@item.StudentName</td>
-                        <td>@item.PhoneNumber</td>
-                        <td>@item.SelectedProgram</td>
-                        <td>@item.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
-                        <td>
-                            @if (item.IsContacted)
-                            {
-                                <span class="badge bg-success">تم التواصل</span>
-                            }
-                            else
-                            {
-                                <span class="badge bg-warning text-dark">لم يتم</span>
-                            }
-                        </td>
-                        <td>
-                            @if (!item.IsContacted)
-                            {
-                                <form asp-action="MarkContacted" method="post">
-                                    <input type="hidden" name="id" value="@item.Id" />
-                                    <button class="btn btn-sm btn-outline-success">
-                                        تم التواصل
-                                    </button>
-                                </form>
-                            }
-                        </td>
-                    </tr>
-                }
-
-                @if (!Model.Leads.Any())
-                {
-                    <tr>
-                        <td colspan="7" class="text-center text-muted py-4">
-                            لا توجد بيانات للعرض
-                        </td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</div>
-
-<style>
-    .dt-buttons .btn {
-        margin-left: 4px;
     }
-
-    .dt-buttons .btn i {
-        font-size: 1rem;
-    }
-</style>
-
-
-
-   @section Scripts {
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
-    <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
-
-    <script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
-    <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
-    <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
-
-    <script>
-        $(document).ready(function () {
-            $('#leadsTable').DataTable({
-                pageLength: 10,
-                ordering: true,
-                responsive: true,
-                dom: '<"d-flex justify-content-between align-items-center mb-3"Bf>rtip',
-
-                buttons: [
+    else
+    {
+        <!-- ③ البحث والفلاتر -->
+        <section class="fl-toolbar" aria-label="البحث والتصفية">
+            <div class="fl-toolbar__row">
+                <div class="fl-search">
+                    <i class="fas fa-search fl-search__icon" aria-hidden="true"></i>
+                    <label class="visually-hidden" for="flSearch">بحث في الطلبات</label>
+                    <input type="search" id="flSearch" class="fl-search__input" placeholder="ابحث بالاسم أو رقم الجوال أو المدينة أو اسم الدورة…" autocomplete="off" />
+                </div>
+                <div class="fl-toolbar__field">
+                    <i class="far fa-calendar-alt" aria-hidden="true"></i>
+                    <label class="visually-hidden" for="flRange">الفترة</label>
+                    <select id="flRange" class="fl-select">
+                        <option value="0">كل الفترات</option>
+                        <option value="1">اليوم</option>
+                        <option value="7">آخر 7 أيام</option>
+                        <option value="30">آخر 30 يومًا</option>
+                    </select>
+                </div>
+                <button type="button" class="fl-btn fl-btn--ghost" id="flClearFilters" hidden>
+                    <i class="fas fa-times" aria-hidden="true"></i> مسح الفلاتر
+                </button>
+            </div>
+            @if (Model.ProjectCounts.Any())
+            {
+                <div class="fl-toolbar__row fl-toolbar__row--chips" role="group" aria-label="تصفية حسب البرنامج">
+                    <span class="fl-toolbar__label"><i class="fas fa-layer-group" aria-hidden="true"></i> البرنامج</span>
+                    @foreach (var p in Model.ProjectCounts)
                     {
-                        extend: 'excelHtml5',
-                        text: '<i class="fas fa-file-excel"></i>',
-                        titleAttr: 'تصدير Excel',
-                        className: 'btn btn-sm btn-success'
-                    },
-                    {
-                        extend: 'copyHtml5',
-                        text: '<i class="fas fa-copy"></i>',
-                        titleAttr: 'نسخ',
-                        className: 'btn btn-sm btn-secondary'
-                    },
-                    {
-                        extend: 'print',
-                        text: '<i class="fas fa-print"></i>',
-                        titleAttr: 'طباعة',
-                        className: 'btn btn-sm btn-primary'
+                        <button type="button" class="fl-chip" data-filter-project="@p.ProjectId" aria-pressed="false">
+                            @p.Name <span class="fl-chip__count">@p.Count</span>
+                        </button>
                     }
-                ],
+                </div>
+            }
+        </section>
 
-                language: {
-                    search: "بحث:",
-                    lengthMenu: "عرض _MENU_ صف",
-                    info: "عرض _START_ إلى _END_ من _TOTAL_",
-                    paginate: {
-                        first: "الأول",
-                        last: "الأخير",
-                        next: "التالي",
-                        previous: "السابق"
-                    },
-                    emptyTable: "لا توجد بيانات"
-                }
-            });
-        });
-    </script>
+        <!-- ④ الجدول -->
+        <section class="fl-card">
+            <div class="fl-card__head">
+                <h2 class="fl-card__title">قائمة الطلبات</h2>
+                <span class="fl-card__meta" id="flResultCount" aria-live="polite"></span>
+            </div>
+            <div class="fl-card__body">
+                <table id="leadsTable" class="table align-middle mb-0 fl-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">المتقدم</th>
+                            <th scope="col">التواصل</th>
+                            <th scope="col">الدورات المطلوبة</th>
+                            <th scope="col">التاريخ</th>
+                            <th scope="col">الحالة</th>
+                            <th scope="col" class="no-export"><span class="visually-hidden">إجراءات</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var l in Model.Leads)
+                        {
+                            var projectIds = "|" + string.Join("|", l.Courses.Where(x => x.ProjectId != null).Select(x => x.ProjectId).Distinct()) + "|";
+                            var courseExport = l.IsLegacy
+                                ? "طلب قديم: " + l.LegacyProgram
+                                : string.Join(" | ", l.Courses.GroupBy(x => x.ProjectName)
+                                    .Select(g => (string.IsNullOrEmpty(g.Key) ? "" : g.Key + ": ") + string.Join("، ", g.Select(x => x.CourseName))));
+                            var local = l.CreatedAt + riyadh;
+                            var statusKey = statuses.First(x => x.Value == l.Status).Key;
+                            var initial = string.IsNullOrWhiteSpace(l.StudentName) ? "؟" : l.StudentName.Trim().Substring(0, 1).ToUpperInvariant();
+                            var allCourses = l.Courses.ToList();
+                            var searchName = string.Join(" ", new[] { l.StudentName, l.ParentName, l.City, l.SchoolStage }.Where(x => !string.IsNullOrWhiteSpace(x)));
 
+                            <tr class="@(l.Status == FrontendLeadStatus.New ? "fl-row--new" : "")"
+                                data-id="@l.Id" data-status="@statusKey" data-ts="@Ts(l.CreatedAt)" data-projects="@projectIds">
+                                <td data-search="@searchName" data-export="@l.StudentName@(l.ApplicantType == LeadApplicantType.Parent ? " (ولي أمر)" : "")">
+                                    <div class="fl-person">
+                                        <span class="fl-avatar" aria-hidden="true">@initial</span>
+                                        <div class="fl-person__info">
+                                            <div class="fl-name">@l.StudentName</div>
+                                            <div class="fl-person__meta">
+                                                <span class="fl-badge @(l.ApplicantType == LeadApplicantType.Parent ? "fl-badge--parent" : "fl-badge--student")">
+                                                    @(l.ApplicantType == LeadApplicantType.Parent ? "ولي أمر" : "طالب")
+                                                </span>
+                                                @if (!string.IsNullOrWhiteSpace(l.City) || !string.IsNullOrWhiteSpace(l.SchoolStage))
+                                                {
+                                                    <span class="fl-sub">@string.Join(" · ", new[] { l.City, l.SchoolStage }.Where(x => !string.IsNullOrWhiteSpace(x)))</span>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td data-search="@l.PhoneNumber @l.ParentPhone" data-export="@l.PhoneNumber@(string.IsNullOrWhiteSpace(l.ParentPhone) ? "" : " / ولي الأمر: " + l.ParentPhone)">
+                                    <div class="fl-contact">
+                                        <span class="fl-phone">@l.PhoneNumber</span>
+                                        <a class="fl-icon-btn" href="tel:@l.PhoneNumber" title="اتصال" aria-label="اتصال بـ @l.StudentName"><i class="fas fa-phone" aria-hidden="true"></i></a>
+                                        <a class="fl-icon-btn fl-icon-btn--wa" href="https://wa.me/@WaNumber(l.PhoneNumber)" target="_blank" rel="noopener noreferrer" title="واتساب" aria-label="واتساب @l.StudentName"><i class="fab fa-whatsapp" aria-hidden="true"></i></a>
+                                    </div>
+                                    @if (!string.IsNullOrWhiteSpace(l.ParentPhone))
+                                    {
+                                        <div class="fl-contact fl-contact--parent">
+                                            <span class="fl-sub">ولي الأمر</span>
+                                            <span class="fl-phone fl-sub">@l.ParentPhone</span>
+                                            <a class="fl-icon-btn" href="tel:@l.ParentPhone" title="اتصال بولي الأمر" aria-label="اتصال بولي أمر @l.StudentName"><i class="fas fa-phone" aria-hidden="true"></i></a>
+                                            <a class="fl-icon-btn fl-icon-btn--wa" href="https://wa.me/@WaNumber(l.ParentPhone)" target="_blank" rel="noopener noreferrer" title="واتساب ولي الأمر" aria-label="واتساب ولي أمر @l.StudentName"><i class="fab fa-whatsapp" aria-hidden="true"></i></a>
+                                        </div>
+                                    }
+                                </td>
+                                <td data-export="@courseExport" data-search="@courseExport">
+                                    @if (l.IsLegacy)
+                                    {
+                                        <span class="fl-badge fl-badge--legacy">طلب قديم</span>
+                                        <div class="fl-sub mt-1">@l.LegacyProgram</div>
+                                    }
+                                    else
+                                    {
+                                        <div class="fl-courses">
+                                            @foreach (var g in allCourses.Take(3).GroupBy(x => x.ProjectName))
+                                            {
+                                                <div class="fl-course-group">
+                                                    @if (!string.IsNullOrEmpty(g.Key))
+                                                    {
+                                                        <span class="fl-course-group__name">@g.Key</span>
+                                                    }
+                                                    @foreach (var course in g)
+                                                    {
+                                                        <span class="fl-course-chip"><i class="fas fa-book-open" aria-hidden="true"></i>@course.CourseName</span>
+                                                    }
+                                                </div>
+                                            }
+                                            @if (allCourses.Count > 3)
+                                            {
+                                                <span class="fl-course-more" title="@string.Join("، ", allCourses.Skip(3).Select(x => x.CourseName))">+@(allCourses.Count - 3) دورات أخرى</span>
+                                            }
+                                        </div>
+                                    }
+                                </td>
+                                <td class="fl-date" data-order="@Ts(l.CreatedAt)" data-export="@local.ToString("yyyy-MM-dd HH:mm")" data-search="">
+                                    <div class="fl-date__rel" data-ts="@Ts(l.CreatedAt)" title="@local.ToString("yyyy-MM-dd HH:mm")">@local.ToString("yyyy-MM-dd")</div>
+                                    <div class="fl-sub">@local.ToString("HH:mm")</div>
+                                </td>
+                                <td data-order="@((int)l.Status)" data-export="@StatusLabel(l.Status)" data-search="@StatusLabel(l.Status)">
+                                    <label class="visually-hidden" for="st-@l.Id">حالة طلب @l.StudentName</label>
+                                    <select id="st-@l.Id" class="fl-status" data-status="@statusKey" data-prev="@((int)l.Status)">
+                                        @foreach (var s in statuses)
+                                        {
+                                            <option value="@((int)s.Value)" selected="@(s.Value == l.Status)">@s.Label</option>
+                                        }
+                                    </select>
+                                </td>
+                                <td class="text-nowrap" data-search="">
+                                    <button type="button" class="fl-btn fl-btn--soft fl-details-btn" data-id="@l.Id" aria-label="تفاصيل طلب @l.StudentName">
+                                        <i class="fas fa-eye" aria-hidden="true"></i> تفاصيل
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
 
-      }   
+                <div class="fl-nomatch" id="flNoMatch" hidden>
+                    <div class="fl-empty__icon" aria-hidden="true"><i class="fas fa-search"></i></div>
+                    <p class="fl-empty__title">لا توجد طلبات مطابقة</p>
+                    <p class="mb-3">جرّب تغيير كلمة البحث أو إزالة بعض الفلاتر.</p>
+                    <button type="button" class="fl-btn fl-btn--soft" id="flNoMatchClear">مسح الفلاتر</button>
+                </div>
+            </div>
+            <div class="fl-card__foot" id="flTableFoot"></div>
+        </section>
+    }
+
+    <!-- ⑤ تفاصيل الطلب -->
+    <div class="offcanvas offcanvas-start fl-offcanvas" tabindex="-1" id="flDetail" aria-labelledby="flDetailTitle">
+        <div class="offcanvas-header fl-offcanvas__header">
+            <h2 class="offcanvas-title" id="flDetailTitle">تفاصيل الطلب</h2>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="إغلاق"></button>
+        </div>
+        <div class="offcanvas-body fl-detail">
+
+            <div class="fl-detail__hero">
+                <span class="fl-avatar fl-avatar--lg" id="flDetailAvatar" aria-hidden="true"></span>
+                <div class="fl-detail__hero-info">
+                    <div class="fl-detail__name" id="flDetailName"></div>
+                    <div class="fl-detail__hero-meta">
+                        <span class="fl-badge" id="flDetailBadge"></span>
+                        <span class="fl-sub" id="flDetailDate"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="fl-detail__actions" id="flDetailActions"></div>
+
+            <section class="fl-detail__section">
+                <h3><i class="fas fa-id-card" aria-hidden="true"></i> بيانات المتقدم</h3>
+                <dl id="flDetailInfo"></dl>
+            </section>
+
+            <section class="fl-detail__section">
+                <h3><i class="fas fa-book-open" aria-hidden="true"></i> الدورات المطلوبة</h3>
+                <div id="flDetailCourses" class="fl-courses"></div>
+            </section>
+
+            <section class="fl-detail__section">
+                <h3><i class="fas fa-clipboard-check" aria-hidden="true"></i> المتابعة</h3>
+                <label class="fl-label" for="flDetailStatus">الحالة</label>
+                <select id="flDetailStatus" class="fl-select fl-select--block mb-3">
+                    @foreach (var s in statuses)
+                    {
+                        <option value="@((int)s.Value)">@s.Label</option>
+                    }
+                </select>
+
+                <label class="fl-label" for="flDetailNotes">ملاحظات الأدمن</label>
+                <textarea id="flDetailNotes" class="fl-textarea" rows="4" maxlength="1000" placeholder="اكتب ما تم مع المتقدم…"></textarea>
+                <div class="fl-sub mb-3"><span id="flNotesCount">0</span> / 1000</div>
+
+                <div class="fl-detail__error" id="flDetailError" role="alert"></div>
+                <button type="button" class="fl-btn fl-btn--primary fl-btn--block" id="flDetailSave">
+                    <span class="spinner-border spinner-border-sm d-none" aria-hidden="true"></span>
+                    <span class="fl-save-text"><i class="fas fa-save" aria-hidden="true"></i> حفظ التغييرات</span>
+                </button>
+            </section>
+        </div>
+    </div>
+
+    <div class="fl-toast" id="flToast" role="status" aria-live="polite"></div>
+</div>
+
+@if (Model.Leads.Any())
+{
+    <script type="application/json" id="flLeadsData">@Html.Raw(Json.Serialize(Model.Leads))</script>
+}
+
+@section Scripts {
+    @* jQuery + DataTables (core/buttons/html5/print/jszip) + Bootstrap JS محمَّلة مسبقًا من _AdminLayout — لا تُحمَّل مرة ثانية. *@
+    <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
+    <script src="~/js/admin-frontend-leads.js" asp-append-version="true"></script>
+}

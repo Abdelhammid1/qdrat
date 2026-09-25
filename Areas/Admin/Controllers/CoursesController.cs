@@ -2,10 +2,12 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using QdratNew.Data;
 using QdratNew.Entities;
 using QdratNew.ViewModels;
 using QdratNew.ViewModels.Course;
+using QdratNew.Services.Frontend.PublicRegistration;
 
 namespace QdratNew.Areas.Admin.Controllers
 {
@@ -14,16 +16,32 @@ namespace QdratNew.Areas.Admin.Controllers
     public class CoursesController : Controller
     {
         private readonly ApplicationDbContext _context;
+        private readonly IMemoryCache _cache;
 
-        public CoursesController(ApplicationDbContext context)
+        public CoursesController(ApplicationDbContext context, IMemoryCache cache)
         {
             _context = context;
+            _cache = cache;
         }
 
         private void LoadDropDownLists(CourseFormViewModel model)
         {
             model.Branches = GetBranchesList();
             model.Projects = GetProjectsList(); // ✅ تم تعديلها لعرض (اسم المشروع - الفرع - الولاية)
+        }
+
+        private static string? NormalizeOptional(string? value)
+            => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+        // هل برنامج الدورة ظاهر في صفحة التسجيل؟ (لتنبيه الأدمن في Edit)
+        private async Task<bool?> GetProjectRegisterVisibilityAsync(int? projectId)
+        {
+            if (projectId == null) return null;
+            return await _context.Projects
+                .AsNoTracking()
+                .Where(p => p.Id == projectId.Value)
+                .Select(p => (bool?)p.ShowOnRegisterPage)
+                .FirstOrDefaultAsync();
         }
 
         public async Task<IActionResult> Index()
@@ -48,7 +66,9 @@ namespace QdratNew.Areas.Admin.Controllers
                 ProjectId = c.ProjectId,
                 ProjectName = c.Project != null
                     ? $"{c.Project.Name} ({c.Project.Branch?.Name ?? "غير متوفر"} - {c.Project.Branch?.State ?? "غير متوفر"})"
-                    : "غير متوفر"
+                    : "غير متوفر",
+                ShowOnRegisterPage = c.ShowOnRegisterPage,
+                RegisterDisplayOrder = c.RegisterDisplayOrder
             }).ToList();
 
 
@@ -87,11 +107,15 @@ namespace QdratNew.Areas.Admin.Controllers
                     EndDate = model.EndDate,
                     BranchId = model.BranchId,
                     ProjectId = model.ProjectId,
-                    IsActive = model.IsActive // ✅ حفظ حالة التفعيل
+                    IsActive = model.IsActive, // ✅ حفظ حالة التفعيل
+                    ShowOnRegisterPage = model.ShowOnRegisterPage,
+                    RegisterDisplayOrder = model.RegisterDisplayOrder,
+                    PublicDescription = NormalizeOptional(model.PublicDescription)
                 };
 
                 _context.Courses.Add(course);
                 await _context.SaveChangesAsync();
+                RegisterCatalogCache.Invalidate(_cache);
 
                 TempData["SuccessMessage"] = "✅ تم إضافة الدورة بنجاح!";
                 return RedirectToAction(nameof(Index));
@@ -119,10 +143,14 @@ namespace QdratNew.Areas.Admin.Controllers
                 EndDate = course.EndDate ?? DateTime.Now,
                 BranchId = course.BranchId,
                 IsActive = course.IsActive, // ✅ حفظ حالة التفعيل
+                ShowOnRegisterPage = course.ShowOnRegisterPage,
+                RegisterDisplayOrder = course.RegisterDisplayOrder,
+                PublicDescription = course.PublicDescription,
 
                 ProjectId = course.ProjectId
             };
 
+            model.ProjectShowOnRegisterPage = await GetProjectRegisterVisibilityAsync(course.ProjectId);
             LoadDropDownLists(model);
             return View(model);
         }
@@ -133,6 +161,7 @@ namespace QdratNew.Areas.Admin.Controllers
         {
             if (!ModelState.IsValid)
             {
+                model.ProjectShowOnRegisterPage = await GetProjectRegisterVisibilityAsync(model.ProjectId);
                 LoadDropDownLists(model);
                 return View(model);
             }
@@ -147,11 +176,30 @@ namespace QdratNew.Areas.Admin.Controllers
             course.BranchId = model.BranchId;
             course.ProjectId = model.ProjectId;
             course.IsActive = model.IsActive; // ✅ حفظ حالة التفعيل
+            course.ShowOnRegisterPage = model.ShowOnRegisterPage;
+            course.RegisterDisplayOrder = model.RegisterDisplayOrder;
+            course.PublicDescription = NormalizeOptional(model.PublicDescription);
 
             await _context.SaveChangesAsync();
+            RegisterCatalogCache.Invalidate(_cache);
 
             TempData["SuccessMessage"] = "✅ تم تعديل الدورة بنجاح!";
             return RedirectToAction(nameof(Index));
+        }
+
+        // POST: Admin/Courses/ToggleRegisterVisibility/5  (تبديل سريع من Index عبر fetch)
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ToggleRegisterVisibility(int id)
+        {
+            var course = await _context.Courses.FirstOrDefaultAsync(c => c.Id == id);
+            if (course == null) return NotFound(new { ok = false });
+
+            course.ShowOnRegisterPage = !course.ShowOnRegisterPage;
+            await _context.SaveChangesAsync();
+            RegisterCatalogCache.Invalidate(_cache);
+
+            return Json(new { ok = true, visible = course.ShowOnRegisterPage });
         }
 
         [HttpGet]
@@ -236,6 +284,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
             _context.Courses.Remove(course);
             await _context.SaveChangesAsync();
+            RegisterCatalogCache.Invalidate(_cache);
 
             TempData["SuccessMessage"] = "🗑️ تم حذف الدورة بنجاح!";
             return RedirectToAction(nameof(Index));

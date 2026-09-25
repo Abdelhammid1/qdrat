@@ -49,6 +49,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<HomeworkDraftQuestion> HomeworkDraftQuestions { get; set; }
     public DbSet<StudentExamSnapshot> StudentExamSnapshots { get; set; }
     public DbSet<FrontendLead> FrontendLeads { get; set; }
+    public DbSet<FrontendLeadCourse> FrontendLeadCourses { get; set; }
     public DbSet<InstructorBatchRole> InstructorBatchRoles { get; set; }
     public DbSet<InstructorBatchPermission> InstructorBatchPermissions { get; set; }
     public DbSet<EmployeeBatchAccess> EmployeeBatchAccesses { get; set; }
@@ -296,6 +297,32 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             .WithMany()
             .HasForeignKey(x => x.GrantedByUserId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // ===== RL: صفحة التسجيل العامة وطلبات الالتحاق =====
+        modelBuilder.Entity<FrontendLeadCourse>(e =>
+        {
+            e.HasOne(x => x.FrontendLead)
+             .WithMany(l => l.SelectedCourses)
+             .HasForeignKey(x => x.FrontendLeadId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(x => x.Course)
+             .WithMany()
+             .HasForeignKey(x => x.CourseId)
+             .OnDelete(DeleteBehavior.SetNull);   // حذف دورة لا يحذف الطلب
+
+            e.HasIndex(x => x.FrontendLeadId);
+            e.HasIndex(x => x.CourseId);
+        });
+
+        modelBuilder.Entity<FrontendLead>()
+            .HasIndex(x => new { x.Status, x.CreatedAt });
+
+        modelBuilder.Entity<Project>()
+            .HasIndex(p => new { p.ShowOnRegisterPage, p.IsActive });
+
+        modelBuilder.Entity<Course>()
+            .HasIndex(c => new { c.ProjectId, c.ShowOnRegisterPage, c.IsActive });
 
         // Project - Course
         modelBuilder.Entity<Course>()

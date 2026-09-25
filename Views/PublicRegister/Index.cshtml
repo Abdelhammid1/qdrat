@@ -1,76 +1,217 @@
-﻿@model QdratNew.ViewModels.Frontend.CourseLeadFormVM
+@using QdratNew.Enums
+@model QdratNew.ViewModels.Frontend.Register.RegisterPageVM
 
 @{
-    ViewData["Title"] = "التسجيل";
+    ViewData["Title"] = "سجل معنا";
+    var form = Model.Form;
+    var hasCatalog = Model.Programs.Any();
+    var selected = new HashSet<int>(form.SelectedCourseIds ?? new List<int>());
+    var isParent = form.ApplicantType == LeadApplicantType.Parent;
+    var stages = new[] { "أول ثانوي", "ثاني ثانوي", "ثالث ثانوي", "خريج" };
 }
 
-<div class="container py-5">
-    <div class="row justify-content-center">
-        <div class="col-12 col-md-8 col-lg-5">
+@section Styles {
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="~/css/public-register.css" asp-append-version="true" />
+}
 
-            <div class="card shadow-sm border-0">
+<div class="rl-register" id="rlRegister">
 
-                <!-- Header -->
-                <div class="card-header bg-white text-center border-0 pt-4">
-                    <h4 class="fw-bold mb-1">سجل بياناتك</h4>
-                    <p class="text-muted small mb-0">
-                        اختر البرنامج المناسب لك وسيتم التواصل معك
-                    </p>
-                </div>
-
-                <!-- Body -->
-                <div class="card-body px-4 py-4">
-                    <form method="post" novalidate>
-                        @Html.AntiForgeryToken()
-
-                        <!-- اسم الطالب -->
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">
-                                اسم الطالب
-                            </label>
-                            <input asp-for="StudentName"
-                                   class="form-control form-control-lg"
-                                   placeholder="اكتب اسمك بالكامل" />
-                            <span asp-validation-for="StudentName"
-                                  class="text-danger small"></span>
-                        </div>
-
-                        <!-- رقم الهاتف -->
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">
-                                رقم الهاتف
-                            </label>
-                            <input asp-for="PhoneNumber"
-                                   class="form-control form-control-lg"
-                                   placeholder="05xxxxxxxx" />
-                            <span asp-validation-for="PhoneNumber"
-                                  class="text-danger small"></span>
-                        </div>
-
-                        <!-- البرنامج -->
-                        <div class="mb-4">
-                            <label class="form-label fw-semibold">
-                                البرنامج
-                            </label>
-                            <select asp-for="SelectedProgram"
-                                    asp-items="Model.Programs"
-                                    class="form-select form-select-lg">
-                                <option value="">-- اختر البرنامج --</option>
-                            </select>
-                            <span asp-validation-for="SelectedProgram"
-                                  class="text-danger small"></span>
-                        </div>
-
-                        <!-- Submit -->
-                        <button type="submit"
-                                class="btn btn-primary btn-lg w-100">
-                            إرسال البيانات
-                        </button>
-                    </form>
-                </div>
-
-            </div>
-
+    <!-- Hero مضغوط -->
+    <header class="rl-hero rl-hero--compact">
+        <div class="container">
+            <h1 class="rl-hero-title">سجّل معنا في معهد قدرات</h1>
+            <p class="rl-hero-sub">اختر الدورات التي تهمك، واترك بياناتك وسيتواصل معك فريق المعهد.</p>
         </div>
+    </header>
+
+    <div class="container rl-body">
+        <form method="post" asp-controller="PublicRegister" asp-action="Submit" novalidate id="rlForm" class="rl-layout">
+            @Html.AntiForgeryToken()
+
+            <!-- الدورات (يسار الصفحة) -->
+            <section class="rl-catalog" aria-label="البرامج والدورات">
+                @if (!ViewData.ModelState.IsValid)
+                {
+                    <div class="rl-alert" role="alert">
+                        <i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>
+                        <div>
+                            <strong>راجع البيانات التالية:</strong>
+                            <ul>
+                                @foreach (var err in ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).Where(m => !string.IsNullOrWhiteSpace(m)).Distinct())
+                                {
+                                    <li>@err</li>
+                                }
+                            </ul>
+                        </div>
+                    </div>
+                }
+
+                @if (hasCatalog)
+                {
+                    @foreach (var p in Model.Programs)
+                    {
+                        var picked = p.Courses.Count(c => selected.Contains(c.CourseId));
+                        <fieldset class="rl-program @(picked > 0 ? "has-selection" : "")" style="--rl-accent:@p.AccentColor" data-program="@p.ProjectId">
+                            <legend class="rl-visually-hidden">@p.Name</legend>
+
+                            <div class="rl-program-head">
+                                <span class="rl-program-icon" aria-hidden="true"><i class="fa-solid @p.Icon"></i></span>
+                                <div class="rl-program-title">
+                                    <h2>@p.Name</h2>
+                                    @if (!string.IsNullOrWhiteSpace(p.Description))
+                                    {
+                                        <p class="rl-program-desc">@p.Description</p>
+                                    }
+                                </div>
+                                <span class="rl-count-badge">@p.Courses.Count @(p.Courses.Count == 1 ? "دورة" : p.Courses.Count == 2 ? "دورتان" : p.Courses.Count <= 10 ? "دورات" : "دورة")</span>
+                                <div class="rl-program-actions" data-js-only>
+                                    <button type="button" class="rl-link-btn" data-select-all="@p.ProjectId">تحديد الكل</button>
+                                    <button type="button" class="rl-link-btn is-muted" data-clear-all="@p.ProjectId">إلغاء</button>
+                                </div>
+                            </div>
+
+                            <div class="rl-courses">
+                                @foreach (var c in p.Courses)
+                                {
+                                    <div class="rl-course-wrap">
+                                        <input type="checkbox" class="btn-check rl-course-cb" name="Form.SelectedCourseIds"
+                                               value="@c.CourseId" id="c-@c.CourseId" autocomplete="off"
+                                               data-name="@c.Name" data-program="@p.ProjectId" data-program-name="@p.Name"
+                                               checked="@selected.Contains(c.CourseId)" />
+                                        <label class="rl-course" for="c-@c.CourseId">
+                                            <span class="rl-course-check" aria-hidden="true"><i class="fa-solid fa-check"></i></span>
+                                            <span class="rl-course-icon" aria-hidden="true"><i class="fa-solid fa-book-open"></i></span>
+                                            <span class="rl-course-body">
+                                                <span class="rl-course-name">@c.Name</span>
+                                                @if (!string.IsNullOrWhiteSpace(c.Description))
+                                                {
+                                                    <span class="rl-course-desc">@c.Description</span>
+                                                }
+                                            </span>
+                                        </label>
+                                    </div>
+                                }
+                            </div>
+                        </fieldset>
+                    }
+                }
+                else
+                {
+                    <div class="rl-empty">
+                        <span class="rl-empty-icon" aria-hidden="true"><i class="fa-regular fa-calendar-check"></i></span>
+                        <h2>سيتم الإعلان عن الدورات قريبًا</h2>
+                        <p>اترك بياناتك واكتب في الملاحظات ما يهمك، ونتواصل معك فور فتح باب التسجيل.</p>
+                    </div>
+                }
+            </section>
+
+            <!-- الفورم (يمين الصفحة — ثابت أثناء التمرير) -->
+            <aside class="rl-form-panel" id="rlFormPanel" aria-labelledby="rlFormTitle">
+                <h2 id="rlFormTitle" class="rl-panel-title"><i class="fa-regular fa-id-card" aria-hidden="true"></i> بياناتك</h2>
+
+                <div class="rl-field">
+                    <div class="rl-toggle" role="radiogroup" aria-label="صفة المسجّل">
+                        <input type="radio" class="btn-check" name="Form.ApplicantType" id="at-student" value="@((int)LeadApplicantType.Student)" checked="@(!isParent)" autocomplete="off" />
+                        <label for="at-student">أنا الطالب</label>
+                        <input type="radio" class="btn-check" name="Form.ApplicantType" id="at-parent" value="@((int)LeadApplicantType.Parent)" checked="@isParent" autocomplete="off" />
+                        <label for="at-parent">أنا ولي الأمر</label>
+                    </div>
+                </div>
+
+                <div class="rl-field">
+                    <label class="rl-label" for="Form_StudentName">اسم الطالب <span class="rl-req">*</span></label>
+                    <input asp-for="Form.StudentName" class="rl-input" placeholder="الاسم بالكامل" autocomplete="name" maxlength="150" />
+                    <span asp-validation-for="Form.StudentName" class="rl-error"></span>
+                </div>
+
+                <div class="rl-field">
+                    <label class="rl-label" for="Form_PhoneNumber">رقم الجوال <span class="rl-req">*</span></label>
+                    <input asp-for="Form.PhoneNumber" class="rl-input" dir="ltr" inputmode="numeric" type="tel"
+                           placeholder="05xxxxxxxx" autocomplete="tel" maxlength="14" />
+                    <span asp-validation-for="Form.PhoneNumber" class="rl-error"></span>
+                </div>
+
+                <div class="rl-field rl-parent-field" data-parent-field>
+                    <label class="rl-label" for="Form_ParentName">اسم ولي الأمر <span class="rl-req rl-req-parent">*</span></label>
+                    <input asp-for="Form.ParentName" class="rl-input" placeholder="اسم ولي الأمر" maxlength="150" />
+                    <span asp-validation-for="Form.ParentName" class="rl-error"></span>
+                </div>
+
+                <div class="rl-field rl-parent-field" data-parent-field>
+                    <label class="rl-label" for="Form_ParentPhone">جوال ولي الأمر <span class="rl-req rl-req-parent">*</span></label>
+                    <input asp-for="Form.ParentPhone" class="rl-input" dir="ltr" inputmode="numeric" type="tel"
+                           placeholder="05xxxxxxxx" maxlength="14" />
+                    <span asp-validation-for="Form.ParentPhone" class="rl-error"></span>
+                </div>
+
+                <div class="rl-row-2">
+                    <div class="rl-field">
+                        <label class="rl-label" for="Form_Gender">الجنس</label>
+                        <select asp-for="Form.Gender" class="rl-input">
+                            <option value="">— اختر —</option>
+                            <option value="@((int)GenderType.Male)" selected="@(form.Gender == GenderType.Male)">ذكر</option>
+                            <option value="@((int)GenderType.Female)" selected="@(form.Gender == GenderType.Female)">أنثى</option>
+                        </select>
+                    </div>
+
+                    <div class="rl-field">
+                        <label class="rl-label" for="Form_SchoolStage">المرحلة</label>
+                        <select asp-for="Form.SchoolStage" class="rl-input">
+                            <option value="">— اختر —</option>
+                            @foreach (var st in stages)
+                            {
+                                <option value="@st" selected="@(form.SchoolStage == st)">@st</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                <div class="rl-field">
+                    <label class="rl-label" for="Form_City">المدينة</label>
+                    <input asp-for="Form.City" class="rl-input" placeholder="مثال: الرياض" maxlength="100" autocomplete="address-level2" />
+                </div>
+
+                <div class="rl-field">
+                    <label class="rl-label" for="Form_Notes">ملاحظات @if (!hasCatalog) { <span class="rl-req">*</span> }</label>
+                    <textarea asp-for="Form.Notes" class="rl-input" rows="2" maxlength="1000"
+                              placeholder="@(hasCatalog ? "أي تفاصيل تود إخبارنا بها (اختياري)" : "اكتب البرنامج أو الدورة التي تهمك")"></textarea>
+                    <span asp-validation-for="Form.Notes" class="rl-error"></span>
+                </div>
+
+                <!-- Honeypot -->
+                <div class="rl-visually-hidden" aria-hidden="true">
+                    <input name="Form.Website" tabindex="-1" autocomplete="off" />
+                </div>
+
+                <!-- ملخص الاختيار -->
+                <div class="rl-summary" data-js-only>
+                    <span class="rl-label">اختياراتك</span>
+                    <div class="rl-chips" id="rlChips" aria-live="polite"></div>
+                    <p class="rl-summary-empty" id="rlChipsEmpty">لم تختر أي دورة بعد.</p>
+                </div>
+
+                <button type="submit" class="rl-submit" id="rlSubmit">
+                    <span class="rl-submit-label">إرسال طلب الالتحاق</span>
+                    <span class="rl-spinner" aria-hidden="true"></span>
+                </button>
+                <p class="rl-privacy"><i class="fa-solid fa-lock" aria-hidden="true"></i> بياناتك محفوظة ولن تُشارك مع أي جهة.</p>
+            </aside>
+        </form>
     </div>
+
+    <!-- شريط لاصق (الجوال فقط) -->
+    @if (hasCatalog)
+    {
+        <div class="rl-sticky" id="rlSticky" data-js-only hidden>
+            <div class="container rl-sticky-inner">
+                <span class="rl-sticky-text" id="rlStickyText" aria-live="polite">لم تختر دورات بعد</span>
+                <button type="button" class="rl-sticky-btn" id="rlContinue" disabled>متابعة لإدخال البيانات</button>
+            </div>
+        </div>
+    }
 </div>
+
+@section Scripts {
+    <script src="~/js/public-register.js" asp-append-version="true"></script>
+}

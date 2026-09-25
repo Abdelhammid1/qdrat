@@ -10,6 +10,23 @@ namespace QdratNew.Helpers
     {
 
 
+        /// <summary>
+        /// يحوّل الأرقام العربية-الهندية (٠-٩) والفارسية (۰-۹) إلى لاتينية ويحذف المسافات — للتحقق من الجوال.
+        /// </summary>
+        public static string NormalizeDigits(string? input)
+        {
+            if (string.IsNullOrEmpty(input)) return string.Empty;
+
+            var sb = new StringBuilder(input.Length);
+            foreach (var c in input)
+            {
+                if (c >= '٠' && c <= '٩') sb.Append((char)('0' + (c - '٠')));
+                else if (c >= '۰' && c <= '۹') sb.Append((char)('0' + (c - '۰')));
+                else if (!char.IsWhiteSpace(c)) sb.Append(c);
+            }
+            return sb.ToString();
+        }
+
         public static string ToIndicNumbersSafe(string input)
         {
             if (string.IsNullOrWhiteSpace(input))

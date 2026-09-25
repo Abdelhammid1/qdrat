@@ -37,5 +37,18 @@ namespace QdratNew.Entities
 
         // ✅ العلاقة مع الدورات
         public ICollection<Course> Courses { get; set; } = new List<Course>();
+
+        // ===== صفحة التسجيل العامة (RL) =====
+        public bool ShowOnRegisterPage { get; set; } = false;
+        public int RegisterDisplayOrder { get; set; } = 0;
+
+        [MaxLength(500)]
+        public string? PublicDescription { get; set; }
+
+        [MaxLength(50)]
+        public string? RegisterIcon { get; set; }       // مثل: "fa-brain"
+
+        [MaxLength(20)]
+        public string? RegisterAccentColor { get; set; } // مثل: "#1B5EAE"
     }
 }

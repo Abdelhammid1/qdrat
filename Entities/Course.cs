@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace QdratNew.Entities
@@ -31,5 +32,12 @@ namespace QdratNew.Entities
         public ICollection<StudentCourse> StudentCourses { get; set; }
             = new List<StudentCourse>();
         public ICollection<StudentCourseEnrollment> StudentCourseEnrollments { get; set; } = new List<StudentCourseEnrollment>();
+
+        // ===== صفحة التسجيل العامة (RL) =====
+        public bool ShowOnRegisterPage { get; set; } = false;
+        public int RegisterDisplayOrder { get; set; } = 0;
+
+        [MaxLength(300)]
+        public string? PublicDescription { get; set; }
     }
 }

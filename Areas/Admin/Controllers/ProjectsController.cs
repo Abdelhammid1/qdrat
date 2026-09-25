@@ -2,10 +2,12 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using QdratNew.Data;
 using QdratNew.Entities;
 using QdratNew.ViewModels;
 using QdratNew.ViewModels.Project;
+using QdratNew.Services.Frontend.PublicRegistration;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -18,10 +20,12 @@ namespace QdratNew.Areas.Admin.Controllers
     public class ProjectsController : Controller
     {
         private readonly ApplicationDbContext _context;
+        private readonly IMemoryCache _cache;
 
-        public ProjectsController(ApplicationDbContext context)
+        public ProjectsController(ApplicationDbContext context, IMemoryCache cache)
         {
             _context = context;
+            _cache = cache;
         }
 
         // GET: Admin/Projects
@@ -94,11 +98,17 @@ namespace QdratNew.Areas.Admin.Controllers
                 EndDate = model.EndDate,
                 ExpectedEndDate = model.ExpectedEndDate,
                 IsActive = model.IsActive,
-                BranchId = model.BranchId
+                BranchId = model.BranchId,
+                ShowOnRegisterPage = model.ShowOnRegisterPage,
+                RegisterDisplayOrder = model.RegisterDisplayOrder,
+                PublicDescription = NormalizeOptional(model.PublicDescription),
+                RegisterIcon = NormalizeOptional(model.RegisterIcon),
+                RegisterAccentColor = NormalizeOptional(model.RegisterAccentColor)
             };
 
             _context.Projects.Add(project);
             _context.SaveChanges();
+            RegisterCatalogCache.Invalidate(_cache);
 
             return RedirectToAction(nameof(Index));
         }
@@ -254,6 +264,11 @@ namespace QdratNew.Areas.Admin.Controllers
                 ExpectedEndDate = project.ExpectedEndDate,
                 IsActive = project.IsActive,
                 BranchId = project.BranchId,
+                ShowOnRegisterPage = project.ShowOnRegisterPage,
+                RegisterDisplayOrder = project.RegisterDisplayOrder,
+                PublicDescription = project.PublicDescription,
+                RegisterIcon = project.RegisterIcon,
+                RegisterAccentColor = project.RegisterAccentColor,
                 Branches = _context.Branches
                     .Select(b => new SelectListItem
                     {
@@ -302,11 +317,32 @@ namespace QdratNew.Areas.Admin.Controllers
             project.ExpectedEndDate = model.ExpectedEndDate;
             project.IsActive = model.IsActive;
             project.BranchId = model.BranchId;
+            project.ShowOnRegisterPage = model.ShowOnRegisterPage;
+            project.RegisterDisplayOrder = model.RegisterDisplayOrder;
+            project.PublicDescription = NormalizeOptional(model.PublicDescription);
+            project.RegisterIcon = NormalizeOptional(model.RegisterIcon);
+            project.RegisterAccentColor = NormalizeOptional(model.RegisterAccentColor);
 
             _context.Projects.Update(project);
             _context.SaveChanges();
+            RegisterCatalogCache.Invalidate(_cache);
 
             return RedirectToAction(nameof(Index));
+        }
+
+        // POST: Admin/Projects/ToggleRegisterVisibility/5  (تبديل سريع من Index عبر fetch)
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ToggleRegisterVisibility(int id)
+        {
+            var project = await _context.Projects.FirstOrDefaultAsync(p => p.Id == id);
+            if (project == null) return NotFound(new { ok = false });
+
+            project.ShowOnRegisterPage = !project.ShowOnRegisterPage;
+            await _context.SaveChangesAsync();
+            RegisterCatalogCache.Invalidate(_cache);
+
+            return Json(new { ok = true, visible = project.ShowOnRegisterPage });
         }
 
         // GET: Admin/Projects/Delete/5
@@ -340,8 +376,12 @@ namespace QdratNew.Areas.Admin.Controllers
             }
 
             await _context.SaveChangesAsync();
+            RegisterCatalogCache.Invalidate(_cache);
             return RedirectToAction(nameof(Index));
         }
+
+        private static string? NormalizeOptional(string? value)
+            => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
         private bool ProjectExists(int id)
         {

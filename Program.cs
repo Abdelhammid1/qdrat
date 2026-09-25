@@ -1028,6 +1028,27 @@ builder.Services.AddScoped<IBatchAnalyticsService, BatchAnalyticsService>();
 builder.Services.AddScoped<IInstructorAnalyticsService, InstructorAnalyticsService>();
 builder.Services.AddScoped<IProfessionalCertificateService, ProfessionalCertificateService>();
 builder.Services.AddScoped<ICourseCollectionService, CourseCollectionService>();
+builder.Services.AddScoped<QdratNew.Services.Frontend.PublicRegistration.IPublicRegistrationService, QdratNew.Services.Frontend.PublicRegistration.PublicRegistrationService>();
+builder.Services.AddScoped<QdratNew.Services.Frontend.Leads.IFrontendLeadAdminService, QdratNew.Services.Frontend.Leads.FrontendLeadAdminService>();
+
+// RL-S4.4: تحديد معدل النماذج العامة (5 طلبات / 10 دقائق لكل IP)
+builder.Services.AddRateLimiter(o =>
+{
+    o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    o.AddPolicy("public-forms", ctx => System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+        ctx.Connection.RemoteIpAddress?.ToString() ?? "anon",
+        _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 5,
+            Window = TimeSpan.FromMinutes(10),
+            QueueLimit = 0
+        }));
+    o.OnRejected = async (context, token) =>
+    {
+        context.HttpContext.Response.ContentType = "text/plain; charset=utf-8";
+        await context.HttpContext.Response.WriteAsync("محاولات كثيرة خلال وقت قصير، يرجى المحاولة بعد قليل.", token);
+    };
+});
 
 
 
@@ -1146,6 +1167,8 @@ app.UseStaticFiles(new StaticFileOptions
 app.UseMiddleware<QdratNew.Middleware.RequestTimingMiddleware>();
 
 app.UseRouting();
+
+app.UseRateLimiter();
 
 app.UseCors("AllowFrontend");
 

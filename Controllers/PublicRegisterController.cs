@@ -1,78 +1,62 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using QdratNew.Data;
-using QdratNew.Entities.Frontend;
-using QdratNew.ViewModels.Frontend;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using QdratNew.Helpers;
+using QdratNew.Services.Frontend.PublicRegistration;
+using QdratNew.ViewModels.Frontend.Register;
 
 namespace QdratNew.Controllers
 {
     public class PublicRegisterController : Controller
     {
-        private readonly ApplicationDbContext _context;
+        private readonly IPublicRegistrationService _registration;
 
-        public PublicRegisterController(ApplicationDbContext context)
+        public PublicRegisterController(IPublicRegistrationService registration)
         {
-            _context = context;
+            _registration = registration;
         }
 
-        // ===============================
-        // 📌 فورم تسجيل عام – Static
-        // /register
-        // ===============================
+        // /register — كتالوج البرامج والدورات + فورم الطلب
         [HttpGet("/register")]
-        public IActionResult Index()
-        {
-            var vm = new CourseLeadFormVM
-            {
-                Programs = GetStaticPrograms()
-            };
+        public async Task<IActionResult> Index(CancellationToken ct)
+            => View(new RegisterPageVM { Programs = await _registration.GetCatalogAsync(ct) });
 
-            return View(vm);
-        }
-
-        // ===============================
-        // 📩 حفظ البيانات
-        // ===============================
+        // POST /register — PRG إلى /register/success
         [HttpPost("/register")]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Submit(CourseLeadFormVM model)
+        [EnableRateLimiting("public-forms")]
+        public async Task<IActionResult> Submit([Bind(Prefix = "Form")] RegisterLeadFormVM form, CancellationToken ct)
         {
-            if (!ModelState.IsValid)
+            // Honeypot: البوت يملأ الحقل المخفي — نرد بنجاح شكلي دون حفظ
+            if (!string.IsNullOrEmpty(form.Website)) return RedirectToAction(nameof(Success));
+
+            // تطبيع الأرقام العربية-الهندية قبل التحقق من نمط الجوال
+            form.PhoneNumber = NumberHelper.NormalizeDigits(form.PhoneNumber);
+            form.ParentPhone = string.IsNullOrWhiteSpace(form.ParentPhone)
+                ? null
+                : NumberHelper.NormalizeDigits(form.ParentPhone);
+            ModelState.Clear();
+            TryValidateModel(form, "Form");
+
+            if (ModelState.IsValid)
             {
-                model.Programs = GetStaticPrograms();
-                return View("Index", model);
+                var result = await _registration.SubmitLeadAsync(
+                    form, HttpContext.Connection.RemoteIpAddress?.ToString(), ct);
+
+                if (result.Success) return RedirectToAction(nameof(Success));
+
+                foreach (var e in result.Errors) ModelState.AddModelError($"Form.{e.Key}", e.Value);
             }
 
-            var lead = new FrontendLead
+            return View("Index", new RegisterPageVM
             {
-                StudentName = model.StudentName,
-                PhoneNumber = model.PhoneNumber,
-                SelectedProgram = model.SelectedProgram
-            };
-
-            _context.FrontendLeads.Add(lead);
-            await _context.SaveChangesAsync();
-
-            return View("Success");
+                Programs = await _registration.GetCatalogAsync(ct),
+                Form = form
+            });
         }
 
-        // ===============================
-        // 📋 البرامج الثابتة
-        // ===============================
-        private List<SelectListItem> GetStaticPrograms()
-        {
-            return new List<SelectListItem>
-            {
-                new SelectListItem { Value = "القدرات التأسيسية العامة", Text = "القدرات التأسيسية العامة" },
-                new SelectListItem { Value = "النماذج الاحترافية للقدرات", Text = "النماذج الاحترافية للقدرات" },
-                new SelectListItem { Value = "برنامج القدرات الشامل (تأسيس + نماذج)", Text = "برنامج القدرات الشامل (تأسيس + نماذج)" },
-                new SelectListItem { Value = "التحصيلي", Text = "التحصيلي" },
-                new SelectListItem { Value = "STEP", Text = "STEP" },
-                new SelectListItem { Value = "اللغة الإنجليزية (تمهيدي)", Text = "اللغة الإنجليزية (تمهيدي)" },
-                new SelectListItem { Value = "اللغة الإنجليزية (مستويات أكسفورد)", Text = "اللغة الإنجليزية (مستويات أكسفورد)" }
-            };
-        }
+        [HttpGet("/register/success")]
+        public IActionResult Success() => View();
     }
 }

@@ -43,3 +43,39 @@ symlink خارج مسار النشر. لازم الفحص ده يتعمل بعد
 backup قبل الـ deploy — لم يظهر أي فولدر آخر متأثر غير uploads/ و
 images/profiles/. الفروقات في js/css/lib هي مكتبات ثابتة (jQuery,
 validation) وليست ملفات مستخدمين، ولا تحتاج حماية.
+
+
+## 📋 نشر Epic RL (سجل معنا + لوحة طلبات الالتحاق) — RL-S6
+
+### 1) قبل النشر (Backup إلزامي)
+```sql
+BACKUP DATABASE [QdratNewDB] TO DISK = N'/var/opt/mssql/backup/QdratNewDB_before_RL.bak' WITH INIT, COMPRESSION;
+```
+لا تُطبَّق الـ Migration آليًا. راجع ثم شغّل يدويًا `.PROMPT/RL_Migration.sql` على قاعدة الإنتاج.
+
+### 2) سكريبت `RL_Migration.sql` — نتيجة المراجعة
+- إضافات فقط (أعمدة + جدول `FrontendLeadCourses` + 4 فهارس)، بلا حذف بيانات. الوحيد الذي يُسقَط فهرس `IX_Courses_ProjectId` ويُستبدل بفهرس مركّب أوسع.
+- Idempotent فعليًا: كل خطوة داخل `IF NOT EXISTS (… __EFMigrationsHistory …)` وفي Transaction واحدة. جُرِّب تشغيله ثانيةً على قاعدة الاختبار (التي فيها الـ Migration مطبّقة) فانتهى بلا أخطاء وبلا تغيير.
+- ترحيل البيانات: `Status = IsContacted ? 2 : 1` للصفوف التي `Status = 0`. الطلبات القديمة تبقى ظاهرة بشارة «طلب قديم».
+- متوافق مع SQL Server 2014: لا `OPENJSON` ولا `Contains` على قوائم داخل استعلامات EF في خدمتي RL.
+
+### 3) بعد النشر
+- تأكد من `symlink` مجلد `uploads` و`images/profiles` (القسمان أعلاه).
+- ⚠ **قرار معلّق: `UseForwardedHeaders`.** Program.cs لا يستدعيه. خلف Nginx/Reverse Proxy يرى `RemoteIpAddress` عنوان الـ Proxy، فيتشارك كل الزوار حد `public-forms` (5 طلبات/10 دقائق) ويُحجَب التسجيل بعد 5 طلبات إجمالًا. فعّله (مع `KnownProxies`) قبل فتح `/register` للعامة، ثم أعد فحص الحد.
+- بعد أي تعديل مباشر في SQL على `Projects/Courses` أعد تشغيل التطبيق أو انتظر 10 دقائق (كاش الكتالوج)؛ التعديل من لوحة الأدمن يُبطل الكاش تلقائيًا.
+
+### 4) Checklist اختبار يدوي (لم يُجرَّب في المتصفح آليًا)
+- [ ] `/register` على 375px: RTL سليم، لا تمرير أفقي، الكروت والـ Tiles مقروءة، الشريط اللاصق لا يغطي زر الإرسال.
+- [ ] `/register` على الديسكتوب.
+- [ ] `/register` بدون JavaScript: الاختيار والإرسال يعملان، ويصل لـ `/register/success`.
+- [ ] حالة الكتالوج الفارغ (إخفاء كل البرامج): تظهر رسالة فارغة ويصبح حقل الملاحظات مطلوبًا.
+- [ ] كتالوج كبير (~30 دورة): سرعة التمرير، وحد 10 دورات يظهر كرسالة واضحة.
+- [ ] إرسال بأرقام عربية (٠٥…) ثم رقم مكرر خلال 10 دقائق (لا تكرار).
+- [ ] الطلب السادس خلال 10 دقائق يرجع نص 429 (مع مراعاة بند UseForwardedHeaders).
+- [ ] `/Admin/FrontendLeads`: المجهول يُحوَّل لتسجيل الدخول؛ الأدمن يرى الكروت وتُفلتر الجدول؛ Chips البرامج؛ فلتر الفترة.
+- [ ] تغيير الحالة + ملاحظة من الـ Offcanvas: تتحدث الكروت والشارة في القائمة فورًا.
+- [ ] تصدير Excel يحتوي الدورات مجمّعة حسب البرنامج؛ وطلب قديم يظهر بشارة «طلب قديم».
+- [ ] مفاتيح «في التسجيل» في Projects/Courses Index (Toggle) وانعكاسها على `/register`.
+
+### 5) الاختبارات
+`dotnet test QdratNew.Tests` — 58 اختبارًا (تشمل RL: كتالوج، SubmitLead، /register GET/POST/429، حماية الأدمن، UpdateStatus). اختبارات التكامل تحتاج SQL Server محليًا وقاعدة `QdratNewDB` (تُنسخ إلى `QdratNewDB_IntegrationTests`)، وتعمل في Collection واحدة متسلسلة لأنها تشترك في نفس القاعدة.

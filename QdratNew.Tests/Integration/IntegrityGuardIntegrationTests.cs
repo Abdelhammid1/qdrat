@@ -16,6 +16,7 @@ namespace QdratNew.Tests.Integration
     // على قاعدة اختبار معزولة، راجع CustomWebApplicationFactory): تُغطّي مصفوفة الاختبارات
     // الأمنية الموصى بها في مراجعة Sprint 8 (طلب بدون مصادقة، بدون CSRF صحيح، طلب صحيح،
     // طلبان متزامنان لنفس المحاولة، ووصول طالب/موظف بلا صلاحية للوحة الأدمن).
+    [Collection("SharedIntegrationDb")]
     public class IntegrityGuardIntegrationTests : IClassFixture<CustomWebApplicationFactory>, IAsyncLifetime
     {
         private readonly CustomWebApplicationFactory _factory;
