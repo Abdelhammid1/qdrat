@@ -37,6 +37,15 @@ namespace QdratNew.Areas.Admin.Controllers
             {
                 Id = req.Id,
                 FullName = req.FullName,
+                EmployeeNumber = req.EmployeeNumber,
+                Email = req.Email,
+                NationalID = req.NationalID,
+                PhoneNumber = req.PhoneNumber,
+                Residence = req.Residence,
+                CompanyName = req.CompanyName,
+                SubmittedAt = req.SubmittedAt,
+                LastUpdated = req.LastUpdated,
+                HandledBy = req.HandledBy,
                 CurrentStatus = req.Status,
                 AdminNotes = req.AdminNotes
             };
@@ -49,6 +58,21 @@ namespace QdratNew.Areas.Admin.Controllers
         {
             var req = await _context.CorporateRegistrationRequests.FindAsync(vm.Id);
             if (req == null) return NotFound();
+
+            if (!ModelState.IsValid)
+            {
+                vm.FullName = req.FullName;
+                vm.EmployeeNumber = req.EmployeeNumber;
+                vm.Email = req.Email;
+                vm.NationalID = req.NationalID;
+                vm.PhoneNumber = req.PhoneNumber;
+                vm.Residence = req.Residence;
+                vm.CompanyName = req.CompanyName;
+                vm.SubmittedAt = req.SubmittedAt;
+                vm.LastUpdated = req.LastUpdated;
+                vm.HandledBy = req.HandledBy;
+                return View(vm);
+            }
 
             req.Status = vm.CurrentStatus;
             req.AdminNotes = vm.AdminNotes;

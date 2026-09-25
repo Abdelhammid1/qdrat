@@ -1,35 +1,245 @@
-﻿@model QdratNew.ViewModels.EditCorporateStatusViewModel
+@model QdratNew.ViewModels.EditCorporateStatusViewModel
+@using QdratNew.Enums
 @{
-    ViewData["Title"] = "تحديث حالة التسجيل";
+    ViewData["Title"] = "تحديث حالة الطلب";
+
+    var statuses = new (RegistrationStatus Value, string Key, string Label, string Icon)[]
+    {
+        (RegistrationStatus.Pending, "Pending", "قيد المراجعة", "fa-hourglass-half"),
+        (RegistrationStatus.Contacted, "Contacted", "تم التواصل", "fa-phone-volume"),
+        (RegistrationStatus.Joined, "Joined", "مشترك فعليًا", "fa-user-check"),
+        (RegistrationStatus.Withdrawn, "Withdrawn", "تراجع", "fa-sign-out-alt"),
+        (RegistrationStatus.Rejected, "Rejected", "مرفوض", "fa-times-circle"),
+    };
+
+    string StatusKey(RegistrationStatus s) => statuses.First(x => x.Value == s).Key;
+    string StatusLabel(RegistrationStatus s) => statuses.First(x => x.Value == s).Label;
+
+    string WaNumber(string? phone)
+    {
+        var digits = new string((phone ?? "").Where(char.IsDigit).ToArray());
+        if (digits.StartsWith("00")) return digits.Substring(2);
+        if ((phone ?? "").TrimStart().StartsWith("+")) return digits;
+        if (digits.StartsWith("05") && digits.Length == 10) return "966" + digits.Substring(1);
+        if (digits.StartsWith("01") && digits.Length == 11) return "20" + digits.Substring(1);
+        if (digits.StartsWith("966") || digits.StartsWith("20")) return digits;
+        return "";
+    }
+
+    var initial = string.IsNullOrWhiteSpace(Model.FullName) ? "؟" : Model.FullName.Trim().Substring(0, 1);
+    var wa = WaNumber(Model.PhoneNumber);
+    var currentKey = StatusKey(Model.CurrentStatus);
 }
 
-<div class="container mt-4">
-    <div class="card shadow-sm">
-        <div class="card-header bg-light">
-            <h5 class="fw-bold mb-0">تحديث حالة الطلب: @Model.FullName</h5>
+@section Styles {
+    <link href="~/css/admin-frontend-leads.css" rel="stylesheet" asp-append-version="true" />
+    <link href="~/css/admin-corporate-requests.css" rel="stylesheet" asp-append-version="true" />
+}
+
+<div class="fl-page cr-page cr-edit-page">
+
+    <!-- ① رأس الصفحة -->
+    <header class="fl-page__header">
+        <div class="fl-page__heading">
+            <span class="fl-page__icon" aria-hidden="true"><i class="fas fa-user-edit"></i></span>
+            <div>
+                <h1 class="fl-page__title">تحديث حالة الطلب</h1>
+                <p class="fl-page__subtitle">راجع بيانات المرسل ثم حدّث حالة طلبه وسجّل ملاحظاتك.</p>
+            </div>
         </div>
-        <div class="card-body">
-            <form asp-action="EditStatus" method="post">
-                <input type="hidden" asp-for="Id" />
-                <div class="mb-3">
-                    <label class="form-label fw-bold">الحالة الحالية</label>
-                    <select asp-for="CurrentStatus" class="form-select">
-                        <option value="0">قيد المراجعة</option>
-                        <option value="1">تم التواصل</option>
-                        <option value="2">مشترك فعليًا</option>
-                        <option value="3">تراجع</option>
-                        <option value="4">مرفوض</option>
-                    </select>
-                </div>
+        <div class="fl-page__actions">
+            <a asp-action="Index" class="fl-btn fl-btn--ghost">
+                <i class="fas fa-arrow-right" aria-hidden="true"></i> رجوع لقائمة الطلبات
+            </a>
+        </div>
+    </header>
 
-                <div class="mb-3">
-                    <label class="form-label fw-bold">ملاحظات الأدمن</label>
-                    <textarea asp-for="AdminNotes" class="form-control" rows="4" placeholder="اكتب سبب التراجع أو تفاصيل التواصل..."></textarea>
-                </div>
+    @if (TempData["Success"] is string ok)
+    {
+        <div class="alert alert-success" role="status">@ok</div>
+    }
 
-                <button type="submit" class="btn btn-success px-4">💾 حفظ التغييرات</button>
-                <a asp-action="Index" class="btn btn-outline-secondary">رجوع</a>
-            </form>
+    <div class="cr-edit-grid">
+
+        <!-- ② عمود معلومات المرسل -->
+        <div class="cr-edit-col cr-edit-col--info">
+
+            <!-- بطاقة الهوية -->
+            <section class="fl-card cr-hero-card">
+                <div class="fl-card__body">
+                    <div class="fl-detail__hero cr-hero">
+                        <span class="fl-avatar fl-avatar--lg" aria-hidden="true">@initial</span>
+                        <div class="fl-person__info">
+                            <div class="fl-detail__name">@Model.FullName</div>
+                            <div class="fl-detail__hero-meta">
+                                <span class="fl-badge fl-badge--student">وظيفي: @Model.EmployeeNumber</span>
+                                <span class="cr-status" data-status="@currentKey" id="crHeroStatus">@StatusLabel(Model.CurrentStatus)</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="fl-detail__actions cr-hero-actions">
+                        <a class="fl-btn fl-btn--soft" href="tel:@Model.PhoneNumber" aria-label="اتصال بـ @Model.FullName">
+                            <i class="fas fa-phone" aria-hidden="true"></i> اتصال
+                        </a>
+                        @if (wa.Length > 0)
+                        {
+                            <a class="fl-btn fl-btn--wa" href="https://wa.me/@wa" target="_blank" rel="noopener noreferrer" aria-label="واتساب @Model.FullName">
+                                <i class="fab fa-whatsapp" aria-hidden="true"></i> واتساب
+                            </a>
+                        }
+                        <a class="fl-btn fl-btn--ghost" href="mailto:@Model.Email" aria-label="مراسلة @Model.FullName بالبريد">
+                            <i class="far fa-envelope" aria-hidden="true"></i> بريد
+                        </a>
+                    </div>
+                </div>
+            </section>
+
+            <!-- بيانات التواصل والهوية -->
+            <section class="fl-detail__section">
+                <h3><i class="fas fa-id-card" aria-hidden="true"></i> بيانات المرسل</h3>
+                <dl>
+                    <dt>الاسم الكامل</dt>
+                    <dd>@Model.FullName</dd>
+
+                    <dt>الرقم الوظيفي</dt>
+                    <dd>@Model.EmployeeNumber</dd>
+
+                    <dt>رقم الهوية</dt>
+                    <dd class="fl-phone">@Model.NationalID</dd>
+
+                    <dt>الجوال</dt>
+                    <dd><a class="fl-phone cr-plain-link" href="tel:@Model.PhoneNumber">@Model.PhoneNumber</a></dd>
+
+                    <dt>البريد الإلكتروني</dt>
+                    <dd><a class="cr-plain-link" href="mailto:@Model.Email">@Model.Email</a></dd>
+
+                    <dt>مكان الإقامة</dt>
+                    @if (!string.IsNullOrWhiteSpace(Model.Residence))
+                    {
+                        <dd><i class="fas fa-location-dot" aria-hidden="true"></i> @Model.Residence</dd>
+                    }
+                    else
+                    {
+                        <dd class="cr-empty-value">— غير محدد —</dd>
+                    }
+                </dl>
+            </section>
+
+            <!-- بيانات الشركة والطلب -->
+            <section class="fl-detail__section">
+                <h3><i class="fas fa-building" aria-hidden="true"></i> الشركة والطلب</h3>
+                <dl>
+                    <dt>الشركة الراعية</dt>
+                    <dd>@Model.CompanyName</dd>
+
+                    <dt>تاريخ الإرسال</dt>
+                    <dd>@Model.SubmittedAt.ToString("yyyy-MM-dd HH:mm")</dd>
+
+                    <dt>آخر تحديث</dt>
+                    @if (Model.LastUpdated.HasValue)
+                    {
+                        <dd>@Model.LastUpdated.Value.ToString("yyyy-MM-dd HH:mm")</dd>
+                    }
+                    else
+                    {
+                        <dd class="cr-empty-value">لم يُحدَّث بعد</dd>
+                    }
+
+                    <dt>عولج بواسطة</dt>
+                    @if (!string.IsNullOrWhiteSpace(Model.HandledBy))
+                    {
+                        <dd>@Model.HandledBy</dd>
+                    }
+                    else
+                    {
+                        <dd class="cr-empty-value">— لم يتم التعامل معه بعد —</dd>
+                    }
+                </dl>
+            </section>
+        </div>
+
+        <!-- ③ عمود نموذج التعديل -->
+        <div class="cr-edit-col cr-edit-col--form">
+            <section class="fl-card cr-form-card">
+                <div class="fl-card__head">
+                    <h2 class="fl-card__title"><i class="fas fa-clipboard-check" aria-hidden="true"></i> تحديث الحالة</h2>
+                </div>
+                <div class="fl-card__body">
+                    <form asp-action="EditStatus" method="post" id="crEditForm" novalidate>
+                        <div asp-validation-summary="ModelOnly" class="fl-detail__error cr-validation-summary"></div>
+                        <input type="hidden" asp-for="Id" />
+
+                        <div class="mb-3">
+                            <label class="fl-label" asp-for="CurrentStatus">الحالة الجديدة</label>
+                            <div class="cr-status-options" role="radiogroup" aria-label="الحالة الجديدة">
+                                @foreach (var s in statuses)
+                                {
+                                    var inputId = "status_" + s.Key;
+                                    <label class="cr-status-option" data-status="@s.Key">
+                                        <input type="radio" name="CurrentStatus" id="@inputId" value="@((int)s.Value)"
+                                               @(Model.CurrentStatus == s.Value ? "checked" : "") />
+                                        <span class="cr-status-option__icon" aria-hidden="true"><i class="fas @s.Icon"></i></span>
+                                        <span class="cr-status-option__label">@s.Label</span>
+                                    </label>
+                                }
+                            </div>
+                            <span asp-validation-for="CurrentStatus" class="text-danger small"></span>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="fl-label" asp-for="AdminNotes">ملاحظات الأدمن</label>
+                            <textarea asp-for="AdminNotes" class="fl-textarea" rows="5"
+                                      placeholder="اكتب سبب التراجع، تفاصيل التواصل، أو أي ملاحظة مهمة..."></textarea>
+                            <span asp-validation-for="AdminNotes" class="text-danger small"></span>
+                        </div>
+
+                        <div class="cr-form-actions">
+                            <button type="submit" class="fl-btn fl-btn--primary fl-btn--block" id="crSaveBtn">
+                                <i class="fas fa-save" aria-hidden="true"></i>
+                                <span class="cr-save-text">حفظ التغييرات</span>
+                            </button>
+                            <a asp-action="Index" class="fl-btn fl-btn--ghost fl-btn--block">إلغاء</a>
+                        </div>
+                    </form>
+                </div>
+            </section>
         </div>
     </div>
 </div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        (function () {
+            var form = document.getElementById('crEditForm');
+            var saveBtn = document.getElementById('crSaveBtn');
+            var saveText = saveBtn ? saveBtn.querySelector('.cr-save-text') : null;
+            var heroStatus = document.getElementById('crHeroStatus');
+            var labels = {};
+            document.querySelectorAll('.cr-status-option').forEach(function (opt) {
+                var input = opt.querySelector('input[type="radio"]');
+                var text = opt.querySelector('.cr-status-option__label').textContent;
+                labels[opt.getAttribute('data-status')] = text;
+                opt.addEventListener('click', function () {
+                    document.querySelectorAll('.cr-status-option').forEach(function (o) { o.classList.remove('is-active'); });
+                    opt.classList.add('is-active');
+                    if (heroStatus && input) {
+                        heroStatus.setAttribute('data-status', opt.getAttribute('data-status'));
+                        heroStatus.textContent = labels[opt.getAttribute('data-status')];
+                    }
+                });
+                if (input && input.checked) { opt.classList.add('is-active'); }
+            });
+
+            if (form && saveBtn) {
+                form.addEventListener('submit', function () {
+                    if (form.checkValidity && !form.checkValidity()) { return; }
+                    saveBtn.disabled = true;
+                    if (saveText) { saveText.textContent = 'جارٍ الحفظ...'; }
+                    saveBtn.querySelector('i').className = 'fas fa-spinner fa-spin';
+                });
+            }
+        })();
+    </script>
+}
