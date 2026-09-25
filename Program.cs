@@ -95,8 +95,11 @@ builder.Configuration
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
+// ✅ Interceptor إبطال كاش الواجهة العامة (Singleton — يُمرَّر لكل DbContext بما فيها الـ PooledFactory)
+builder.Services.AddSingleton<QdratNew.Data.Interceptors.HomePageCacheInvalidationInterceptor>();
+
 // ✅ تسجيل الـ DbContext العادي للكنترولرات القديمة
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
+builder.Services.AddDbContext<ApplicationDbContext>((sp, options) =>
     options.UseSqlServer(
         builder.Configuration.GetConnectionString("DefaultConnection"),
         sql => sql.UseQuerySplittingBehavior(QuerySplittingBehavior.SingleQuery)
@@ -105,7 +108,8 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
                   .CommandTimeout(180)
         // ⚠️ MaxBatchSize(1) تم حذفه — كان يُبطئ كل عمليات الكتابة
         // إذا ظهرت مشكلة WITH بعد الحذف، حددها بالاستعلام المسبب وليس بتعطيل الـ batching كاملاً
-    ));
+    )
+    .AddInterceptors(sp.GetRequiredService<QdratNew.Data.Interceptors.HomePageCacheInvalidationInterceptor>()));
 
 
 // ✅ إنشاء Factory آمن للكنترولرات الجديدة (مثل StudentHomeworkDashboardController)
@@ -1011,6 +1015,8 @@ builder.Services.AddScoped<IExamWriteService, ExamWriteService>();
 builder.Services.AddScoped<IHomeworkWriteService, HomeworkWriteService>();
 builder.Services.AddScoped<InstructorExamDraftManagementService>();
 builder.Services.AddScoped<ICacheService, CacheService>();
+builder.Services.AddScoped<QdratNew.Services.Frontend.HomePage.IHomePageContentService,
+                           QdratNew.Services.Frontend.HomePage.HomePageContentService>();
 builder.Services.AddScoped<IQuestionPoolService, QuestionPoolService>();
 builder.Services.AddScoped<IInstructorExamMonitoringService, InstructorExamMonitoringService>();
 builder.Services.AddScoped<IBatchReportService, BatchReportService>();

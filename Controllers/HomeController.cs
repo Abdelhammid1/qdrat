@@ -1,21 +1,25 @@
 using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using QdratNew.Models;
+using QdratNew.Services.Frontend.HomePage;
 
 namespace QdratNew.Controllers;
 
 public class HomeController : Controller
 {
     private readonly ILogger<HomeController> _logger;
+    private readonly IHomePageContentService _homePageContent;
 
-    public HomeController(ILogger<HomeController> logger)
+    public HomeController(ILogger<HomeController> logger, IHomePageContentService homePageContent)
     {
         _logger = logger;
+        _homePageContent = homePageContent;
     }
 
-    public IActionResult Index()
+    public async Task<IActionResult> Index()
     {
-        return View();
+        var model = await _homePageContent.GetHomeContentAsync();
+        return View(model);
     }
 
     public IActionResult Privacy()
