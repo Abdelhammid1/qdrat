@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using QdratNew.Services.Frontend.HomePage;
 using QdratNew.Data;
 using QdratNew.Entities.Frontend;
 using QdratNew.Enums;
@@ -11,15 +13,21 @@ namespace QdratNew.Services.Frontend.ProfessionalCertificates;
 public class ProfessionalCertificateService : IProfessionalCertificateService
 {
     private readonly ApplicationDbContext _context;
+    private readonly IMemoryCache _cache;
 
-    public ProfessionalCertificateService(ApplicationDbContext context)
+    public ProfessionalCertificateService(ApplicationDbContext context, IMemoryCache cache)
     {
         _context = context;
+        _cache = cache;
     }
 
     // ─── Frontend ───────────────────────────────────────────────
 
-    public async Task<ProfessionalCertificateHomeSectionViewModel> GetHomeSectionAsync()
+    public Task<ProfessionalCertificateHomeSectionViewModel> GetHomeSectionAsync() =>
+        HomePageCache.GetOrLoadAsync(_cache, HomePageCache.ProfCertSectionKey,
+                                     HomePageCache.CountersTtl, LoadHomeSectionAsync);
+
+    private async Task<ProfessionalCertificateHomeSectionViewModel> LoadHomeSectionAsync()
     {
         var setting = await _context.ProfessionalCertificateSectionSettings
             .AsNoTracking()

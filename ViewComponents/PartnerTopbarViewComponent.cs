@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using QdratNew.Data;
 using QdratNew.ViewModels.Partner;
 using System.Linq;
@@ -25,7 +26,8 @@ namespace QdratNew.ViewComponents
                 HttpContext.Session.GetInt32("ActivePartnerId");
 
             // جميع المدارس المرتبطة بالمستخدم
-            var partners = _context.UserPartners
+            var partners = await _context.UserPartners
+                .AsNoTracking()
                 .Where(up => up.UserId == userId)
                 .Select(up => new PartnerItemVM
                 {
@@ -34,7 +36,7 @@ namespace QdratNew.ViewComponents
                     LogoPath = up.Partner.LogoPath
                 })
                 .OrderBy(p => p.Name)
-                .ToList();
+                .ToListAsync();
 
             var activePartner = partners
                 .FirstOrDefault(p => p.Id == activePartnerId);

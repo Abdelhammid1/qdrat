@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using QdratNew.Data;
 using QdratNew.Services.Partner;
 using QdratNew.ViewModels.Partner;
@@ -19,7 +20,7 @@ namespace QdratNew.ViewComponents
             _context = context;
         }
 
-        public IViewComponentResult Invoke()
+        public async Task<IViewComponentResult> InvokeAsync()
         {
             int? partnerId = HttpContext.Session.GetInt32("ActivePartnerId");
 
@@ -29,13 +30,14 @@ namespace QdratNew.ViewComponents
             }
 
             // الصلاحيات (كما هي)
-            var vm = _permissionService.GetActivePermissions(partnerId.Value);
+            var vm = await _permissionService.GetActivePermissionsAsync(partnerId.Value);
 
             // إضافة لوجو الشريك
-            vm.PartnerLogoPath = _context.Partners
+            vm.PartnerLogoPath = await _context.Partners
+                .AsNoTracking()
                 .Where(p => p.Id == partnerId.Value)
                 .Select(p => p.LogoPath)
-                .FirstOrDefault();
+                .FirstOrDefaultAsync();
 
             return View(vm);
         }

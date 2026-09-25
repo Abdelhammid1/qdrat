@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using QdratNew.Services.Frontend.HomePage;
 using QdratNew.Data;
 using QdratNew.Entities.Frontend;
 using QdratNew.Enums;
@@ -11,16 +13,22 @@ namespace QdratNew.Services.Frontend.CourseCollections;
 public class CourseCollectionService : ICourseCollectionService
 {
     private readonly ApplicationDbContext _context;
+    private readonly IMemoryCache _cache;
     private const string LogoFolder = "course-collections";
 
-    public CourseCollectionService(ApplicationDbContext context)
+    public CourseCollectionService(ApplicationDbContext context, IMemoryCache cache)
     {
         _context = context;
+        _cache = cache;
     }
 
     // ─── Frontend (Public) ──────────────────────────────────────
 
-    public async Task<CourseCollectionHomeSectionViewModel> GetHomeSectionAsync()
+    public Task<CourseCollectionHomeSectionViewModel> GetHomeSectionAsync() =>
+        HomePageCache.GetOrLoadAsync(_cache, HomePageCache.CourseCollectionsSectionKey,
+                                     HomePageCache.CountersTtl, LoadHomeSectionAsync);
+
+    private async Task<CourseCollectionHomeSectionViewModel> LoadHomeSectionAsync()
     {
         var vm = new CourseCollectionHomeSectionViewModel();
 
