@@ -1,335 +1,292 @@
-﻿@model IEnumerable<QdratNew.Entities.CorporateRegistrationRequest>
-@using QdratNew.Enums;
+@model IEnumerable<QdratNew.Entities.CorporateRegistrationRequest>
+@using QdratNew.Enums
+
 @{
-    ViewData["Title"] = "طلبات تسجيل الشركات والهيئات";
+    ViewData["Title"] = "طلبات تسجيل الرعاة";
+
+    var requests = Model.ToList();
+
+    // (القيمة، المفتاح، التسمية) — نفس الترتيب في الكروت والجدول
+    var statuses = new (RegistrationStatus Value, string Key, string Label)[]
+    {
+        (RegistrationStatus.Pending, "Pending", "قيد المراجعة"),
+        (RegistrationStatus.Contacted, "Contacted", "تم التواصل"),
+        (RegistrationStatus.Joined, "Joined", "مشترك فعليًا"),
+        (RegistrationStatus.Withdrawn, "Withdrawn", "تراجع"),
+        (RegistrationStatus.Rejected, "Rejected", "مرفوض")
+    };
+
+    string StatusKey(RegistrationStatus s) => statuses.First(x => x.Value == s).Key;
+    string StatusLabel(RegistrationStatus s) => statuses.First(x => x.Value == s).Label;
+
+    var total = requests.Count;
+    var counts = requests.GroupBy(x => x.Status).ToDictionary(g => g.Key, g => g.Count());
+    int CountOf(RegistrationStatus s) => counts.TryGetValue(s, out var n) ? n : 0;
+    string Share(int n) => total > 0 ? Math.Round(n * 100.0 / total) + "% من الإجمالي" : "";
+
+    var companies = requests
+        .GroupBy(x => (x.CompanyName ?? "").Trim())
+        .Where(g => g.Key.Length > 0)
+        .OrderByDescending(g => g.Count())
+        .Select(g => (Name: g.Key, Count: g.Count()))
+        .ToList();
+
+    // واتساب: نقبل فقط الأرقام الدولية أو المحلية المعروفة (سعودي 05xxxxxxxx / مصري 01xxxxxxxxx)
+    string WaNumber(string? phone)
+    {
+        var digits = new string((phone ?? "").Where(char.IsDigit).ToArray());
+        if (digits.StartsWith("00")) return digits.Substring(2);
+        if ((phone ?? "").TrimStart().StartsWith("+")) return digits;
+        if (digits.StartsWith("05") && digits.Length == 10) return "966" + digits.Substring(1);
+        if (digits.StartsWith("01") && digits.Length == 11) return "20" + digits.Substring(1);
+        if (digits.StartsWith("966") || digits.StartsWith("20")) return digits;
+        return "";
+    }
+
+    var last = requests.Count > 0 ? requests.Max(x => x.SubmittedAt) : (DateTime?)null;
 }
 
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap" rel="stylesheet">
+@section Styles {
+    <link href="~/css/admin-frontend-leads.css" rel="stylesheet" asp-append-version="true" />
+    <link href="~/css/admin-corporate-requests.css" rel="stylesheet" asp-append-version="true" />
+}
 
-<!-- ✅ استدعاء مكتبات DataTables -->
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" />
-<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css" />
+<div class="fl-page cr-page" id="crPage" data-last="@(last?.ToString("yyyy-MM-ddTHH:mm:ss"))">
 
-<style>
-    body {
-        font-family: 'Cairo', sans-serif;
-        direction: rtl;
-        text-align: right;
-        background: #f9fafb;
-    }
-
-    .page-header {
-        background: #fff;
-        border-bottom: 3px solid #339999;
-        border-radius: 12px;
-        padding: 20px 25px;
-        margin-bottom: 20px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-    }
-
-    .btn-export {
-        background-color: #339999;
-        border: none;
-        color: white;
-        font-weight: 600;
-        transition: 0.3s;
-    }
-
-        .btn-export:hover {
-            background-color: #2b7f7f;
-        }
-
-    table.dataTable thead {
-        background-color: #339999;
-        color: #fff;
-        text-align: center;
-    }
-
-    .dataTables_filter input {
-        border-radius: 6px;
-        border: 1px solid #ccc;
-        padding: 6px;
-    }
-
-    .dt-buttons .btn {
-        margin: 0 4px;
-        border-radius: 6px;
-    }
-
-    .dt-button.buttons-excel {
-        background-color: #2b7f7f !important;
-        color: #fff !important;
-    }
-
-    .dt-button.buttons-copy {
-        background-color: #777 !important;
-        color: #fff !important;
-    }
-
-    .dt-button.buttons-pdf {
-        background-color: #d9534f !important;
-        color: #fff !important;
-    }
-
-    .dt-button.buttons-print {
-        background-color: #5cb85c !important;
-        color: #fff !important;
-    }
-
-    .status-card {
-        background: #fff;
-        border-radius: 14px;
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
-        transition: all 0.3s ease;
-        border-right: 6px solid transparent;
-    }
-
-        .status-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
-        }
-
-    .status-icon {
-        font-size: 2.2rem;
-        margin-bottom: 8px;
-    }
-
-    .status-pending {
-        border-right-color: #f6c23e; /* أصفر هادئ */
-    }
-
-    .status-contacted {
-        border-right-color: #36b9cc; /* أزرق سماوي */
-    }
-
-    .status-joined {
-        border-right-color: #1cc88a; /* أخضر ناعم */
-    }
-
-    .status-withdrawn {
-        border-right-color: #858796; /* رمادي */
-    }
-
-    .status-rejected {
-        border-right-color: #e74a3b; /* أحمر خافت */
-    }
-
-    .status-title {
-        font-weight: 600;
-        color: #444;
-    }
-
-    .status-value {
-        font-size: 1.8rem;
-        font-weight: 800;
-        margin-top: 5px;
-    }
-
-</style>
-
-<div class="container mt-4">
-    <div class="page-header d-flex justify-content-between align-items-center">
-
-        <h4 class="fw-bold text-dark mb-0">🧾 طلبات تسجيل الشركات والهيئات</h4>
-
-        <div class="d-flex gap-2">
-
-            <!-- ⭐ زر إدارة التسجيل للشركات -->
-            <a asp-action="ManageCompany"
-               asp-route-company="petrojet"
-               class="btn btn-dark shadow-sm">
-                <i class="fas fa-cog me-1"></i> إدارة تسجيل شركة Petrojet
+    <!-- ① رأس الصفحة -->
+    <header class="fl-page__header">
+        <div class="fl-page__heading">
+            <span class="fl-page__icon" aria-hidden="true"><i class="fas fa-handshake"></i></span>
+            <div>
+                <h1 class="fl-page__title">طلبات تسجيل الرعاة</h1>
+                <p class="fl-page__subtitle" id="crLastRequest">تابع طلبات موظفي الشركات والهيئات الراعية وحدّث حالة كل طلب.</p>
+            </div>
+        </div>
+        <div class="fl-page__actions">
+            <a asp-action="ManageCompany" asp-route-company="petrojet" class="fl-btn fl-btn--ghost">
+                <i class="fas fa-cog" aria-hidden="true"></i> إدارة تسجيل شركة Petrojet
             </a>
-
-            <!-- زر تصدير Excel -->
-            <a asp-action="ExportToExcel" class="btn btn-export shadow-sm">
-                <i class="fas fa-file-excel me-1"></i> تصدير إلى Excel
+            <span id="crExportHost"></span>
+            <a asp-action="ExportToExcel" class="fl-btn fl-btn--ghost" title="تصدير كل الطلبات بكل الحقول">
+                <i class="fas fa-file-excel" aria-hidden="true"></i> تصدير الكل
             </a>
-
         </div>
-    </div>
+    </header>
 
+    @if (TempData["Success"] is string ok)
+    {
+        <div class="alert alert-success" role="status">@ok</div>
+    }
 
+    <!-- ② كروت الإحصائيات — كل كارت يفلتر الجدول مباشرة -->
+    <section class="fl-stats" aria-label="ملخص الطلبات (اضغط على كارت لتصفية الجدول)">
+        <button type="button" class="fl-stat fl-stat--total" data-filter-status="" aria-pressed="false">
+            <span class="fl-stat__icon" aria-hidden="true"><i class="fas fa-inbox"></i></span>
+            <span class="fl-stat__body">
+                <span class="fl-stat__label">إجمالي الطلبات</span>
+                <span class="fl-stat__value">@total</span>
+                <span class="fl-stat__sub">كل الشركات</span>
+            </span>
+        </button>
+        <button type="button" class="fl-stat cr-stat--pending" data-filter-status="Pending" aria-pressed="false">
+            <span class="fl-stat__icon" aria-hidden="true"><i class="fas fa-hourglass-half"></i></span>
+            <span class="fl-stat__body">
+                <span class="fl-stat__label">قيد المراجعة</span>
+                <span class="fl-stat__value">@CountOf(RegistrationStatus.Pending)</span>
+                <span class="fl-stat__sub">@Share(CountOf(RegistrationStatus.Pending))</span>
+            </span>
+        </button>
+        <button type="button" class="fl-stat fl-stat--contacted" data-filter-status="Contacted" aria-pressed="false">
+            <span class="fl-stat__icon" aria-hidden="true"><i class="fas fa-phone-volume"></i></span>
+            <span class="fl-stat__body">
+                <span class="fl-stat__label">تم التواصل</span>
+                <span class="fl-stat__value">@CountOf(RegistrationStatus.Contacted)</span>
+                <span class="fl-stat__sub">@Share(CountOf(RegistrationStatus.Contacted))</span>
+            </span>
+        </button>
+        <button type="button" class="fl-stat fl-stat--converted" data-filter-status="Joined" aria-pressed="false">
+            <span class="fl-stat__icon" aria-hidden="true"><i class="fas fa-user-check"></i></span>
+            <span class="fl-stat__body">
+                <span class="fl-stat__label">مشترك فعليًا</span>
+                <span class="fl-stat__value">@CountOf(RegistrationStatus.Joined)</span>
+                <span class="fl-stat__sub">@Share(CountOf(RegistrationStatus.Joined))</span>
+            </span>
+        </button>
+        <button type="button" class="fl-stat fl-stat--total cr-stat--withdrawn" data-filter-status="Withdrawn" aria-pressed="false">
+            <span class="fl-stat__icon" aria-hidden="true"><i class="fas fa-sign-out-alt"></i></span>
+            <span class="fl-stat__body">
+                <span class="fl-stat__label">تراجع</span>
+                <span class="fl-stat__value">@CountOf(RegistrationStatus.Withdrawn)</span>
+                <span class="fl-stat__sub">@Share(CountOf(RegistrationStatus.Withdrawn))</span>
+            </span>
+        </button>
+        <button type="button" class="fl-stat fl-stat--rejected" data-filter-status="Rejected" aria-pressed="false">
+            <span class="fl-stat__icon" aria-hidden="true"><i class="fas fa-times-circle"></i></span>
+            <span class="fl-stat__body">
+                <span class="fl-stat__label">مرفوض</span>
+                <span class="fl-stat__value">@CountOf(RegistrationStatus.Rejected)</span>
+                <span class="fl-stat__sub">@Share(CountOf(RegistrationStatus.Rejected))</span>
+            </span>
+        </button>
+    </section>
 
-
-    <div class="row g-3 text-center mb-4">
-        <div class="col-md-2 col-6">
-            <div class="status-card status-pending p-3">
-                <div class="status-icon text-warning">
-                    <i class="fas fa-hourglass-half"></i>
-                </div>
-                <div class="status-title">قيد المراجعة</div>
-                <div class="status-value text-warning">
-                    @Model.Count(x => x.Status == RegistrationStatus.Pending)
-                </div>
+    @if (total == 0)
+    {
+        <div class="fl-card">
+            <div class="fl-empty">
+                <div class="fl-empty__icon" aria-hidden="true"><i class="fas fa-inbox"></i></div>
+                <p class="fl-empty__title">لا توجد طلبات تسجيل بعد</p>
+                <p class="mb-0">ستظهر هنا طلبات موظفي الشركات الراعية فور وصولها.</p>
             </div>
         </div>
-
-        <div class="col-md-3 col-6">
-            <div class="status-card status-contacted p-3">
-                <div class="status-icon text-info">
-                    <i class="fas fa-phone-volume"></i>
+    }
+    else
+    {
+        <!-- ③ البحث والفلاتر -->
+        <section class="fl-toolbar" aria-label="البحث والتصفية">
+            <div class="fl-toolbar__row">
+                <div class="fl-search">
+                    <i class="fas fa-search fl-search__icon" aria-hidden="true"></i>
+                    <label class="visually-hidden" for="crSearch">بحث في الطلبات</label>
+                    <input type="search" id="crSearch" class="fl-search__input"
+                           placeholder="ابحث بالاسم أو الرقم الوظيفي أو الهوية أو الجوال أو البريد أو الشركة…" autocomplete="off" />
                 </div>
-                <div class="status-title">تم التواصل</div>
-                <div class="status-value text-info">
-                    @Model.Count(x => x.Status == RegistrationStatus.Contacted)
+                <div class="fl-toolbar__field">
+                    <i class="far fa-calendar-alt" aria-hidden="true"></i>
+                    <label class="visually-hidden" for="crRange">الفترة</label>
+                    <select id="crRange" class="fl-select">
+                        <option value="0">كل الفترات</option>
+                        <option value="1">اليوم</option>
+                        <option value="7">آخر 7 أيام</option>
+                        <option value="30">آخر 30 يومًا</option>
+                    </select>
                 </div>
+                <button type="button" class="fl-btn fl-btn--ghost" id="crClearFilters" hidden>
+                    <i class="fas fa-times" aria-hidden="true"></i> مسح الفلاتر
+                </button>
             </div>
-        </div>
-
-        <div class="col-md-3 col-6">
-            <div class="status-card status-joined p-3">
-                <div class="status-icon text-success">
-                    <i class="fas fa-user-check"></i>
-                </div>
-                <div class="status-title">مشترك فعليًا</div>
-                <div class="status-value text-success">
-                    @Model.Count(x => x.Status == RegistrationStatus.Joined)
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-2 col-6">
-            <div class="status-card status-withdrawn p-3">
-                <div class="status-icon text-secondary">
-                    <i class="fas fa-sign-out-alt"></i>
-                </div>
-                <div class="status-title">تراجع</div>
-                <div class="status-value text-secondary">
-                    @Model.Count(x => x.Status == RegistrationStatus.Withdrawn)
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-2 col-6">
-            <div class="status-card status-rejected p-3">
-                <div class="status-icon text-danger">
-                    <i class="fas fa-times-circle"></i>
-                </div>
-                <div class="status-title">مرفوض</div>
-                <div class="status-value text-danger">
-                    @Model.Count(x => x.Status == RegistrationStatus.Rejected)
-                </div>
-            </div>
-        </div>
-    </div>
-
-
-
-
-    <div class="card shadow-sm border-0">
-        <div class="card-body">
-            <table id="requestsTable" class="table table-bordered table-striped align-middle">
-                <thead>
-                    <tr>
-                        <th>الاسم الكامل</th>
-                        <th>الرقم الوظيفي</th>
-                        <th>البريد الإلكتروني</th>
-                        <th>رقم الهوية</th>
-                        <th>رقم الجوال</th>
-                        <th>محل الإقامة</th>
-                        <th>الشركة</th>
-                        <th>تاريخ الإرسال</th>
-                        <th>الحالة</th>
-                        <th>آخر تحديث</th>
-                        <th>إجراءات</th>
-
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var r in Model)
+            @if (companies.Count > 1)
+            {
+                <div class="fl-toolbar__row fl-toolbar__row--chips" role="group" aria-label="تصفية حسب الشركة">
+                    <span class="fl-toolbar__label"><i class="fas fa-building" aria-hidden="true"></i> الشركة</span>
+                    @foreach (var c in companies)
                     {
-                        <tr>
-                            <td>@r.FullName</td>
-                            <td>@r.EmployeeNumber</td>
-                            <td>@r.Email</td>
-                            <td>@r.NationalID</td>
-                            <td>@r.PhoneNumber</td>
-                            <td>@r.Residence</td>
-                            <td>@r.CompanyName</td>
-                            <td>@r.SubmittedAt.ToString("yyyy/MM/dd HH:mm")</td>
-                            <td>
-                                @switch (r.Status)
-                                {
-                                    case RegistrationStatus.Pending:
-                                        <span class="badge bg-warning text-dark">قيد المراجعة</span>
-                                        break;
-                                    case RegistrationStatus.Contacted:
-                                        <span class="badge bg-info text-dark">تم التواصل</span>
-                                        break;
-                                    case RegistrationStatus.Joined:
-                                        <span class="badge bg-success">مشترك فعليًا</span>
-                                        break;
-                                    case RegistrationStatus.Withdrawn:
-                                        <span class="badge bg-secondary">تراجع</span>
-                                        break;
-                                    case RegistrationStatus.Rejected:
-                                        <span class="badge bg-danger">مرفوض</span>
-                                        break;
-                                }
-                            </td>
-                            <td>@r.LastUpdated?.ToString("yyyy/MM/dd HH:mm")</td>
-                            <td>
-                                <a asp-action="EditStatus" asp-route-id="@r.Id" class="btn btn-outline-primary btn-sm">
-                                    <i class="fas fa-edit"></i> تعديل الحالة
-                                </a>
-                            </td>
-
-                        </tr>
+                        <button type="button" class="fl-chip" data-filter-company="@c.Name" aria-pressed="false">
+                            @c.Name <span class="fl-chip__count">@c.Count</span>
+                        </button>
                     }
-                </tbody>
-            </table>
-        </div>
-    </div>
+                </div>
+            }
+        </section>
+
+        <!-- ④ الجدول -->
+        <section class="fl-card">
+            <div class="fl-card__head">
+                <h2 class="fl-card__title">قائمة الطلبات</h2>
+                <span class="fl-card__meta" id="crResultCount" aria-live="polite"></span>
+            </div>
+            <div class="fl-card__body">
+                <table id="requestsTable" class="table align-middle mb-0 fl-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">المتقدم</th>
+                            <th scope="col">التواصل</th>
+                            <th scope="col">الشركة والإقامة</th>
+                            <th scope="col">تاريخ الإرسال</th>
+                            <th scope="col">الحالة</th>
+                            <th scope="col"><span class="visually-hidden">إجراءات</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in requests)
+                        {
+                            var statusKey = StatusKey(r.Status);
+                            var statusLabel = StatusLabel(r.Status);
+                            var initial = string.IsNullOrWhiteSpace(r.FullName) ? "؟" : r.FullName.Trim().Substring(0, 1);
+                            var wa = WaNumber(r.PhoneNumber);
+                            var iso = r.SubmittedAt.ToString("yyyy-MM-ddTHH:mm:ss");
+                            var company = (r.CompanyName ?? "").Trim();
+
+                            <tr class="@(r.Status == RegistrationStatus.Pending ? "fl-row--new" : "")"
+                                data-status="@statusKey" data-company="@company" data-date="@iso">
+                                <td data-search="@r.FullName @r.EmployeeNumber @r.NationalID"
+                                    data-export="@r.FullName">
+                                    <div class="fl-person">
+                                        <span class="fl-avatar" aria-hidden="true">@initial</span>
+                                        <div class="fl-person__info">
+                                            <div class="fl-name">@r.FullName</div>
+                                            <div class="fl-person__meta">
+                                                <span class="fl-badge fl-badge--student">وظيفي: @r.EmployeeNumber</span>
+                                                <span class="fl-sub">هوية: <span class="fl-phone">@r.NationalID</span></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td data-search="@r.PhoneNumber @r.Email"
+                                    data-export="@r.PhoneNumber / @r.Email">
+                                    <div class="fl-contact">
+                                        <span class="fl-phone">@r.PhoneNumber</span>
+                                        <a class="fl-icon-btn" href="tel:@r.PhoneNumber" title="اتصال" aria-label="اتصال بـ @r.FullName"><i class="fas fa-phone" aria-hidden="true"></i></a>
+                                        @if (wa.Length > 0)
+                                        {
+                                            <a class="fl-icon-btn fl-icon-btn--wa" href="https://wa.me/@wa" target="_blank" rel="noopener noreferrer" title="واتساب" aria-label="واتساب @r.FullName"><i class="fab fa-whatsapp" aria-hidden="true"></i></a>
+                                        }
+                                    </div>
+                                    <div class="fl-contact fl-contact--parent">
+                                        <a class="cr-email" href="mailto:@r.Email" title="@r.Email"><i class="far fa-envelope" aria-hidden="true"></i> @r.Email</a>
+                                    </div>
+                                </td>
+                                <td data-search="@company @r.Residence"
+                                    data-export="@company - @r.Residence">
+                                    <div class="fl-course-group">
+                                        <span class="fl-course-group__name">@company</span>
+                                    </div>
+                                    @if (!string.IsNullOrWhiteSpace(r.Residence))
+                                    {
+                                        <div class="fl-sub mt-1"><i class="fas fa-location-dot" aria-hidden="true"></i> @r.Residence</div>
+                                    }
+                                </td>
+                                <td class="fl-date" data-order="@r.SubmittedAt.Ticks" data-export="@r.SubmittedAt.ToString("yyyy-MM-dd HH:mm")" data-search="">
+                                    <div class="fl-date__rel" data-date="@iso" title="@r.SubmittedAt.ToString("yyyy-MM-dd HH:mm")">@r.SubmittedAt.ToString("yyyy-MM-dd")</div>
+                                    <div class="fl-sub">@r.SubmittedAt.ToString("HH:mm")</div>
+                                </td>
+                                <td data-order="@((int)r.Status)" data-export="@statusLabel" data-search="@statusLabel @r.AdminNotes @r.HandledBy">
+                                    <span class="cr-status" data-status="@statusKey">@statusLabel</span>
+                                    @if (!string.IsNullOrWhiteSpace(r.AdminNotes))
+                                    {
+                                        <div class="cr-note" title="@r.AdminNotes"><i class="far fa-comment-dots" aria-hidden="true"></i> @r.AdminNotes</div>
+                                    }
+                                    @if (r.LastUpdated.HasValue)
+                                    {
+                                        <div class="fl-sub mt-1">
+                                            آخر تحديث @r.LastUpdated.Value.ToString("yyyy-MM-dd HH:mm")@(string.IsNullOrWhiteSpace(r.HandledBy) ? "" : " · " + r.HandledBy)
+                                        </div>
+                                    }
+                                </td>
+                                <td class="text-nowrap" data-search="">
+                                    <a asp-action="EditStatus" asp-route-id="@r.Id" class="fl-btn fl-btn--soft" aria-label="تعديل حالة طلب @r.FullName">
+                                        <i class="fas fa-pen" aria-hidden="true"></i> تعديل الحالة
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                <div class="fl-nomatch" id="crNoMatch" hidden>
+                    <div class="fl-empty__icon" aria-hidden="true"><i class="fas fa-search"></i></div>
+                    <p class="fl-empty__title">لا توجد طلبات مطابقة</p>
+                    <p class="mb-3">جرّب تغيير كلمة البحث أو إزالة بعض الفلاتر.</p>
+                    <button type="button" class="fl-btn fl-btn--soft" id="crNoMatchClear">مسح الفلاتر</button>
+                </div>
+            </div>
+            <div class="fl-card__foot" id="crTableFoot"></div>
+        </section>
+    }
 </div>
 
-<!-- ✅ استدعاء سكربتات DataTables -->
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
-
-<script>
-    $(document).ready(function () {
-        $('#requestsTable').DataTable({
-            language: {
-                url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json"
-            },
-            responsive: true,
-            dom: 'Bfrtip',
-            buttons: [
-                {
-                    extend: 'copyHtml5',
-                    text: '<i class="fas fa-copy"></i> نسخ',
-                    className: 'btn btn-sm btn-secondary'
-                },
-                {
-                    extend: 'excelHtml5',
-                    text: '<i class="fas fa-file-excel"></i> Excel',
-                    className: 'btn btn-sm btn-success'
-                },
-                {
-                    extend: 'pdfHtml5',
-                    text: '<i class="fas fa-file-pdf"></i> PDF',
-                    className: 'btn btn-sm btn-danger',
-                    orientation: 'landscape',
-                    pageSize: 'A4',
-                    exportOptions: { columns: ':visible' }
-                },
-                {
-                    extend: 'print',
-                    text: '<i class="fas fa-print"></i> طباعة',
-                    className: 'btn btn-sm btn-primary'
-                }
-            ],
-            order: [[7, 'desc']],
-            pageLength: 10
-        });
-    });
-</script>
+@section Scripts {
+    @* jQuery + DataTables (core/buttons/html5/print/jszip) + Bootstrap JS محمَّلة مسبقًا من _AdminLayout — لا تُحمَّل مرة ثانية. *@
+    <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
+    <script src="~/js/admin-corporate-requests.js" asp-append-version="true"></script>
+}
