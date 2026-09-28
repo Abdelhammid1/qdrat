@@ -2,9 +2,11 @@
 using DocumentFormat.OpenXml.Office2016.Drawing.ChartDrawing;
 using Hangfire;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.AspNetCore.ResponseCompression;
+using System.Net;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.FileProviders;
@@ -1112,6 +1114,20 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 #region 🚀 Middleware
+
+// ⚡ Nginx (proxy عكسي على نفس السيرفر) هو المصدر الوحيد لهذا الترافيك — بدون ده كل الزوار
+// بيظهروا بنفس IP (IP الـ proxy)، فالـ rate limiting بيحجب الجميع بدل الزائر الفعلي.
+// KnownProxies مقصورة على loopback (127.0.0.1 / ::1) لأن Kestrel بيسمع على loopback بس
+// ونجينكس على نفس السيرفر (لا يوجد Cloudflare/CDN/Load Balancer قبله).
+var forwardedHeadersOptions = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+};
+forwardedHeadersOptions.KnownProxies.Clear();
+forwardedHeadersOptions.KnownNetworks.Clear();
+forwardedHeadersOptions.KnownProxies.Add(IPAddress.Parse("127.0.0.1"));
+forwardedHeadersOptions.KnownProxies.Add(IPAddress.IPv6Loopback);
+app.UseForwardedHeaders(forwardedHeadersOptions);
 
 using (var scope = app.Services.CreateScope())
 {
