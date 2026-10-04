@@ -38,10 +38,139 @@
         return checked ? checked.value : null;
     }
 
+    // ───── التنقل سؤالًا بسؤال + لوحة المراجعة (نفس أسلوب الاختبارات العامة) ─────
+    var shell = document.getElementById('rtkShell');
+    var navBar = document.getElementById('rtkNavBar');
+    var reviewTrigger = document.getElementById('rtkReviewTrigger');
+    var reviewPanel = document.getElementById('rtkReviewPanel');
+    var reviewGrid = document.getElementById('rtkReviewGrid');
+    var prevBtn = form.querySelector('[data-rtk-nav="prev"]');
+    var nextBtn = form.querySelector('[data-rtk-nav="next"]');
+    var flagBtn = form.querySelector('[data-rtk-nav="flag"]');
+    var flagLabel = flagBtn ? flagBtn.querySelector('[data-role="flag-label"]') : null;
+
+    var currentIndex = 1;
+    var inReview = false;
+    var flagged = {};    // questionId -> true (علامة مراجعة؛ تُحفظ في المتصفح فقط)
+    var flagKey = 'rtk_flags_' + attemptId;
+
+    try {
+        var rawFlags = window.sessionStorage.getItem(flagKey);
+        if (rawFlags) flagged = JSON.parse(rawFlags) || {};
+    } catch (e) { flagged = {}; }
+
+    function persistFlags() {
+        try { window.sessionStorage.setItem(flagKey, JSON.stringify(flagged)); } catch (e) { /* التخزين غير متاح */ }
+    }
+
+    function sectionAt(index) { return form.querySelector('.rtk-q[data-index="' + index + '"]'); }
+    function sectionId(section) { return section.getAttribute('data-question-id'); }
+
+    function setText(id, value) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = String(value);
+    }
+
+    function renderReview() {
+        var answered = 0, marked = 0, unanswered = 0;
+        sections().forEach(function (s) {
+            var idx = s.getAttribute('data-index');
+            var isAns = !!selectedValue(s);
+            var isMark = !!flagged[sectionId(s)];
+            if (isMark) marked++; else if (isAns) answered++; else unanswered++;
+
+            var btn = reviewGrid ? reviewGrid.querySelector('[data-rtk-goto="' + idx + '"]') : null;
+            if (!btn) return;
+            btn.classList.remove('btn-warning', 'btn-success', 'btn-outline-secondary',
+                'qx-qbtn--flagged', 'qx-qbtn--answered', 'qx-qbtn--unanswered');
+            if (isMark) btn.classList.add('btn-warning', 'qx-qbtn--flagged');
+            else if (isAns) btn.classList.add('btn-success', 'qx-qbtn--answered');
+            else btn.classList.add('btn-outline-secondary', 'qx-qbtn--unanswered');
+            var isCurr = parseInt(idx, 10) === currentIndex;
+            btn.classList.toggle('review-btn--current', isCurr);
+            btn.classList.toggle('qx-qbtn--current', isCurr);
+        });
+
+        var withAnswer = answered + marked;
+        var pct = totalQuestions > 0 ? Math.round(withAnswer / totalQuestions * 100) : 0;
+        setText('rtkStatAnswered', answered);
+        setText('rtkStatFlagged', marked);
+        setText('rtkStatUnanswered', unanswered);
+        setText('rtkProgressLabel', withAnswer + ' / ' + totalQuestions);
+        var fill = document.getElementById('rtkProgressFill');
+        if (fill) fill.style.width = pct + '%';
+        return { answered: answered, marked: marked, unanswered: unanswered };
+    }
+
+    function renderNav() {
+        var onLast = currentIndex >= totalQuestions;
+        if (prevBtn) prevBtn.disabled = currentIndex <= 1;
+        // آخر سؤال ← زر «مراجعة الأسئلة» بدل شريط التنقل (كما في الاختبارات العامة)
+        if (navBar) navBar.style.display = (inReview || onLast) ? 'none' : '';
+        if (reviewTrigger) reviewTrigger.hidden = inReview || !onLast;
+
+        var cur = sectionAt(currentIndex);
+        var isMark = cur ? !!flagged[sectionId(cur)] : false;
+        if (flagBtn) flagBtn.setAttribute('aria-pressed', isMark ? 'true' : 'false');
+        if (flagLabel) flagLabel.textContent = isMark ? 'إزالة علامة المراجعة' : 'ضع علامة للمراجعة';
+    }
+
+    function showQuestion(index) {
+        if (index < 1 || index > totalQuestions) return;
+        currentIndex = index;
+        inReview = false;
+        sections().forEach(function (s) {
+            s.hidden = parseInt(s.getAttribute('data-index'), 10) !== index;
+        });
+        if (reviewPanel) reviewPanel.hidden = true;
+        if (shell) shell.classList.remove('exam-in-review-mode');
+        renderNav();
+        renderReview();
+        if (typeof window.syncOptionStyles === 'function') window.syncOptionStyles(form);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function showReview() {
+        inReview = true;
+        sections().forEach(function (s) { s.hidden = true; });
+        if (reviewPanel) reviewPanel.hidden = false;
+        if (shell) shell.classList.add('exam-in-review-mode');
+        renderNav();
+        renderReview();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function toggleFlag() {
+        var cur = sectionAt(currentIndex);
+        if (!cur) return;
+        var id = sectionId(cur);
+        if (flagged[id]) delete flagged[id]; else flagged[id] = true;
+        persistFlags();
+        renderNav();
+        renderReview();
+    }
+
+    form.addEventListener('click', function (e) {
+        var t = e.target;
+        if (!t || !t.closest) return;
+        var navEl = t.closest('[data-rtk-nav]');
+        if (navEl) {
+            var nav = navEl.getAttribute('data-rtk-nav');
+            if (nav === 'prev') showQuestion(currentIndex - 1);
+            else if (nav === 'next') showQuestion(currentIndex + 1);
+            else if (nav === 'flag') toggleFlag();
+            else if (nav === 'showReview') showReview();
+            return;
+        }
+        var jump = t.closest('[data-rtk-goto]');
+        if (jump) showQuestion(parseInt(jump.getAttribute('data-rtk-goto'), 10));
+    });
+
     function refreshCount() {
         var n = 0;
         sections().forEach(function (s) { if (selectedValue(s)) n++; });
         if (countEl) countEl.textContent = String(n);
+        renderReview();
         return n;
     }
 
@@ -52,6 +181,7 @@
         if (v) { saved[id] = v; wanted[id] = v; }
     });
     refreshCount();
+    renderNav();
 
     function markSaved(section, ok) {
         var badge = section.querySelector('[data-role="saved"]');
@@ -83,7 +213,12 @@
             }).then(function (res) {
                 if (res.ok) return { ok: true };
                 if (res.status === 409) return { ok: false, final: true, expired: true };
-                if (res.status === 400 || res.status === 403 || res.status === 404) return { ok: false, final: true };
+                if (res.status === 400 || res.status === 403 || res.status === 404) {
+                    // اقرأ سبب الرفض من الخادم ليظهر للطالب/للدعم بدل رسالة عامة
+                    return res.json().catch(function () { return null; }).then(function (b) {
+                        return { ok: false, final: true, status: res.status, message: b && b.message };
+                    });
+                }
                 throw new Error('http-' + res.status);   // 429/5xx ← أعد المحاولة
             }).catch(function (err) {
                 if (n >= 3) return { ok: false, final: false, error: err };
@@ -107,7 +242,8 @@
                 setState('انتهى وقت الاختبار — جارٍ التسليم…', 'is-error');
                 doSubmit(true);
             } else if (r.final) {
-                setState('تعذّر حفظ هذه الإجابة. اختر الإجابة مرة أخرى.', 'is-error');
+                setState('تعذّر حفظ هذه الإجابة. اختر الإجابة مرة أخرى.'
+                    + (r.message ? ' (' + r.message + ')' : (r.status ? ' (' + r.status + ')' : '')), 'is-error');
             } else {
                 setState('تعذّر الحفظ بسبب الاتصال. تحقق من الإنترنت ثم اختر الإجابة مرة أخرى.', 'is-error');
             }
@@ -160,12 +296,39 @@
         if (submitting) return;
 
         var answered = refreshCount();
-        if (!expiredOnServer && answered < totalQuestions) {
+        var proceed = function () {
+            form.setAttribute('data-go', '1');
+            doSubmit(false);
+        };
+        if (expiredOnServer) { proceed(); return; }
+
+        // الأعداد الفعلية للإجابات (السؤال الموسوم قد يكون مجابًا أو لا)
+        var stats = { marked: Object.keys(flagged).length, unanswered: totalQuestions - answered };
+        var answeredAll = answered;
+
+        if (typeof Swal === 'undefined') {
             var left = totalQuestions - answered;
-            if (!window.confirm('لم تُجب عن ' + left + ' سؤال. هل تريد تسليم الاختبار الآن؟')) return;
+            if (left > 0 && !window.confirm('لم تُجب عن ' + left + ' سؤال. هل تريد تسليم الاختبار الآن؟')) return;
+            proceed();
+            return;
         }
-        form.setAttribute('data-go', '1');
-        doSubmit(false);
+
+        Swal.fire({
+            title: 'هل أنت متأكد من إنهاء الاختبار؟',
+            html: '<div dir="rtl" style="display:flex;flex-direction:column;gap:.5rem;text-align:right">'
+                + '<div style="background:#e8f5e9;border-radius:10px;padding:.5rem 1rem"><b style="color:#2e7d32;font-size:1.4rem">' + answeredAll + '</b> سؤال أجبت عليه</div>'
+                + '<div style="background:#ffeaea;border-radius:10px;padding:.5rem 1rem"><b style="color:#c62828;font-size:1.4rem">' + stats.unanswered + '</b> سؤال لم تُجب عليه</div>'
+                + '<div style="background:#fff8e1;border-radius:10px;padding:.5rem 1rem"><b style="color:#e65100;font-size:1.4rem">' + stats.marked + '</b> سؤال بعلامة مراجعة</div>'
+                + '</div>',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'إنهاء نهائيًا',
+            cancelButtonText: 'العودة للاختبار',
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6'
+        }).then(function (result) {
+            if (result.isConfirmed) proceed();
+        });
     });
 
     // ───── المؤقّت: من ساعة الخادم، ويُقاس بـ performance.now حتى لا يتأثر بتغيير ساعة الجهاز ─────

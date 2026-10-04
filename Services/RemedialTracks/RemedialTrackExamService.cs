@@ -321,7 +321,10 @@ namespace QdratNew.Services.RemedialTracks
                 .Where(o => o.QuestionId == questionId)
                 .Select(o => o.Text)
                 .ToListAsync(ct);
-            var matched = optionTexts.FirstOrDefault(t => RemedialTrackScoring.IsCorrect(answer, t));
+            // المتصفح يوحّد CRLF إلى LF في قيمة الخيار؛ نوحّد الطرفين قبل المطابقة (المخزَّن يبقى نص الخيار الأصلي)
+            var normalizedAnswer = answer.Replace("\r\n", "\n");
+            var matched = optionTexts.FirstOrDefault(t =>
+                RemedialTrackScoring.IsCorrect(normalizedAnswer, t?.Replace("\r\n", "\n")));
             if (matched is null)
                 return new(RemedialTrackSaveAnswerStatus.BadRequest, 0, "الإجابة ليست ضمن خيارات السؤال.");
 

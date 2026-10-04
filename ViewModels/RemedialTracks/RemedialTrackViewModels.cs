@@ -50,16 +50,16 @@ namespace QdratNew.ViewModels.RemedialTracks
     {
         [Range(1, int.MaxValue, ErrorMessage = "الخطة غير صالحة")] public int TrackId { get; set; }
         [Range(1, int.MaxValue, ErrorMessage = "اختر المحور")] public int SectionId { get; set; }
-        [Range(1, int.MaxValue, ErrorMessage = "اختر نموذج اختبار 101")] public int Exam101ModelId { get; set; }
-        [Range(1, int.MaxValue, ErrorMessage = "اختر نموذج اختبار 102")] public int Exam102ModelId { get; set; }
+        [Range(1, int.MaxValue, ErrorMessage = "اختر نموذج الاختبار الأول")] public int Exam101ModelId { get; set; }
+        [Range(1, int.MaxValue, ErrorMessage = "اختر نموذج الاختبار الثاني")] public int Exam102ModelId { get; set; }
         [Range(5, 180, ErrorMessage = "مدة الاختبار بين 5 و180 دقيقة")] public int ExamDurationMinutes { get; set; } = 30;
     }
 
     public sealed class SaveRemedialAxisExamsInput
     {
         [Range(1, int.MaxValue, ErrorMessage = "المحور غير صالح")] public int AxisId { get; set; }
-        [Range(1, int.MaxValue, ErrorMessage = "اختر نموذج اختبار 101")] public int Exam101ModelId { get; set; }
-        [Range(1, int.MaxValue, ErrorMessage = "اختر نموذج اختبار 102")] public int Exam102ModelId { get; set; }
+        [Range(1, int.MaxValue, ErrorMessage = "اختر نموذج الاختبار الأول")] public int Exam101ModelId { get; set; }
+        [Range(1, int.MaxValue, ErrorMessage = "اختر نموذج الاختبار الثاني")] public int Exam102ModelId { get; set; }
         [Range(5, 180, ErrorMessage = "مدة الاختبار بين 5 و180 دقيقة")] public int ExamDurationMinutes { get; set; } = 30;
     }
 

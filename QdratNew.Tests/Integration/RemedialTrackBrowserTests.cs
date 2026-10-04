@@ -137,8 +137,12 @@ namespace QdratNew.Tests.Integration
                 var section = sections.Nth(i);
                 await section.Locator("label.qx-option", new() { HasText = "الجواب الصحيح" }).ClickAsync();
                 await Assertions.Expect(section.Locator("[data-role=saved]")).ToBeVisibleAsync(new() { Timeout = 15000 });
+                // سؤال واحد في كل مرة: انتقل للتالي، وعند آخر سؤال افتح لوحة المراجعة
+                if (i < 3) await page.ClickAsync("[data-rtk-nav=next]");
+                else await page.ClickAsync("[data-rtk-nav=showReview]");
             }
             await Assertions.Expect(page.Locator("#rtkAnsweredCount")).ToHaveTextAsync("4");
+            await Assertions.Expect(page.Locator("#rtkReviewPanel")).ToBeVisibleAsync();
 
             // (النص يمرّ على smart-text فتتحوّل أرقامه لهندية في العرض؛ لذا يُنتقى بالجزء العربي فقط) الحفظ وصل القاعدة فعلًا
             await using (var db = RtkRealDb.CreateDb())
@@ -147,6 +151,7 @@ namespace QdratNew.Tests.Integration
 
             // ---------- التسليم والنتيجة ----------
             await page.ClickAsync("#rtkSubmitBtn");
+            await page.ClickAsync(".swal2-confirm");   // تأكيد الإنهاء
             await page.WaitForURLAsync(url => url.Contains("/RemedialTrack/Result"), new PageWaitForURLOptions { Timeout = 20000 });
             await Assertions.Expect(page.Locator(".rtk-result-title")).ToBeVisibleAsync(new() { Timeout = 15000 });
             await AssertNoHorizontalScrollAsync(page, "صفحة النتيجة");

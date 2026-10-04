@@ -675,10 +675,10 @@ namespace QdratNew.Services.RemedialTracks
                 if (a.ExamDurationMinutes is < MinExamMinutes or > MaxExamMinutes)
                     issues.Add(prefix + $"مدة الاختبار يجب أن تكون بين {MinExamMinutes} و{MaxExamMinutes} دقيقة.");
                 if (a.Exam101ModelId == a.Exam102ModelId)
-                    issues.Add(prefix + "نموذجا 101 و102 يجب أن يكونا مختلفين.");
+                    issues.Add(prefix + "نموذجا الاختبار الأول والثاني يجب أن يكونا مختلفين.");
 
-                CheckModel(prefix + "اختبار 101", a.M101, stats, issues, null, track.CurriculumId);
-                CheckModel(prefix + "اختبار 102", a.M102, stats, issues, null, track.CurriculumId);
+                CheckModel(prefix + "الاختبار الأول", a.M101, stats, issues, null, track.CurriculumId);
+                CheckModel(prefix + "الاختبار الثاني", a.M102, stats, issues, null, track.CurriculumId);
             }
 
             return issues;
@@ -693,7 +693,7 @@ namespace QdratNew.Services.RemedialTracks
             if (durationMinutes is < MinExamMinutes or > MaxExamMinutes)
                 errors.Add($"مدة الاختبار بين {MinExamMinutes} و{MaxExamMinutes} دقيقة.");
             if (id101 == id102)
-                errors.Add("نموذجا 101 و102 يجب أن يكونا مختلفين.");
+                errors.Add("نموذجا الاختبار الأول والثاني يجب أن يكونا مختلفين.");
             if (errors.Count > 0) return (errors, warnings);
 
             var infos = await db.ProfessionalModels.AsNoTracking()
@@ -705,8 +705,8 @@ namespace QdratNew.Services.RemedialTracks
 
             var m101 = infos.FirstOrDefault(i => i.Id == id101);
             var m102 = infos.FirstOrDefault(i => i.Id == id102);
-            CheckModel("اختبار 101", m101, stats, errors, warnings, trackCurriculumId);
-            CheckModel("اختبار 102", m102, stats, errors, warnings, trackCurriculumId);
+            CheckModel("الاختبار الأول", m101, stats, errors, warnings, trackCurriculumId);
+            CheckModel("الاختبار الثاني", m102, stats, errors, warnings, trackCurriculumId);
             return (errors, warnings);
         }
 

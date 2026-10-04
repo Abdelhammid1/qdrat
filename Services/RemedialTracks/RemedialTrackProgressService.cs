@@ -188,6 +188,14 @@ namespace QdratNew.Services.RemedialTracks
 
             if (ap is null || ap.Status == RemedialTrackAxisStatus.Locked) return null;
 
+            // العلامة المائية: استعلام صغير منفصل حتى لا يتأثر الاستعلام الرئيسي
+            var who = await db.Students.AsNoTracking()
+                .Where(s => s.StudentID == studentId)
+                .Select(s => new { s.FullName, s.NationalID })
+                .FirstOrDefaultAsync(ct);
+            var studentName = who?.FullName ?? string.Empty;
+            var nationalId = (who?.NationalID ?? string.Empty).Trim();
+
             var canWatch = (ap.Status == RemedialTrackAxisStatus.Videos && ap.Round == 1)
                            || (ap.Status == RemedialTrackAxisStatus.Rewatch && ap.Round == 2);
 
@@ -266,6 +274,8 @@ namespace QdratNew.Services.RemedialTracks
                 Status = ap.Status,
                 Round = ap.Round,
                 CanWatch = canWatch,
+                WatermarkText = studentName,
+                WatermarkIdText = nationalId,
                 AllVideosDone = videos.Count > 0 && videos.All(v => v.IsCompleted),
                 ExamReady = ap.Status is RemedialTrackAxisStatus.AwaitingExam101 or RemedialTrackAxisStatus.AwaitingExam102,
                 PendingExam = pendingExam,
@@ -576,7 +586,8 @@ namespace QdratNew.Services.RemedialTracks
                 Title = next.Title,
                 Provider = next.Provider.ToString(),
                 ExternalId = next.ExternalId,
-                Url = next.Url
+                Url = next.Url,
+                EmbedUrl = RemedialTrackVideoUrlParser.BuildEmbedUrl(next.Provider, next.ExternalId)
             }, !anyPending);
         }
 
@@ -671,7 +682,7 @@ namespace QdratNew.Services.RemedialTracks
                     .FirstAsync(ct);
 
                 var t = RemedialTrackStateMachine.OnExamSubmitted(ap.Status, att.ExamNumber, att.IsPassed);
-                var examNo = (int)att.ExamNumber;
+                var examName = att.ExamNumber.DisplayName();
                 var score = Pct(att.ScorePercent);
 
                 if (att.ExamNumber == RemedialTrackExamNumber.Exam101) ap.Exam101Percent = att.ScorePercent;
@@ -683,7 +694,7 @@ namespace QdratNew.Services.RemedialTracks
                 {
                     ap.PassedAtUtc = now;
                     AddEvent(db, info.EnrollmentId, info.AxisId, RemedialTrackEventType.ExamPassed,
-                        $"اجتاز الطالب اختبار {examNo} للمحور «{info.Title}» بنسبة {score}%.", now);
+                        $"اجتاز الطالب {examName} للمحور «{info.Title}» بنسبة {score}%.", now);
                     if (t.UnlockNextAxis)
                         await OpenNextAxisAsync(db, info.EnrollmentId, ap.Order, now, ct);
                 }
@@ -691,7 +702,7 @@ namespace QdratNew.Services.RemedialTracks
                 {
                     // صياغة محايدة: هذه الأحداث قد تظهر في خط الطالب الزمني (S6)
                     AddEvent(db, info.EnrollmentId, info.AxisId, RemedialTrackEventType.ExamFailed,
-                        $"نتيجة اختبار {examNo} للمحور «{info.Title}»: {score}% (نسبة الاجتياز {info.Pass}%).", now);
+                        $"نتيجة {examName} للمحور «{info.Title}»: {score}% (نسبة الاجتياز {info.Pass}%).", now);
 
                     if (t.StartRewatchRound)
                     {
@@ -703,7 +714,7 @@ namespace QdratNew.Services.RemedialTracks
                     {
                         ap.FailedAtUtc = now;
                         AddEvent(db, info.EnrollmentId, info.AxisId, RemedialTrackEventType.AxisNotPassed,
-                            $"لم يجتز الطالب الخطة العلاجية للمحور «{info.Title}» (101: {Pct(ap.Exam101Percent)}%، 102: {Pct(ap.Exam102Percent)}%).", now);
+                            $"لم يجتز الطالب الخطة العلاجية للمحور «{info.Title}» (الأول: {Pct(ap.Exam101Percent)}%، الثاني: {Pct(ap.Exam102Percent)}%).", now);
                     }
                 }
 

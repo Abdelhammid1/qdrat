@@ -17,7 +17,7 @@
     @switch (Model.Status)
     {
         case RemedialTrackAxisStatus.Rewatch:
-            <div class="rtk-alert rtk-alert-info">لم تصل إلى النسبة المطلوبة في اختبار 101. أعد مشاهدة فيديوهات المحور من جديد، وبعد آخرها سيظهر اختبار 102.</div>
+            <div class="rtk-alert rtk-alert-info">لم تصل إلى النسبة المطلوبة في الاختبار الأول. أعد مشاهدة فيديوهات المحور من جديد، وبعد آخرها سيظهر الاختبار الثاني.</div>
             break;
         case RemedialTrackAxisStatus.Passed:
             <div class="rtk-alert rtk-alert-ok">اجتزت هذا المحور.</div>
@@ -46,7 +46,21 @@
             {
                 <div class="rtk-card mb-3">
                     <h3 id="rtkNowTitle" class="mb-2"></h3>
-                    <div class="rtk-player-wrap" id="rtkPlayerWrap" hidden><div id="rtkPlayerHost" class="rtk-player-host"></div></div>
+                    <div class="rtk-player-wrap" id="rtkPlayerWrap" hidden>
+                        <div id="rtkPlayerHost" class="rtk-player-host"></div>
+                        @* طبقة حماية: تمنع النقر على عناصر المنصة (الشعار/العنوان/مشاهدة على…) وتمنع قائمة الكليك يمين *@
+                        <div class="rtk-player-shield" id="rtkPlayerShield" aria-hidden="true"></div>
+                        @* علامة مائية: تكشف مصدر أي تسريب/تسجيل للشاشة *@
+                        <div class="rtk-watermark rtk-watermark-a" aria-hidden="true"><span class="rtk-wm-name">@Model.WatermarkText</span>@if (!string.IsNullOrEmpty(Model.WatermarkIdText)){<span class="rtk-wm-id">@Model.WatermarkIdText</span>}</div>
+                        <div class="rtk-watermark rtk-watermark-b" aria-hidden="true"><span class="rtk-wm-name">@Model.WatermarkText</span>@if (!string.IsNullOrEmpty(Model.WatermarkIdText)){<span class="rtk-wm-id">@Model.WatermarkIdText</span>}</div>
+                        <div class="rtk-player-controls" id="rtkPlayerControls" dir="ltr">
+                            <button type="button" id="rtkBtnPlay" class="rtk-ctl-btn" aria-label="تشغيل / إيقاف مؤقت"><i class="fas fa-play" aria-hidden="true"></i></button>
+                            <button type="button" id="rtkBtnMute" class="rtk-ctl-btn" aria-label="كتم / تشغيل الصوت"><i class="fas fa-volume-up" aria-hidden="true"></i></button>
+                            <span class="rtk-ctl-time" id="rtkTime">0:00 / 0:00</span>
+                            <input type="range" id="rtkSeek" class="rtk-seek" min="0" max="1000" value="0" step="1" aria-label="موضع الفيديو (يمكنك الرجوع فقط داخل ما شاهدته)" />
+                            <button type="button" id="rtkBtnFull" class="rtk-ctl-btn" aria-label="ملء الشاشة"><i class="fas fa-expand" aria-hidden="true"></i></button>
+                        </div>
+                    </div>
                     <div id="rtkOtherBox" hidden>
                         <p class="small mb-2">هذا الفيديو على منصة خارجية. افتحه في نافذة جديدة وأبقِ هذه الصفحة مفتوحة أثناء المشاهدة.</p>
                         <a id="rtkOtherLink" class="rtk-btn rtk-btn-outline mb-2" target="_blank" rel="noopener noreferrer"><i class="fas fa-up-right-from-square"></i> فتح الفيديو</a>
@@ -57,17 +71,21 @@
             }
 
             <ol class="rtk-videos" id="rtkVideoList">
+                @* لا نطبع معرّف/رابط الفيديو في HTML إلا للمتاح حاليًا والتالي مباشرة (يُفتح من JS بعد الإتمام) *@
+                @{ var revealedNextLocked = false; }
                 @foreach (var v in Model.Videos)
                 {
                     var active = Model.CanWatch && v.IsUnlocked && !v.IsCompleted;
+                    var exposeSource = v.IsUnlocked;
+                    if (!v.IsUnlocked && !revealedNextLocked) { exposeSource = true; revealedNextLocked = true; }
                     <li class="rtk-video-item @(v.IsCompleted ? "is-done" : "") @(Model.CanWatch && !v.IsUnlocked ? "is-locked" : "")"
                         data-vp-id="@v.VideoProgressId"
                         data-order="@v.Order"
                         data-title="@v.Title"
                         data-provider="@v.Provider"
-                        data-external-id="@v.ExternalId"
-                        data-embed-url="@v.EmbedUrl"
-                        data-url="@v.Url"
+                        data-external-id="@(exposeSource ? v.ExternalId : null)"
+                        data-embed-url="@(exposeSource ? v.EmbedUrl : null)"
+                        data-url="@(exposeSource ? v.Url : null)"
                         data-duration="@(v.DurationSeconds?.ToString() ?? "")"
                         data-required="@v.RequiredSeconds"
                         data-completed="@(v.IsCompleted ? "1" : "0")"
@@ -89,24 +107,26 @@
         <div class="rtk-alert rtk-alert-info" role="alert">@rtkMessage</div>
     }
 
+    @* منطقة تُحدَّث من الخادم بعد إتمام الفيديو بلا إعادة تحميل (بطاقة بدء الاختبار + النتائج) *@
+    <div id="rtkExamArea">
     @if (Model.ExamReady)
     {
-        var examNo = (int)Model.PendingExam!.Value;
+        var examName = Model.PendingExam!.Value.DisplayName();
         <div class="rtk-card rtk-exam-start mt-3">
-            <h3>اختبار @examNo</h3>
+            <h3>@examName</h3>
             <p class="mb-2">
                 أنهيت جميع فيديوهات المحور. مدة الاختبار @Model.ExamDurationMinutes دقيقة، ويبدأ العدّ التنازلي لحظة الضغط على الزر.
             </p>
             @if (Model.InProgressAttemptId.HasValue)
             {
                 <a class="rtk-btn" asp-action="Solve" asp-route-attemptId="@Model.InProgressAttemptId">
-                    <i class="fas fa-play" aria-hidden="true"></i> متابعة اختبار @examNo
+                    <i class="fas fa-play" aria-hidden="true"></i> متابعة @examName
                 </a>
             }
             else
             {
                 <form asp-action="StartExam" asp-route-enrollmentId="@Model.EnrollmentId" asp-route-axisProgressId="@Model.AxisProgressId" method="post">
-                    <button type="submit" class="rtk-btn"><i class="fas fa-pen" aria-hidden="true"></i> ابدأ اختبار @examNo</button>
+                    <button type="submit" class="rtk-btn"><i class="fas fa-pen" aria-hidden="true"></i> ابدأ @examName</button>
                 </form>
             }
         </div>
@@ -120,13 +140,15 @@
                 @foreach (var a in Model.Attempts.Where(a => a.IsClosed))
                 {
                     <li>
-                        اختبار @((int)a.ExamNumber): @a.ScorePercent.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%
+                        @a.ExamNumber.DisplayName(): @a.ScorePercent.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%
                         — <a asp-action="Result" asp-route-attemptId="@a.AttemptId">عرض النتيجة</a>
                     </li>
                 }
             </ul>
         </div>
     }
+
+    </div>
 
     <div class="mt-3"><a asp-action="Open" asp-route-enrollmentId="@Model.EnrollmentId">العودة إلى الخطة</a></div>
 </div>

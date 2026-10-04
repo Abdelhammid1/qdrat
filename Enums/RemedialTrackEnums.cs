@@ -55,6 +55,13 @@ namespace QdratNew.Enums
         Exam102 = 102
     }
 
+    /// <summary>الاسم المعروض للاختبار في الواجهات (الاختبار الأول / الاختبار الثاني) — القيم 101/102 داخلية فقط.</summary>
+    public static class RemedialTrackExamNumberExtensions
+    {
+        public static string DisplayName(this RemedialTrackExamNumber number)
+            => number == RemedialTrackExamNumber.Exam101 ? "الاختبار الأول" : "الاختبار الثاني";
+    }
+
     public enum RemedialTrackAttemptStatus
     {
         InProgress = 0,

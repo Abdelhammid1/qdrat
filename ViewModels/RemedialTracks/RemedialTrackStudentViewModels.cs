@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using QdratNew.Enums;
 
 namespace QdratNew.ViewModels.RemedialTracks
@@ -97,6 +98,8 @@ namespace QdratNew.ViewModels.RemedialTracks
         public bool AllVideosDone { get; set; }
         public bool ExamReady { get; set; }       // AwaitingExam101/102
         public RemedialTrackExamNumber? PendingExam { get; set; }
+        public string WatermarkText { get; set; } = string.Empty;          // علامة مائية فوق الفيديو: اسم الطالب (السطر الأول)
+        public string WatermarkIdText { get; set; } = string.Empty;        // السطر الثاني: رقم الهوية المسجل في حساب الطالب
         public int ExamDurationMinutes { get; set; }                       // RTK-S5
         public int? InProgressAttemptId { get; set; }                      // RTK-S5: محاولة الاختبار المعلّق قيد الحل
         public IReadOnlyList<StudentRemedialTrackAttemptItemVm> Attempts { get; set; } = Array.Empty<StudentRemedialTrackAttemptItemVm>();
@@ -115,23 +118,24 @@ namespace QdratNew.ViewModels.RemedialTracks
 
     public sealed class RemedialTrackNextVideoDto
     {
-        public int VideoProgressId { get; set; }
-        public string Title { get; set; } = string.Empty;
-        public string Provider { get; set; } = string.Empty;
-        public string? ExternalId { get; set; }
-        public string Url { get; set; } = string.Empty;
+        [JsonPropertyName("videoProgressId")] public int VideoProgressId { get; set; }
+        [JsonPropertyName("title")] public string Title { get; set; } = string.Empty;
+        [JsonPropertyName("provider")] public string Provider { get; set; } = string.Empty;
+        [JsonPropertyName("externalId")] public string? ExternalId { get; set; }
+        [JsonPropertyName("url")] public string Url { get; set; } = string.Empty;
+        [JsonPropertyName("embedUrl")] public string? EmbedUrl { get; set; }     // يُبنى من ExternalId في الخادم — الصفحة لا تعتمد على بيانات مخفية في HTML
     }
 
     public sealed class RemedialTrackVideoPingResponse
     {
-        public bool Ok { get; set; }
-        public string? Reason { get; set; }       // insufficient | locked | state | ...
-        public string? Message { get; set; }
-        public bool Completed { get; set; }
-        public int WatchedSeconds { get; set; }
-        public int RequiredSeconds { get; set; }
-        public RemedialTrackNextVideoDto? NextVideo { get; set; }
-        public bool AllDone { get; set; }
-        public bool NeedsCode { get; set; }
+        [JsonPropertyName("ok")] public bool Ok { get; set; }
+        [JsonPropertyName("reason")] public string? Reason { get; set; }       // insufficient | locked | state | ...
+        [JsonPropertyName("message")] public string? Message { get; set; }
+        [JsonPropertyName("completed")] public bool Completed { get; set; }
+        [JsonPropertyName("watchedSeconds")] public int WatchedSeconds { get; set; }
+        [JsonPropertyName("requiredSeconds")] public int RequiredSeconds { get; set; }
+        [JsonPropertyName("nextVideo")] public RemedialTrackNextVideoDto? NextVideo { get; set; }
+        [JsonPropertyName("allDone")] public bool AllDone { get; set; }
+        [JsonPropertyName("needsCode")] public bool NeedsCode { get; set; }
     }
 }
