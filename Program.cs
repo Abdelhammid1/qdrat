@@ -998,6 +998,8 @@ builder.Services.AddScoped<QdratNew.Services.QuestionReviewTasks.IQuestionReview
                            QdratNew.Services.QuestionReviewTasks.QuestionReviewLockService>();
 builder.Services.AddScoped<QdratNew.Services.QuestionReviewTasks.IQuestionReviewTaskService,
                            QdratNew.Services.QuestionReviewTasks.QuestionReviewTaskService>();
+builder.Services.AddScoped<QdratNew.Services.QuestionReviewTasks.IQuestionReviewTaskQueryService,
+                           QdratNew.Services.QuestionReviewTasks.QuestionReviewTaskQueryService>();
 builder.Services.AddScoped<ILectureInstructorSyncService, LectureInstructorSyncService>();
 builder.Services.AddScoped<IEmployeeBatchAccessService, EmployeeBatchAccessService>();
 builder.Services.AddScoped<QdratNew.Services.Admin.EmployeeDashboard.IEmployeeDashboardService,

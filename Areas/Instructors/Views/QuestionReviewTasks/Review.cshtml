@@ -1,0 +1,482 @@
+@model QdratNew.ViewModels.QuestionReviewTasks.InstructorTaskReviewVm
+@using QdratNew.Enums
+@{
+    ViewData["Title"] = "مراجعة المهمة " + Model.Code;
+    var p = Model.Progress;
+
+    string StatusLabel(QuestionReviewTaskStatus s) => s switch
+    {
+        QuestionReviewTaskStatus.Assigned => "مُسندة",
+        QuestionReviewTaskStatus.InProgress => "قيد المراجعة",
+        QuestionReviewTaskStatus.Completed => "مكتملة",
+        QuestionReviewTaskStatus.Closed => "مغلقة",
+        _ => "ملغاة"
+    };
+
+    string StatusBadge(QuestionReviewTaskStatus s) => s switch
+    {
+        QuestionReviewTaskStatus.Assigned => "qrt-badge--assigned",
+        QuestionReviewTaskStatus.InProgress => "qrt-badge--progress",
+        QuestionReviewTaskStatus.Completed => "qrt-badge--done",
+        QuestionReviewTaskStatus.Closed => "qrt-badge--closed",
+        _ => "qrt-badge--cancel"
+    };
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/instructor/qrt-review.css" asp-append-version="true" />
+}
+
+@Html.AntiForgeryToken()
+
+<div class="qrt-page container-fluid mt-4" dir="rtl"
+     id="qrtReview"
+     data-task-id="@Model.Id"
+     data-can-act="@(Model.CanAct ? "1" : "0")"
+     data-default-filter="@(p.Pending > 0 ? (int)QuestionReviewTaskItemStatus.Pending : -1)">
+
+    <header class="qrt-hero">
+        <div class="qrt-hero__top">
+            <div>
+                <div class="qrt-hero__label">
+                    <span class="qrt-code">@Model.Code</span>
+                    @if (!string.IsNullOrWhiteSpace(Model.CurriculumTitle))
+                    {
+                        <span class="me-2"><i class="fas fa-book-open ms-1"></i>@Model.CurriculumTitle</span>
+                    }
+                </div>
+                <h1>@Model.Title</h1>
+                <p>
+                    <span class="qrt-badge @StatusBadge(Model.Status)" id="qrtStatusBadge">@StatusLabel(Model.Status)</span>
+                    @if (Model.Priority == QuestionReviewTaskPriority.Urgent)
+                    {
+                        <span class="qrt-badge qrt-badge--urgent">عاجلة</span>
+                    }
+                    else if (Model.Priority == QuestionReviewTaskPriority.High)
+                    {
+                        <span class="qrt-badge qrt-badge--high">مرتفعة</span>
+                    }
+                    @if (Model.DueLocal is not null)
+                    {
+                        <span class="me-2"><i class="far fa-calendar-check ms-1"></i>التسليم @Model.DueLocal@(Model.IsOverdue ? " — متأخرة" : "")</span>
+                    }
+                </p>
+            </div>
+            <a class="qrt-back" asp-area="Instructors" asp-controller="QuestionReviewTasks" asp-action="Index">
+                <i class="fas fa-arrow-right ms-1"></i> مهامي
+            </a>
+        </div>
+    </header>
+
+    <section class="qrt-panel" aria-label="تقدم المهمة">
+        @if (!string.IsNullOrWhiteSpace(Model.AdminNote))
+        {
+            <div class="qrt-note mt-0 mb-3"><strong><i class="fas fa-comment-dots"></i> ملاحظة الإدارة:</strong>@Model.AdminNote</div>
+        }
+
+        <div class="qrt-two-bars mt-0">
+            <div>
+                <div class="qrt-bar__row"><span>نسبة الاعتماد</span><strong id="qrtApprovalPct">@p.ApprovalPercent%</strong></div>
+                <div class="qrt-bar" role="progressbar" aria-label="نسبة الاعتماد" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@p.ApprovalPercent" id="qrtApprovalBar">
+                    <div class="qrt-bar__fill" id="qrtApprovalFill" data-w="@p.ApprovalPercent"></div>
+                </div>
+            </div>
+            <div>
+                <div class="qrt-bar__row"><span>نسبة الإنجاز</span><strong id="qrtHandledPct">@p.HandledPercent%</strong></div>
+                <div class="qrt-bar" role="progressbar" aria-label="نسبة الإنجاز" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@p.HandledPercent" id="qrtHandledBar">
+                    <div class="qrt-bar__fill qrt-bar__fill--handled" id="qrtHandledFill" data-w="@p.HandledPercent"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="qrt-counts mt-3" aria-live="polite">
+            <span>الإجمالي <b id="qrtCntTotal">@p.Effective</b></span>
+            <span>بانتظار المراجعة <b id="qrtCntPending">@p.Pending</b></span>
+            <span>اعتُمد <b id="qrtCntApproved">@p.Approved</b></span>
+            <span>أُرجع للإدارة <b id="qrtCntReturned">@p.Returned</b></span>
+        </div>
+
+        <div id="qrtDoneBanner" class="qrt-note mt-3" @(Model.Status == QuestionReviewTaskStatus.Completed ? "" : "hidden")>
+            <strong><i class="fas fa-circle-check"></i> اكتملت المراجعة.</strong>لا توجد أسئلة بانتظار مراجعتك في هذه المهمة، وقد وصل الإدارة إشعار بالإنجاز.
+        </div>
+    </section>
+
+    <section class="qrt-panel" aria-label="أسئلة المهمة">
+        <div class="qrt-toolbar">
+            <select id="qrtStatusFilter" class="qrt-select" aria-label="تصفية حسب حالة السؤال">
+                <option value="-1">كل الأسئلة</option>
+                <option value="@((int)QuestionReviewTaskItemStatus.Pending)">بانتظار المراجعة</option>
+                <option value="@((int)QuestionReviewTaskItemStatus.Approved)">اعتمدتها</option>
+                <option value="@((int)QuestionReviewTaskItemStatus.Returned)">أرجعتها للإدارة</option>
+                <option value="@((int)QuestionReviewTaskItemStatus.ApprovedByAdmin)">اعتمدتها الإدارة</option>
+                <option value="@((int)QuestionReviewTaskItemStatus.Removed)">أُزيلت من المهمة</option>
+            </select>
+            <input id="qrtSearch" type="search" class="qrt-input" placeholder="بحث بنص السؤال أو رقمه المرجعي" aria-label="بحث" maxlength="100" />
+            <span class="qrt-spacer"></span>
+            @if (Model.CanAct)
+            {
+                <button type="button" id="qrtBulkApprove" class="qrt-btn qrt-btn--primary" disabled>
+                    <i class="fas fa-check-double"></i><span>اعتماد المحدد (<span id="qrtSelCount">0</span>)</span>
+                </button>
+            }
+        </div>
+
+        <div class="qrt-table-wrap">
+            <table id="qrtTable" class="qrt-table">
+                <thead>
+                    <tr>
+                        @if (Model.CanAct)
+                        {
+                            <th style="width:36px"><input type="checkbox" id="qrtSelectAll" class="qrt-check" aria-label="تحديد كل أسئلة الصفحة" /></th>
+                        }
+                        <th>الرقم المرجعي</th>
+                        <th>السؤال</th>
+                        <th>المحور / المؤشر</th>
+                        <th>الحالة</th>
+                        <th>إجراءات</th>
+                    </tr>
+                </thead>
+            </table>
+        </div>
+    </section>
+
+    <!-- معاينة السؤال -->
+    <div class="modal fade" id="qrtPreviewModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content text-end">
+                <div class="modal-header">
+                    <h5 class="modal-title">معاينة السؤال</h5>
+                    <button type="button" class="btn-close ms-0 me-auto" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+                </div>
+                <div class="modal-body" id="qrtPreviewBody"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- إرجاع للإدارة -->
+    <div class="modal fade" id="qrtReturnModal" tabindex="-1" aria-hidden="true" aria-labelledby="qrtReturnTitle">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content text-end">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="qrtReturnTitle"><i class="fas fa-reply text-warning ms-2"></i>إرجاع السؤال للإدارة</h5>
+                    <button type="button" class="btn-close ms-0 me-auto" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-2">السؤال: <strong id="qrtReturnRef">—</strong>. ستصل ملاحظتك للإدارة لاتخاذ القرار المناسب.</p>
+                    <div class="qrt-reasons" id="qrtReasons">
+                        <button type="button" class="qrt-reason" data-text="الإجابة الصحيحة المحددة غير صحيحة.">الإجابة الصحيحة خاطئة</button>
+                        <button type="button" class="qrt-reason" data-text="صياغة السؤال غير واضحة وتحتاج إعادة كتابة.">صياغة غير واضحة</button>
+                        <button type="button" class="qrt-reason" data-text="السؤال مكرر لسؤال آخر في البنك.">سؤال مكرر</button>
+                        <button type="button" class="qrt-reason" data-text="السؤال خارج نطاق هذا الدرس/المؤشر.">خارج الدرس</button>
+                    </div>
+                    <label for="qrtReturnNote" class="form-label fw-bold">ملاحظة الإرجاع <span class="text-danger">*</span></label>
+                    <textarea id="qrtReturnNote" class="form-control" rows="4" maxlength="500" placeholder="اكتب سبب الإرجاع بوضوح (10 – 500 حرف)"></textarea>
+                    <div class="qrt-counter" id="qrtReturnCounter">0 / 500</div>
+                    <div class="qrt-field-error" id="qrtReturnError" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="qrt-btn qrt-btn--ghost" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="button" class="qrt-btn qrt-btn--accent" id="qrtReturnSubmit"><i class="fas fa-reply"></i><span>إرجاع للإدارة</span></button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+    (function () {
+        'use strict';
+
+        var root = document.getElementById('qrtReview');
+        if (!root || root.dataset.bound === '1') return;   // منع تكرار الربط
+        root.dataset.bound = '1';
+
+        var taskId = root.dataset.taskId;
+        var canAct = root.dataset.canAct === '1';
+        var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+        var selected = new Set();
+        var table = null;
+        var returnItemId = null;
+        var busy = false;
+
+        var urls = {
+            data: '@Url.Action("LoadItemsData", "QuestionReviewTasks", new { area = "Instructors" })',
+            preview: '@Url.Action("Preview", "QuestionReviewTasks", new { area = "Instructors" })',
+            approve: '@Url.Action("Approve", "QuestionReviewTasks", new { area = "Instructors" })',
+            ret: '@Url.Action("Return", "QuestionReviewTasks", new { area = "Instructors" })'
+        };
+
+        var el = function (id) { return document.getElementById(id); };
+        var esc = function (t) { var d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; };
+
+        function badgeClass(status) {
+            if (status === 0) return 'qrt-badge--pending';
+            if (status === 1 || status === 2 || status === 4) return 'qrt-badge--approved';
+            if (status === 3) return 'qrt-badge--returned';
+            return 'qrt-badge--other';
+        }
+
+        function setBar(fillId, pct) {
+            var fill = el(fillId);
+            fill.style.width = pct + '%';
+            fill.parentElement.setAttribute('aria-valuenow', pct);
+        }
+
+        function applySummary(s, taskStatus) {
+            if (!s) return;
+            el('qrtApprovalPct').textContent = s.approvalPercent + '%';
+            el('qrtHandledPct').textContent = s.handledPercent + '%';
+            setBar('qrtApprovalFill', s.approvalPercent);
+            setBar('qrtHandledFill', s.handledPercent);
+            // ردّ الاعتماد/الإرجاع يحمل النسب والمعلّق فقط؛ بقية العدادات تصل مع إعادة تحميل الجدول
+            if (s.pending !== undefined) el('qrtCntPending').textContent = s.pending;
+            if (s.effective !== undefined) el('qrtCntTotal').textContent = s.effective;
+            if (s.approved !== undefined) el('qrtCntApproved').textContent = s.approved;
+            if (s.returned !== undefined) el('qrtCntReturned').textContent = s.returned;
+            if (taskStatus === 3) el('qrtDoneBanner').hidden = false;
+        }
+
+        function updateSelectionUi() {
+            if (!canAct) return;
+            el('qrtSelCount').textContent = selected.size;
+            el('qrtBulkApprove').disabled = busy || selected.size === 0;
+        }
+
+        function toast(icon, title, text) {
+            return Swal.fire({ icon: icon, title: title, text: text, confirmButtonText: 'حسنًا' });
+        }
+
+        function post(url, body) {
+            body.append('__RequestVerificationToken', token);
+            return fetch(url, {
+                method: 'POST',
+                headers: { 'RequestVerificationToken': token },
+                body: body
+            }).then(function (res) {
+                if (!res.ok) throw new Error('http ' + res.status);
+                return res.json();
+            });
+        }
+
+        function setBusy(on, btn, html) {
+            busy = on;
+            if (btn) {
+                if (on) { btn.dataset.html = btn.innerHTML; btn.innerHTML = '<span class="qrt-spin"></span><span>جارٍ التنفيذ…</span>'; }
+                else if (btn.dataset.html) { btn.innerHTML = btn.dataset.html; }
+                btn.disabled = on;
+            }
+            updateSelectionUi();
+        }
+
+        // ---------- DataTable ----------
+        var columns = [];
+        if (canAct) {
+            columns.push({
+                data: null, orderable: false, searchable: false,
+                render: function (d, t, row) {
+                    return row.canAct
+                        ? '<input type="checkbox" class="qrt-check qrt-row-check" data-id="' + row.itemId + '" aria-label="تحديد السؤال"' + (selected.has(row.itemId) ? ' checked' : '') + '>'
+                        : '';
+                }
+            });
+        }
+        columns.push(
+            { data: 'reference', orderable: false, render: function (d) { return '<span class="qrt-code">' + esc(d) + '</span>'; } },
+            {
+                data: 'title', orderable: false,
+                render: function (d, t, row) {
+                    var note = row.returnNote ? '<span class="qrt-return-note"><i class="fas fa-reply"></i> ' + esc(row.returnNote) + '</span>' : '';
+                    return '<div class="qrt-title-cell"><span class="qrt-t" title="' + esc(d) + '">' + esc(d || '—') + '</span>' + note + '</div>';
+                }
+            },
+            { data: 'section', orderable: false, render: function (d, t, row) { return esc(d) + '<span class="qrt-sub">' + esc(row.lesson) + '</span>'; } },
+            { data: 'statusLabel', orderable: false, render: function (d, t, row) { return '<span class="qrt-badge ' + badgeClass(row.status) + '">' + esc(d) + '</span>'; } },
+            {
+                data: null, orderable: false,
+                render: function (d, t, row) {
+                    var html = '<div class="qrt-actions"><button type="button" class="qrt-btn qrt-btn--ghost qrt-btn--sm qrt-act-preview" data-id="' + row.itemId + '" title="معاينة"><i class="fas fa-eye"></i></button>';
+                    if (row.canAct) {
+                        html += '<button type="button" class="qrt-btn qrt-btn--primary qrt-btn--sm qrt-act-approve" data-id="' + row.itemId + '" title="اعتماد"><i class="fas fa-check"></i></button>' +
+                                '<button type="button" class="qrt-btn qrt-btn--accent qrt-btn--sm qrt-act-return" data-id="' + row.itemId + '" data-ref="' + esc(row.reference) + '" title="إرجاع للإدارة"><i class="fas fa-reply"></i></button>';
+                    }
+                    return html + '</div>';
+                }
+            }
+        );
+
+        var defaultFilter = root.dataset.defaultFilter;
+        el('qrtStatusFilter').value = defaultFilter;
+
+        table = $('#qrtTable').DataTable({
+            processing: true,
+            serverSide: true,
+            searching: false,
+            ordering: false,
+            lengthMenu: [10, 25, 50, 100],
+            pageLength: 25,
+            ajax: {
+                url: urls.data,
+                type: 'POST',
+                data: function (d) {
+                    d.taskId = taskId;
+                    d.statusFilter = el('qrtStatusFilter').value === '-1' ? '' : el('qrtStatusFilter').value;
+                    d.searchTitle = el('qrtSearch').value;
+                    d.__RequestVerificationToken = token;
+                },
+                error: function () { toast('error', 'تعذّر التحميل', 'تعذّر تحميل الأسئلة، تحقق من الاتصال وحاول مجددًا.'); }
+            },
+            columns: columns,
+            language: {
+                url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json',
+                emptyTable: 'لا توجد أسئلة مطابقة.',
+                zeroRecords: 'لا توجد أسئلة مطابقة.'
+            }
+        });
+
+        table.on('xhr.dt', function (e, settings, json) {
+            if (json && json.summary) applySummary(json.summary, json.taskStatus);
+        });
+        table.on('draw.dt', function () {
+            if (canAct) el('qrtSelectAll').checked = false;
+            updateSelectionUi();
+        });
+
+        // ---------- التصفية والبحث ----------
+        el('qrtStatusFilter').addEventListener('change', function () { selected.clear(); table.ajax.reload(); });
+        var searchTimer = null;
+        el('qrtSearch').addEventListener('input', function () {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(function () { selected.clear(); table.ajax.reload(); }, 400);
+        });
+
+        // ---------- أحداث الجدول (تفويض واحد) ----------
+        $('#qrtTable tbody').on('change', '.qrt-row-check', function () {
+            var id = parseInt(this.dataset.id, 10);
+            if (this.checked) selected.add(id); else selected.delete(id);
+            updateSelectionUi();
+        });
+
+        $('#qrtTable tbody').on('click', '.qrt-act-preview', function () {
+            var btn = this;
+            btn.disabled = true;
+            fetch(urls.preview + '?itemId=' + encodeURIComponent(btn.dataset.id), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function (r) { if (!r.ok) throw new Error(); return r.text(); })
+                .then(function (html) {
+                    el('qrtPreviewBody').innerHTML = html;
+                    bootstrap.Modal.getOrCreateInstance(el('qrtPreviewModal')).show();
+                })
+                .catch(function () { toast('error', 'خطأ', 'تعذّر تحميل المعاينة.'); })
+                .finally(function () { btn.disabled = false; });
+        });
+
+        $('#qrtTable tbody').on('click', '.qrt-act-approve', function () {
+            approve([parseInt(this.dataset.id, 10)], this);
+        });
+
+        $('#qrtTable tbody').on('click', '.qrt-act-return', function () {
+            returnItemId = this.dataset.id;
+            el('qrtReturnRef').textContent = this.dataset.ref || '—';
+            el('qrtReturnNote').value = '';
+            updateCounter();
+            el('qrtReturnError').textContent = '';
+            bootstrap.Modal.getOrCreateInstance(el('qrtReturnModal')).show();
+        });
+
+        if (canAct) {
+            el('qrtSelectAll').addEventListener('change', function () {
+                var on = this.checked;
+                document.querySelectorAll('#qrtTable .qrt-row-check').forEach(function (cb) {
+                    cb.checked = on;
+                    var id = parseInt(cb.dataset.id, 10);
+                    if (on) selected.add(id); else selected.delete(id);
+                });
+                updateSelectionUi();
+            });
+
+            el('qrtBulkApprove').addEventListener('click', function () {
+                if (selected.size === 0) return;
+                Swal.fire({
+                    icon: 'question', title: 'اعتماد الأسئلة المحددة؟',
+                    text: 'سيتم اعتماد ' + selected.size + ' سؤال وتسجيل ذلك في سجل البنك.',
+                    showCancelButton: true, confirmButtonText: 'نعم، اعتمد', cancelButtonText: 'إلغاء'
+                }).then(function (r) { if (r.isConfirmed) approve(Array.from(selected), el('qrtBulkApprove')); });
+            });
+        }
+
+        // ---------- اعتماد ----------
+        function approve(ids, btn) {
+            if (busy || ids.length === 0) return;
+            var body = new URLSearchParams();
+            body.append('taskId', taskId);
+            ids.forEach(function (id) { body.append('itemIds', id); });
+            setBusy(true, btn);
+            post(urls.approve, body)
+                .then(function (res) {
+                    if (res.data) applySummary({
+                        approvalPercent: res.data.approvalPercent, handledPercent: res.data.handledPercent,
+                        pending: res.data.pending
+                    }, res.data.taskStatus);
+                    selected.clear();
+                    toast(res.success ? 'success' : 'warning', res.success ? 'تم' : 'تنبيه', res.message);
+                    table.ajax.reload(null, false);
+                })
+                .catch(function () { toast('error', 'خطأ', 'تعذّر الاتصال بالخادم، حاول مرة أخرى.'); })
+                .finally(function () { setBusy(false, btn); });
+        }
+
+        // ---------- إرجاع ----------
+        function updateCounter() {
+            var len = el('qrtReturnNote').value.trim().length;
+            var c = el('qrtReturnCounter');
+            c.textContent = len + ' / 500';
+            c.classList.toggle('is-bad', len > 0 && len < 10);
+        }
+        el('qrtReturnNote').addEventListener('input', function () { updateCounter(); el('qrtReturnError').textContent = ''; });
+        el('qrtReasons').addEventListener('click', function (e) {
+            var b = e.target.closest('.qrt-reason');
+            if (!b) return;
+            var area = el('qrtReturnNote');
+            area.value = area.value.trim() ? (area.value.trim() + ' ' + b.dataset.text) : b.dataset.text;
+            updateCounter();
+            area.focus();
+        });
+
+        el('qrtReturnSubmit').addEventListener('click', function () {
+            if (busy) return;
+            var note = el('qrtReturnNote').value.trim();
+            if (note.length < 10 || note.length > 500) {
+                el('qrtReturnError').textContent = 'ملاحظة الإرجاع إلزامية (10 – 500 حرف).';
+                return;
+            }
+            var btn = this;
+            var body = new URLSearchParams();
+            body.append('itemId', returnItemId);
+            body.append('note', note);
+            setBusy(true, btn);
+            post(urls.ret, body)
+                .then(function (res) {
+                    if (res.success) {
+                        bootstrap.Modal.getOrCreateInstance(el('qrtReturnModal')).hide();
+                        if (res.data) applySummary({
+                            approvalPercent: res.data.approvalPercent, handledPercent: res.data.handledPercent,
+                            pending: res.data.pending
+                        }, res.data.taskStatus);
+                        selected.clear();
+                        toast('success', 'تم', res.message);
+                        table.ajax.reload(null, false);
+                    } else {
+                        el('qrtReturnError').textContent = res.message;
+                    }
+                })
+                .catch(function () { el('qrtReturnError').textContent = 'تعذّر الاتصال بالخادم، حاول مرة أخرى.'; })
+                .finally(function () { setBusy(false, btn); });
+        });
+
+        // أشرطة التقدم الأولية
+        document.querySelectorAll('.qrt-bar__fill[data-w]').forEach(function (f) {
+            requestAnimationFrame(function () { f.style.width = f.getAttribute('data-w') + '%'; });
+        });
+    })();
+    </script>
+}

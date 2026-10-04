@@ -2,10 +2,14 @@
 @using QdratNew.Entities
 @inject SignInManager<ApplicationUser> SignInManager
 @inject QdratNew.Interfaces.IUserAccountDropdownService AccountDropdownService
+@inject QdratNew.Services.QuestionReviewTasks.IQuestionReviewTaskQueryService ReviewTaskQuery
 
 @{
     var account = await AccountDropdownService.GetDropdownViewModelAsync(User);
     var path    = Context.Request.Path.Value ?? "";
+    // QRT-S3.5: عدد الأسئلة المعلّقة في مهام المراجعة (مخزَّن مؤقتًا 60 ثانية)
+    var reviewTasksPending = await ReviewTaskQuery.GetPendingCountByUserIdAsync(
+        User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "");
 
     /* helper: returns "nav-active" if any keyword matches current path */
     string IsActive(params string[] keys) =>
@@ -256,6 +260,20 @@
     background: #4CA6A8;
     color: #fff;
     box-shadow: 0 4px 10px rgba(76,166,168,.35);
+}
+
+/* شارة العدد (مهام مراجعة الأسئلة) */
+.nav-count-badge {
+    margin-inline-start: auto;
+    min-width: 22px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: #da784d;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+    line-height: 1.6;
 }
 
 /* Collapsible trigger */
@@ -812,6 +830,18 @@
            class="nav-link-item @IsActive("QuestionsReview")">
             <div class="nav-ico"><i class="fas fa-search-plus"></i></div>
             <span>مراجعة الأسئلة</span>
+        </a>
+
+        <a asp-area="Instructors"
+           asp-controller="QuestionReviewTasks"
+           asp-action="Index"
+           class="nav-link-item @IsActive("QuestionReviewTasks")">
+            <div class="nav-ico"><i class="fas fa-clipboard-check"></i></div>
+            <span>مهام المراجعة</span>
+            @if (reviewTasksPending > 0)
+            {
+                <span class="nav-count-badge" title="أسئلة بانتظار مراجعتك">@(reviewTasksPending > 99 ? "99+" : reviewTasksPending.ToString())</span>
+            }
         </a>
 
         <div class="sb-divider"></div>

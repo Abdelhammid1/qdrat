@@ -1,0 +1,185 @@
+@model QdratNew.ViewModels.QuestionReviewTasks.InstructorTasksIndexVm
+@using QdratNew.Enums
+@{
+    ViewData["Title"] = "مهام مراجعة الأسئلة";
+
+    string StatusLabel(QuestionReviewTaskStatus s) => s switch
+    {
+        QuestionReviewTaskStatus.Assigned => "مُسندة",
+        QuestionReviewTaskStatus.InProgress => "قيد المراجعة",
+        QuestionReviewTaskStatus.Completed => "مكتملة",
+        QuestionReviewTaskStatus.Closed => "مغلقة",
+        QuestionReviewTaskStatus.Cancelled => "ملغاة",
+        _ => ""
+    };
+
+    string StatusBadge(QuestionReviewTaskStatus s) => s switch
+    {
+        QuestionReviewTaskStatus.Assigned => "qrt-badge--assigned",
+        QuestionReviewTaskStatus.InProgress => "qrt-badge--progress",
+        QuestionReviewTaskStatus.Completed => "qrt-badge--done",
+        QuestionReviewTaskStatus.Closed => "qrt-badge--closed",
+        _ => "qrt-badge--cancel"
+    };
+
+    string CardClass(QuestionReviewTaskStatus s, bool overdue) =>
+        overdue ? "qrt-card--overdue"
+        : s == QuestionReviewTaskStatus.Completed ? "qrt-card--done"
+        : (s == QuestionReviewTaskStatus.Closed || s == QuestionReviewTaskStatus.Cancelled) ? "qrt-card--muted"
+        : "";
+
+    var chips = new (QuestionReviewTaskStatus? Value, string Text)[]
+    {
+        (null, "الكل"),
+        (QuestionReviewTaskStatus.Assigned, "مُسندة"),
+        (QuestionReviewTaskStatus.InProgress, "قيد المراجعة"),
+        (QuestionReviewTaskStatus.Completed, "مكتملة"),
+        (QuestionReviewTaskStatus.Closed, "مغلقة")
+    };
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/instructor/qrt-review.css" asp-append-version="true" />
+}
+
+<div class="qrt-page container-fluid mt-4" dir="rtl">
+
+    <header class="qrt-hero">
+        <div class="qrt-hero__top">
+            <div>
+                <div class="qrt-hero__label"><i class="fas fa-search-plus ms-1"></i> منطقة المدرب</div>
+                <h1>مهام مراجعة الأسئلة</h1>
+                <p>أسئلة أسندتها الإدارة إليك لمراجعتها: اعتمدها، أو أرجعها للإدارة مع ملاحظتك.</p>
+            </div>
+        </div>
+    </header>
+
+    <section class="qrt-kpis" aria-label="ملخص المهام">
+        <div class="qrt-kpi">
+            <div class="qrt-kpi__ico"><i class="fas fa-clipboard-list"></i></div>
+            <div><div class="qrt-kpi__num">@Model.ActiveCount</div><div class="qrt-kpi__lbl">مهام نشطة</div></div>
+        </div>
+        <div class="qrt-kpi qrt-kpi--warn">
+            <div class="qrt-kpi__ico"><i class="fas fa-hourglass-half"></i></div>
+            <div><div class="qrt-kpi__num">@Model.PendingQuestions</div><div class="qrt-kpi__lbl">أسئلة بانتظار مراجعتك</div></div>
+        </div>
+        <div class="qrt-kpi qrt-kpi--danger">
+            <div class="qrt-kpi__ico"><i class="fas fa-clock"></i></div>
+            <div><div class="qrt-kpi__num">@Model.OverdueCount</div><div class="qrt-kpi__lbl">متأخرة عن الموعد</div></div>
+        </div>
+        <div class="qrt-kpi qrt-kpi--ok">
+            <div class="qrt-kpi__ico"><i class="fas fa-circle-check"></i></div>
+            <div><div class="qrt-kpi__num">@Model.CompletedCount</div><div class="qrt-kpi__lbl">مهام مكتملة</div></div>
+        </div>
+    </section>
+
+    <nav class="qrt-chips" aria-label="تصفية حسب الحالة">
+        @foreach (var chip in chips)
+        {
+            var active = chip.Value == Model.StatusFilter;
+            <a class="qrt-chip @(active ? "is-active" : "")"
+               asp-area="Instructors" asp-controller="QuestionReviewTasks" asp-action="Index"
+               asp-route-status="@(chip.Value.HasValue ? ((int)chip.Value.Value).ToString() : null)"
+               aria-current="@(active ? "page" : null)">@chip.Text</a>
+        }
+    </nav>
+
+    @if (!Model.Tasks.Any())
+    {
+        <div class="qrt-empty">
+            <i class="fas fa-inbox"></i>
+            <h5>لا توجد مهام مراجعة @(Model.StatusFilter.HasValue ? "بهذه الحالة" : "مُسندة إليك حاليًا")</h5>
+            <p class="mb-0">ستظهر هنا المهام التي تُسندها إليك الإدارة، وسيصلك إشعار عند وصول مهمة جديدة.</p>
+        </div>
+    }
+    else
+    {
+        <div class="qrt-grid">
+            @foreach (var t in Model.Tasks)
+            {
+                var p = t.Progress;
+                <article class="qrt-card @CardClass(t.Status, t.IsOverdue)">
+                    <div class="qrt-card__head">
+                        <span class="qrt-code">@t.Code</span>
+                        <span class="d-flex gap-1 flex-wrap">
+                            @if (t.Priority == QuestionReviewTaskPriority.Urgent)
+                            {
+                                <span class="qrt-badge qrt-badge--urgent">عاجلة</span>
+                            }
+                            else if (t.Priority == QuestionReviewTaskPriority.High)
+                            {
+                                <span class="qrt-badge qrt-badge--high">مرتفعة</span>
+                            }
+                            <span class="qrt-badge @StatusBadge(t.Status)">@StatusLabel(t.Status)</span>
+                        </span>
+                    </div>
+
+                    <h2 class="qrt-card__title">@t.Title</h2>
+
+                    <div class="qrt-meta">
+                        @if (!string.IsNullOrWhiteSpace(t.CurriculumTitle))
+                        {
+                            <span><i class="fas fa-book-open"></i>@t.CurriculumTitle</span>
+                        }
+                        @if (t.AssignedLocal is not null)
+                        {
+                            <span><i class="far fa-calendar-plus"></i>أُسندت @t.AssignedLocal</span>
+                        }
+                        @if (t.DueLocal is not null)
+                        {
+                            <span class="@(t.IsOverdue ? "is-late" : "")">
+                                <i class="far fa-calendar-check"></i>التسليم @t.DueLocal@(t.IsOverdue ? " — متأخرة" : "")
+                            </span>
+                        }
+                    </div>
+
+                    <div class="qrt-bars">
+                        <div>
+                            <div class="qrt-bar__row"><span>نسبة الاعتماد</span><strong>@p.ApprovalPercent%</strong></div>
+                            <div class="qrt-bar" role="progressbar" aria-label="نسبة الاعتماد" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@p.ApprovalPercent">
+                                <div class="qrt-bar__fill" data-w="@p.ApprovalPercent"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="qrt-bar__row"><span>نسبة الإنجاز</span><strong>@p.HandledPercent%</strong></div>
+                            <div class="qrt-bar" role="progressbar" aria-label="نسبة الإنجاز" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@p.HandledPercent">
+                                <div class="qrt-bar__fill qrt-bar__fill--handled" data-w="@p.HandledPercent"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="qrt-counts">
+                        <span>الإجمالي <b>@p.Effective</b></span>
+                        <span>بانتظار المراجعة <b>@p.Pending</b></span>
+                        <span>اعتمدتها <b>@p.Approved</b></span>
+                        @if (p.Returned > 0)
+                        {
+                            <span>أرجعتها <b>@p.Returned</b></span>
+                        }
+                    </div>
+
+                    <a class="qrt-btn @(QdratNew.Services.QuestionReviewTasks.QuestionReviewTaskMetrics.IsActive(t.Status) ? "qrt-btn--primary" : "qrt-btn--ghost") qrt-btn--block mt-auto"
+                       asp-area="Instructors" asp-controller="QuestionReviewTasks" asp-action="Review" asp-route-id="@t.Id">
+                        @if (QdratNew.Services.QuestionReviewTasks.QuestionReviewTaskMetrics.IsActive(t.Status))
+                        {
+                            <i class="fas fa-play"></i><span>@(p.Pending == p.Effective ? "ابدأ المراجعة" : "تابع المراجعة")</span>
+                        }
+                        else
+                        {
+                            <i class="fas fa-eye"></i><span>عرض المهمة</span>
+                        }
+                    </a>
+                </article>
+            }
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        // تعبئة أشرطة التقدم بعد التحميل لتظهر حركة الامتلاء
+        document.querySelectorAll('.qrt-bar__fill[data-w]').forEach(function (el) {
+            requestAnimationFrame(function () { el.style.width = el.getAttribute('data-w') + '%'; });
+        });
+    </script>
+}
