@@ -280,6 +280,10 @@ namespace QdratNew.Areas.Students.Controllers
         [HttpGet]
         public async Task<IActionResult> Solve(int examId, int stageNumber, Guid? q = null, bool review = false)
         {
+            Response.Headers["Cache-Control"] = "no-cache,no-store,must-revalidate";
+            Response.Headers["Pragma"] = "no-cache";
+            Response.Headers["Expires"] = "0";
+
             var studentId = await GetCurrentStudentIdAsync();
             if (studentId == null)
                 return RedirectToAction("Login", "Account", new { area = "" });

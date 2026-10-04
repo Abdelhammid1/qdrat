@@ -203,6 +203,10 @@ namespace QdratNew.Areas.Students.Controllers
         [HttpGet]
         public async Task<IActionResult> StartPerformanceExam(int id, Guid? q = null)
         {
+            Response.Headers["Cache-Control"] = "no-cache,no-store,must-revalidate";
+            Response.Headers["Pragma"] = "no-cache";
+            Response.Headers["Expires"] = "0";
+
             var verifiedKey = $"VerifiedExam_{id}";
             if (HttpContext.Session.GetString(verifiedKey) != "true")
             {

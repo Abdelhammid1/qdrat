@@ -54,6 +54,10 @@ namespace QdratNew.Areas.Students.Controllers
         [HttpGet]
         public async Task<IActionResult> StartPlacementExam(int assignmentId, Guid? q = null)
         {
+            Response.Headers["Cache-Control"] = "no-cache,no-store,must-revalidate";
+            Response.Headers["Pragma"] = "no-cache";
+            Response.Headers["Expires"] = "0";
+
             using var _context = _contextFactory.CreateDbContext();
 
             var studentId = await GetCurrentStudentIdAsync();
