@@ -1,36 +1,408 @@
 using Microsoft.EntityFrameworkCore;
 using QdratNew.Data;
+using QdratNew.Entities;
 using QdratNew.Enums;
+using QdratNew.Services.Instructors;
+using QdratNew.Services.Instructors.Interfaces;
+using QdratNew.Services.Interfaces;
 using QdratNew.ViewModels.QuestionReviewTasks;
 
 namespace QdratNew.Services.QuestionReviewTasks
 {
     /// <summary>
     /// QRT-S1: هيكل الخدمة + مولّد الكود + إعادة حساب العدادات (D10).
+    /// QRT-S2: إنشاء المهمة (CreateTaskAsync) + المدربون المؤهلون.
     /// بقية العمليات تُنفَّذ في Sprints لاحقة وتُرجع فشلًا صريحًا حتى ذلك الحين.
     /// </summary>
     public sealed class QuestionReviewTaskService : IQuestionReviewTaskService
     {
         private const string NotImplementedMessage = "هذه العملية غير متاحة بعد.";
+        private const int MaxQuestionsPerTask = 500; // D8
+        private const string ActiveLockIndexName = "UX_QuestionReviewTaskItems_ActiveLock";
+        private const string CodeIndexName = "IX_QuestionReviewTasks_Code";
+        private const string AuditActionAssigned = "إسناد لمهمة مراجعة";
+
+        // D9: التخزين UTC، والعرض/الإدخال بتوقيت Arab Standard Time (مع بديل IANA لبيئات Linux).
+        private static readonly Lazy<TimeZoneInfo> DisplayZone = new(() =>
+        {
+            try { return TimeZoneInfo.FindSystemTimeZoneById("Arab Standard Time"); }
+            catch (TimeZoneNotFoundException) { return TimeZoneInfo.FindSystemTimeZoneById("Asia/Riyadh"); }
+        });
 
         private readonly IDbContextFactory<ApplicationDbContext> _dbFactory;
         private readonly TimeProvider _time;
+        private readonly IInstructorScopeService _scope;
+        private readonly IAdvancedNotificationService _notifications;
         private readonly ILogger<QuestionReviewTaskService> _logger;
 
         public QuestionReviewTaskService(
             IDbContextFactory<ApplicationDbContext> dbFactory,
             TimeProvider time,
+            IInstructorScopeService scope,
+            IAdvancedNotificationService notifications,
             ILogger<QuestionReviewTaskService> logger)
         {
             _dbFactory = dbFactory;
             _time = time;
+            _scope = scope;
+            _notifications = notifications;
             _logger = logger;
         }
 
-        // ===== الأدمن (Sprint 2 / 6) =====
-        public Task<OperationResult> CreateTaskAsync(CreateQuestionReviewTaskInput input, ReviewActor actor, CancellationToken ct = default)
-            => Task.FromResult(OperationResult.Fail(NotImplementedMessage));
+        // سؤال مرشّح للإسناد (قراءة فقط)
+        private sealed record CandidateQuestion(Guid Id, int CurriculumId, int? PartnerId, string? ReferenceNumber);
 
+        private sealed record QuestionSelection(List<CandidateQuestion> Eligible, int Excluded, string? Error);
+
+        private sealed record CreatedTaskInfo(int TaskId, string Code, int ItemsCount);
+
+        // ===== الأدمن: إنشاء مهمة (QRT-S2.1 + S2.4) =====
+        public async Task<OperationResult> CreateTaskAsync(CreateQuestionReviewTaskInput input, ReviewActor actor, CancellationToken ct = default)
+        {
+            if (input is null)
+                return OperationResult.Fail("⚠️ بيانات المهمة غير مكتملة.");
+
+            var title = (input.Title ?? string.Empty).Trim();
+            if (title.Length < 3 || title.Length > 200)
+                return OperationResult.Fail("⚠️ عنوان المهمة يجب أن يكون بين 3 و200 حرف.");
+
+            var adminNote = string.IsNullOrWhiteSpace(input.AdminNote) ? null : input.AdminNote.Trim();
+            if (adminNote is { Length: > 1000 })
+                return OperationResult.Fail("⚠️ ملاحظة الإدارة لا تتجاوز 1000 حرف.");
+
+            var nowUtc = _time.GetUtcNow().UtcDateTime;
+
+            DateTime? dueUtc = null;
+            if (input.DueAtLocal.HasValue)
+            {
+                dueUtc = ToUtc(input.DueAtLocal.Value);
+                if (dueUtc.Value <= nowUtc)
+                    return OperationResult.Fail("⚠️ موعد التسليم يجب أن يكون في المستقبل.");
+            }
+
+            await using var readDb = await _dbFactory.CreateDbContextAsync(ct);
+
+            // 2) المدرب
+            var instructor = await readDb.Instructors.AsNoTracking()
+                .Where(i => i.Id == input.InstructorId)
+                .Select(i => new { i.Id, i.FullName, i.IsActive, i.UserId, i.PartnerId })
+                .FirstOrDefaultAsync(ct);
+
+            if (instructor is null || !instructor.IsActive)
+                return OperationResult.Fail("⚠️ المدرب غير موجود أو غير نشط.");
+            if (string.IsNullOrWhiteSpace(instructor.UserId))
+                return OperationResult.Fail("⚠️ المدرب غير مرتبط بحساب دخول.");
+
+            // 3) + 4) تحديد الأسئلة وأهليتها (استعلام واحد)
+            var selection = await ResolveQuestionsAsync(
+                readDb, input.SelectedQuestionIds, input.CurriculumId, input.SectionId, input.LessonId, input.TakeCount, ct);
+            if (selection.Error is not null)
+                return OperationResult.Fail(selection.Error);
+
+            var eligible = selection.Eligible;
+            if (eligible.Count == 0)
+                return OperationResult.Fail("⚠️ لا توجد أسئلة مؤهلة للإسناد (يجب أن تكون مكتملة، غير معتمدة، غير مرفوضة، لها إجابة صحيحة، وغير محجوزة).");
+
+            // 6) D7: عزل الشركاء
+            var partnerMismatch = eligible.Count(q => q.PartnerId != instructor.PartnerId);
+            if (partnerMismatch > 0)
+                return OperationResult.Fail($"⚠️ {partnerMismatch} سؤال لا يتبع نفس جهة المدرب (الشريك)، ولا يمكن إسناده إليه.");
+
+            // 5) صلاحية المنهج
+            var curriculumIds = eligible.Select(q => q.CurriculumId).Distinct().ToList();
+            var allowed = (await _scope.GetDirectCurriculumIdsAsync(instructor.Id)).ToHashSet();
+            var deniedIds = curriculumIds.Where(id => !allowed.Contains(id)).ToList();
+            if (deniedIds.Count > 0)
+            {
+                var deniedNames = await readDb.Curriculums.AsNoTracking()
+                    .Where(c => deniedIds.Contains(c.Id))
+                    .Select(c => c.Title)
+                    .ToListAsync(ct);
+                return OperationResult.Fail($"⚠️ المدرب لا يملك صلاحية على المناهج التالية: {string.Join("، ", deniedNames)}.");
+            }
+
+            // 7) + 8) Transaction واحدة: مهمة + عناصر + Audit + عدادات (إعادة المحاولة مرة واحدة عند تكرار الكود)
+            CreatedTaskInfo? created = null;
+            for (var attempt = 0; attempt < 2 && created is null; attempt++)
+            {
+                try
+                {
+                    created = await InsertTaskAsync(
+                        title, adminNote, instructor.Id, instructor.FullName, curriculumIds, eligible,
+                        input.Priority, dueUtc, actor, nowUtc, ct);
+                }
+                catch (DbUpdateException ex) when (IsConstraintViolation(ex, CodeIndexName) && attempt == 0)
+                {
+                    _logger.LogWarning(ex, "QRT: task code collision, retrying once");
+                }
+                catch (DbUpdateException ex) when (IsConstraintViolation(ex, ActiveLockIndexName))
+                {
+                    _logger.LogWarning(ex, "QRT: active-lock violation while creating a task");
+                    return OperationResult.Fail("⚠️ بعض الأسئلة أُسندت لمهمة أخرى للتو، أعد تحميل الصفحة وحاول مجددًا.");
+                }
+            }
+
+            if (created is null)
+                return OperationResult.Fail("⚠️ تعذّر إنشاء المهمة، حاول مرة أخرى.");
+
+            // 9) الإشعار خارج الـ Transaction — فشله لا يُفشل العملية
+            await NotifyInstructorAsync(instructor.UserId!, created, dueUtc, ct);
+
+            var message = $"✅ تم إنشاء المهمة {created.Code} وإسناد {created.ItemsCount} سؤال إلى {instructor.FullName}.";
+            if (selection.Excluded > 0)
+                message += $" (استُبعد {selection.Excluded} سؤال غير مؤهل: معتمد أو مرفوض أو غير مكتمل أو محجوز أو غير موجود.)";
+
+            return OperationResult.Ok(message, new { taskId = created.TaskId, code = created.Code, count = created.ItemsCount, excluded = selection.Excluded });
+        }
+
+        private async Task<CreatedTaskInfo> InsertTaskAsync(
+            string title,
+            string? adminNote,
+            int instructorId,
+            string instructorName,
+            IReadOnlyList<int> curriculumIds,
+            IReadOnlyList<CandidateQuestion> eligible,
+            QuestionReviewTaskPriority priority,
+            DateTime? dueUtc,
+            ReviewActor actor,
+            DateTime nowUtc,
+            CancellationToken ct)
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync(ct);
+            var strategy = db.Database.CreateExecutionStrategy();
+
+            return await strategy.ExecuteAsync(async () =>
+            {
+                db.ChangeTracker.Clear(); // أمان عند إعادة تشغيل الـ Strategy
+
+                // مزوّد InMemory (الاختبارات) لا يدعم Transactions
+                await using var tx = db.Database.IsRelational()
+                    ? await db.Database.BeginTransactionAsync(ct)
+                    : null;
+
+                var task = new QuestionReviewTask
+                {
+                    Code = await NextCodeAsync(db, ct),
+                    Title = title,
+                    AdminNote = adminNote,
+                    InstructorId = instructorId,
+                    CurriculumId = curriculumIds.Count == 1 ? curriculumIds[0] : null,
+                    Priority = priority,
+                    DueAtUtc = dueUtc,
+                    CreatedByUserId = actor.UserId,
+                    CreatedByName = actor.Name,
+                    CreatedAtUtc = nowUtc,
+                    Status = QuestionReviewTaskStatus.Assigned
+                };
+
+                // قائمة في الذاكرة من استعلام واحد — بلا Query أو SaveChanges داخل Loop
+                var order = 0;
+                foreach (var q in eligible)
+                {
+                    task.Items.Add(new QuestionReviewTaskItem
+                    {
+                        QuestionId = q.Id,
+                        SortOrder = ++order,
+                        ReferenceNumberSnapshot = q.ReferenceNumber,
+                        IsLockActive = true
+                    });
+                }
+
+                db.QuestionReviewTasks.Add(task);
+
+                var auditAt = DateTime.Now; // QuestionAuditLog.PerformedAt يبقى بالتوقيت المحلي كما في بقية البنك
+                var summary = $"المهمة {task.Code} — المدرب: {instructorName}";
+                db.QuestionAuditLogs.AddRange(eligible.Select(q => new QuestionAuditLog
+                {
+                    QuestionId = q.Id,
+                    Action = AuditActionAssigned,
+                    PerformedByUserId = actor.UserId,
+                    PerformedByName = actor.Name,
+                    PerformedByRole = actor.Role,
+                    PerformedAt = auditAt,
+                    ChangedFieldsSummary = summary
+                }));
+
+                await db.SaveChangesAsync(ct);
+                await RecalculateCountersAsync(db, task.Id, ct);
+
+                if (tx is not null)
+                    await tx.CommitAsync(ct);
+
+                return new CreatedTaskInfo(task.Id, task.Code, task.TotalItems);
+            });
+        }
+
+        private async Task NotifyInstructorAsync(string instructorUserId, CreatedTaskInfo created, DateTime? dueUtc, CancellationToken ct)
+        {
+            try
+            {
+                var dueText = dueUtc.HasValue
+                    ? TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(dueUtc.Value, DateTimeKind.Utc), DisplayZone.Value)
+                        .ToString("yyyy/MM/dd HH:mm")
+                    : null;
+
+                await _notifications.SendToUserAsync(
+                    instructorUserId,
+                    $"📋 أُسندت إليك مهمة مراجعة جديدة ({created.Code}) تضم {created.ItemsCount} سؤالًا"
+                        + (dueText is null ? string.Empty : $" — التسليم {dueText}"),
+                    NotificationCategory.Important,
+                    $"/Instructors/QuestionReviewTasks/Review/{created.TaskId}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "QRT: failed to notify instructor for task {Code}", created.Code);
+            }
+        }
+
+        // ===== الأدمن: المدربون المؤهلون (QRT-S2.3) =====
+        public async Task<OperationResult> GetEligibleInstructorsAsync(EligibleInstructorsInput input, CancellationToken ct = default)
+        {
+            if (input is null)
+                return OperationResult.Fail("⚠️ بيانات غير مكتملة.");
+
+            await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+            var selection = await ResolveQuestionsAsync(
+                db, input.SelectedQuestionIds, input.CurriculumId, input.SectionId, input.LessonId, input.TakeCount, ct);
+            if (selection.Error is not null)
+                return OperationResult.Fail(selection.Error);
+            if (selection.Eligible.Count == 0)
+                return OperationResult.Fail("⚠️ لا توجد أسئلة مؤهلة للإسناد ضمن هذا التحديد.");
+
+            var curriculumIds = selection.Eligible.Select(q => q.CurriculumId).Distinct().ToList();
+            var partnerIds = selection.Eligible.Select(q => q.PartnerId).Distinct().ToList();
+            if (partnerIds.Count > 1)
+                return OperationResult.Fail("⚠️ الأسئلة المحددة تتبع جهات (شركاء) مختلفة؛ حدّد أسئلة جهة واحدة.");
+
+            var partnerId = partnerIds[0];
+
+            // مدربون نشطون لهم حساب دخول ومن نفس الشريك (D7)
+            var candidates = await db.Instructors.AsNoTracking()
+                .Where(i => i.IsActive && i.UserId != null && i.PartnerId == partnerId)
+                .Select(i => new { i.Id, i.FullName })
+                .ToListAsync(ct);
+
+            if (candidates.Count == 0)
+                return OperationResult.Ok("لا يوجد مدرب مؤهل لهذه الأسئلة.", Array.Empty<EligibleInstructorDto>());
+
+            // نفس شرط GetDirectCurriculumIdsAsync عبر مصدر واحد مشترك
+            var pairs = await db.InstructorCurriculumBatches.AsNoTracking()
+                .Where(InstructorBatchScope.IsDirectActive(DateTime.Today))
+                .Where(x => curriculumIds.Contains(x.CurriculumId))
+                .Select(x => new { x.InstructorId, x.CurriculumId })
+                .Distinct()
+                .ToListAsync(ct);
+
+            var coverage = pairs
+                .GroupBy(p => p.InstructorId)
+                .ToDictionary(g => g.Key, g => g.Select(p => p.CurriculumId).Distinct().Count());
+
+            // عبء العمل: الأسئلة المحجوزة بانتظار المراجعة لكل مدرب (GROUP BY واحد)
+            var loadRows = await db.QuestionReviewTaskItems.AsNoTracking()
+                .Where(i => i.IsLockActive)
+                .GroupBy(i => i.Task!.InstructorId)
+                .Select(g => new { InstructorId = g.Key, Count = g.Count() })
+                .ToListAsync(ct);
+            var load = loadRows.ToDictionary(r => r.InstructorId, r => r.Count);
+
+            var result = candidates
+                .Where(c => coverage.TryGetValue(c.Id, out var covered) && covered == curriculumIds.Count)
+                .Select(c => new EligibleInstructorDto(c.Id, c.FullName, load.GetValueOrDefault(c.Id)))
+                .OrderBy(c => c.ActiveLockedItems)
+                .ThenBy(c => c.FullName)
+                .ToList();
+
+            var message = result.Count == 0
+                ? "لا يوجد مدرب مؤهل: يجب أن يملك المدرب كل المناهج المعنية ونفس الجهة."
+                : string.Empty;
+
+            return OperationResult.Ok(message, new
+            {
+                questionCount = selection.Eligible.Count,
+                excluded = selection.Excluded,
+                instructors = result
+            });
+        }
+
+        // ===== تحديد الأسئلة + الأهلية (استعلام واحد، بلا Loop) =====
+        private async Task<QuestionSelection> ResolveQuestionsAsync(
+            ApplicationDbContext db,
+            IReadOnlyCollection<Guid>? selectedIds,
+            int? curriculumId,
+            int? sectionId,
+            int? lessonId,
+            int? takeCount,
+            CancellationToken ct)
+        {
+            if (selectedIds is { Count: > 0 })
+            {
+                // وضع 1: تحديد يدوي
+                var ids = selectedIds.Where(id => id != Guid.Empty).Distinct().ToList();
+                if (ids.Count == 0)
+                    return new QuestionSelection(new List<CandidateQuestion>(), 0, "⚠️ لم يتم تحديد أسئلة صالحة.");
+                if (ids.Count > MaxQuestionsPerTask)
+                    return new QuestionSelection(new List<CandidateQuestion>(), 0, $"⚠️ الحد الأقصى {MaxQuestionsPerTask} سؤال للمهمة الواحدة.");
+
+                var rows = await db.Questions.AsNoTracking()
+                    .Where(q => ids.Contains(q.Id))
+                    .Select(q => new
+                    {
+                        q.Id,
+                        q.CurriculumId,
+                        q.PartnerId,
+                        q.ReferenceNumber,
+                        Valid = q.IsComplete && !q.IsReviewed && !q.IsRejected && !string.IsNullOrWhiteSpace(q.CorrectAnswer),
+                        Locked = db.QuestionReviewTaskItems.Any(i => i.QuestionId == q.Id && i.IsLockActive)
+                    })
+                    .ToListAsync(ct);
+
+                var eligible = rows
+                    .Where(r => r.Valid && !r.Locked)
+                    .Select(r => new CandidateQuestion(r.Id, r.CurriculumId, r.PartnerId, r.ReferenceNumber))
+                    .ToList();
+
+                return new QuestionSelection(eligible, ids.Count - eligible.Count, null);
+            }
+
+            // وضع 2: أول N حسب الفلتر (الأقدم أولًا) مع استبعاد المحجوز
+            if (!takeCount.HasValue || takeCount.Value < 1)
+                return new QuestionSelection(new List<CandidateQuestion>(), 0, "⚠️ حدّد أسئلة يدويًا أو أدخل عدد الأسئلة المطلوب (1 – 500).");
+            if (takeCount.Value > MaxQuestionsPerTask)
+                return new QuestionSelection(new List<CandidateQuestion>(), 0, $"⚠️ الحد الأقصى {MaxQuestionsPerTask} سؤال للمهمة الواحدة.");
+
+            var query = db.Questions.AsNoTracking()
+                .Where(q => q.IsComplete && !q.IsReviewed && !q.IsRejected && !string.IsNullOrWhiteSpace(q.CorrectAnswer))
+                .Where(q => !db.QuestionReviewTaskItems.Any(i => i.QuestionId == q.Id && i.IsLockActive));
+
+            if (curriculumId.HasValue) query = query.Where(q => q.CurriculumId == curriculumId.Value);
+            if (sectionId.HasValue) query = query.Where(q => q.SectionId == sectionId.Value);
+            if (lessonId.HasValue) query = query.Where(q => q.LessonId == lessonId.Value);
+
+            var picked = await query
+                .OrderBy(q => q.CreatedAt)
+                .ThenBy(q => q.Id)
+                .Take(takeCount.Value)
+                .Select(q => new CandidateQuestion(q.Id, q.CurriculumId, q.PartnerId, q.ReferenceNumber))
+                .ToListAsync(ct);
+
+            return new QuestionSelection(picked, 0, null);
+        }
+
+        private static bool IsConstraintViolation(DbUpdateException ex, string indexName)
+        {
+            for (Exception? e = ex; e is not null; e = e.InnerException)
+            {
+                if (e.Message.Contains(indexName, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        private static DateTime ToUtc(DateTime local)
+            => TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(local, DateTimeKind.Unspecified), DisplayZone.Value);
+
+        // ===== الأدمن (Sprint 6) =====
         public Task<OperationResult> CancelTaskAsync(int taskId, string reason, ReviewActor actor, CancellationToken ct = default)
             => Task.FromResult(OperationResult.Fail(NotImplementedMessage));
 
@@ -60,7 +432,7 @@ namespace QdratNew.Services.QuestionReviewTasks
             => Task.FromResult(OperationResult.Fail(NotImplementedMessage));
 
         // ===== مولّد الكود QRT-{yyyy}-{0000} (QRT-S1.5) =====
-        // يُستدعى من CreateTaskAsync (Sprint 2). الفهرس الفريد على Code يحمي من التكرار.
+        // الفهرس الفريد على Code يحمي من التكرار؛ CreateTaskAsync يعيد المحاولة مرة واحدة عند التصادم.
         internal async Task<string> NextCodeAsync(ApplicationDbContext db, CancellationToken ct)
         {
             var year = _time.GetUtcNow().Year;

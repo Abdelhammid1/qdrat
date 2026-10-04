@@ -258,17 +258,31 @@ namespace QdratNew.Areas.Admin.Controllers
         }
 
         [HttpPost]
-        [IgnoreAntiforgeryToken]
+        [ValidateAntiForgeryToken]
         [AdminPermission("Questions", "Read")]
         public async Task<IActionResult> LoadPendingReviewQuestionsData()
         {
             using var _context = _contextFactory.CreateDbContext();
 
-            int? curriculumId = string.IsNullOrWhiteSpace(Request.Form["curriculumId"]) ? null : int.Parse(Request.Form["curriculumId"]);
-            int? sectionId = string.IsNullOrWhiteSpace(Request.Form["sectionId"]) ? null : int.Parse(Request.Form["sectionId"]);
-            int? lessonId = string.IsNullOrWhiteSpace(Request.Form["lessonId"]) ? null : int.Parse(Request.Form["lessonId"]);
+            // QRT-S2.2: Paging خادمي (≤100)
+            var start = int.TryParse(Request.Form["start"], out var parsedStart) && parsedStart > 0
+                ? parsedStart
+                : 0;
+            var length = int.TryParse(Request.Form["length"], out var parsedLength) && parsedLength > 0
+                ? Math.Min(parsedLength, 100)
+                : 50;
+
+            int? curriculumId = int.TryParse(Request.Form["curriculumId"], out var parsedCurriculumId) ? parsedCurriculumId : null;
+            int? sectionId = int.TryParse(Request.Form["sectionId"], out var parsedSectionId) ? parsedSectionId : null;
+            int? lessonId = int.TryParse(Request.Form["lessonId"], out var parsedLessonId) ? parsedLessonId : null;
             bool onlyUnanswered = Request.Form["onlyUnanswered"] == "true";
-            string searchTitle = Request.Form["searchTitle"];
+
+            string searchTitle = Request.Form["searchTitle"].ToString().Trim();
+            if (string.IsNullOrWhiteSpace(searchTitle))
+                searchTitle = Request.Form["search[value]"].ToString().Trim();
+
+            // QRT-S2.2: فلتر الإسناد (الكل / غير مُسند / مُسند)
+            string assignment = Request.Form["assignment"].ToString();
 
             var baseQuery = _context.Questions
                 .AsNoTracking()
@@ -280,10 +294,33 @@ namespace QdratNew.Areas.Admin.Controllers
                 .Where(q => !onlyUnanswered || string.IsNullOrWhiteSpace(q.CorrectAnswer))
                 .Where(q => string.IsNullOrWhiteSpace(searchTitle) || (q.Title != null && q.Title.Contains(searchTitle)));
 
+            if (assignment == "assigned")
+                baseQuery = baseQuery.Where(q => _context.QuestionReviewTaskItems.Any(i => i.QuestionId == q.Id && i.IsLockActive));
+            else if (assignment == "unassigned")
+                baseQuery = baseQuery.Where(q => !_context.QuestionReviewTaskItems.Any(i => i.QuestionId == q.Id && i.IsLockActive));
+
             int totalRecords = await baseQuery.CountAsync();
 
-            var data = await baseQuery
-                .OrderByDescending(q => q.CreatedAt)
+            // ترتيب خادمي حسب عمود DataTables (قائمة بيضاء) — الافتراضي: الأحدث أولًا
+            int orderColumn = int.TryParse(Request.Form["order[0][column]"], out var parsedOrderColumn) ? parsedOrderColumn : 8;
+            bool orderAsc = Request.Form["order[0][dir]"] == "asc";
+
+            IOrderedQueryable<Question> ordered = orderColumn switch
+            {
+                1 => orderAsc ? baseQuery.OrderBy(q => q.ReferenceNumber) : baseQuery.OrderByDescending(q => q.ReferenceNumber),
+                2 => orderAsc ? baseQuery.OrderBy(q => q.Title) : baseQuery.OrderByDescending(q => q.Title),
+                3 => orderAsc ? baseQuery.OrderBy(q => q.Curriculum.Title) : baseQuery.OrderByDescending(q => q.Curriculum.Title),
+                4 => orderAsc ? baseQuery.OrderBy(q => q.Section.Title) : baseQuery.OrderByDescending(q => q.Section.Title),
+                5 => orderAsc ? baseQuery.OrderBy(q => q.Lesson.Title) : baseQuery.OrderByDescending(q => q.Lesson.Title),
+                6 => orderAsc ? baseQuery.OrderBy(q => q.IsAnswerConfirmed) : baseQuery.OrderByDescending(q => q.IsAnswerConfirmed),
+                8 when orderAsc => baseQuery.OrderBy(q => q.CreatedAt),
+                _ => baseQuery.OrderByDescending(q => q.CreatedAt)
+            };
+
+            var data = await ordered
+                .ThenByDescending(q => q.Id)
+                .Skip(start)
+                .Take(length)
                 .Select(q => new
                 {
                     q.Id,
@@ -293,25 +330,35 @@ namespace QdratNew.Areas.Admin.Controllers
                     Curriculum = q.Curriculum.Title,
                     Section = q.Section.Title,
                     Lesson = q.Lesson.Title,
-                    q.IsAnswerConfirmed
+                    q.IsAnswerConfirmed,
+                    q.IsQuantitative,
+                    // الحجز النشط (إن وُجد): كود المهمة + اسم المدرب
+                    Lock = _context.QuestionReviewTaskItems
+                        .Where(i => i.QuestionId == q.Id && i.IsLockActive)
+                        .Select(i => new { i.Task!.Code, InstructorName = i.Task.Instructor!.FullName })
+                        .FirstOrDefault()
                 })
                 .ToListAsync();
 
             var result = data.Select(q => new
             {
                 q.Id,
-                title = q.Title.Length > 25 ? q.Title.Substring(0, 25) + "..." : q.Title,
+                title = (q.Title ?? string.Empty).Length > 25 ? q.Title!.Substring(0, 25) + "..." : (q.Title ?? string.Empty),
                 referenceNumber = q.ReferenceNumber ?? "—",
                 curriculum = q.Curriculum ?? "—",
                 section = q.Section ?? "—",
                 lesson = q.Lesson ?? "—",
                 createdAt = q.CreatedAt.ToString("yyyy/MM/dd"),
-                isAnswerConfirmed = q.IsAnswerConfirmed
+                isAnswerConfirmed = q.IsAnswerConfirmed,
+                isQuantitative = q.IsQuantitative,
+                isLocked = q.Lock != null,
+                taskCode = q.Lock?.Code,
+                assignedTo = q.Lock?.InstructorName
             });
 
             return Json(new
             {
-                draw = Request.Form["draw"],
+                draw = Request.Form["draw"].ToString(),
                 recordsTotal = totalRecords,
                 recordsFiltered = totalRecords,
                 data = result

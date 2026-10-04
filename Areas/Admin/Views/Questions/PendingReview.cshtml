@@ -1,6 +1,10 @@
 @model QdratNew.ViewModels.Question.QuestionIndexViewModel
+@using Microsoft.AspNetCore.Authorization
+@using QdratNew.Security.AdminPermissions
+@inject IAuthorizationService AuthorizationService
 @{
     ViewData["Title"] = "مركز اعتماد الأسئلة";
+    var canAssignReviewTask = (await AuthorizationService.AuthorizeAsync(User, AdminPermissionPolicies.QuestionReviewTasks_Create)).Succeeded;
     var totalPending = Model.PendingReviewCount;
     var filteredPending = Model.PendingReviewFilteredCount;
     var confirmedPercent = filteredPending == 0 ? 0 : (int)Math.Round((double)Model.PendingReviewConfirmedAnswersCount / filteredPending * 100);
@@ -1328,6 +1332,302 @@ table.dataTable thead .sorting_desc:after {
             opacity: 1 !important;
         }
 
+        /* ═══ QRT-S2: إسناد كمهمة مراجعة — ألوان الأدوار: الإدارة Slate-indigo، المدرب Terracotta، النجاح أخضر ═══ */
+        :root {
+            --qrt-admin: #434a63;
+            --qrt-admin-dark: #343a50;
+            --qrt-instructor: #da784d;
+            --qrt-success: #198754;
+            --qrt-danger: #c94141;
+            --qrt-ink: #161b26;
+            --qrt-muted: #4c5566;
+            --qrt-line: #dde1e7;
+            --qrt-soft: #f7f8fa;
+        }
+
+        .btn-qrt-assign {
+            background: var(--qrt-admin);
+            border: 1px solid var(--qrt-admin);
+            color: #fff;
+            font-size: 13px;
+            font-weight: 700;
+            border-radius: var(--pr-radius-sm);
+            padding: 8px 18px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            transition: var(--pr-transition);
+        }
+
+            .btn-qrt-assign:hover:not(:disabled) {
+                background: var(--qrt-admin-dark);
+                color: #fff;
+                box-shadow: 0 4px 14px rgba(67,74,99,.35);
+            }
+
+            .btn-qrt-assign:disabled {
+                opacity: .45;
+                cursor: not-allowed;
+            }
+
+            .btn-qrt-assign .qrt-count {
+                background: rgba(255,255,255,.2);
+                border-radius: 999px;
+                padding: 0 8px;
+                font-size: 12px;
+            }
+
+        .qrt-assign-filter {
+            background: #fff;
+            color: var(--qrt-ink);
+            border: 1px solid var(--qrt-line);
+            border-radius: var(--pr-radius-sm);
+            font-size: 13px;
+            font-weight: 600;
+            height: 38px;
+            padding: 0 12px;
+        }
+
+        .qrt-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: #fdf0ea;
+            color: #b4552d !important;
+            border: 1px solid #f3c9b6;
+            border-radius: 999px;
+            padding: 2px 10px;
+            font-size: 11px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        .qrt-tag-code {
+            font-family: monospace;
+            color: var(--qrt-admin) !important;
+            font-size: 11px;
+            margin-top: 3px;
+            display: block;
+        }
+
+        .qrt-none {
+            color: #8a93a3 !important;
+            font-size: 12px;
+        }
+
+        /* المودال: سطح فاتح بألوان صريحة (مستقل عن ثيم الصفحة) */
+        #assignTaskModal .modal-content {
+            background: #fff !important;
+            color: var(--qrt-ink) !important;
+            border: 1px solid var(--qrt-line) !important;
+            border-radius: 14px;
+            overflow: hidden;
+        }
+
+        #assignTaskModal .modal-header {
+            background: var(--qrt-admin) !important;
+            color: #fff !important;
+            border-bottom: 0 !important;
+        }
+
+        #assignTaskModal .modal-title {
+            color: #fff !important;
+            font-weight: 800 !important;
+            font-size: 16px;
+        }
+
+        #assignTaskModal .btn-close {
+            filter: invert(1) brightness(2) !important;
+            opacity: .9 !important;
+        }
+
+        #assignTaskModal .modal-body {
+            padding: 20px;
+        }
+
+        #assignTaskModal .form-label {
+            font-size: 12px;
+            font-weight: 800;
+            color: var(--qrt-muted);
+            margin-bottom: 4px;
+        }
+
+        #assignTaskModal .form-control,
+        #assignTaskModal .form-select {
+            background: #fff;
+            color: var(--qrt-ink);
+            border: 1px solid #b8c0cc;
+            border-radius: 8px;
+            font-size: 13px;
+        }
+
+            #assignTaskModal .form-control:focus,
+            #assignTaskModal .form-select:focus {
+                border-color: var(--qrt-admin);
+                box-shadow: 0 0 0 3px rgba(67,74,99,.15);
+            }
+
+        .qrt-tabs {
+            display: flex;
+            gap: 6px;
+            background: var(--qrt-soft);
+            border: 1px solid var(--qrt-line);
+            border-radius: 10px;
+            padding: 4px;
+        }
+
+        .qrt-tab {
+            flex: 1;
+            background: transparent;
+            border: 0;
+            border-radius: 8px;
+            padding: 8px 10px;
+            font-size: 13px;
+            font-weight: 800;
+            color: var(--qrt-muted);
+            cursor: pointer;
+        }
+
+            .qrt-tab.active {
+                background: var(--qrt-admin);
+                color: #fff;
+            }
+
+        .qrt-mode-box {
+            background: var(--qrt-soft);
+            border: 1px dashed #b8c0cc;
+            border-radius: 10px;
+            padding: 12px 14px;
+            font-size: 13px;
+            color: var(--qrt-ink);
+        }
+
+            .qrt-mode-box strong {
+                color: var(--qrt-admin);
+            }
+
+        .qrt-instructors {
+            display: grid;
+            gap: 8px;
+            max-height: 240px;
+            overflow-y: auto;
+        }
+
+        .qrt-instructor {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border: 1px solid var(--qrt-line);
+            border-radius: 10px;
+            padding: 9px 12px;
+            cursor: pointer;
+            background: #fff;
+        }
+
+            .qrt-instructor:hover {
+                border-color: var(--qrt-admin);
+            }
+
+            .qrt-instructor input {
+                margin: 0;
+                flex-shrink: 0;
+            }
+
+            .qrt-instructor.selected {
+                border-color: var(--qrt-instructor);
+                background: #fdf0ea;
+            }
+
+        .qrt-instructor-name {
+            font-weight: 800;
+            font-size: 13px;
+            color: var(--qrt-ink);
+        }
+
+        .qrt-load {
+            margin-inline-start: auto;
+            background: #fdf0ea;
+            color: #b4552d;
+            border: 1px solid #f3c9b6;
+            border-radius: 999px;
+            padding: 1px 10px;
+            font-size: 11px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        .qrt-state {
+            text-align: center;
+            padding: 16px 10px;
+            font-size: 13px;
+            color: var(--qrt-muted);
+            border: 1px dashed #b8c0cc;
+            border-radius: 10px;
+        }
+
+        .qrt-alert {
+            border-radius: 10px;
+            padding: 10px 14px;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .qrt-alert-danger {
+            background: #fbeaea;
+            color: #9b2c2c;
+            border: 1px solid #f0c2c2;
+        }
+
+        .qrt-alert-info {
+            background: #eef0f6;
+            color: var(--qrt-admin);
+            border: 1px solid #d3d8e6;
+        }
+
+        #assignTaskModal .modal-footer {
+            border-top: 1px solid var(--qrt-line);
+            background: var(--qrt-soft);
+        }
+
+        .btn-qrt-cancel {
+            background: #fff;
+            border: 1px solid #b8c0cc;
+            color: var(--qrt-ink);
+            font-size: 13px;
+            font-weight: 700;
+            border-radius: 8px;
+            padding: 8px 18px;
+        }
+
+        .btn-qrt-submit {
+            background: var(--qrt-success);
+            border: 1px solid var(--qrt-success);
+            color: #fff;
+            font-size: 13px;
+            font-weight: 800;
+            border-radius: 8px;
+            padding: 8px 20px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+            .btn-qrt-submit:disabled {
+                opacity: .55;
+                cursor: not-allowed;
+            }
+
+        @@media (max-width: 576px) {
+            #assignTaskModal .modal-body {
+                padding: 14px;
+            }
+
+            .qrt-instructor {
+                flex-wrap: wrap;
+            }
+        }
+
     </style>
 }
 
@@ -1502,8 +1802,20 @@ table.dataTable thead .sorting_desc:after {
                 <i class="fas fa-square-check" style="font-size:11px;"></i>
                 <span id="selectedCount">0</span> سؤال محدد
             </span>
+            <select id="assignmentFilter" class="qrt-assign-filter" aria-label="فلتر الإسناد">
+                <option value="">الكل (مُسند وغير مُسند)</option>
+                <option value="unassigned">غير مُسند</option>
+                <option value="assigned">مُسند لمهمة مراجعة</option>
+            </select>
         </div>
         <div class="d-flex flex-wrap gap-2">
+            @if (canAssignReviewTask)
+            {
+                <button type="button" class="btn-qrt-assign" id="openAssignTaskBtn">
+                    <i class="fa-solid fa-user-check"></i> إسناد كمهمة مراجعة
+                    <span class="qrt-count" id="selCount">0</span>
+                </button>
+            }
             <form method="post" asp-action="ApproveQuestions" id="bulkApproveForm">
                 @Html.AntiForgeryToken()
                 <div id="selectedInputs"></div>
@@ -1540,6 +1852,7 @@ table.dataTable thead .sorting_desc:after {
                         <th>المحور</th>
                         <th>المؤشر</th>
                         <th>الإجابة</th>
+                        <th>مسند إلى</th>
                         <th>التاريخ</th>
                         <th style="width:100px;">اعتماد</th>
                         <th style="width:130px;">إجراءات</th>
@@ -1553,6 +1866,80 @@ table.dataTable thead .sorting_desc:after {
 </div>
 
 @* ─── Modals ─── *@
+
+@if (canAssignReviewTask)
+{
+    @* QRT-S2.3: إسناد كمهمة مراجعة *@
+    <div class="modal fade" id="assignTaskModal" tabindex="-1" dir="rtl" aria-labelledby="assignTaskModalTitle" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="assignTaskModalTitle">
+                        <i class="fa-solid fa-user-check me-2"></i> إسناد كمهمة مراجعة
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="qrtFormError" class="qrt-alert qrt-alert-danger mb-3 d-none" role="alert"></div>
+
+                    <div class="qrt-tabs mb-3" role="tablist">
+                        <button type="button" class="qrt-tab active" id="qrtTabSelected" data-mode="selected" role="tab">الأسئلة المحددة</button>
+                        <button type="button" class="qrt-tab" id="qrtTabFilter" data-mode="filter" role="tab">أول N حسب الفلتر الحالي</button>
+                    </div>
+
+                    <div id="qrtModeSelected" class="qrt-mode-box mb-3">
+                        عدد الأسئلة المحددة: <strong id="qrtSelectedInfo">0</strong>
+                        <div class="small mt-1" style="color:var(--qrt-muted);">الحد الأقصى 500 سؤال للمهمة. الأسئلة المحجوزة أو غير المؤهلة تُستبعد تلقائيًا.</div>
+                    </div>
+
+                    <div id="qrtModeFilter" class="qrt-mode-box mb-3 d-none">
+                        <div class="mb-2">الفلتر الحالي: <strong id="qrtFilterInfo">—</strong></div>
+                        <label class="form-label" for="qrtTakeCount">عدد الأسئلة (الأقدم أولًا، بدون المحجوز)</label>
+                        <input type="text" inputmode="numeric" class="form-control" id="qrtTakeCount" maxlength="3" placeholder="مثال: 50" />
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-12">
+                            <label class="form-label" for="qrtTitle">عنوان المهمة <span style="color:var(--qrt-danger);">*</span></label>
+                            <input type="text" class="form-control" id="qrtTitle" maxlength="200" placeholder="مثال: مراجعة أسئلة الجبر — الأسبوع الأول" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="qrtPriority">الأولوية</label>
+                            <select class="form-select" id="qrtPriority">
+                                <option value="0">عادية</option>
+                                <option value="1">مرتفعة</option>
+                                <option value="2">عاجلة</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="qrtDue">موعد التسليم (اختياري)</label>
+                            <input type="datetime-local" class="form-control" id="qrtDue" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label" for="qrtNote">ملاحظة للمدرب (اختياري)</label>
+                            <textarea class="form-control" id="qrtNote" rows="2" maxlength="1000"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="form-label mb-0">المدرب المسؤول <span style="color:var(--qrt-danger);">*</span></label>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="qrtReloadInstructors">
+                            <i class="fa-solid fa-rotate-right"></i> تحديث القائمة
+                        </button>
+                    </div>
+                    <div id="qrtInstructorState" class="qrt-state d-none"></div>
+                    <div id="qrtInstructors" class="qrt-instructors" role="radiogroup" aria-label="المدربون المؤهلون"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-qrt-cancel" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="button" class="btn-qrt-submit" id="qrtSubmit" disabled>
+                        <i class="fa-solid fa-paper-plane"></i> <span id="qrtSubmitLabel">إنشاء المهمة وإسنادها</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
 
 @* Preview Modal *@
 <div class="modal fade pr-modal" id="questionPreviewModal" tabindex="-1" dir="rtl">
@@ -1639,6 +2026,8 @@ table.dataTable thead .sorting_desc:after {
             const count = selectedQuestions.size;
             const badge = document.getElementById('selectedBadge');
             document.getElementById('selectedCount').textContent = count;
+            const selCountEl = document.getElementById('selCount'); // زر الإسناد (قد لا يظهر حسب الصلاحية)
+            if (selCountEl) selCountEl.textContent = count;
             document.getElementById('bulkApproveBtn').disabled = count === 0;
 
             if (count > 0) {
@@ -1659,19 +2048,32 @@ table.dataTable thead .sorting_desc:after {
         }
 
         /* ─── DataTable Init ─── */
+        function antiForgeryToken() {
+            return document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
         const questionsTable = $('#questionsTable').DataTable({
+            serverSide: true,   // QRT-S2.2: Paging خادمي (≤100 في الخادم)
+            order: [[8, 'desc']], // الترتيب ينفَّذ في الخادم (الأحدث أولًا افتراضيًا)
             ajax: {
                 url: '/Admin/Questions/LoadPendingReviewQuestionsData',
                 type: 'POST',
+                headers: { 'RequestVerificationToken': antiForgeryToken() },
                 data: function (d) {
                     d.curriculumId = $('#CurriculumId').val();
                     d.sectionId    = $('#SectionId').val();
                     d.lessonId     = $('#LessonId').val();
                     d.searchTitle  = $('#SearchTitle').val();
+                    d.assignment   = $('#assignmentFilter').val();
                 },
                 dataSrc: 'data'
             },
-            order: [[7, 'desc']],
             pageLength: 25,
             columns: [
                 {
@@ -1680,6 +2082,10 @@ table.dataTable thead .sorting_desc:after {
                     searchable: false,
                     render: function (_, __, row) {
                         const id = rowId(row);
+                        // السؤال المحجوز لا يُحدَّد للإسناد (الاعتماد المباشر للأدمن يبقى متاحًا)
+                        if (row.isLocked) {
+                            return `<input type="checkbox" class="form-check-input pr-check row-select" disabled title="محجوز ضمن مهمة مراجعة" />`;
+                        }
                         const checked = selectedQuestions.has(String(id)) ? 'checked' : '';
                         return `<input type="checkbox" class="form-check-input pr-check row-select" value="${id}" ${checked} />`;
                     }
@@ -1739,6 +2145,16 @@ table.dataTable thead .sorting_desc:after {
                         return data
                             ? `<span class="pr-badge pr-badge-confirmed"><i class="fas fa-check" style="font-size:9px;"></i> مؤكدة</span>`
                             : `<span class="pr-badge pr-badge-unconfirmed"><i class="fas fa-xmark" style="font-size:9px;"></i> غير مؤكدة</span>`;
+                    }
+                },
+                {
+                    data: null,
+                    orderable: false,
+                    searchable: false,
+                    render: function (_, __, row) {
+                        if (!row.isLocked) return '<span class="qrt-none">—</span>';
+                        return `<span class="qrt-tag"><i class="fa-solid fa-lock" style="font-size:9px;"></i> ${escapeHtml(row.assignedTo)}</span>` +
+                               `<span class="qrt-tag-code">${escapeHtml(row.taskCode)}</span>`;
                     }
                 },
                 {
@@ -1804,7 +2220,7 @@ table.dataTable thead .sorting_desc:after {
         /* ─── Select All Visible ─── */
         $('#selectAllVisible').on('change', function () {
             const checked = this.checked;
-            $('#questionsTable .row-select').each(function () {
+            $('#questionsTable .row-select:not(:disabled)').each(function () {
                 this.checked = checked;
                 const id = String(this.value);
                 if (checked) {
@@ -1948,5 +2364,262 @@ table.dataTable thead .sorting_desc:after {
                     container.innerHTML = '<div class="text-center py-4" style="color:#fca5a5;"><i class="fas fa-exclamation-triangle"></i> فشل في تحميل الأسئلة المتشابهة.</div>';
                 });
         }
+
+        /* ─── QRT-S2.2: فلتر الإسناد ─── */
+        $('#assignmentFilter').on('change', function () {
+            questionsTable.ajax.reload();
+        });
+
+        /* ─── QRT-S2.3: إسناد كمهمة مراجعة ─── */
+        (function () {
+            const openBtn = document.getElementById('openAssignTaskBtn');
+            const modalEl = document.getElementById('assignTaskModal');
+            if (!openBtn || !modalEl) return; // المستخدم بلا صلاحية الإسناد
+
+            const MAX_QUESTIONS = 500;
+            const els = {
+                error: document.getElementById('qrtFormError'),
+                tabSelected: document.getElementById('qrtTabSelected'),
+                tabFilter: document.getElementById('qrtTabFilter'),
+                boxSelected: document.getElementById('qrtModeSelected'),
+                boxFilter: document.getElementById('qrtModeFilter'),
+                selectedInfo: document.getElementById('qrtSelectedInfo'),
+                filterInfo: document.getElementById('qrtFilterInfo'),
+                take: document.getElementById('qrtTakeCount'),
+                title: document.getElementById('qrtTitle'),
+                priority: document.getElementById('qrtPriority'),
+                due: document.getElementById('qrtDue'),
+                note: document.getElementById('qrtNote'),
+                list: document.getElementById('qrtInstructors'),
+                state: document.getElementById('qrtInstructorState'),
+                reload: document.getElementById('qrtReloadInstructors'),
+                submit: document.getElementById('qrtSubmit'),
+                submitLabel: document.getElementById('qrtSubmitLabel')
+            };
+            const modal = new bootstrap.Modal(modalEl);
+
+            let mode = 'selected';          // selected | filter
+            let selectedInstructorId = null;
+            let loadSeq = 0;                // لتجاهل ردود قديمة
+            let submitting = false;
+            let takeTimer = null;
+
+            function showError(msg) {
+                els.error.textContent = msg;
+                els.error.classList.remove('d-none');
+            }
+            function clearError() {
+                els.error.classList.add('d-none');
+                els.error.textContent = '';
+            }
+
+            function selectOptionText(id) {
+                const sel = document.getElementById(id);
+                return sel && sel.value ? sel.options[sel.selectedIndex].text : '';
+            }
+
+            function filterSummary() {
+                const parts = [selectOptionText('CurriculumId'), selectOptionText('SectionId'), selectOptionText('LessonId')].filter(Boolean);
+                return parts.length ? parts.join(' ‹ ') : 'كل الأقسام (بدون تقييد)';
+            }
+
+            function takeCountValue() {
+                const n = parseInt(els.take.value, 10);
+                return Number.isInteger(n) ? n : null;
+            }
+
+            function updateSubmitState() {
+                els.submit.disabled = submitting || !selectedInstructorId;
+            }
+
+            function setMode(next) {
+                mode = next;
+                els.tabSelected.classList.toggle('active', next === 'selected');
+                els.tabFilter.classList.toggle('active', next === 'filter');
+                els.boxSelected.classList.toggle('d-none', next !== 'selected');
+                els.boxFilter.classList.toggle('d-none', next !== 'filter');
+                els.selectedInfo.textContent = selectedQuestions.size;
+                els.filterInfo.textContent = filterSummary();
+                loadInstructors();
+            }
+
+            function buildSelectionFormData() {
+                const fd = new FormData();
+                if (mode === 'selected') {
+                    selectedQuestions.forEach(id => fd.append('SelectedQuestionIds', id));
+                } else {
+                    const c = $('#CurriculumId').val(), s = $('#SectionId').val(), l = $('#LessonId').val();
+                    if (c) fd.append('CurriculumId', c);
+                    if (s) fd.append('SectionId', s);
+                    if (l) fd.append('LessonId', l);
+                    const n = takeCountValue();
+                    if (n !== null) fd.append('TakeCount', n);
+                }
+                return fd;
+            }
+
+            function selectionProblem() {
+                if (mode === 'selected') {
+                    if (selectedQuestions.size === 0) return 'حدّد سؤالًا واحدًا على الأقل من الجدول، أو انتقل إلى تبويب «أول N حسب الفلتر».';
+                    if (selectedQuestions.size > MAX_QUESTIONS) return `الحد الأقصى ${MAX_QUESTIONS} سؤال للمهمة الواحدة (المحدد ${selectedQuestions.size}).`;
+                    return null;
+                }
+                const n = takeCountValue();
+                if (n === null || n < 1 || n > MAX_QUESTIONS) return `أدخل عدد الأسئلة بين 1 و${MAX_QUESTIONS}.`;
+                return null;
+            }
+
+            function renderState(text, icon) {
+                els.list.replaceChildren();
+                els.state.classList.remove('d-none');
+                els.state.replaceChildren();
+                if (icon) {
+                    const i = document.createElement('i');
+                    i.className = icon + ' me-1';
+                    els.state.appendChild(i);
+                }
+                els.state.appendChild(document.createTextNode(text));
+            }
+
+            function renderInstructors(items) {
+                els.state.classList.add('d-none');
+                els.list.replaceChildren();
+                items.forEach(item => {
+                    const label = document.createElement('label');
+                    label.className = 'qrt-instructor';
+                    const radio = document.createElement('input');
+                    radio.type = 'radio';
+                    radio.name = 'qrtInstructor';
+                    radio.value = item.id;
+                    const name = document.createElement('span');
+                    name.className = 'qrt-instructor-name';
+                    name.textContent = item.fullName;
+                    const load = document.createElement('span');
+                    load.className = 'qrt-load';
+                    load.textContent = item.activeLockedItems + ' سؤال بانتظار مراجعته';
+                    label.append(radio, name, load);
+                    radio.addEventListener('change', function () {
+                        selectedInstructorId = item.id;
+                        els.list.querySelectorAll('.qrt-instructor').forEach(x => x.classList.remove('selected'));
+                        label.classList.add('selected');
+                        updateSubmitState();
+                    });
+                    els.list.appendChild(label);
+                });
+            }
+
+            async function loadInstructors() {
+                const seq = ++loadSeq;
+                selectedInstructorId = null;
+                updateSubmitState();
+                clearError();
+
+                const problem = selectionProblem();
+                if (problem) {
+                    renderState(problem, 'fa-solid fa-circle-info');
+                    return;
+                }
+
+                renderState('جارٍ تحميل المدربين المؤهلين…', 'fa-solid fa-spinner fa-spin');
+                try {
+                    const response = await fetch('/Admin/QuestionReviewTasks/EligibleInstructors', {
+                        method: 'POST',
+                        headers: { 'RequestVerificationToken': antiForgeryToken() },
+                        body: buildSelectionFormData()
+                    });
+                    if (!response.ok) throw new Error('http ' + response.status);
+                    const data = await response.json();
+                    if (seq !== loadSeq) return;
+
+                    if (!data.success) {
+                        renderState(data.message || 'تعذّر تحميل المدربين.', 'fa-solid fa-triangle-exclamation');
+                        return;
+                    }
+                    const instructors = (data.data && data.data.instructors) || [];
+                    if (instructors.length === 0) {
+                        renderState(data.message || 'لا يوجد مدرب مؤهل لهذه الأسئلة.', 'fa-solid fa-user-slash');
+                        return;
+                    }
+                    renderInstructors(instructors);
+                } catch (e) {
+                    if (seq !== loadSeq) return;
+                    renderState('تعذّر الاتصال بالخادم. حاول تحديث القائمة.', 'fa-solid fa-plug-circle-exclamation');
+                }
+            }
+
+            function setSubmitting(value) {
+                submitting = value;
+                els.submitLabel.textContent = value ? 'جارٍ الإنشاء…' : 'إنشاء المهمة وإسنادها';
+                updateSubmitState();
+            }
+
+            async function submitTask() {
+                if (submitting) return;
+                clearError();
+
+                const title = els.title.value.trim();
+                if (title.length < 3) { showError('عنوان المهمة مطلوب (3 أحرف على الأقل).'); els.title.focus(); return; }
+                const problem = selectionProblem();
+                if (problem) { showError(problem); return; }
+                if (!selectedInstructorId) { showError('اختر المدرب المسؤول.'); return; }
+                if (els.due.value && new Date(els.due.value).getTime() <= Date.now()) {
+                    showError('موعد التسليم يجب أن يكون في المستقبل.'); els.due.focus(); return;
+                }
+
+                const fd = buildSelectionFormData();
+                fd.append('Title', title);
+                fd.append('InstructorId', selectedInstructorId);
+                fd.append('Priority', els.priority.value);
+                if (els.note.value.trim()) fd.append('AdminNote', els.note.value.trim());
+                if (els.due.value) fd.append('DueAtLocal', els.due.value);
+
+                setSubmitting(true);
+                try {
+                    const response = await fetch('/Admin/QuestionReviewTasks/Create', {
+                        method: 'POST',
+                        headers: { 'RequestVerificationToken': antiForgeryToken() },
+                        body: fd
+                    });
+                    if (!response.ok) throw new Error('http ' + response.status);
+                    const data = await response.json();
+
+                    if (data.success) {
+                        modal.hide();
+                        selectedQuestions.clear();
+                        updateBulkState();
+                        questionsTable.ajax.reload(null, false);
+                        Swal.fire('تم الإسناد', data.message, 'success');
+                    } else {
+                        showError(data.message || 'تعذّر إنشاء المهمة.');
+                        loadInstructors(); // قد يكون التحديد تغيّر (حجز متزامن)
+                    }
+                } catch (e) {
+                    showError('تعذّر الاتصال بالخادم. لم يتم إنشاء المهمة، حاول مرة أخرى.');
+                } finally {
+                    setSubmitting(false);
+                }
+            }
+
+            openBtn.addEventListener('click', function () {
+                els.title.value = '';
+                els.note.value = '';
+                els.due.value = '';
+                els.priority.value = '0';
+                els.take.value = '';
+                clearError();
+                setMode(selectedQuestions.size > 0 ? 'selected' : 'filter');
+                modal.show();
+            });
+
+            els.tabSelected.addEventListener('click', () => setMode('selected'));
+            els.tabFilter.addEventListener('click', () => setMode('filter'));
+            els.reload.addEventListener('click', loadInstructors);
+            els.take.addEventListener('input', function () {
+                els.take.value = els.take.value.replace(/[^0-9]/g, '');
+                clearTimeout(takeTimer);
+                takeTimer = setTimeout(loadInstructors, 500);
+            });
+            els.submit.addEventListener('click', submitTask);
+        })();
     </script>
 }

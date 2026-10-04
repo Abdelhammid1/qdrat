@@ -492,13 +492,8 @@ namespace QdratNew.Services.Instructors.Implementations
 
             return await context.InstructorCurriculumBatches
                 .AsNoTracking()
-                .Where(x =>
-                    x.InstructorId == instructorId &&
-                    x.Batch != null &&
-                    x.Batch.IsActive &&
-                    !x.Batch.IsDeleted &&
-                    !x.Batch.IsArchived &&
-                    (!x.Batch.EndDate.HasValue || x.Batch.EndDate.Value >= today))
+                .Where(x => x.InstructorId == instructorId)
+                .Where(QdratNew.Services.Instructors.InstructorBatchScope.IsDirectActive(today))
                 .Select(x => x.CurriculumId)
                 .Distinct()
                 .ToListAsync();
