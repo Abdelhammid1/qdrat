@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using QdratNew.Entities;
+using QdratNew.Enums;
 using QdratNew.Security;
 using QdratNew.Security.AdminPermissions;
 using QdratNew.Services.Admin;
@@ -20,17 +21,20 @@ namespace QdratNew.Areas.Admin.Controllers
     public class RemedialTrackPublicationsController : Controller
     {
         private readonly IRemedialTrackPublicationService _publications;
+        private readonly IRemedialTrackReportService _reports;
         private readonly IEmployeeBatchAccessService _batchAccess;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IAuthorizationService _authorization;
 
         public RemedialTrackPublicationsController(
             IRemedialTrackPublicationService publications,
+            IRemedialTrackReportService reports,
             IEmployeeBatchAccessService batchAccess,
             UserManager<ApplicationUser> userManager,
             IAuthorizationService authorization)
         {
             _publications = publications;
+            _reports = reports;
             _batchAccess = batchAccess;
             _userManager = userManager;
             _authorization = authorization;
@@ -112,7 +116,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
         [HttpGet]
         [AdminPermission("RemedialTrackPublications", "Read")]
-        public async Task<IActionResult> Details(int id, CancellationToken ct)
+        public async Task<IActionResult> Details(int id, RemedialTrackEnrollmentStatus? status, bool blockedOnly = false, string? q = null, int page = 1, CancellationToken ct = default)
         {
             var canManageCode = await CanAsync(AdminPermissionPolicies.RemedialTrackPublications_ManageCode);
             var vm = await _publications.GetDetailsAsync(id, canManageCode, await ScopeAsync(), ct);
@@ -121,6 +125,21 @@ namespace QdratNew.Areas.Admin.Controllers
 
             vm.CanManageCode = canManageCode;
             vm.CanCancel = await CanAsync(AdminPermissionPolicies.RemedialTrackPublications_Cancel);
+
+            // RTK-S6.2: لوحة المتابعة
+            var filter = new RemedialTrackDashboardFilter
+            {
+                Status = status.HasValue && Enum.IsDefined(typeof(RemedialTrackEnrollmentStatus), status.Value) ? status : null,
+                BlockedOnly = blockedOnly,
+                Q = q,
+                Page = page
+            };
+            vm.Dashboard = await _reports.GetDashboardAsync(id, filter, await ScopeAsync(), ct);
+            if (vm.Dashboard is not null)
+            {
+                vm.Dashboard.CanUnlock = await CanAsync(AdminPermissionPolicies.RemedialTrackPublications_Unlock);
+                vm.Dashboard.CanReadReports = await CanAsync(AdminPermissionPolicies.RemedialTrackReports_Read);
+            }
             return View(vm);
         }
 
@@ -145,6 +164,20 @@ namespace QdratNew.Areas.Admin.Controllers
                 return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
 
             var r = await _publications.CancelAsync(id, reason, actor, await ScopeAsync(), ct);
+            return Json(new { success = r.Success, message = r.Message, data = r.Data, warnings = r.Warnings });
+        }
+
+        // ---------------- RTK-S6.3: فتح المحور التالي ----------------
+
+        [HttpPost, ValidateAntiForgeryToken]
+        [AdminPermission("RemedialTrackPublications", "Unlock")]
+        public async Task<IActionResult> Unlock([FromForm] UnlockRemedialTrackAxisInput input, CancellationToken ct)
+        {
+            var actor = await ActorAsync();
+            if (actor is null)
+                return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
+
+            var r = await _reports.UnlockNextAxisAsync(input.EnrollmentId, input.AxisProgressId, input.Reason, actor, await ScopeAsync(), ct);
             return Json(new { success = r.Success, message = r.Message, data = r.Data, warnings = r.Warnings });
         }
 

@@ -145,6 +145,9 @@ namespace QdratNew.ViewModels.RemedialTracks
         public List<RemedialTrackPublicationStudentVm> Students { get; set; } = new();
         public bool StudentsTruncated { get; set; }
 
+        /// <summary>RTK-S6.2: لوحة المتابعة (KPIs + رسوم + جدول مرقّم). تُملأ في الكنترولر من IRemedialTrackReportService.</summary>
+        public RemedialTrackDashboardVm? Dashboard { get; set; }
+
         // صلاحيات العرض (تُحدَّد في الكنترولر)
         public bool CanManageCode { get; set; }
         public bool CanCancel { get; set; }

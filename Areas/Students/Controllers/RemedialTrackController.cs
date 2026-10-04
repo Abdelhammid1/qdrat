@@ -19,6 +19,7 @@ namespace QdratNew.Areas.Students.Controllers
         private readonly IRemedialTrackAccessService _access;
         private readonly IRemedialTrackProgressService _progress;
         private readonly IRemedialTrackExamService _exams;
+        private readonly IRemedialTrackReportService _reports;
         private readonly ITimeZoneService _tz;
 
         public RemedialTrackController(
@@ -26,12 +27,14 @@ namespace QdratNew.Areas.Students.Controllers
             IRemedialTrackAccessService access,
             IRemedialTrackProgressService progress,
             IRemedialTrackExamService exams,
+            IRemedialTrackReportService reports,
             ITimeZoneService tz)
         {
             _identity = identity;
             _access = access;
             _progress = progress;
             _exams = exams;
+            _reports = reports;
             _tz = tz;
         }
 
@@ -60,6 +63,24 @@ namespace QdratNew.Areas.Students.Controllers
             if (blocked is not null) return blocked;
 
             var vm = await _progress.GetPlanAsync(studentId, enrollmentId, ct);
+            if (vm is null) return NotFound();
+            return View(vm);
+        }
+
+        // ───────────── RTK-S6.1: التقرير النهائي (مالك فقط) ─────────────
+
+        [HttpGet]
+        public async Task<IActionResult> Report(int enrollmentId, CancellationToken ct)
+        {
+            var studentId = await _identity.GetCurrentStudentIdAsync(User);
+            if (studentId == 0) return Challenge();
+
+            // التقرير يحتوي نتائج فقط (لا رقم مرجعي) لكنه يمرّ على نفس البوابة لتوحيد السلوك (D14).
+            var gate = await _access.EvaluateAsync(studentId, enrollmentId, ct);
+            var blocked = HandleGate(gate, enrollmentId);
+            if (blocked is not null) return blocked;
+
+            var vm = await _reports.GetStudentReportAsync(studentId, enrollmentId, ct);
             if (vm is null) return NotFound();
             return View(vm);
         }

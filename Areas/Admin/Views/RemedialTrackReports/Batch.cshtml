@@ -1,0 +1,76 @@
+@using QdratNew.Enums
+@model QdratNew.ViewModels.RemedialTracks.RemedialTrackBatchReportVm
+@inject QdratNew.Services.Interfaces.ITimeZoneService Tz
+@functions {
+    static string StatusLabel(RemedialTrackEnrollmentStatus s) => s switch
+    {
+        RemedialTrackEnrollmentStatus.NotStarted => "لم تبدأ",
+        RemedialTrackEnrollmentStatus.InProgress => "قيد التنفيذ",
+        RemedialTrackEnrollmentStatus.Completed => "مكتملة",
+        RemedialTrackEnrollmentStatus.CompletedWithFailures => "مكتملة مع تعثّر",
+        _ => "ملغاة"
+    };
+}
+@{
+    ViewData["Title"] = "تقرير الدفعة — " + Model.TrackTitle;
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/admin-rtk.css" asp-append-version="true" />
+    <style>
+        @@media print {
+            @@page { size: A4; margin: 14mm; }
+            .no-print, .navbar, .sidebar, header.main-header, footer { display: none !important; }
+            body { background: #fff !important; }
+            .rtk-panel { border: 0; padding: 0; }
+            tr { break-inside: avoid; }
+        }
+    </style>
+}
+
+<div class="rtk-page container-fluid mt-4" dir="rtl">
+    <div class="d-flex gap-2 flex-wrap mb-3 no-print">
+        <button type="button" class="rtk-btn" onclick="window.print()"><i class="fas fa-print"></i> طباعة / حفظ PDF</button>
+        <a class="rtk-btn rtk-btn--outline" asp-area="Admin" asp-controller="RemedialTrackPublications" asp-action="Details" asp-route-id="@Model.PublicationId">العودة للمتابعة</a>
+    </div>
+
+    <section class="rtk-panel">
+        <h2>تقرير الدفعة — @Model.TrackTitle</h2>
+        <dl class="rtk-dl mb-3">
+            <div><dt>الدفعة</dt><dd>@Model.BatchName</dd></div>
+            <div><dt>المنهج</dt><dd>@Model.CurriculumTitle</dd></div>
+            <div><dt>وقت النشر</dt><dd>@Tz.ConvertToSaudi(Model.PublishAtUtc).ToString("yyyy/MM/dd HH:mm")</dd></div>
+            <div><dt>النمط</dt><dd>@(Model.Mode == RemedialTrackDeliveryMode.InPerson ? "حضوري" : "أونلاين")</dd></div>
+            <div><dt>عدد المحاور</dt><dd>@Model.TotalAxes</dd></div>
+            <div><dt>تاريخ الإصدار</dt><dd>@Tz.ConvertToSaudi(Model.IssuedAtUtc).ToString("yyyy/MM/dd HH:mm")</dd></div>
+        </dl>
+
+        @if (Model.Rows.Count == 0)
+        {
+            <div class="rtk-empty"><i class="fas fa-users"></i> لا يوجد طلاب مسجَّلون في هذا الأمر.</div>
+        }
+        else
+        {
+            <div class="rtk-table-wrap">
+                <table class="rtk-table">
+                    <thead><tr><th>#</th><th>الطالب</th><th>الحالة</th><th>محاور اجتازها</th><th>محاور تحتاج متابعة</th><th>آخر نشاط</th></tr></thead>
+                    <tbody>
+                        @{ var i = 0; }
+                        @foreach (var r in Model.Rows)
+                        {
+                            i++;
+                            <tr>
+                                <td>@i</td>
+                                <td>@r.StudentName</td>
+                                <td>@StatusLabel(r.Status)</td>
+                                <td>@r.PassedAxes / @Model.TotalAxes</td>
+                                <td>@r.FollowUpAxes</td>
+                                <td>@(r.LastActivityUtc.HasValue ? Tz.ConvertToSaudi(r.LastActivityUtc.Value).ToString("yyyy/MM/dd HH:mm") : "—")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+</div>

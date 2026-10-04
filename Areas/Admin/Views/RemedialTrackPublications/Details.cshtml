@@ -104,6 +104,164 @@
         </section>
     }
 
+    @if (Model.Dashboard is { } dash)
+    {
+        var k = dash.Kpis;
+        var chartData = new
+        {
+            status = new[] { k.NotStarted, k.InProgress, k.Completed, k.CompletedWithFailures, k.Cancelled },
+            axes = dash.AxisChart.Select(r => new { title = r.Order + ". " + r.Title, first = r.PassedFirstTime, rewatch = r.PassedAfterRewatch, notPassed = r.NotPassed })
+        };
+
+        <section class="rtk-panel" aria-label="مؤشرات المتابعة">
+            <h2>متابعة الطلاب</h2>
+            <div class="rtk-kpis">
+                <div class="rtk-kpi"><span>@k.Total</span>إجمالي الطلاب</div>
+                <div class="rtk-kpi"><span>@k.NotStarted</span>لم يبدأ</div>
+                <div class="rtk-kpi"><span>@k.InProgress</span>قيد التنفيذ</div>
+                <div class="rtk-kpi"><span>@k.Completed</span>مكتمل</div>
+                <div class="rtk-kpi"><span>@k.CompletedWithFailures</span>مكتمل مع تعثّر</div>
+                <div class="rtk-kpi @(k.BlockedAwaitingAdmin > 0 ? "rtk-kpi--alert" : "")"><span>@k.BlockedAwaitingAdmin</span>محجوب بانتظار الإدارة</div>
+            </div>
+        </section>
+
+        @if (k.Total > 0)
+        {
+            <section class="rtk-panel" aria-label="الرسوم البيانية">
+                <div class="rtk-charts" id="rtkCharts" data-chart="@System.Text.Json.JsonSerializer.Serialize(chartData)">
+                    <div class="rtk-chart-box"><h3>توزيع حالات التسجيل</h3><div class="rtk-chart-canvas"><canvas id="rtkStatusChart" role="img" aria-label="دونات توزيع حالات التسجيل"></canvas></div></div>
+                    <div class="rtk-chart-box"><h3>نتائج المحاور</h3><div class="rtk-chart-canvas"><canvas id="rtkAxisChart" role="img" aria-label="أعمدة نتائج كل محور"></canvas></div></div>
+                </div>
+                <div class="rtk-hint" id="rtkChartFallback" hidden>تعذّر تحميل الرسوم البيانية؛ الأرقام متاحة في المؤشرات والجدول.</div>
+            </section>
+        }
+
+        <section class="rtk-panel" aria-label="جدول الطلاب">
+            <h2>الطلاب</h2>
+            <form method="get" class="rtk-filters">
+                <div class="rtk-field">
+                    <label for="rtkFilterQ">بحث بالاسم</label>
+                    <input id="rtkFilterQ" type="search" name="q" value="@dash.Filter.Q" maxlength="@QdratNew.ViewModels.RemedialTracks.RemedialTrackDashboardFilter.MaxSearchLength" />
+                </div>
+                <div class="rtk-field">
+                    <label for="rtkFilterStatus">الحالة</label>
+                    <select id="rtkFilterStatus" name="status">
+                        <option value="">الكل</option>
+                        @foreach (var st in new[] { RemedialTrackEnrollmentStatus.NotStarted, RemedialTrackEnrollmentStatus.InProgress, RemedialTrackEnrollmentStatus.Completed, RemedialTrackEnrollmentStatus.CompletedWithFailures, RemedialTrackEnrollmentStatus.Cancelled })
+                        {
+                            <option value="@((int)st)" selected="@(dash.Filter.Status == st)">@EnrollmentLabel(st)</option>
+                        }
+                    </select>
+                </div>
+                <label class="rtk-choice__item"><input type="checkbox" name="blockedOnly" value="true" checked="@dash.Filter.BlockedOnly" /> المحجوبون فقط</label>
+                <button type="submit" class="rtk-btn rtk-btn--outline"><i class="fas fa-filter"></i> تصفية</button>
+                <a class="rtk-btn rtk-btn--outline" asp-action="Details" asp-route-id="@Model.Id">مسح</a>
+                @if (dash.CanReadReports)
+                {
+                    <a class="rtk-btn rtk-btn--outline" asp-area="Admin" asp-controller="RemedialTrackReports" asp-action="Batch" asp-route-publicationId="@Model.Id" target="_blank" rel="noopener">
+                        <i class="fas fa-print"></i> تقرير الدفعة
+                    </a>
+                }
+            </form>
+
+            @if (dash.Students.Count == 0)
+            {
+                <div class="rtk-empty"><i class="fas fa-users"></i> @(dash.Total == 0 && dash.Filter.Q is null && dash.Filter.Status is null && !dash.Filter.BlockedOnly ? "لا يوجد طلاب مسجَّلون في هذا الأمر." : "لا توجد نتائج مطابقة للتصفية.")</div>
+            }
+            else
+            {
+                <div class="rtk-table-wrap">
+                    <table class="rtk-table">
+                        <thead><tr><th>الطالب</th><th>الحالة</th><th>المحور الحالي</th><th>آخر نتيجة</th><th>آخر نشاط</th><th>إجراءات</th></tr></thead>
+                        <tbody>
+                            @foreach (var s in dash.Students)
+                            {
+                                <tr>
+                                    <td>@s.StudentName</td>
+                                    <td>@EnrollmentLabel(s.Status)@if (s.IsBlocked) { <text> </text><span class="rtk-badge rtk-badge--lock">محجوب</span> }</td>
+                                    <td>@(s.CurrentAxisTitle is null ? "—" : $"{s.CurrentAxisOrder}. {s.CurrentAxisTitle} (الجولة {s.CurrentRound})")</td>
+                                    <td>@(s.LastScorePercent.HasValue && s.LastExamNumber.HasValue ? $"{s.LastScorePercent.Value:0.#}% (اختبار {(int)s.LastExamNumber.Value})" : "—")</td>
+                                    <td>@(s.LastActivityUtc.HasValue ? Tz.ConvertToSaudi(s.LastActivityUtc.Value).ToString("yyyy-MM-dd HH:mm") : "—")</td>
+                                    <td>
+                                        <div class="d-flex gap-1 flex-wrap">
+                                            @if (dash.CanReadReports)
+                                            {
+                                                <a class="rtk-btn rtk-btn--sm rtk-btn--outline" asp-area="Admin" asp-controller="RemedialTrackReports" asp-action="Student" asp-route-enrollmentId="@s.EnrollmentId" target="_blank" rel="noopener">تقرير ولي الأمر</a>
+                                            }
+                                            @if (dash.CanUnlock && s.IsBlocked && Model.IsActive)
+                                            {
+                                                <button type="button" class="rtk-btn rtk-btn--sm rtk-btn--danger" data-rtk-act="unlock-open"
+                                                        data-enrollment="@s.EnrollmentId" data-axis="@s.BlockedAxisProgressId"
+                                                        data-student="@s.StudentName" data-title="@s.BlockedAxisTitle">فتح المحور التالي</button>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (dash.TotalPages > 1)
+                {
+                    <nav class="rtk-pager" aria-label="الصفحات">
+                        @for (var pg = 1; pg <= dash.TotalPages; pg++)
+                        {
+                            if (pg == dash.Page) { <span class="is-current" aria-current="page">@pg</span> }
+                            else
+                            {
+                                <a asp-action="Details" asp-route-id="@Model.Id" asp-route-page="@pg" asp-route-q="@dash.Filter.Q"
+                                   asp-route-status="@(dash.Filter.Status.HasValue ? (int?)dash.Filter.Status.Value : null)"
+                                   asp-route-blockedOnly="@(dash.Filter.BlockedOnly ? "true" : null)">@pg</a>
+                            }
+                        }
+                    </nav>
+                }
+            }
+        </section>
+
+        <section class="rtk-panel" aria-label="من لم يجتز">
+            <h2>من لم يجتز محورًا</h2>
+            @if (dash.NotPassed.Count == 0)
+            {
+                <div class="rtk-empty"><i class="fas fa-circle-check"></i> لا يوجد طلاب لم يجتازوا أي محور.</div>
+            }
+            else
+            {
+                <ul class="rtk-notpassed">
+                    @foreach (var n in dash.NotPassed)
+                    {
+                        <li>
+                            يُسجَّل أن الطالب <strong>@n.StudentName</strong> لم يجتز الخطة العلاجية للمحور «@n.AxisTitle»
+                            @if (n.Status == RemedialTrackAxisStatus.FailedOpenedByAdmin) { <span class="rtk-badge">نُقل بقرار الإدارة</span> }
+                            else { <span class="rtk-badge rtk-badge--lock">بانتظار الإدارة</span> }
+                        </li>
+                    }
+                </ul>
+                @if (dash.NotPassedTruncated)
+                {
+                    <div class="rtk-hint mt-2">عُرض أول @QdratNew.ViewModels.RemedialTracks.RemedialTrackDashboardVm.MaxNotPassedListed صفًّا فقط.</div>
+                }
+            }
+        </section>
+
+        @if (dash.CanUnlock && Model.IsActive)
+        {
+            <section class="rtk-panel" id="rtkUnlockBox" hidden aria-label="فتح المحور التالي">
+                <h2>فتح المحور التالي</h2>
+                <p class="rtk-alert rtk-alert--warn" id="rtkUnlockWarn"></p>
+                <div class="rtk-field">
+                    <label for="rtkUnlockReason">السبب (إلزامي، 10–300 حرف)</label>
+                    <textarea id="rtkUnlockReason" maxlength="300"></textarea>
+                </div>
+                <div class="rtk-form-actions">
+                    <button type="button" class="rtk-btn rtk-btn--danger" data-rtk-act="unlock-confirm"><i class="fas fa-lock-open"></i> تأكيد الفتح</button>
+                    <button type="button" class="rtk-btn rtk-btn--outline" data-rtk-act="unlock-close">تراجع</button>
+                </div>
+            </section>
+        }
+    }
+    else
+    {
     <section class="rtk-panel" aria-label="الطلاب">
         <h2>الطلاب</h2>
         @if (Model.StatusCounts.Count > 0)
@@ -134,10 +292,11 @@
             </div>
             @if (Model.StudentsTruncated)
             {
-                <div class="rtk-hint mt-2">عُرض أول @QdratNew.ViewModels.RemedialTracks.RemedialTrackPublicationDetailsVm.MaxStudentsListed طالب فقط. المتابعة الكاملة تُضاف في Sprint 6.</div>
+                <div class="rtk-hint mt-2">عُرض أول @QdratNew.ViewModels.RemedialTracks.RemedialTrackPublicationDetailsVm.MaxStudentsListed طالب فقط.</div>
             }
         }
     </section>
+    }
 
     @if (Model.CanCancel && Model.IsActive)
     {
@@ -159,6 +318,40 @@
 </div>
 
 @section Scripts {
+    @if (Model.Dashboard is { Kpis.Total: > 0 })
+    {
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+        <script>
+        (function () {
+            'use strict';
+            var host = document.getElementById('rtkCharts');
+            if (!host || host.dataset.bound === '1') return;
+            host.dataset.bound = '1';
+            if (typeof Chart === 'undefined') { var fb = document.getElementById('rtkChartFallback'); if (fb) fb.hidden = false; return; }
+            var data = JSON.parse(host.getAttribute('data-chart'));
+            var css = getComputedStyle(document.getElementById('rtkPubDetails'));
+            function v(n) { return css.getPropertyValue(n).trim(); }
+            var brand = v('--rtk-brand'), ok = v('--rtk-ok'), warn = v('--rtk-warn'), danger = v('--rtk-danger'), muted = v('--rtk-muted');
+            new Chart(document.getElementById('rtkStatusChart'), {
+                type: 'doughnut',
+                data: { labels: ['لم تبدأ', 'قيد التنفيذ', 'مكتملة', 'مكتملة مع تعثّر', 'ملغاة'],
+                        datasets: [{ data: data.status, backgroundColor: [muted, brand, ok, warn, danger], borderWidth: 1 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+            });
+            new Chart(document.getElementById('rtkAxisChart'), {
+                type: 'bar',
+                data: { labels: data.axes.map(function (a) { return a.title; }),
+                        datasets: [
+                            { label: 'اجتاز من أول مرة (101)', data: data.axes.map(function (a) { return a.first; }), backgroundColor: ok },
+                            { label: 'اجتاز بعد إعادة (102)', data: data.axes.map(function (a) { return a.rewatch; }), backgroundColor: brand },
+                            { label: 'لم يجتز', data: data.axes.map(function (a) { return a.notPassed; }), backgroundColor: danger }
+                        ] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } },
+                           scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } } } }
+            });
+        })();
+        </script>
+    }
     <script>
     (function () {
         'use strict';
@@ -170,8 +363,10 @@
         var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
         var urls = {
             regen: '@Url.Action("RegenerateCode", "RemedialTrackPublications", new { area = "Admin" })',
-            cancel: '@Url.Action("Cancel", "RemedialTrackPublications", new { area = "Admin" })'
+            cancel: '@Url.Action("Cancel", "RemedialTrackPublications", new { area = "Admin" })',
+            unlock: '@Url.Action("Unlock", "RemedialTrackPublications", new { area = "Admin" })'
         };
+        var unlockTarget = null;
         var toast = document.getElementById('rtkToast');
         var busy = false;
 
@@ -186,7 +381,7 @@
             if (busy) return;
             busy = true; btn.disabled = true; btn.classList.add('is-busy');
             fd.set('__RequestVerificationToken', token);
-            fd.set('id', id);
+            if (!fd.has('id')) fd.set('id', id);
             fetch(url, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
                 .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
                 .then(function (res) {
@@ -211,6 +406,23 @@
                     if (v && res.data) v.textContent = res.data;
                     setTimeout(function () { window.location.reload(); }, 900);
                 });
+            } else if (act === 'unlock-open') {
+                var box = document.getElementById('rtkUnlockBox');
+                if (!box) return;
+                unlockTarget = { enrollment: btn.getAttribute('data-enrollment'), axis: btn.getAttribute('data-axis') };
+                document.getElementById('rtkUnlockWarn').textContent = 'سيُسجَّل على الطالب «' + btn.getAttribute('data-student') +
+                    '» أنه لم يجتز المحور «' + btn.getAttribute('data-title') + '» وسيُفتح له المحور التالي. هذا القرار يُسجَّل باسمك.';
+                document.getElementById('rtkUnlockReason').value = '';
+                box.hidden = false; box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else if (act === 'unlock-close') {
+                var ub = document.getElementById('rtkUnlockBox'); if (ub) ub.hidden = true; unlockTarget = null;
+            } else if (act === 'unlock-confirm') {
+                if (!unlockTarget) return;
+                var why = document.getElementById('rtkUnlockReason').value.trim();
+                if (why.length < 10 || why.length > 300) { showToast('⚠️ السبب إلزامي (10–300 حرف).', false); return; }
+                var ufd = new FormData();
+                ufd.set('enrollmentId', unlockTarget.enrollment); ufd.set('axisProgressId', unlockTarget.axis); ufd.set('reason', why);
+                post(urls.unlock, ufd, btn, function () { setTimeout(function () { window.location.reload(); }, 900); });
             } else if (act === 'cancel-open') {
                 if (cancelBox) { cancelBox.hidden = false; cancelBox.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
             } else if (act === 'cancel-close') {

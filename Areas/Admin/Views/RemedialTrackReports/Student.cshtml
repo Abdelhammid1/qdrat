@@ -1,0 +1,177 @@
+@using QdratNew.Enums
+@using QdratNew.ViewModels.RemedialTracks
+@model QdratNew.ViewModels.RemedialTracks.RemedialTrackEnrollmentReportVm
+@inject QdratNew.Services.Interfaces.ITimeZoneService Tz
+@functions {
+    static string OutcomeText(RemedialTrackReportAxisOutcome o) => o switch
+    {
+        RemedialTrackReportAxisOutcome.Passed => "اجتاز المحور",
+        RemedialTrackReportAxisOutcome.NeedsFollowUp => "يحتاج متابعة مع المعهد",
+        RemedialTrackReportAxisOutcome.MovedByAdmin => "فتحت الإدارة المحور التالي",
+        RemedialTrackReportAxisOutcome.InProgress => "قيد التنفيذ",
+        _ => "لم يصل إليه بعد"
+    };
+    string Date(DateTime? utc) => utc.HasValue ? Tz.ConvertToSaudi(utc.Value).ToString("yyyy/MM/dd") : "—";
+    static string Pct(double? v) => v.HasValue ? v.Value.ToString("0.#") + "%" : "—";
+}
+@{
+    ViewData["Title"] = "تقرير الخطة العلاجية — " + Model.StudentName;
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/admin-rtk.css" asp-append-version="true" />
+    <style>
+        .rtk-report { background: #fff; border: 1px solid var(--rtk-line); border-radius: 14px; padding: 24px; max-width: 900px; margin-inline: auto; }
+        .rtk-report__head { text-align: center; border-bottom: 2px solid var(--rtk-brand); padding-bottom: 12px; margin-bottom: 16px; }
+        .rtk-report__head h1 { font-size: 1.3rem; font-weight: 800; margin: 0 0 4px; }
+        .rtk-report__head p { margin: 0; color: var(--rtk-muted); font-size: .9rem; }
+        .rtk-report .rtk-table { min-width: 0; font-size: .85rem; }
+        .rtk-note { white-space: pre-wrap; border: 1px solid var(--rtk-line); border-radius: 10px; padding: 10px 12px; min-height: 60px; overflow-wrap: anywhere; }
+        .rtk-report__foot { margin-top: 16px; font-size: .78rem; color: var(--rtk-muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+        @@media print {
+            @@page { size: A4; margin: 14mm; }
+            .no-print, .navbar, .sidebar, header.main-header, footer { display: none !important; }
+            body { background: #fff !important; }
+            .rtk-report { border: 0; padding: 0; max-width: none; }
+            .rtk-table th, .rtk-table td { padding: 5px 6px; }
+            tr { break-inside: avoid; }
+        }
+    </style>
+}
+
+@Html.AntiForgeryToken()
+
+<div class="rtk-page container-fluid mt-4" dir="rtl" id="rtkParentReport" data-enrollment="@Model.EnrollmentId">
+    <div class="d-flex gap-2 flex-wrap mb-3 no-print">
+        <button type="button" class="rtk-btn" onclick="window.print()"><i class="fas fa-print"></i> طباعة / حفظ PDF</button>
+        <button type="button" class="rtk-btn rtk-btn--outline" onclick="window.close()">إغلاق</button>
+    </div>
+
+    <article class="rtk-report" aria-label="تقرير ولي الأمر">
+        <div class="rtk-report__head">
+            <h1>معهد القدرات للتدريب — تقرير الخطة العلاجية</h1>
+            <p>@Model.TrackTitle · @Model.CurriculumTitle</p>
+        </div>
+
+        <dl class="rtk-dl mb-3">
+            <div><dt>الطالب</dt><dd>@Model.StudentName</dd></div>
+            <div><dt>الدفعة</dt><dd>@Model.BatchName</dd></div>
+            <div><dt>وقت النشر</dt><dd>@Tz.ConvertToSaudi(Model.PublishAtUtc).ToString("yyyy/MM/dd HH:mm")</dd></div>
+            <div><dt>نمط التقديم</dt><dd>@(Model.Mode == RemedialTrackDeliveryMode.InPerson ? "حضوري" : "أونلاين")</dd></div>
+        </dl>
+
+        <h2 class="h6 fw-bold">ملخص النتائج</h2>
+        <div class="rtk-kpis mb-3">
+            <div class="rtk-kpi"><span>@Model.PassedAxes / @Model.TotalAxes</span>محاور اجتازها</div>
+            <div class="rtk-kpi"><span>@Model.PassedPercent%</span>نسبة المحاور المجتازة</div>
+            <div class="rtk-kpi"><span>@(Model.AverageScorePercent.HasValue ? Model.AverageScorePercent.Value.ToString("0.#") + "%" : "—")</span>متوسط نتائج الاختبارات</div>
+            <div class="rtk-kpi"><span>@Model.FollowUpAxes</span>محاور تحتاج متابعة</div>
+        </div>
+
+        <h2 class="h6 fw-bold">تفاصيل المحاور</h2>
+        @if (Model.Axes.Count == 0)
+        {
+            <div class="rtk-empty">لا توجد محاور في هذه الخطة.</div>
+        }
+        else
+        {
+            <div class="rtk-table-wrap">
+                <table class="rtk-table">
+                    <thead>
+                        <tr><th>#</th><th>المحور</th><th>الفيديوهات</th><th>اختبار 101</th><th>اختبار 102</th><th>النتيجة</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var a in Model.Axes)
+                        {
+                            <tr>
+                                <td>@a.Order</td>
+                                <td>@a.Title</td>
+                                <td>
+                                    @if (a.Outcome == RemedialTrackReportAxisOutcome.NotReached) { <text>—</text> }
+                                    else
+                                    {
+                                        <text>@a.VideosDoneRound1 من @a.VideoTotal</text>
+                                        if (a.HasRound2) { <div class="rtk-hint">إعادة: @a.VideosDoneRound2 من @a.VideoTotal</div> }
+                                    }
+                                </td>
+                                <td>@Pct(a.Exam101Percent)@if (a.Exam101SubmittedAtUtc.HasValue) { <div class="rtk-hint">@Date(a.Exam101SubmittedAtUtc)</div> }</td>
+                                <td>@Pct(a.Exam102Percent)@if (a.Exam102SubmittedAtUtc.HasValue) { <div class="rtk-hint">@Date(a.Exam102SubmittedAtUtc)</div> }</td>
+                                <td>
+                                    <strong>@OutcomeText(a.Outcome)</strong>
+                                    @if (a.Outcome == RemedialTrackReportAxisOutcome.MovedByAdmin)
+                                    {
+                                        <div class="rtk-hint">فتحت الإدارة المحور التالي بتاريخ @Date(a.AdminOpenedAtUtc) دون اجتياز هذا المحور</div>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        <h2 class="h6 fw-bold mt-3">ملاحظة الإدارة</h2>
+        <div class="rtk-note" id="rtkNoteView">@(string.IsNullOrWhiteSpace(Model.AdminNote) ? "—" : Model.AdminNote)</div>
+
+        @if (Model.CanEditNote)
+        {
+            <div class="no-print mt-3" id="rtkNoteEditor">
+                <div class="rtk-field">
+                    <label for="rtkNoteInput">تعديل الملاحظة (حتى 2000 حرف — تظهر في التقرير المطبوع)</label>
+                    <textarea id="rtkNoteInput" maxlength="2000">@Model.AdminNote</textarea>
+                </div>
+                <div class="rtk-form-actions">
+                    <button type="button" class="rtk-btn rtk-btn--outline" id="rtkNoteSave"><i class="fas fa-save"></i> حفظ الملاحظة</button>
+                </div>
+            </div>
+        }
+
+        <div class="rtk-report__foot">
+            <span>تاريخ إصدار التقرير: @Tz.ConvertToSaudi(Model.IssuedAtUtc).ToString("yyyy/MM/dd HH:mm")</span>
+            <span>حالة الخطة: @(Model.IsFinished ? "منتهية" : "قيد التنفيذ")</span>
+        </div>
+    </article>
+
+    <div class="rtk-toast no-print" id="rtkToast" role="status" aria-live="polite"></div>
+</div>
+
+@section Scripts {
+    @if (Model.CanEditNote)
+    {
+        <script>
+        (function () {
+            'use strict';
+            var root = document.getElementById('rtkParentReport');
+            var btn = document.getElementById('rtkNoteSave');
+            if (!root || !btn || btn.dataset.bound === '1') return;
+            btn.dataset.bound = '1';
+            var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+            var toast = document.getElementById('rtkToast');
+            function showToast(msg, ok) {
+                var d = document.createElement('div');
+                d.className = 'rtk-alert ' + (ok ? 'rtk-alert--ok' : 'rtk-alert--error');
+                d.textContent = msg;
+                toast.replaceChildren(d);
+                setTimeout(function () { toast.replaceChildren(); }, ok ? 3000 : 7000);
+            }
+            btn.addEventListener('click', function () {
+                var note = document.getElementById('rtkNoteInput').value;
+                if (note.length > 2000) { showToast('⚠️ الملاحظة أطول من 2000 حرف.', false); return; }
+                var fd = new FormData();
+                fd.set('__RequestVerificationToken', token);
+                fd.set('enrollmentId', root.getAttribute('data-enrollment'));
+                fd.set('note', note);
+                btn.disabled = true; btn.classList.add('is-busy');
+                fetch('@Url.Action("SaveNote", "RemedialTrackReports", new { area = "Admin" })', { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                    .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                    .then(function (res) {
+                        showToast(res.message || (res.success ? 'تم.' : 'تعذّر الحفظ.'), !!res.success);
+                        if (res.success) document.getElementById('rtkNoteView').textContent = note.trim() === '' ? '—' : note.trim();
+                    })
+                    .catch(function () { showToast('تعذّر الاتصال بالخادم. أعد المحاولة.', false); })
+                    .finally(function () { btn.disabled = false; btn.classList.remove('is-busy'); });
+            });
+        })();
+        </script>
+    }
+}
