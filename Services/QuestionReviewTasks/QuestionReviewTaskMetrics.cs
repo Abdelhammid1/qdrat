@@ -29,6 +29,10 @@ namespace QdratNew.Services.QuestionReviewTasks
         public static bool IsOverdue(QuestionReviewTaskStatus status, DateTime? dueUtc, DateTime nowUtc)
             => IsActive(status) && dueUtc.HasValue && dueUtc.Value < nowUtc;
 
+        /// <summary>D9: تحويل إدخال الأدمن (توقيت Arab Standard Time) إلى UTC للتخزين.</summary>
+        public static DateTime LocalToUtc(DateTime local)
+            => TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(local, DateTimeKind.Unspecified), DisplayZone.Value);
+
         /// <summary>D9: التخزين UTC والعرض بتوقيت Arab Standard Time.</summary>
         public static string? FormatLocal(DateTime? utc, string format = "yyyy/MM/dd HH:mm")
             => utc.HasValue

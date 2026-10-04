@@ -1,9 +1,19 @@
 @model QdratNew.ViewModels.QuestionReviewTasks.AdminTaskDetailsVm
 @using QdratNew.Enums
 @using QdratNew.Services.QuestionReviewTasks
+@using QdratNew.Security
+@using Microsoft.AspNetCore.Authorization
+@inject IAuthorizationService AuthorizationService
 @{
     ViewData["Title"] = "تفاصيل المهمة " + Model.Code;
     var p = Model.Progress;
+    var a = Model.Actions;
+
+    // القاعدة: الزر المحجوب يُخفى كليًا ولا يُعطَّل
+    var canManage = (await AuthorizationService.AuthorizeAsync(User, AdminPermissionPolicies.QuestionReviewTasks_Manage)).Succeeded;
+    var canEditQuestion = (await AuthorizationService.AuthorizeAsync(User, AdminPermissionPolicies.Questions_Edit)).Succeeded;
+    var canRemove = canManage && a.CanRemoveItems;
+    var showActionBar = canManage && (a.CanExtendDue || a.CanReassign || a.CanClose || a.CanCancel || a.CloseBlockedReason != null);
 
     string StatusBadge(QuestionReviewTaskStatus s) => s switch
     {
@@ -22,7 +32,8 @@
 
 @Html.AntiForgeryToken()
 
-<div class="qrt-page container-fluid mt-4" dir="rtl" id="qrtAdminDetails" data-task-id="@Model.Id">
+<div class="qrt-page container-fluid mt-4" dir="rtl" id="qrtAdminDetails" data-task-id="@Model.Id" data-task-code="@Model.Code"
+     data-can-manage="@(canManage ? "1" : "0")" data-can-remove="@(canRemove ? "1" : "0")" data-can-edit="@(canEditQuestion ? "1" : "0")">
 
     <header class="qrt-hero">
         <div class="qrt-hero__top">
@@ -58,6 +69,35 @@
     </header>
 
     <section class="qrt-panel" aria-label="بيانات المهمة وتقدمها">
+        <div id="qrtNotice" class="qrt-notice" role="status" aria-live="polite" hidden></div>
+
+        @if (showActionBar)
+        {
+            <div class="qrt-actions" role="group" aria-label="إدارة المهمة">
+                @if (a.CanExtendDue)
+                {
+                    <button type="button" class="qrt-btn qrt-btn--ghost" id="qrtBtnExtend"><i class="fas fa-calendar-plus"></i><span>تمديد الموعد</span></button>
+                }
+                @if (a.CanReassign)
+                {
+                    <button type="button" class="qrt-btn qrt-btn--ghost" id="qrtBtnReassign"><i class="fas fa-people-arrows"></i><span>إعادة إسناد المتبقي</span></button>
+                }
+                @if (a.CloseBlockedReason != null)
+                {
+                    <span class="qrt-hint"><i class="fas fa-triangle-exclamation"></i>@a.CloseBlockedReason</span>
+                }
+                <span class="qrt-spacer"></span>
+                @if (a.CanClose)
+                {
+                    <button type="button" class="qrt-btn qrt-btn--primary" id="qrtBtnClose"><i class="fas fa-lock"></i><span>إغلاق المهمة</span></button>
+                }
+                @if (a.CanCancel)
+                {
+                    <button type="button" class="qrt-btn qrt-btn--danger" id="qrtBtnCancel"><i class="fas fa-ban"></i><span>إلغاء المهمة</span></button>
+                }
+            </div>
+        }
+
         @if (!string.IsNullOrWhiteSpace(Model.AdminNote))
         {
             <div class="qrt-note mt-0 mb-3"><strong><i class="fas fa-comment-dots"></i> ملاحظة الإدارة:</strong>@Model.AdminNote</div>
@@ -119,7 +159,17 @@
                     <option value="@((int)QuestionReviewTaskItemStatus.Removed)">أُزيل من المهمة</option>
                 </select>
                 <input id="qrtSearch" type="search" class="qrt-input" placeholder="بحث بنص السؤال أو رقمه المرجعي" aria-label="بحث" maxlength="100" />
+                <span class="qrt-spacer"></span>
+                <button type="button" class="qrt-btn qrt-btn--ghost qrt-btn--sm" id="qrtBtnRefresh"><i class="fas fa-rotate"></i><span>تحديث</span></button>
             </div>
+
+            @if (canRemove)
+            {
+                <div class="qrt-selbar" id="qrtSelBar" hidden>
+                    <span>المحدد: <b id="qrtSelCount">0</b> سؤال معلّق</span>
+                    <button type="button" class="qrt-btn qrt-btn--danger qrt-btn--sm" id="qrtBtnRemove"><i class="fas fa-trash-can"></i><span>إزالة المحدد من المهمة</span></button>
+                </div>
+            }
 
             <div id="qrtLoadError" class="qrt-error" role="alert" hidden>تعذّر تحميل الأسئلة. تحقق من الاتصال ثم أعد المحاولة.</div>
 
@@ -127,11 +177,19 @@
                 <table id="qrtItemsTable" class="qrt-table">
                     <thead>
                         <tr>
+                            @if (canRemove)
+                            {
+                                <th class="qrt-col-check"><input type="checkbox" class="qrt-check" id="qrtCheckAll" aria-label="تحديد كل المعلّق في الصفحة" /></th>
+                            }
                             <th>الرقم المرجعي</th>
                             <th>السؤال</th>
                             <th>المحور / المؤشر</th>
                             <th>الحالة</th>
                             <th>الإجراء</th>
+                            @if (canManage)
+                            {
+                                <th>معالجة</th>
+                            }
                         </tr>
                     </thead>
                 </table>
@@ -165,6 +223,46 @@
     </div>
 </div>
 
+@if (canManage)
+{
+    <div class="modal fade" id="qrtActionModal" tabindex="-1" aria-hidden="true" aria-labelledby="qrtActionTitle">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content text-end">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="qrtActionTitle">—</h5>
+                    <button type="button" class="btn-close ms-0 me-auto" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3" id="qrtActionDesc"></p>
+
+                    <div id="qrtActionSelectWrap" hidden class="mb-3">
+                        <label for="qrtActionSelect" class="form-label fw-bold">المدرب الجديد <span class="text-danger">*</span></label>
+                        <select id="qrtActionSelect" class="form-select"></select>
+                    </div>
+
+                    <div id="qrtActionDueWrap" hidden class="mb-3">
+                        <label for="qrtActionDue" class="form-label fw-bold">موعد التسليم (بتوقيت الرياض)</label>
+                        <input type="datetime-local" id="qrtActionDue" class="form-control" value="@a.DueInputLocal" />
+                        <label class="qrt-check-inline"><input type="checkbox" class="qrt-check" id="qrtActionDueClear" /> بلا موعد تسليم</label>
+                    </div>
+
+                    <div id="qrtActionNoteWrap" hidden>
+                        <label for="qrtActionNote" class="form-label fw-bold"><span id="qrtActionNoteLabel">ملاحظة</span> <span class="text-danger" id="qrtActionNoteStar">*</span></label>
+                        <textarea id="qrtActionNote" class="form-control" rows="3" maxlength="500"></textarea>
+                        <div class="qrt-counter" id="qrtActionCounter">0 / 500</div>
+                    </div>
+
+                    <div class="qrt-field-error" id="qrtActionError" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="qrt-btn qrt-btn--ghost" data-bs-dismiss="modal">تراجع</button>
+                    <button type="button" class="qrt-btn qrt-btn--primary" id="qrtActionSubmit"><i class="fas fa-check"></i><span>تأكيد</span></button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @section Scripts {
     <script>
     (function () {
@@ -191,6 +289,37 @@
             return 'qrt-badge--other';
         }
 
+        var canManage = root.dataset.canManage === '1';
+        var canRemove = root.dataset.canRemove === '1';
+        var canEdit = root.dataset.canEdit === '1';
+
+        // عمود التحديد (للمعلّق فقط) + عمود المعالجة (للمرتجع فقط) — يظهران بحسب الصلاحية وحالة المهمة
+        var checkCol = canRemove ? [{
+            data: null, orderable: false,
+            render: function (d, t, row) {
+                return row.status === 0
+                    ? '<input type="checkbox" class="qrt-check qrt-row-check" data-id="' + esc(row.itemId) + '" aria-label="تحديد السؤال ' + esc(row.reference) + '" />'
+                    : '';
+            }
+        }] : [];
+
+        var actionCol = canManage ? [{
+            data: null, orderable: false,
+            render: function (d, t, row) {
+                if (row.status !== 3) return '<span class="qrt-sub">—</span>';
+                var ref = esc(row.reference);
+                var html = '<div class="qrt-row-actions">' +
+                    '<button type="button" class="qrt-btn qrt-btn--primary" data-act="approve" data-id="' + esc(row.itemId) + '" data-ref="' + ref + '"><i class="fas fa-check"></i><span>اعتماد</span></button>';
+                if (canEdit) {
+                    html += '<a class="qrt-btn qrt-btn--ghost" target="_blank" rel="noopener" href="/Admin/Questions/Edit/' + esc(row.questionId) + '"><i class="fas fa-pen"></i><span>تعديل</span></a>';
+                }
+                html += '<button type="button" class="qrt-btn qrt-btn--ghost" data-act="release" data-id="' + esc(row.itemId) + '" data-ref="' + ref + '"><i class="fas fa-box-open"></i><span>للمسبح</span></button>' +
+                    '<button type="button" class="qrt-btn qrt-btn--danger" data-act="reject" data-id="' + esc(row.itemId) + '" data-ref="' + ref + '"><i class="fas fa-xmark"></i><span>رفض</span></button>' +
+                    '</div>';
+                return html;
+            }
+        }] : [];
+
         var table = $('#qrtItemsTable').DataTable({
             processing: true,
             serverSide: true,
@@ -210,7 +339,8 @@
                 dataSrc: function (json) { el('qrtLoadError').hidden = true; return json.data; },
                 error: function () { el('qrtLoadError').hidden = false; }
             },
-            columns: [
+            drawCallback: function () { resetSelection(); },
+            columns: [].concat(checkCol, [
                 { data: 'reference', render: function (d) { return '<span class="qrt-code">' + esc(d) + '</span>'; } },
                 {
                     data: 'title',
@@ -229,7 +359,7 @@
                         return esc(d || '') + (row.actionLocal ? '<span class="qrt-sub">' + esc(row.actionLocal) + '</span>' : '');
                     }
                 }
-            ],
+            ], actionCol),
             language: {
                 url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json',
                 emptyTable: 'لا توجد أسئلة في هذه المهمة.',
@@ -241,6 +371,297 @@
         el('qrtStatusFilter').addEventListener('change', reload);
         var timer = null;
         el('qrtSearch').addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(reload, 400); });
+        el('qrtBtnRefresh').addEventListener('click', reload);
+
+        // ---------------- QRT-S6: إدارة دورة الحياة ----------------
+        var urls = {
+            resolve: '@Url.Action("ResolveReturned", "QuestionReviewTasks", new { area = "Admin" })',
+            remove: '@Url.Action("RemoveItems", "QuestionReviewTasks", new { area = "Admin" })',
+            candidates: '@Url.Action("ReassignCandidates", "QuestionReviewTasks", new { area = "Admin" })',
+            reassign: '@Url.Action("Reassign", "QuestionReviewTasks", new { area = "Admin" })',
+            cancel: '@Url.Action("Cancel", "QuestionReviewTasks", new { area = "Admin" })',
+            close: '@Url.Action("Close", "QuestionReviewTasks", new { area = "Admin" })',
+            extend: '@Url.Action("ExtendDue", "QuestionReviewTasks", new { area = "Admin" })',
+            details: '@Url.Action("Details", "QuestionReviewTasks", new { area = "Admin" })'
+        };
+
+        // حالة التحديد (للمعلّق فقط) — تُصفَّر عند كل إعادة رسم
+        function selectedIds() {
+            return Array.prototype.map.call(document.querySelectorAll('.qrt-row-check:checked'), function (c) { return c.dataset.id; });
+        }
+        function refreshSelection() {
+            var bar = el('qrtSelBar');
+            if (!bar) return;
+            var n = selectedIds().length;
+            el('qrtSelCount').textContent = n;
+            bar.hidden = n === 0;
+        }
+        function resetSelection() {
+            var all = el('qrtCheckAll');
+            if (all) all.checked = false;
+            refreshSelection();
+        }
+
+        function showNotice(ok, message, linkHref, linkText) {
+            var n = el('qrtNotice');
+            n.className = 'qrt-notice ' + (ok ? 'is-ok' : 'is-err');
+            n.textContent = message;
+            if (linkHref) {
+                n.appendChild(document.createTextNode(' '));
+                var a = document.createElement('a');
+                a.href = linkHref;
+                a.textContent = linkText;
+                n.appendChild(a);
+            }
+            n.hidden = false;
+            n.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        // POST موحّد: Antiforgery + شكل استجابة ثابت {success, message, data} + معالجة أخطاء الشبكة/الخادم
+        function post(url, params) {
+            var body = new URLSearchParams();
+            body.append('__RequestVerificationToken', token);
+            Object.keys(params).forEach(function (k) {
+                var v = params[k];
+                if (v === null || v === undefined) return;
+                if (Array.isArray(v)) v.forEach(function (x) { body.append(k, x); });
+                else body.append(k, v);
+            });
+            return fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+                body: body.toString(),
+                credentials: 'same-origin'
+            }).then(function (r) {
+                return r.json().catch(function () { throw new Error('bad-response'); });
+            }).catch(function () {
+                return { success: false, message: 'تعذّر الاتصال بالخادم أو انتهت الجلسة. أعد تحميل الصفحة وحاول مجددًا.' };
+            });
+        }
+
+        function setBusy(btn, busy) {
+            btn.classList.toggle('is-loading', busy);
+            btn.disabled = busy;
+            var i = btn.querySelector('i');
+            if (!i) return;
+            if (busy) { btn.dataset.icon = i.className; i.className = 'fas fa-spinner'; }
+            else if (btn.dataset.icon) { i.className = btn.dataset.icon; }
+        }
+
+        // ----- مودال عام: يُهيَّأ بإعدادات كل إجراء (عنوان/وصف/حقول/تنفيذ) -----
+        var modalEl = el('qrtActionModal');
+        var cfg = null;
+
+        function modalReady() { return !!modalEl && typeof bootstrap !== 'undefined'; }
+
+        function updateCounter() {
+            var len = el('qrtActionNote').value.trim().length;
+            var c = el('qrtActionCounter');
+            c.textContent = len + ' / 500';
+            c.classList.toggle('is-bad', !!(cfg && cfg.note && cfg.note.required && len < cfg.note.min));
+        }
+
+        function openAction(c) {
+            if (!modalReady()) return;
+            cfg = c;
+            el('qrtActionTitle').innerHTML = '<i class="fas ' + c.icon + ' ms-2" style="color:var(--qrt-brand)"></i>' + esc(c.title);
+            el('qrtActionDesc').textContent = c.desc || '';
+            el('qrtActionError').textContent = '';
+
+            var noteWrap = el('qrtActionNoteWrap');
+            noteWrap.hidden = !c.note;
+            if (c.note) {
+                el('qrtActionNoteLabel').textContent = c.note.label;
+                el('qrtActionNoteStar').hidden = !c.note.required;
+                el('qrtActionNote').value = '';
+                el('qrtActionNote').placeholder = c.note.placeholder || '';
+                updateCounter();
+            }
+
+            el('qrtActionDueWrap').hidden = !c.due;
+            if (c.due) el('qrtActionDueClear').checked = false;
+
+            el('qrtActionSelectWrap').hidden = !c.select;
+
+            var submit = el('qrtActionSubmit');
+            submit.className = 'qrt-btn ' + (c.danger ? 'qrt-btn--danger' : 'qrt-btn--primary');
+            submit.querySelector('span').textContent = c.confirmText;
+            submit.querySelector('i').className = 'fas ' + (c.confirmIcon || 'fa-check');
+            submit.disabled = false;
+            submit.classList.remove('is-loading');
+
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+            if (c.select) loadCandidates();
+        }
+
+        function loadCandidates() {
+            var sel = el('qrtActionSelect');
+            var submit = el('qrtActionSubmit');
+            sel.innerHTML = '<option value="">جارٍ التحميل…</option>';
+            sel.disabled = true;
+            submit.disabled = true;
+            post(urls.candidates, { taskId: taskId }).then(function (res) {
+                var list = res.success && res.data && res.data.instructors ? res.data.instructors : [];
+                if (!res.success) { el('qrtActionError').textContent = res.message; sel.innerHTML = '<option value="">—</option>'; return; }
+                if (list.length === 0) {
+                    sel.innerHTML = '<option value="">لا يوجد مدرب مؤهل</option>';
+                    el('qrtActionError').textContent = res.message || 'لا يوجد مدرب آخر مؤهل لاستلام هذه الأسئلة.';
+                    return;
+                }
+                sel.innerHTML = '<option value="">اختر المدرب…</option>' + list.map(function (i) {
+                    return '<option value="' + esc(i.id) + '">' + esc(i.fullName) + ' — محجوز لديه ' + esc(i.activeLockedItems) + '</option>';
+                }).join('');
+                sel.disabled = false;
+                submit.disabled = false;
+            });
+        }
+
+        if (modalEl) {
+            el('qrtActionNote').addEventListener('input', function () { updateCounter(); el('qrtActionError').textContent = ''; });
+
+            el('qrtActionSubmit').addEventListener('click', function () {
+                if (!cfg) return;
+                var err = el('qrtActionError');
+                err.textContent = '';
+                var values = {};
+
+                if (cfg.note) {
+                    values.note = el('qrtActionNote').value.trim();
+                    if (cfg.note.required && values.note.length < cfg.note.min) {
+                        err.textContent = cfg.note.label + ' إلزامي (' + cfg.note.min + ' – 500 حرف).';
+                        return;
+                    }
+                }
+                if (cfg.select) {
+                    values.select = el('qrtActionSelect').value;
+                    if (!values.select) { err.textContent = 'اختر المدرب أولًا.'; return; }
+                }
+                if (cfg.due) {
+                    values.clearDue = el('qrtActionDueClear').checked;
+                    values.due = el('qrtActionDue').value;
+                    if (!values.clearDue && !values.due) { err.textContent = 'حدّد موعدًا جديدًا أو اختر «بلا موعد تسليم».'; return; }
+                }
+
+                var btn = el('qrtActionSubmit');
+                setBusy(btn, true);
+                cfg.run(values).then(function (res) {
+                    setBusy(btn, false);
+                    if (!res.success) { err.textContent = res.message; return; }
+                    bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+                    cfg.done(res);
+                });
+            });
+        }
+
+        function afterSuccess(res, goTo) {
+            if (goTo) {
+                showNotice(true, res.message, goTo, 'فتح المهمة الجديدة');
+                setTimeout(function () { window.location.href = goTo; }, 1600);
+            } else {
+                showNotice(true, res.message);
+                setTimeout(function () { window.location.reload(); }, 1200);   // الرأس والأزرار والخط الزمني تُرسم من الخادم
+            }
+        }
+
+        // ----- إجراءات المرتجع (تفويض أحداث: ربط واحد على الجدول) -----
+        var RESOLVE = {
+            approve: { r: 1, title: 'اعتماد السؤال كما هو', icon: 'fa-check', confirm: 'اعتماد', danger: false,
+                desc: 'سيُعتمد السؤال بحالته الحالية ويُسجَّل الإرجاع كمعالَج.' },
+            release: { r: 2, title: 'إعادة السؤال للمسبح', icon: 'fa-box-open', confirm: 'إعادة للمسبح', danger: false,
+                desc: 'يعود السؤال إلى المسبح العام ويمكن إسناده في مهمة جديدة.' },
+            reject: { r: 3, title: 'رفض السؤال نهائيًا', icon: 'fa-xmark', confirm: 'رفض نهائي', danger: true,
+                desc: 'يُرفض السؤال ويخرج من دورة المراجعة. لا يمكن التراجع من هنا.' }
+        };
+
+        if (canManage) {
+            document.querySelector('#qrtItemsTable').addEventListener('click', function (e) {
+                var btn = e.target.closest('button[data-act]');
+                if (!btn) return;
+                var def = RESOLVE[btn.dataset.act];
+                if (!def) return;
+                var itemId = btn.dataset.id;
+                openAction({
+                    title: def.title + ' (' + btn.dataset.ref + ')', icon: def.icon, desc: def.desc,
+                    confirmText: def.confirm, danger: def.danger,
+                    note: { label: 'ملاحظة المعالجة (اختيارية)', required: false, min: 0, placeholder: 'تظهر في سجل المهمة' },
+                    run: function (v) { return post(urls.resolve, { ItemId: itemId, Resolution: def.r, Note: v.note }); },
+                    done: function (res) { afterSuccess(res); }
+                });
+            });
+        }
+
+        // ----- تحديد وإزالة أسئلة معلّقة -----
+        if (canRemove) {
+            el('qrtItemsTable').addEventListener('change', function (e) {
+                if (e.target.id === 'qrtCheckAll') {
+                    document.querySelectorAll('.qrt-row-check').forEach(function (c) { c.checked = e.target.checked; });
+                } else if (e.target.classList.contains('qrt-row-check')) {
+                    var all = el('qrtCheckAll');
+                    if (all) all.checked = document.querySelectorAll('.qrt-row-check:not(:checked)').length === 0;
+                }
+                refreshSelection();
+            });
+
+            el('qrtBtnRemove').addEventListener('click', function () {
+                var ids = selectedIds();
+                if (ids.length === 0) return;
+                openAction({
+                    title: 'إزالة ' + ids.length + ' سؤال من المهمة', icon: 'fa-trash-can',
+                    desc: 'تعود الأسئلة المحددة للمسبح العام ويُحرَّر حجزها. لا تُحتسب ضمن نسبة الاعتماد.',
+                    confirmText: 'إزالة', danger: true,
+                    run: function () { return post(urls.remove, { TaskId: taskId, ItemIds: ids }); },
+                    done: function (res) { afterSuccess(res); }
+                });
+            });
+        }
+
+        // ----- إجراءات المهمة -----
+        var btnExtend = el('qrtBtnExtend');
+        if (btnExtend) btnExtend.addEventListener('click', function () {
+            openAction({
+                title: 'تمديد موعد التسليم', icon: 'fa-calendar-plus', due: true,
+                desc: 'يصل المدرب إشعار بالموعد الجديد.', confirmText: 'حفظ الموعد',
+                run: function (v) { return post(urls.extend, { TaskId: taskId, DueAtLocal: v.clearDue ? '' : v.due }); },
+                done: function (res) { afterSuccess(res); }
+            });
+        });
+
+        var btnReassign = el('qrtBtnReassign');
+        if (btnReassign) btnReassign.addEventListener('click', function () {
+            openAction({
+                title: 'إعادة إسناد المتبقي', icon: 'fa-people-arrows', select: true,
+                desc: 'تُنقل الأسئلة المعلّقة فقط إلى مهمة جديدة لمدرب آخر، وتبقى الأسئلة المعتمدة والمرتجعة في هذه المهمة.',
+                confirmText: 'إعادة الإسناد',
+                run: function (v) { return post(urls.reassign, { TaskId: taskId, NewInstructorId: v.select }); },
+                done: function (res) {
+                    var goTo = res.data && res.data.taskId ? urls.details + '/' + res.data.taskId : null;
+                    afterSuccess(res, goTo);
+                }
+            });
+        });
+
+        var btnClose = el('qrtBtnClose');
+        if (btnClose) btnClose.addEventListener('click', function () {
+            openAction({
+                title: 'إغلاق المهمة', icon: 'fa-lock',
+                desc: 'تكتمل المراجعة ولا يوجد مرتجع غير معالج. الإغلاق نهائي ولا يمكن إعادة فتح المهمة.',
+                confirmText: 'إغلاق المهمة', confirmIcon: 'fa-lock',
+                run: function () { return post(urls.close, { taskId: taskId }); },
+                done: function (res) { afterSuccess(res); }
+            });
+        });
+
+        var btnCancel = el('qrtBtnCancel');
+        if (btnCancel) btnCancel.addEventListener('click', function () {
+            openAction({
+                title: 'إلغاء المهمة', icon: 'fa-ban', danger: true,
+                desc: 'تعود الأسئلة المعلّقة للمسبح العام ويُحرَّر حجزها، ويصل المدرب إشعار بالسبب. الإلغاء نهائي.',
+                confirmText: 'إلغاء المهمة', confirmIcon: 'fa-ban',
+                note: { label: 'سبب الإلغاء', required: true, min: 5, placeholder: 'اكتب سبب الإلغاء (5 – 500 حرف)' },
+                run: function (v) { return post(urls.cancel, { TaskId: taskId, Reason: v.note }); },
+                done: function (res) { afterSuccess(res); }
+            });
+        });
     })();
     </script>
 }

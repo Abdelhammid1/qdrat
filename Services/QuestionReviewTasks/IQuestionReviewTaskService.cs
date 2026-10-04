@@ -38,6 +38,12 @@ namespace QdratNew.Services.QuestionReviewTasks
         Task<OperationResult> GetEligibleInstructorsAsync(EligibleInstructorsInput input, CancellationToken ct = default);
 
         /// <summary>
+        /// QRT-S6.2: المدربون المؤهلون لاستلام المتبقي (المعلّق) من مهمة، باستثناء مدربها الحالي.
+        /// Data = { pendingCount, instructors: IReadOnlyList&lt;EligibleInstructorDto&gt; }.
+        /// </summary>
+        Task<OperationResult> GetReassignCandidatesAsync(int taskId, CancellationToken ct = default);
+
+        /// <summary>
         /// QRT-S4.3: مزامنة عناصر المهام مع حالة الأسئلة بعد اعتماد/رفض/إلغاء اعتماد من الأدمن (تُستدعى بعد حفظ تغيير السؤال).
         /// مبنية على حالة السؤال الفعلية لا على قائمة معرّفات، فتُصلح أي عنصر فاته التحديث سابقًا.
         /// لا ترمي استثناءً أبدًا: فشلها يُسجَّل فقط ولا يُبطل قرار الأدمن. تُرجع عدد العناصر المحدَّثة.

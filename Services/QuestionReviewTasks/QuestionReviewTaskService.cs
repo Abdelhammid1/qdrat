@@ -12,11 +12,11 @@ namespace QdratNew.Services.QuestionReviewTasks
     /// <summary>
     /// QRT-S1: هيكل الخدمة + مولّد الكود + إعادة حساب العدادات (D10).
     /// QRT-S2: إنشاء المهمة (CreateTaskAsync) + المدربون المؤهلون.
-    /// بقية العمليات تُنفَّذ في Sprints لاحقة وتُرجع فشلًا صريحًا حتى ذلك الحين.
+    /// QRT-S6: إدارة دورة الحياة في الملف الجزئي QuestionReviewTaskService.Lifecycle.cs.
+    /// ما تبقى غير منفّذ يُرجع فشلًا صريحًا.
     /// </summary>
-    public sealed class QuestionReviewTaskService : IQuestionReviewTaskService
+    public sealed partial class QuestionReviewTaskService : IQuestionReviewTaskService
     {
-        private const string NotImplementedMessage = "هذه العملية غير متاحة بعد.";
         private const int MaxQuestionsPerTask = 500; // D8
         private const string ActiveLockIndexName = "UX_QuestionReviewTaskItems_ActiveLock";
         private const string CodeIndexName = "IX_QuestionReviewTasks_Code";
@@ -280,16 +280,31 @@ namespace QdratNew.Services.QuestionReviewTasks
             if (partnerIds.Count > 1)
                 return OperationResult.Fail("⚠️ الأسئلة المحددة تتبع جهات (شركاء) مختلفة؛ حدّد أسئلة جهة واحدة.");
 
-            var partnerId = partnerIds[0];
+            var result = await FindEligibleInstructorsAsync(db, curriculumIds, partnerIds[0], ct);
 
-            // مدربون نشطون لهم حساب دخول ومن نفس الشريك (D7)
+            var message = result.Count == 0
+                ? "لا يوجد مدرب مؤهل: يجب أن يملك المدرب كل المناهج المعنية ونفس الجهة."
+                : string.Empty;
+
+            return OperationResult.Ok(message, new
+            {
+                questionCount = selection.Eligible.Count,
+                excluded = selection.Excluded,
+                instructors = result
+            });
+        }
+
+        // مدربون نشطون لهم حساب دخول ومن نفس الشريك (D7) ويملكون كل المناهج المعنية، مرتبون حسب العبء ثم الاسم
+        private async Task<List<EligibleInstructorDto>> FindEligibleInstructorsAsync(
+            ApplicationDbContext db, IReadOnlyCollection<int> curriculumIds, int? partnerId, CancellationToken ct)
+        {
             var candidates = await db.Instructors.AsNoTracking()
                 .Where(i => i.IsActive && i.UserId != null && i.PartnerId == partnerId)
                 .Select(i => new { i.Id, i.FullName })
                 .ToListAsync(ct);
 
             if (candidates.Count == 0)
-                return OperationResult.Ok("لا يوجد مدرب مؤهل لهذه الأسئلة.", Array.Empty<EligibleInstructorDto>());
+                return new List<EligibleInstructorDto>();
 
             // نفس شرط GetDirectCurriculumIdsAsync عبر مصدر واحد مشترك
             var pairs = await db.InstructorCurriculumBatches.AsNoTracking()
@@ -311,23 +326,12 @@ namespace QdratNew.Services.QuestionReviewTasks
                 .ToListAsync(ct);
             var load = loadRows.ToDictionary(r => r.InstructorId, r => r.Count);
 
-            var result = candidates
+            return candidates
                 .Where(c => coverage.TryGetValue(c.Id, out var covered) && covered == curriculumIds.Count)
                 .Select(c => new EligibleInstructorDto(c.Id, c.FullName, load.GetValueOrDefault(c.Id)))
                 .OrderBy(c => c.ActiveLockedItems)
                 .ThenBy(c => c.FullName)
                 .ToList();
-
-            var message = result.Count == 0
-                ? "لا يوجد مدرب مؤهل: يجب أن يملك المدرب كل المناهج المعنية ونفس الجهة."
-                : string.Empty;
-
-            return OperationResult.Ok(message, new
-            {
-                questionCount = selection.Eligible.Count,
-                excluded = selection.Excluded,
-                instructors = result
-            });
         }
 
         // ===== تحديد الأسئلة + الأهلية (استعلام واحد، بلا Loop) =====
@@ -404,27 +408,7 @@ namespace QdratNew.Services.QuestionReviewTasks
             return false;
         }
 
-        private static DateTime ToUtc(DateTime local)
-            => TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(local, DateTimeKind.Unspecified), DisplayZone.Value);
-
-        // ===== الأدمن (Sprint 6) =====
-        public Task<OperationResult> CancelTaskAsync(int taskId, string reason, ReviewActor actor, CancellationToken ct = default)
-            => Task.FromResult(OperationResult.Fail(NotImplementedMessage));
-
-        public Task<OperationResult> CloseTaskAsync(int taskId, ReviewActor actor, CancellationToken ct = default)
-            => Task.FromResult(OperationResult.Fail(NotImplementedMessage));
-
-        public Task<OperationResult> ExtendDueAsync(int taskId, DateTime? newDueUtc, ReviewActor actor, CancellationToken ct = default)
-            => Task.FromResult(OperationResult.Fail(NotImplementedMessage));
-
-        public Task<OperationResult> RemoveItemsAsync(int taskId, IReadOnlyCollection<long> itemIds, ReviewActor actor, CancellationToken ct = default)
-            => Task.FromResult(OperationResult.Fail(NotImplementedMessage));
-
-        public Task<OperationResult> ReassignRemainingAsync(int taskId, int newInstructorId, ReviewActor actor, CancellationToken ct = default)
-            => Task.FromResult(OperationResult.Fail(NotImplementedMessage));
-
-        public Task<OperationResult> ResolveReturnedAsync(long itemId, ReturnResolution resolution, string? note, ReviewActor actor, CancellationToken ct = default)
-            => Task.FromResult(OperationResult.Fail(NotImplementedMessage));
+        private static DateTime ToUtc(DateTime local) => QuestionReviewTaskMetrics.LocalToUtc(local);
 
         // ===== المدرب (Sprint 3) =====
         // نتيجة إجراء المدرب داخل الـ Transaction (الإشعار يُرسل بعد الإنهاء)

@@ -330,6 +330,19 @@ namespace QdratNew.Services.QuestionReviewTasks
                     ApprovalPercent = QuestionReviewTaskMetrics.ApprovalPercent(t.ApprovedItems, effective),
                     HandledPercent = QuestionReviewTaskMetrics.HandledPercent(t.PendingItems, effective)
                 },
+                Actions = new AdminTaskActionsVm
+                {
+                    CanCancel = QuestionReviewTaskStateRules.CanCancel(t.Status),
+                    CanClose = QuestionReviewTaskStateRules.CanClose(t.Status, t.ReturnedItems),
+                    CanExtendDue = QuestionReviewTaskStateRules.CanExtendDue(t.Status),
+                    CanRemoveItems = QuestionReviewTaskStateRules.CanRemoveItems(t.Status, t.PendingItems),
+                    CanReassign = QuestionReviewTaskStateRules.CanReassign(t.Status, t.PendingItems),
+                    UnresolvedReturns = t.ReturnedItems,
+                    DueInputLocal = QuestionReviewTaskMetrics.FormatLocal(t.DueAtUtc, "yyyy-MM-ddTHH:mm") ?? string.Empty,
+                    CloseBlockedReason = t.Status == QuestionReviewTaskStatus.Completed && t.ReturnedItems > 0
+                        ? $"يوجد {t.ReturnedItems} سؤال مرتجع غير معالج — عالجه أولًا ثم أغلق المهمة."
+                        : null
+                },
                 Timeline = events.OrderByDescending(e => e.AtUtc).ToList()
             };
         }

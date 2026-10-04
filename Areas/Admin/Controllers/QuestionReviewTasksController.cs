@@ -104,6 +104,77 @@ namespace QdratNew.Areas.Admin.Controllers
             });
         }
 
+        // ---------------- QRT-S6: إدارة دورة الحياة (كلها Manage + POST + Antiforgery) ----------------
+
+        [HttpPost, ValidateAntiForgeryToken]
+        [AdminPermission("QuestionReviewTasks", "Manage")]
+        public Task<IActionResult> ResolveReturned([FromForm] ResolveReturnedInput input, CancellationToken ct)
+            => RunManageAsync(input, (actor) => _service.ResolveReturnedAsync(
+                input.ItemId, (ReturnResolution)input.Resolution, input.Note, actor, ct));
+
+        [HttpPost, ValidateAntiForgeryToken]
+        [AdminPermission("QuestionReviewTasks", "Manage")]
+        public Task<IActionResult> RemoveItems([FromForm] RemoveReviewItemsInput input, CancellationToken ct)
+            => RunManageAsync(input, (actor) => _service.RemoveItemsAsync(input.TaskId, input.ItemIds, actor, ct));
+
+        // المدربون المؤهلون لاستلام المتبقي (قراءة فقط لكنها جزء من تدفق إعادة الإسناد)
+        [HttpPost, ValidateAntiForgeryToken]
+        [AdminPermission("QuestionReviewTasks", "Manage")]
+        public async Task<IActionResult> ReassignCandidates([FromForm] int taskId, CancellationToken ct)
+        {
+            if (taskId <= 0)
+                return Json(new { success = false, message = "⚠️ مهمة غير صالحة." });
+
+            var result = await _service.GetReassignCandidatesAsync(taskId, ct);
+            return Json(new { success = result.Success, message = result.Message, data = result.Data });
+        }
+
+        [HttpPost, ValidateAntiForgeryToken]
+        [AdminPermission("QuestionReviewTasks", "Manage")]
+        public Task<IActionResult> Reassign([FromForm] ReassignReviewTaskInput input, CancellationToken ct)
+            => RunManageAsync(input, (actor) => _service.ReassignRemainingAsync(input.TaskId, input.NewInstructorId, actor, ct));
+
+        [HttpPost, ValidateAntiForgeryToken]
+        [AdminPermission("QuestionReviewTasks", "Manage")]
+        public Task<IActionResult> Cancel([FromForm] CancelReviewTaskInput input, CancellationToken ct)
+            => RunManageAsync(input, (actor) => _service.CancelTaskAsync(input.TaskId, input.Reason, actor, ct));
+
+        [HttpPost, ValidateAntiForgeryToken]
+        [AdminPermission("QuestionReviewTasks", "Manage")]
+        public async Task<IActionResult> Close([FromForm] int taskId, CancellationToken ct)
+        {
+            if (taskId <= 0)
+                return Json(new { success = false, message = "⚠️ مهمة غير صالحة." });
+
+            var actor = await ActorAsync();
+            if (actor is null)
+                return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
+
+            var result = await _service.CloseTaskAsync(taskId, actor, ct);
+            return Json(new { success = result.Success, message = result.Message, data = result.Data });
+        }
+
+        [HttpPost, ValidateAntiForgeryToken]
+        [AdminPermission("QuestionReviewTasks", "Manage")]
+        public Task<IActionResult> ExtendDue([FromForm] ExtendReviewTaskDueInput input, CancellationToken ct)
+            => RunManageAsync(input, (actor) => _service.ExtendDueAsync(
+                input.TaskId, input.DueAtLocal.HasValue ? QuestionReviewTaskMetrics.LocalToUtc(input.DueAtLocal.Value) : null, actor, ct));
+
+        // نمط واحد لكل إجراءات الإدارة: ModelState ← المستخدم الحالي ← الخدمة ← JSON بشكل ثابت
+        private async Task<IActionResult> RunManageAsync<TInput>(TInput? input, Func<ReviewActor, Task<OperationResult>> operation)
+            where TInput : class
+        {
+            if (input is null || !ModelState.IsValid)
+                return Json(new { success = false, message = BuildValidationMessage() });
+
+            var actor = await ActorAsync();
+            if (actor is null)
+                return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
+
+            var result = await operation(actor);
+            return Json(new { success = result.Success, message = result.Message, data = result.Data });
+        }
+
         private static TEnum? ParseEnum<TEnum>(string? raw) where TEnum : struct, Enum
             => int.TryParse(raw, out var n) && Enum.IsDefined(typeof(TEnum), n) ? (TEnum)(object)n : null;
 

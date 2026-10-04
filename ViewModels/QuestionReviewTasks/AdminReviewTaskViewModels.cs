@@ -89,6 +89,21 @@ namespace QdratNew.ViewModels.QuestionReviewTasks
         public string? Detail { get; init; }
     }
 
+    /// <summary>ما يسمح به آلة الحالة للمهمة الآن (QRT-S6) — تُحسب في الخدمة من QuestionReviewTaskStateRules، والواجهة تضيف فحص الصلاحية.</summary>
+    public sealed class AdminTaskActionsVm
+    {
+        public bool CanCancel { get; init; }
+        public bool CanClose { get; init; }
+        public bool CanExtendDue { get; init; }
+        public bool CanRemoveItems { get; init; }
+        public bool CanReassign { get; init; }
+        public int UnresolvedReturns { get; init; }
+        /// <summary>الموعد الحالي بصيغة datetime-local (yyyy-MM-ddTHH:mm) بتوقيت العرض، أو فارغ.</summary>
+        public string DueInputLocal { get; init; } = string.Empty;
+        /// <summary>سبب منع الإغلاق عند اكتمال المراجعة، لعرضه بدل الزر.</summary>
+        public string? CloseBlockedReason { get; init; }
+    }
+
     public sealed class AdminTaskDetailsVm
     {
         public int Id { get; init; }
@@ -106,6 +121,7 @@ namespace QdratNew.ViewModels.QuestionReviewTasks
         public string? CancelReason { get; init; }
         public bool IsOverdue { get; init; }
         public ReviewTaskProgressVm Progress { get; init; } = new();
+        public AdminTaskActionsVm Actions { get; init; } = new();
         public List<AdminTimelineEventVm> Timeline { get; init; } = new();
     }
 
