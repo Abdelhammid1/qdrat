@@ -223,7 +223,8 @@ namespace QdratNew.Areas.Instructors.Controllers
                     {
                         BatchId = model.BatchId,
                         LessonId = lesson.LessonId,
-                        CompletionDate = DateTime.Now
+                        CompletionDate = DateTime.Now,
+                        CompletionTitle = homeworkSet.CompletionTitle
                     });
                 }
             }
