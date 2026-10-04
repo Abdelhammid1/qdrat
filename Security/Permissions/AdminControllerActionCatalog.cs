@@ -31,6 +31,29 @@
                     new AdminActionDescriptor { Key = "Manage", DisplayNameAr = "إدارة المهام (إلغاء / إغلاق / إعادة إسناد / معالجة المرتجعات)" }
                 },
 
+                "RemedialTracks" => new[]
+                {
+                    new AdminActionDescriptor { Key = "Read", DisplayNameAr = "عرض الخطط العلاجية" },
+                    new AdminActionDescriptor { Key = "Create", DisplayNameAr = "إنشاء خطة علاجية" },
+                    new AdminActionDescriptor { Key = "Edit", DisplayNameAr = "تعديل خطة علاجية" },
+                    new AdminActionDescriptor { Key = "Archive", DisplayNameAr = "أرشفة خطة علاجية" }
+                },
+
+                "RemedialTrackPublications" => new[]
+                {
+                    new AdminActionDescriptor { Key = "Read", DisplayNameAr = "عرض أوامر النشر ومتابعتها" },
+                    new AdminActionDescriptor { Key = "Publish", DisplayNameAr = "نشر خطة علاجية" },
+                    new AdminActionDescriptor { Key = "ManageCode", DisplayNameAr = "عرض/تجديد الرقم المرجعي" },
+                    new AdminActionDescriptor { Key = "Cancel", DisplayNameAr = "إلغاء أمر نشر" },
+                    new AdminActionDescriptor { Key = "Unlock", DisplayNameAr = "فتح المحور التالي لطالب" }
+                },
+
+                "RemedialTrackReports" => new[]
+                {
+                    new AdminActionDescriptor { Key = "Read", DisplayNameAr = "عرض تقارير الخطة العلاجية" },
+                    new AdminActionDescriptor { Key = "Edit", DisplayNameAr = "تحرير ملاحظة تقرير ولي الأمر" }
+                },
+
                 "Curriculums" => new[]
                 {
                     new AdminActionDescriptor { Key = "Read", DisplayNameAr = "عرض المناهج" },

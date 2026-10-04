@@ -107,6 +107,16 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<QuestionAuditLog> QuestionAuditLogs { get; set; }
     public DbSet<QuestionReviewTask> QuestionReviewTasks { get; set; }
     public DbSet<QuestionReviewTaskItem> QuestionReviewTaskItems { get; set; }
+    public DbSet<RemedialTrack> RemedialTracks { get; set; }
+    public DbSet<RemedialTrackAxis> RemedialTrackAxes { get; set; }
+    public DbSet<RemedialTrackVideo> RemedialTrackVideos { get; set; }
+    public DbSet<RemedialTrackPublication> RemedialTrackPublications { get; set; }
+    public DbSet<RemedialTrackEnrollment> RemedialTrackEnrollments { get; set; }
+    public DbSet<RemedialTrackAxisProgress> RemedialTrackAxisProgresses { get; set; }
+    public DbSet<RemedialTrackVideoProgress> RemedialTrackVideoProgresses { get; set; }
+    public DbSet<RemedialTrackExamAttempt> RemedialTrackExamAttempts { get; set; }
+    public DbSet<RemedialTrackExamAttemptQuestion> RemedialTrackExamAttemptQuestions { get; set; }
+    public DbSet<RemedialTrackEvent> RemedialTrackEvents { get; set; }
     public DbSet<HomeworkSet> HomeworkSets { get; set; }
     public DbSet<HomeworkArchiveAccess> HomeworkArchiveAccesses { get; set; }
     public DbSet<AttendanceBatchArchiveAccess> AttendanceBatchArchiveAccesses { get; set; }
@@ -1552,6 +1562,100 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 
             e.HasOne(x => x.Task).WithMany(t => t.Items).HasForeignKey(x => x.TaskId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Question).WithMany().HasForeignKey(x => x.QuestionId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ==== RTK — الخطة العلاجية العاجلة ====
+        modelBuilder.Entity<RemedialTrack>(e =>
+        {
+            e.ToTable("RemedialTracks");
+            e.HasIndex(x => x.Code).IsUnique();
+            e.HasIndex(x => new { x.CurriculumId, x.Status });
+            e.HasOne(x => x.Curriculum).WithMany().HasForeignKey(x => x.CurriculumId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RemedialTrackAxis>(e =>
+        {
+            e.ToTable("RemedialTrackAxes");
+            e.HasIndex(x => new { x.TrackId, x.Order }).IsUnique();
+            e.HasIndex(x => new { x.TrackId, x.SectionId }).IsUnique();
+            e.HasOne(x => x.Track).WithMany(t => t.Axes).HasForeignKey(x => x.TrackId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Section).WithMany().HasForeignKey(x => x.SectionId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Exam101Model).WithMany().HasForeignKey(x => x.Exam101ModelId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Exam102Model).WithMany().HasForeignKey(x => x.Exam102ModelId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RemedialTrackVideo>(e =>
+        {
+            e.ToTable("RemedialTrackVideos");
+            e.HasIndex(x => new { x.AxisId, x.Order }).IsUnique();
+            e.HasOne(x => x.Axis).WithMany(a => a.Videos).HasForeignKey(x => x.AxisId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RemedialTrackPublication>(e =>
+        {
+            e.ToTable("RemedialTrackPublications");
+            e.HasIndex(x => new { x.TrackId, x.Status });
+            e.HasIndex(x => new { x.BatchId, x.Status });
+
+            // D6: الرقم المرجعي فريد بين أوامر النشر النشطة (الفهرس هو الحارس النهائي)
+            e.HasIndex(x => x.AccessCode)
+             .HasDatabaseName("UX_RemedialTrackPublications_ActiveCode")
+             .IsUnique()
+             .HasFilter("[AccessCode] IS NOT NULL AND [Status] = 1");
+
+            e.HasOne(x => x.Track).WithMany().HasForeignKey(x => x.TrackId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Batch).WithMany().HasForeignKey(x => x.BatchId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RemedialTrackEnrollment>(e =>
+        {
+            e.ToTable("RemedialTrackEnrollments");
+            e.HasIndex(x => new { x.PublicationId, x.StudentId }).IsUnique();
+            e.HasIndex(x => new { x.StudentId, x.Status });
+            e.HasIndex(x => new { x.TrackId, x.StudentId });
+            e.HasOne(x => x.Publication).WithMany(p => p.Enrollments).HasForeignKey(x => x.PublicationId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Student).WithMany().HasForeignKey(x => x.StudentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RemedialTrackAxisProgress>(e =>
+        {
+            e.ToTable("RemedialTrackAxisProgresses");
+            e.HasIndex(x => new { x.EnrollmentId, x.AxisId }).IsUnique();
+            e.HasIndex(x => new { x.EnrollmentId, x.Order });
+            e.HasOne(x => x.Enrollment).WithMany(en => en.AxisProgresses).HasForeignKey(x => x.EnrollmentId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Axis).WithMany().HasForeignKey(x => x.AxisId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RemedialTrackVideoProgress>(e =>
+        {
+            e.ToTable("RemedialTrackVideoProgresses");
+            e.HasIndex(x => new { x.AxisProgressId, x.VideoId, x.Round }).IsUnique();
+            e.HasOne(x => x.AxisProgress).WithMany(a => a.VideoProgresses).HasForeignKey(x => x.AxisProgressId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Video).WithMany().HasForeignKey(x => x.VideoId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RemedialTrackExamAttempt>(e =>
+        {
+            e.ToTable("RemedialTrackExamAttempts");
+            // محاولة واحدة لكل اختبار (101 مرة، 102 مرة) في المحور
+            e.HasIndex(x => new { x.AxisProgressId, x.ExamNumber }).IsUnique();
+            e.HasOne(x => x.AxisProgress).WithMany(a => a.Attempts).HasForeignKey(x => x.AxisProgressId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RemedialTrackExamAttemptQuestion>(e =>
+        {
+            e.ToTable("RemedialTrackExamAttemptQuestions");
+            e.HasIndex(x => new { x.AttemptId, x.QuestionId }).IsUnique();
+            e.HasIndex(x => new { x.AttemptId, x.Order });
+            e.HasOne(x => x.Attempt).WithMany(a => a.Questions).HasForeignKey(x => x.AttemptId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Question).WithMany().HasForeignKey(x => x.QuestionId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RemedialTrackEvent>(e =>
+        {
+            e.ToTable("RemedialTrackEvents");
+            e.HasIndex(x => new { x.EnrollmentId, x.CreatedAtUtc });
+            e.HasOne(x => x.Enrollment).WithMany(en => en.Events).HasForeignKey(x => x.EnrollmentId).OnDelete(DeleteBehavior.Cascade);
         });
 
     }

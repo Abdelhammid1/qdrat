@@ -190,5 +190,24 @@
         // ===============================
         public const string IntegrityViolations_Read = "IntegrityViolations:Read";
         public const string IntegrityViolations_Resolve = "IntegrityViolations:Resolve";
+
+        // ===============================
+        // RemedialTracks — الخطة العلاجية العاجلة (بناء الخطة)
+        // ===============================
+        public const string RemedialTracks_Read = "RemedialTracks:Read";
+        public const string RemedialTracks_Create = "RemedialTracks:Create";
+        public const string RemedialTracks_Edit = "RemedialTracks:Edit";
+        public const string RemedialTracks_Archive = "RemedialTracks:Archive";
+
+        // RemedialTrackPublications — النشر والمتابعة
+        public const string RemedialTrackPublications_Read = "RemedialTrackPublications:Read";
+        public const string RemedialTrackPublications_Publish = "RemedialTrackPublications:Publish";
+        public const string RemedialTrackPublications_ManageCode = "RemedialTrackPublications:ManageCode"; // عرض/تجديد الرقم المرجعي
+        public const string RemedialTrackPublications_Cancel = "RemedialTrackPublications:Cancel";
+        public const string RemedialTrackPublications_Unlock = "RemedialTrackPublications:Unlock";         // فتح المحور التالي
+
+        // RemedialTrackReports — التقارير
+        public const string RemedialTrackReports_Read = "RemedialTrackReports:Read";
+        public const string RemedialTrackReports_Edit = "RemedialTrackReports:Edit";                       // ملاحظة تقرير ولي الأمر
     }
 }

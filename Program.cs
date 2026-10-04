@@ -276,6 +276,28 @@ builder.Services.AddAuthorization(options =>
         policy => policy.Requirements.Add(
             new AdminPermissionAuthorizationRequirement(AdminPermissionPolicies.QuestionReviewTasks_Manage)));
 
+    // RTK — الخطة العلاجية العاجلة
+    foreach (var rtkPolicy in new[]
+    {
+        AdminPermissionPolicies.RemedialTracks_Read,
+        AdminPermissionPolicies.RemedialTracks_Create,
+        AdminPermissionPolicies.RemedialTracks_Edit,
+        AdminPermissionPolicies.RemedialTracks_Archive,
+        AdminPermissionPolicies.RemedialTrackPublications_Read,
+        AdminPermissionPolicies.RemedialTrackPublications_Publish,
+        AdminPermissionPolicies.RemedialTrackPublications_ManageCode,
+        AdminPermissionPolicies.RemedialTrackPublications_Cancel,
+        AdminPermissionPolicies.RemedialTrackPublications_Unlock,
+        AdminPermissionPolicies.RemedialTrackReports_Read,
+        AdminPermissionPolicies.RemedialTrackReports_Edit
+    })
+    {
+        var policyName = rtkPolicy;
+        options.AddPolicy(
+            policyName,
+            policy => policy.Requirements.Add(new AdminPermissionAuthorizationRequirement(policyName)));
+    }
+
 
 
     // ===============================
@@ -1000,6 +1022,22 @@ builder.Services.AddScoped<QdratNew.Services.QuestionReviewTasks.IQuestionReview
                            QdratNew.Services.QuestionReviewTasks.QuestionReviewTaskService>();
 builder.Services.AddScoped<QdratNew.Services.QuestionReviewTasks.IQuestionReviewTaskQueryService,
                            QdratNew.Services.QuestionReviewTasks.QuestionReviewTaskQueryService>();
+builder.Services.AddScoped<QdratNew.Services.QuestionReviewTasks.IQuestionReviewTaskAdminQueryService,
+                           QdratNew.Services.QuestionReviewTasks.QuestionReviewTaskAdminQueryService>(); // QRT-S5
+builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackCodeGenerator,
+                           QdratNew.Services.RemedialTracks.RemedialTrackCodeGenerator>();
+builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackBuilderService,
+                           QdratNew.Services.RemedialTracks.RemedialTrackBuilderService>();
+builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackPublicationService,
+                           QdratNew.Services.RemedialTracks.RemedialTrackPublicationService>();
+builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackAccessService,
+                           QdratNew.Services.RemedialTracks.RemedialTrackAccessService>();
+builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackProgressService,
+                           QdratNew.Services.RemedialTracks.RemedialTrackProgressService>();
+builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackExamService,
+                           QdratNew.Services.RemedialTracks.RemedialTrackExamService>();
+builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackReportService,
+                           QdratNew.Services.RemedialTracks.RemedialTrackReportService>();
 builder.Services.AddScoped<ILectureInstructorSyncService, LectureInstructorSyncService>();
 builder.Services.AddScoped<IEmployeeBatchAccessService, EmployeeBatchAccessService>();
 builder.Services.AddScoped<QdratNew.Services.Admin.EmployeeDashboard.IEmployeeDashboardService,
