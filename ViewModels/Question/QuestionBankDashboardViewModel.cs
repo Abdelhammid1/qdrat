@@ -14,6 +14,7 @@ namespace QdratNew.ViewModels.Question
         public List<QuestionBankChartItem> DifficultyStats { get; set; } = new();
         public List<QuestionBankChartItem> CurriculumCoverageStats { get; set; } = new();
         public List<QuestionBankCurriculumStats> QuestionBankStatsByCurriculum { get; set; } = new();
+        public QdratNew.ViewModels.QuestionReviewTasks.ReviewTasksSummaryVm? ReviewTasksSummary { get; set; } // QRT-S5.3
     }
 
     public class QuestionBankStatusCard

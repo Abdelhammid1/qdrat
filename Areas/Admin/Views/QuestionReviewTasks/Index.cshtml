@@ -1,0 +1,283 @@
+@model QdratNew.ViewModels.QuestionReviewTasks.AdminTasksIndexVm
+@using QdratNew.Enums
+@{
+    ViewData["Title"] = "متابعة مهام مراجعة الأسئلة";
+    var k = Model.Kpis;
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/instructor/qrt-review.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/admin-qrt.css" asp-append-version="true" />
+}
+
+@Html.AntiForgeryToken()
+
+<div class="qrt-page container-fluid mt-4" dir="rtl" id="qrtAdminIndex">
+
+    <header class="qrt-hero">
+        <div class="qrt-hero__top">
+            <div>
+                <div class="qrt-hero__label"><i class="fas fa-clipboard-check ms-1"></i> بنك الأسئلة</div>
+                <h1>متابعة مهام مراجعة الأسئلة</h1>
+                <p>نسبة الاعتماد لكل مهمة ولكل مدرب، والمتأخر، والمُرجَع من المدربين.</p>
+            </div>
+            <a class="qrt-back" asp-area="Admin" asp-controller="Questions" asp-action="PendingReview">
+                <i class="fas fa-arrow-right ms-1"></i> الأسئلة قيد المراجعة
+            </a>
+        </div>
+    </header>
+
+    <section class="qrt-kpis qrt-kpis--5" aria-label="ملخص المهام">
+        <div class="qrt-kpi">
+            <div class="qrt-kpi__ico"><i class="fas fa-clipboard-list"></i></div>
+            <div><div class="qrt-kpi__num">@k.OpenTasks</div><div class="qrt-kpi__lbl">مهام مفتوحة</div></div>
+        </div>
+        <div class="qrt-kpi qrt-kpi--warn">
+            <div class="qrt-kpi__ico"><i class="fas fa-lock"></i></div>
+            <div><div class="qrt-kpi__num">@k.LockedPending</div><div class="qrt-kpi__lbl">أسئلة محجوزة بانتظار المراجعة</div></div>
+        </div>
+        <div class="qrt-kpi qrt-kpi--danger">
+            <div class="qrt-kpi__ico"><i class="fas fa-clock"></i></div>
+            <div><div class="qrt-kpi__num">@k.OverdueTasks</div><div class="qrt-kpi__lbl">مهام متأخرة</div></div>
+        </div>
+        <div class="qrt-kpi qrt-kpi--warn">
+            <div class="qrt-kpi__ico"><i class="fas fa-reply"></i></div>
+            <div><div class="qrt-kpi__num">@k.UnresolvedReturns</div><div class="qrt-kpi__lbl">مرتجعات غير معالجة</div></div>
+        </div>
+        <div class="qrt-kpi qrt-kpi--ok">
+            <div class="qrt-kpi__ico"><i class="fas fa-circle-check"></i></div>
+            <div><div class="qrt-kpi__num">@k.AverageApprovalPercent%</div><div class="qrt-kpi__lbl">متوسط نسبة الاعتماد</div></div>
+        </div>
+    </section>
+
+    @if (Model.ByInstructor.Count > 0)
+    {
+        <section class="qrt-panel" aria-label="نسبة الاعتماد لكل مدرب">
+            <h2 class="h6 fw-bold mb-3"><i class="fas fa-user-check ms-1" style="color:var(--qrt-brand)"></i> نسبة الاعتماد لكل مدرب</h2>
+            <div class="qrt-inst-list">
+                @foreach (var i in Model.ByInstructor)
+                {
+                    <button type="button" class="qrt-inst" data-instructor-id="@i.InstructorId" title="عرض مهام @i.InstructorName">
+                        <span class="qrt-inst__name"><span>@i.InstructorName</span><strong>@i.ApprovalPercent%</strong></span>
+                        <span class="qrt-inst__meta d-block">@i.Tasks مهمة · بانتظار المراجعة @i.Pending · مرتجع @i.Returned</span>
+                        <span class="qrt-bar d-block" role="progressbar" aria-label="نسبة اعتماد @i.InstructorName" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@i.ApprovalPercent">
+                            <span class="qrt-bar__fill d-block" data-w="@i.ApprovalPercent"></span>
+                        </span>
+                    </button>
+                }
+            </div>
+        </section>
+    }
+
+    <section class="qrt-panel" aria-label="قائمة المهام">
+        <div class="qrt-filters mb-3">
+            <div>
+                <label for="fStatus">الحالة</label>
+                <select id="fStatus" class="qrt-select">
+                    <option value="">كل الحالات</option>
+                    <option value="@((int)QuestionReviewTaskStatus.Assigned)">مُسندة</option>
+                    <option value="@((int)QuestionReviewTaskStatus.InProgress)">قيد المراجعة</option>
+                    <option value="@((int)QuestionReviewTaskStatus.Completed)">مكتملة</option>
+                    <option value="@((int)QuestionReviewTaskStatus.Closed)">مغلقة</option>
+                    <option value="@((int)QuestionReviewTaskStatus.Cancelled)">ملغاة</option>
+                </select>
+            </div>
+            <div>
+                <label for="fInstructor">المدرب</label>
+                <select id="fInstructor" class="qrt-select">
+                    <option value="">كل المدربين</option>
+                    @foreach (var i in Model.Instructors)
+                    {
+                        <option value="@i.Id">@i.Text</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label for="fCurriculum">المنهج</label>
+                <select id="fCurriculum" class="qrt-select">
+                    <option value="">كل المناهج</option>
+                    @foreach (var c in Model.Curriculums)
+                    {
+                        <option value="@c.Id">@c.Text</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label for="fPriority">الأولوية</label>
+                <select id="fPriority" class="qrt-select">
+                    <option value="">كل الأولويات</option>
+                    <option value="@((int)QuestionReviewTaskPriority.Normal)">عادية</option>
+                    <option value="@((int)QuestionReviewTaskPriority.High)">مرتفعة</option>
+                    <option value="@((int)QuestionReviewTaskPriority.Urgent)">عاجلة</option>
+                </select>
+            </div>
+            <div>
+                <label for="fSearch">بحث</label>
+                <input id="fSearch" type="search" class="qrt-input" maxlength="100" placeholder="كود المهمة أو عنوانها" />
+            </div>
+            <div>
+                <label class="qrt-check-inline"><input type="checkbox" id="fOverdue" class="qrt-check" /> المتأخرة فقط</label>
+                <button type="button" id="fReset" class="qrt-btn qrt-btn--ghost qrt-btn--sm"><i class="fas fa-rotate-left"></i><span>إعادة ضبط</span></button>
+            </div>
+        </div>
+
+        <div id="qrtLoadError" class="qrt-error" role="alert" hidden>تعذّر تحميل المهام. تحقق من الاتصال ثم أعد المحاولة.</div>
+
+        <div class="qrt-table-wrap">
+            <table id="qrtTasksTable" class="qrt-table">
+                <thead>
+                    <tr>
+                        <th>الكود</th>
+                        <th>العنوان</th>
+                        <th>المدرب</th>
+                        <th>الأسئلة</th>
+                        <th>نسبة الاعتماد</th>
+                        <th>نسبة الإنجاز</th>
+                        <th>المرتجع</th>
+                        <th>الموعد</th>
+                        <th>الحالة</th>
+                        <th>إجراءات</th>
+                    </tr>
+                </thead>
+            </table>
+        </div>
+    </section>
+</div>
+
+@section Scripts {
+    <script>
+    (function () {
+        'use strict';
+
+        var root = document.getElementById('qrtAdminIndex');
+        if (!root || root.dataset.bound === '1') return;   // منع تكرار الربط
+        root.dataset.bound = '1';
+
+        var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+        var urls = {
+            data: '@Url.Action("LoadTasksData", "QuestionReviewTasks", new { area = "Admin" })',
+            details: '@Url.Action("Details", "QuestionReviewTasks", new { area = "Admin" })'
+        };
+        var el = function (id) { return document.getElementById(id); };
+        var esc = function (t) { var d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; };
+
+        // أشرطة التقدم (ملخص المدربين)
+        document.querySelectorAll('.qrt-bar__fill[data-w]').forEach(function (n) {
+            requestAnimationFrame(function () { n.style.width = n.getAttribute('data-w') + '%'; });
+        });
+
+        function statusBadge(s) {
+            return { 1: 'qrt-badge--assigned', 2: 'qrt-badge--progress', 3: 'qrt-badge--done', 4: 'qrt-badge--closed' }[s] || 'qrt-badge--cancel';
+        }
+
+        function bar(pct, handled) {
+            return '<div class="qrt-mini"><span class="qrt-mini__num">' + pct + '%</span>' +
+                '<div class="qrt-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '">' +
+                '<div class="qrt-bar__fill' + (handled ? ' qrt-bar__fill--handled' : '') + '" style="width:' + pct + '%"></div></div></div>';
+        }
+
+        var table = $('#qrtTasksTable').DataTable({
+            processing: true,
+            serverSide: true,
+            searching: false,
+            lengthMenu: [10, 25, 50, 100],
+            pageLength: 25,
+            order: [],
+            ajax: {
+                url: urls.data,
+                type: 'POST',
+                data: function (d) {
+                    d.status = el('fStatus').value;
+                    d.instructorId = el('fInstructor').value;
+                    d.curriculumId = el('fCurriculum').value;
+                    d.priority = el('fPriority').value;
+                    d.overdueOnly = el('fOverdue').checked ? 'true' : 'false';
+                    d.searchTitle = el('fSearch').value;
+                    d.__RequestVerificationToken = token;
+                },
+                dataSrc: function (json) { el('qrtLoadError').hidden = true; return json.data; },
+                error: function () { el('qrtLoadError').hidden = false; }
+            },
+            columns: [
+                { data: 'code', render: function (d) { return '<span class="qrt-code">' + esc(d) + '</span>'; } },
+                {
+                    data: 'title', orderable: false,
+                    render: function (d, t, row) {
+                        var pr = row.priority === 2 ? ' <span class="qrt-badge qrt-badge--urgent">عاجلة</span>'
+                               : row.priority === 1 ? ' <span class="qrt-badge qrt-badge--high">مرتفعة</span>' : '';
+                        var cur = row.curriculumTitle ? '<span class="qrt-sub">' + esc(row.curriculumTitle) + '</span>' : '';
+                        return '<div class="qrt-title-cell"><span class="qrt-t" title="' + esc(d) + '">' + esc(d) + '</span>' + cur + pr + '</div>';
+                    }
+                },
+                { data: 'instructorName', orderable: false, render: function (d) { return esc(d); } },
+                {
+                    data: 'effective',
+                    render: function (d, t, row) {
+                        return '<b>' + d + '</b><span class="qrt-sub">بانتظار ' + row.pending + ' · اعتُمد ' + row.approved + '</span>';
+                    }
+                },
+                { data: 'approvalPercent', orderable: false, render: function (d) { return bar(d, false); } },
+                { data: 'handledPercent', orderable: false, render: function (d) { return bar(d, true); } },
+                {
+                    data: 'returned',
+                    render: function (d) { return '<span class="qrt-pill-return' + (d > 0 ? ' has' : '') + '">' + d + '</span>'; }
+                },
+                {
+                    data: 'dueLocal',
+                    render: function (d, t, row) {
+                        if (!d) return '<span class="qrt-sub">—</span>';
+                        return '<span class="qrt-due' + (row.isOverdue ? ' is-late' : '') + '">' + esc(d) + (row.isOverdue ? '<span class="qrt-sub" style="color:inherit">متأخرة</span>' : '') + '</span>';
+                    }
+                },
+                { data: 'statusLabel', render: function (d, t, row) { return '<span class="qrt-badge ' + statusBadge(row.status) + '">' + esc(d) + '</span>'; } },
+                {
+                    data: null, orderable: false,
+                    render: function (d, t, row) {
+                        return '<div class="qrt-actions"><a class="qrt-btn qrt-btn--ghost qrt-btn--sm" href="' + urls.details + '?id=' + row.id + '" title="تفاصيل المهمة"><i class="fas fa-eye"></i><span>التفاصيل</span></a></div>';
+                    }
+                }
+            ],
+            language: {
+                url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json',
+                emptyTable: 'لا توجد مهام مراجعة مطابقة. أنشئ مهمة من صفحة «الأسئلة قيد المراجعة».',
+                zeroRecords: 'لا توجد مهام مطابقة للفلاتر الحالية.'
+            }
+        });
+
+        function reload() { table.ajax.reload(); }
+
+        ['fStatus', 'fInstructor', 'fCurriculum', 'fPriority', 'fOverdue'].forEach(function (id) {
+            el(id).addEventListener('change', function () { syncInstructorCards(); reload(); });
+        });
+
+        var searchTimer = null;
+        el('fSearch').addEventListener('input', function () {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(reload, 400);
+        });
+
+        el('fReset').addEventListener('click', function () {
+            ['fStatus', 'fInstructor', 'fCurriculum', 'fPriority'].forEach(function (id) { el(id).value = ''; });
+            el('fOverdue').checked = false;
+            el('fSearch').value = '';
+            syncInstructorCards();
+            reload();
+        });
+
+        // بطاقات المدربين: ضغطة واحدة تفلتر الجدول (تفويض واحد)
+        function syncInstructorCards() {
+            var cur = el('fInstructor').value;
+            root.querySelectorAll('.qrt-inst').forEach(function (b) {
+                b.classList.toggle('is-active', cur !== '' && b.dataset.instructorId === cur);
+            });
+        }
+        root.addEventListener('click', function (e) {
+            var b = e.target.closest('.qrt-inst');
+            if (!b) return;
+            el('fInstructor').value = el('fInstructor').value === b.dataset.instructorId ? '' : b.dataset.instructorId;
+            syncInstructorCards();
+            reload();
+        });
+    })();
+    </script>
+}

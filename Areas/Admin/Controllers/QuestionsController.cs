@@ -224,7 +224,16 @@ namespace QdratNew.Areas.Admin.Controllers
                     Lesson = q.Lesson.Title,
                     q.IsAnswerConfirmed,
                     q.CreatedAt,
-                    q.InternalNote
+                    q.InternalNote,
+                    // QRT-S5.4: «اعتمده» — داخل نفس الاستعلام المقسّم صفحات (≤100 صف) دون N+1
+                    ReviewerName = _context.Users.Where(u => u.Id == q.ReviewedByUserId).Select(u => u.FullName).FirstOrDefault(),
+                    ReviewerIsInstructor = _context.Instructors.Any(i => i.UserId != null && i.UserId == q.ReviewedByUserId),
+                    ReviewTaskCode = _context.QuestionReviewTaskItems
+                        .Where(i => i.QuestionId == q.Id &&
+                                    (i.Status == QuestionReviewTaskItemStatus.Approved || i.Status == QuestionReviewTaskItemStatus.EditedAndApproved))
+                        .OrderByDescending(i => i.ActionAtUtc)
+                        .Select(i => i.Task!.Code)
+                        .FirstOrDefault()
                 })
                 .ToListAsync();
 
@@ -257,6 +266,10 @@ namespace QdratNew.Areas.Admin.Controllers
                     internalNote = string.IsNullOrWhiteSpace(q.InternalNote)
                         ? "—"
                         : (q.InternalNote.Length > 30 ? q.InternalNote.Substring(0, 30) + "..." : q.InternalNote),
+
+                    reviewerName = string.IsNullOrWhiteSpace(q.ReviewerName) ? null : q.ReviewerName,
+                    reviewerIsInstructor = q.ReviewerIsInstructor,
+                    reviewTaskCode = q.ReviewTaskCode,
 
                     id = q.Id
                 };
@@ -473,7 +486,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
         [HttpGet]
         [AdminPermission("Questions", "Read")]
-        public async Task<IActionResult> Dashboard()
+        public async Task<IActionResult> Dashboard([FromServices] IQuestionReviewTaskAdminQueryService reviewTasksQuery)
         {
             using var _context = _contextFactory.CreateDbContext();
 
@@ -620,7 +633,8 @@ namespace QdratNew.Areas.Admin.Controllers
                         Url = Url.Action("Index", "Questions", new { area = "Admin", curriculumId = c.CurriculumId }) ?? "#"
                     })
                     .ToList(),
-                QuestionBankStatsByCurriculum = stats
+                QuestionBankStatsByCurriculum = stats,
+                ReviewTasksSummary = await reviewTasksQuery.GetDashboardSummaryAsync(HttpContext.RequestAborted) // QRT-S5.3
             };
 
             return View("Dashboard", model);

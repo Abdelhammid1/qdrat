@@ -1,5 +1,8 @@
 @model QdratNew.ViewModels.Question.QuestionBankDashboardViewModel
 @using System.Text.Json
+@using Microsoft.AspNetCore.Authorization
+@using QdratNew.Security.AdminPermissions
+@inject IAuthorizationService AuthorizationService
 @{
     ViewData["Title"] = "لوحة بنك الأسئلة";
 
@@ -12,11 +15,34 @@
     var covValues      = Model.CurriculumCoverageStats.Select(x => x.Value).ToList();
 
     int totalApproved = Model.StatusCards.FirstOrDefault(c => c.Color == "#198754" || c.Title.Contains("معتمد"))?.Count ?? 0;
+    var reviewTasks   = Model.ReviewTasksSummary;
+    var canSeeReviewTasks = reviewTasks is not null
+        && (await AuthorizationService.AuthorizeAsync(User, AdminPermissionPolicies.QuestionReviewTasks_Read)).Succeeded;
     int approvedPct   = Model.TotalQuestions > 0 ? (int)Math.Round(totalApproved * 100.0 / Model.TotalQuestions) : 0;
 }
 
 @section Styles {
 <style>
+/* ─── QRT-S5.3: مهام مراجعة الأسئلة (ألوان قدرات) ─────────────────────── */
+.qb-qrt { --qrt-brand:#339999; --qrt-brand-300:#4CA6A8; --qrt-accent:#da784d; display:flex; flex-wrap:wrap; gap:18px; align-items:center;
+    background:#fff; border:1px solid var(--qb-border); border-inline-start:4px solid var(--qrt-brand); border-radius:16px; padding:16px 20px; text-decoration:none; color:inherit; }
+.qb-qrt:hover { box-shadow:0 6px 22px rgba(15,23,42,.1); color:inherit; }
+.qb-qrt__head { display:flex; align-items:center; gap:12px; flex:1 1 220px; min-width:0; }
+.qb-qrt__ico { width:44px; height:44px; border-radius:12px; display:grid; place-items:center; background:#e0f5f5; color:var(--qrt-brand); font-size:1.1rem; flex-shrink:0; }
+.qb-qrt__ttl { font-weight:800; font-size:1rem; }
+.qb-qrt__sub { font-size:.78rem; color:var(--qb-muted); }
+.qb-qrt__stats { display:flex; flex-wrap:wrap; gap:8px 22px; flex:2 1 320px; }
+.qb-qrt__stat b { display:block; font-size:1.35rem; line-height:1.1; }
+.qb-qrt__stat span { font-size:.76rem; color:var(--qb-muted); }
+.qb-qrt__stat--late b { color:#c94141; }
+.qb-qrt__pct { flex:1 1 200px; min-width:160px; }
+.qb-qrt__pct-row { display:flex; justify-content:space-between; font-size:.78rem; color:var(--qb-muted); margin-bottom:4px; }
+.qb-qrt__pct-row strong { color:var(--qb-text); }
+.qb-qrt__bar { height:8px; border-radius:999px; background:#eef2f6; overflow:hidden; }
+.qb-qrt__bar > div { height:100%; border-radius:999px; background:var(--qrt-brand); }
+.qb-qrt__go { color:var(--qrt-brand); font-weight:700; font-size:.85rem; white-space:nowrap; }
+@media (max-width:575.98px) { .qb-qrt { padding:14px; } .qb-qrt__stats { gap:8px 16px; } }
+
 /* ─── tokens ──────────────────────────────────────────────────────────── */
 :root {
     --qb-bg:        #f0f4ff;
@@ -541,6 +567,33 @@
             </div>
         }
     </div>
+
+    @if (canSeeReviewTasks)
+    {
+        <div class="mb-4">
+            <a class="qb-qrt" asp-area="Admin" asp-controller="QuestionReviewTasks" asp-action="Index" aria-label="متابعة مهام مراجعة الأسئلة">
+                <div class="qb-qrt__head">
+                    <div class="qb-qrt__ico"><i class="fas fa-clipboard-check"></i></div>
+                    <div>
+                        <div class="qb-qrt__ttl">مهام مراجعة الأسئلة</div>
+                        <div class="qb-qrt__sub">أسئلة مُسندة للمدربين بانتظار الاعتماد</div>
+                    </div>
+                </div>
+                <div class="qb-qrt__stats">
+                    <div class="qb-qrt__stat"><b>@reviewTasks!.OpenTasks</b><span>مهام مفتوحة</span></div>
+                    <div class="qb-qrt__stat"><b>@reviewTasks.LockedPending</b><span>أسئلة محجوزة بانتظار المراجعة</span></div>
+                    <div class="qb-qrt__stat @(reviewTasks.Overdue > 0 ? "qb-qrt__stat--late" : "")"><b>@reviewTasks.Overdue</b><span>مهام متأخرة</span></div>
+                </div>
+                <div class="qb-qrt__pct">
+                    <div class="qb-qrt__pct-row"><span>نسبة الاعتماد (آخر 90 يومًا)</span><strong>@reviewTasks.ApprovalPercent%</strong></div>
+                    <div class="qb-qrt__bar" role="progressbar" aria-label="نسبة اعتماد مهام المراجعة" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@reviewTasks.ApprovalPercent">
+                        <div style="width:@(reviewTasks.ApprovalPercent)%"></div>
+                    </div>
+                </div>
+                <span class="qb-qrt__go">متابعة المهام <i class="fas fa-arrow-left"></i></span>
+            </a>
+        </div>
+    }
 
     @*  *@
     <div class="qb-section-title">

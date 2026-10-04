@@ -1,0 +1,246 @@
+@model QdratNew.ViewModels.QuestionReviewTasks.AdminTaskDetailsVm
+@using QdratNew.Enums
+@using QdratNew.Services.QuestionReviewTasks
+@{
+    ViewData["Title"] = "تفاصيل المهمة " + Model.Code;
+    var p = Model.Progress;
+
+    string StatusBadge(QuestionReviewTaskStatus s) => s switch
+    {
+        QuestionReviewTaskStatus.Assigned => "qrt-badge--assigned",
+        QuestionReviewTaskStatus.InProgress => "qrt-badge--progress",
+        QuestionReviewTaskStatus.Completed => "qrt-badge--done",
+        QuestionReviewTaskStatus.Closed => "qrt-badge--closed",
+        _ => "qrt-badge--cancel"
+    };
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/instructor/qrt-review.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/admin-qrt.css" asp-append-version="true" />
+}
+
+@Html.AntiForgeryToken()
+
+<div class="qrt-page container-fluid mt-4" dir="rtl" id="qrtAdminDetails" data-task-id="@Model.Id">
+
+    <header class="qrt-hero">
+        <div class="qrt-hero__top">
+            <div>
+                <div class="qrt-hero__label">
+                    <span class="qrt-code">@Model.Code</span>
+                    @if (!string.IsNullOrWhiteSpace(Model.CurriculumTitle))
+                    {
+                        <span class="me-2"><i class="fas fa-book-open ms-1"></i>@Model.CurriculumTitle</span>
+                    }
+                </div>
+                <h1>@Model.Title</h1>
+                <p>
+                    <span class="qrt-badge @StatusBadge(Model.Status)">@QuestionReviewTaskAdminQueryService.TaskStatusLabel(Model.Status)</span>
+                    @if (Model.Priority == QuestionReviewTaskPriority.Urgent)
+                    {
+                        <span class="qrt-badge qrt-badge--urgent">عاجلة</span>
+                    }
+                    else if (Model.Priority == QuestionReviewTaskPriority.High)
+                    {
+                        <span class="qrt-badge qrt-badge--high">مرتفعة</span>
+                    }
+                    @if (Model.IsOverdue)
+                    {
+                        <span class="qrt-badge qrt-badge--urgent">متأخرة</span>
+                    }
+                </p>
+            </div>
+            <a class="qrt-back" asp-area="Admin" asp-controller="QuestionReviewTasks" asp-action="Index">
+                <i class="fas fa-arrow-right ms-1"></i> كل المهام
+            </a>
+        </div>
+    </header>
+
+    <section class="qrt-panel" aria-label="بيانات المهمة وتقدمها">
+        @if (!string.IsNullOrWhiteSpace(Model.AdminNote))
+        {
+            <div class="qrt-note mt-0 mb-3"><strong><i class="fas fa-comment-dots"></i> ملاحظة الإدارة:</strong>@Model.AdminNote</div>
+        }
+        @if (Model.Status == QuestionReviewTaskStatus.Cancelled && !string.IsNullOrWhiteSpace(Model.CancelReason))
+        {
+            <div class="qrt-error"><strong>سبب الإلغاء:</strong> @Model.CancelReason</div>
+        }
+
+        <dl class="qrt-info">
+            <div><dt>المدرب</dt><dd>@Model.InstructorName</dd></div>
+            <div><dt>أُنشئت بواسطة</dt><dd>@(string.IsNullOrWhiteSpace(Model.CreatedByName) ? "—" : Model.CreatedByName)</dd></div>
+            <div><dt>تاريخ الإسناد</dt><dd>@(Model.CreatedLocal ?? "—")</dd></div>
+            <div><dt>موعد التسليم</dt><dd class="@(Model.IsOverdue ? "text-danger" : "")">@(Model.DueLocal ?? "—")</dd></div>
+            @if (!string.IsNullOrWhiteSpace(Model.ParentTaskCode))
+            {
+                <div><dt>مهمة سابقة</dt><dd>@Model.ParentTaskCode</dd></div>
+            }
+        </dl>
+
+        <div class="qrt-two-bars mt-0">
+            <div>
+                <div class="qrt-bar__row"><span>نسبة الاعتماد</span><strong>@p.ApprovalPercent%</strong></div>
+                <div class="qrt-bar" role="progressbar" aria-label="نسبة الاعتماد" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@p.ApprovalPercent">
+                    <div class="qrt-bar__fill" data-w="@p.ApprovalPercent"></div>
+                </div>
+            </div>
+            <div>
+                <div class="qrt-bar__row"><span>نسبة الإنجاز</span><strong>@p.HandledPercent%</strong></div>
+                <div class="qrt-bar" role="progressbar" aria-label="نسبة الإنجاز" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@p.HandledPercent">
+                    <div class="qrt-bar__fill qrt-bar__fill--handled" data-w="@p.HandledPercent"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="qrt-counts mt-3">
+            <span>الإجمالي <b>@p.Effective</b></span>
+            <span>بانتظار المراجعة <b>@p.Pending</b></span>
+            <span>اعتُمد <b>@p.Approved</b></span>
+            <span>مرتجع غير معالج <b>@p.Returned</b></span>
+            @if (p.Removed > 0)
+            {
+                <span>أُزيل <b>@p.Removed</b></span>
+            }
+        </div>
+    </section>
+
+    <div class="qrt-split">
+        <section class="qrt-panel" aria-label="أسئلة المهمة">
+            <div class="qrt-toolbar">
+                <select id="qrtStatusFilter" class="qrt-select" aria-label="تصفية حسب حالة السؤال">
+                    <option value="">كل الأسئلة</option>
+                    <option value="@((int)QuestionReviewTaskItemStatus.Pending)">بانتظار المراجعة</option>
+                    <option value="@((int)QuestionReviewTaskItemStatus.Approved)">اعتمده المدرب</option>
+                    <option value="@((int)QuestionReviewTaskItemStatus.EditedAndApproved)">عُدِّل واعتُمد</option>
+                    <option value="@((int)QuestionReviewTaskItemStatus.Returned)">مُرجَع للإدارة</option>
+                    <option value="@((int)QuestionReviewTaskItemStatus.ApprovedByAdmin)">اعتمدته الإدارة</option>
+                    <option value="@((int)QuestionReviewTaskItemStatus.ReturnResolved)">عولج المرتجع</option>
+                    <option value="@((int)QuestionReviewTaskItemStatus.Removed)">أُزيل من المهمة</option>
+                </select>
+                <input id="qrtSearch" type="search" class="qrt-input" placeholder="بحث بنص السؤال أو رقمه المرجعي" aria-label="بحث" maxlength="100" />
+            </div>
+
+            <div id="qrtLoadError" class="qrt-error" role="alert" hidden>تعذّر تحميل الأسئلة. تحقق من الاتصال ثم أعد المحاولة.</div>
+
+            <div class="qrt-table-wrap">
+                <table id="qrtItemsTable" class="qrt-table">
+                    <thead>
+                        <tr>
+                            <th>الرقم المرجعي</th>
+                            <th>السؤال</th>
+                            <th>المحور / المؤشر</th>
+                            <th>الحالة</th>
+                            <th>الإجراء</th>
+                        </tr>
+                    </thead>
+                </table>
+            </div>
+        </section>
+
+        <aside class="qrt-panel" aria-label="الخط الزمني">
+            <h2 class="h6 fw-bold mb-3"><i class="fas fa-timeline ms-1" style="color:var(--qrt-brand)"></i> الخط الزمني</h2>
+            @if (Model.Timeline.Count == 0)
+            {
+                <div class="qrt-empty py-4"><i class="fas fa-hourglass-start"></i><p class="mb-0">لا أحداث بعد.</p></div>
+            }
+            else
+            {
+                <ol class="qrt-timeline">
+                    @foreach (var e in Model.Timeline)
+                    {
+                        <li class="qrt-tl qrt-tl--@e.Tone">
+                            <span class="qrt-tl__dot"><i class="fas @e.Icon"></i></span>
+                            <div class="qrt-tl__txt">@e.Text</div>
+                            @if (!string.IsNullOrWhiteSpace(e.Detail))
+                            {
+                                <span class="qrt-tl__detail">@e.Detail</span>
+                            }
+                            <span class="qrt-tl__time">@e.AtLocal</span>
+                        </li>
+                    }
+                </ol>
+            }
+        </aside>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+    (function () {
+        'use strict';
+
+        var root = document.getElementById('qrtAdminDetails');
+        if (!root || root.dataset.bound === '1') return;   // منع تكرار الربط
+        root.dataset.bound = '1';
+
+        var taskId = root.dataset.taskId;
+        var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+        var url = '@Url.Action("LoadItemsData", "QuestionReviewTasks", new { area = "Admin" })';
+        var el = function (id) { return document.getElementById(id); };
+        var esc = function (t) { var d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; };
+
+        document.querySelectorAll('.qrt-bar__fill[data-w]').forEach(function (n) {
+            requestAnimationFrame(function () { n.style.width = n.getAttribute('data-w') + '%'; });
+        });
+
+        function badgeClass(s) {
+            if (s === 0) return 'qrt-badge--pending';
+            if (s === 1 || s === 2 || s === 4) return 'qrt-badge--approved';
+            if (s === 3) return 'qrt-badge--returned';
+            return 'qrt-badge--other';
+        }
+
+        var table = $('#qrtItemsTable').DataTable({
+            processing: true,
+            serverSide: true,
+            searching: false,
+            ordering: false,
+            lengthMenu: [10, 25, 50, 100],
+            pageLength: 25,
+            ajax: {
+                url: url,
+                type: 'POST',
+                data: function (d) {
+                    d.taskId = taskId;
+                    d.statusFilter = el('qrtStatusFilter').value;
+                    d.searchTitle = el('qrtSearch').value;
+                    d.__RequestVerificationToken = token;
+                },
+                dataSrc: function (json) { el('qrtLoadError').hidden = true; return json.data; },
+                error: function () { el('qrtLoadError').hidden = false; }
+            },
+            columns: [
+                { data: 'reference', render: function (d) { return '<span class="qrt-code">' + esc(d) + '</span>'; } },
+                {
+                    data: 'title',
+                    render: function (d, t, row) {
+                        var note = row.returnNote ? '<span class="qrt-return-note"><i class="fas fa-reply"></i> ' + esc(row.returnNote) + '</span>' : '';
+                        var res = row.adminResolutionNote ? '<span class="qrt-res-note"><i class="fas fa-clipboard-check"></i> ' + esc(row.adminResolutionNote) + '</span>' : '';
+                        return '<div class="qrt-title-cell"><span class="qrt-t" title="' + esc(d) + '">' + esc(d || '—') + '</span>' + note + res + '</div>';
+                    }
+                },
+                { data: 'section', render: function (d, t, row) { return esc(d) + '<span class="qrt-sub">' + esc(row.lesson) + '</span>'; } },
+                { data: 'statusLabel', render: function (d, t, row) { return '<span class="qrt-badge ' + badgeClass(row.status) + '">' + esc(d) + '</span>'; } },
+                {
+                    data: 'actionBy',
+                    render: function (d, t, row) {
+                        if (!d && !row.actionLocal) return '<span class="qrt-sub">—</span>';
+                        return esc(d || '') + (row.actionLocal ? '<span class="qrt-sub">' + esc(row.actionLocal) + '</span>' : '');
+                    }
+                }
+            ],
+            language: {
+                url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/ar.json',
+                emptyTable: 'لا توجد أسئلة في هذه المهمة.',
+                zeroRecords: 'لا توجد أسئلة مطابقة.'
+            }
+        });
+
+        function reload() { table.ajax.reload(); }
+        el('qrtStatusFilter').addEventListener('change', reload);
+        var timer = null;
+        el('qrtSearch').addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(reload, 400); });
+    })();
+    </script>
+}
