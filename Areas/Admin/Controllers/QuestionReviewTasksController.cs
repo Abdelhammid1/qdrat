@@ -205,6 +205,49 @@ namespace QdratNew.Areas.Admin.Controllers
             return Json(new { success = result.Success, message = result.Message, data = result.Data });
         }
 
+        // ---------------- QRT-S7: توزيع تلقائي + تقرير أداء المراجعين ----------------
+
+        [HttpGet]
+        [AdminPermission("QuestionReviewTasks", "Create")]
+        public async Task<IActionResult> AutoDistribute(CancellationToken ct)
+            => View(await _adminQuery.GetAutoDistributePageAsync(ct));
+
+        // معاينة (مدرب ← عدد) قبل التأكيد — لا تكتب شيئًا
+        [HttpPost, ValidateAntiForgeryToken]
+        [AdminPermission("QuestionReviewTasks", "Create")]
+        public async Task<IActionResult> PreviewAutoDistribution([FromForm] AutoDistributeInput input, CancellationToken ct)
+        {
+            if (!ModelState.IsValid)
+                return Json(new { success = false, message = BuildValidationMessage() });
+
+            var result = await _service.PreviewAutoDistributionAsync(input, ct);
+            return Json(new { success = result.Success, message = result.Message, data = result.Data });
+        }
+
+        [HttpPost, ValidateAntiForgeryToken]
+        [AdminPermission("QuestionReviewTasks", "Create")]
+        public async Task<IActionResult> AutoDistributeConfirm([FromForm] AutoDistributeInput input, CancellationToken ct)
+        {
+            if (!ModelState.IsValid)
+                return Json(new { success = false, message = BuildValidationMessage() });
+
+            var actor = await ActorAsync();
+            if (actor is null)
+                return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
+
+            var result = await _service.AutoDistributeAsync(input, actor, ct);
+            return Json(new { success = result.Success, message = result.Message, data = result.Data });
+        }
+
+        [HttpGet]
+        [AdminPermission("QuestionReviewTasks", "Read")]
+        public async Task<IActionResult> Reviewers(DateTime? from, DateTime? to, int? instructorId, CancellationToken ct)
+        {
+            var model = await _adminQuery.GetReviewersReportAsync(
+                new ReviewersReportFilter { From = from, To = to, InstructorId = instructorId }, ct);
+            return View(model);
+        }
+
         private string BuildValidationMessage()
         {
             var errors = ModelState.Values

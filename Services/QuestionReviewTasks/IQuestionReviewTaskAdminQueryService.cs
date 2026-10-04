@@ -24,5 +24,11 @@ namespace QdratNew.Services.QuestionReviewTasks
 
         /// <summary>ملخص بطاقة داشبورد بنك الأسئلة (المهام المفتوحة + نسبة الاعتماد لآخر 90 يومًا).</summary>
         Task<ReviewTasksSummaryVm> GetDashboardSummaryAsync(CancellationToken ct = default);
+
+        /// <summary>QRT-S7.3: أداء المراجعين في فترة (استعلام مهام + استعلام عناصر مجمّع، بلا N+1).</summary>
+        Task<ReviewersReportVm> GetReviewersReportAsync(ReviewersReportFilter filter, CancellationToken ct = default);
+
+        /// <summary>QRT-S7.2: بيانات صفحة التوزيع التلقائي (قائمة المناهج).</summary>
+        Task<AutoDistributePageVm> GetAutoDistributePageAsync(CancellationToken ct = default);
     }
 }

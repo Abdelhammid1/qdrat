@@ -1,0 +1,300 @@
+@model QdratNew.ViewModels.QuestionReviewTasks.AutoDistributePageVm
+@using QdratNew.Enums
+@{
+    ViewData["Title"] = "التوزيع التلقائي لمهام المراجعة";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/instructor/qrt-review.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/admin-qrt.css" asp-append-version="true" />
+}
+
+@Html.AntiForgeryToken()
+
+<div class="qrt-page container-fluid mt-4" dir="rtl" id="qrtAutoDist">
+
+    <header class="qrt-hero">
+        <div class="qrt-hero__top">
+            <div>
+                <div class="qrt-hero__label"><i class="fas fa-shuffle ms-1"></i> بنك الأسئلة</div>
+                <h1>التوزيع التلقائي لمهام المراجعة</h1>
+                <p>وزّع أول N سؤال معلّق على عدة مدربين بالتساوي مع مراعاة عبء كل مدرب؛ كل مدرب يستلم مهمة مستقلة.</p>
+            </div>
+            <a class="qrt-back" asp-area="Admin" asp-controller="QuestionReviewTasks" asp-action="Index">
+                <i class="fas fa-arrow-right ms-1"></i> متابعة المهام
+            </a>
+        </div>
+    </header>
+
+    <div id="adNotice" class="qrt-notice" role="status" aria-live="polite" hidden></div>
+
+    <form id="adForm" novalidate autocomplete="off">
+
+        <section class="qrt-panel" aria-labelledby="adStep1">
+            <h2 id="adStep1" class="h6 fw-bold mb-3"><span class="qrt-step">1</span> حدّد الأسئلة</h2>
+            <div class="qrt-filters qrt-filters--4">
+                <div>
+                    <label for="adCurriculum">المنهج</label>
+                    <select id="adCurriculum" name="CurriculumId" class="qrt-select">
+                        <option value="">كل المناهج</option>
+                        @foreach (var c in Model.Curriculums)
+                        {
+                            <option value="@c.Id">@c.Text</option>
+                        }
+                    </select>
+                </div>
+                <div>
+                    <label for="adSection">المحور</label>
+                    <select id="adSection" name="SectionId" class="qrt-select" disabled>
+                        <option value="">كل المحاور</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="adLesson">المؤشر (الدرس)</label>
+                    <select id="adLesson" name="LessonId" class="qrt-select" disabled>
+                        <option value="">كل المؤشرات</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="adTake">عدد الأسئلة (1 – 500)</label>
+                    <input id="adTake" name="TakeCount" type="text" inputmode="numeric" maxlength="3" class="qrt-input" placeholder="مثال: 120" />
+                </div>
+            </div>
+            <p class="qrt-hint-line">تُؤخذ الأسئلة المكتملة غير المعتمدة وغير المحجوزة، الأقدم أولًا.</p>
+            <button type="button" id="adLoadInstructors" class="qrt-btn qrt-btn--ghost">
+                <i class="fas fa-user-group"></i><span>عرض المدربين المؤهلين</span>
+            </button>
+        </section>
+
+        <section class="qrt-panel" id="adStep2Panel" aria-labelledby="adStep2" hidden>
+            <h2 id="adStep2" class="h6 fw-bold mb-1"><span class="qrt-step">2</span> اختر المدربين</h2>
+            <p class="qrt-hint-line" id="adInstructorsInfo"></p>
+            <div id="adInstructors" class="qrt-pick-list" role="group" aria-label="المدربون المؤهلون"></div>
+            <div id="adNoInstructors" class="qrt-empty" hidden>لا يوجد مدرب مؤهل: يجب أن يملك المدرب كل المناهج المعنية ونفس الجهة.</div>
+        </section>
+
+        <section class="qrt-panel" id="adStep3Panel" aria-labelledby="adStep3" hidden>
+            <h2 id="adStep3" class="h6 fw-bold mb-3"><span class="qrt-step">3</span> تفاصيل المهام</h2>
+            <div class="qrt-filters qrt-filters--4">
+                <div class="qrt-span-2">
+                    <label for="adTitle">عنوان المهام (يُضاف اسم المدرب تلقائيًا)</label>
+                    <input id="adTitle" name="Title" class="qrt-input" maxlength="150" placeholder="مثال: مراجعة أسئلة الجبر" />
+                </div>
+                <div>
+                    <label for="adPriority">الأولوية</label>
+                    <select id="adPriority" name="Priority" class="qrt-select">
+                        <option value="@((int)QuestionReviewTaskPriority.Normal)">عادية</option>
+                        <option value="@((int)QuestionReviewTaskPriority.High)">مرتفعة</option>
+                        <option value="@((int)QuestionReviewTaskPriority.Urgent)">عاجلة</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="adDue">موعد التسليم (اختياري)</label>
+                    <input id="adDue" name="DueAtLocal" type="datetime-local" class="qrt-input" />
+                </div>
+                <div class="qrt-span-4">
+                    <label for="adNote">ملاحظة للمدربين (اختيارية)</label>
+                    <textarea id="adNote" name="AdminNote" class="qrt-input" rows="2" maxlength="1000"></textarea>
+                </div>
+            </div>
+            <div class="qrt-actions mt-3">
+                <button type="button" id="adPreview" class="qrt-btn qrt-btn--ghost">
+                    <i class="fas fa-table-list"></i><span>معاينة التوزيع</span>
+                </button>
+            </div>
+
+            <div id="adPreviewBox" hidden>
+                <div class="qrt-table-wrap">
+                    <table class="qrt-table" aria-label="معاينة التوزيع">
+                        <thead>
+                            <tr><th>المدرب</th><th>العبء الحالي</th><th>سيستلم</th><th>بعد التوزيع</th></tr>
+                        </thead>
+                        <tbody id="adPreviewBody"></tbody>
+                    </table>
+                </div>
+                <p class="qrt-hint-line" id="adPreviewSummary"></p>
+                <button type="button" id="adConfirm" class="qrt-btn qrt-btn--accent" disabled>
+                    <i class="fas fa-check"></i><span>تأكيد التوزيع وإنشاء المهام</span>
+                </button>
+            </div>
+        </section>
+    </form>
+</div>
+
+@section Scripts {
+    <script>
+    (function () {
+        'use strict';
+
+        var root = document.getElementById('qrtAutoDist');
+        if (!root || root.dataset.bound === '1') return;   // منع تكرار الربط
+        root.dataset.bound = '1';
+
+        var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+        var urls = {
+            sections: '@Url.Action("GetSectionsByCurriculum", "Questions", new { area = "Admin" })',
+            lessons: '@Url.Action("GetLessonsBySection", "Questions", new { area = "Admin" })',
+            eligible: '@Url.Action("EligibleInstructors", "QuestionReviewTasks", new { area = "Admin" })',
+            preview: '@Url.Action("PreviewAutoDistribution", "QuestionReviewTasks", new { area = "Admin" })',
+            confirm: '@Url.Action("AutoDistributeConfirm", "QuestionReviewTasks", new { area = "Admin" })',
+            index: '@Url.Action("Index", "QuestionReviewTasks", new { area = "Admin" })'
+        };
+        var el = function (id) { return document.getElementById(id); };
+        var esc = function (t) { var d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; };
+
+        function notice(msg, kind) {
+            var n = el('adNotice');
+            if (!msg) { n.hidden = true; return; }
+            n.className = 'qrt-notice' + (kind === 'ok' ? ' is-ok' : kind === 'err' ? ' is-err' : '');
+            n.innerHTML = msg;
+            n.hidden = false;
+            n.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function setLoading(btn, on) {
+            btn.disabled = on;
+            btn.classList.toggle('is-loading', on);
+            var i = btn.querySelector('i');
+            if (!i) return;
+            if (on) { btn.dataset.ico = i.className; i.className = 'fas fa-spinner'; }
+            else if (btn.dataset.ico) { i.className = btn.dataset.ico; }
+        }
+
+        function post(url, fd) {
+            fd.append('__RequestVerificationToken', token);
+            return fetch(url, { method: 'POST', body: fd, credentials: 'same-origin' })
+                .then(function (r) {
+                    if (!r.ok) throw new Error('http ' + r.status);
+                    return r.json();
+                });
+        }
+
+        function filterData() {
+            var fd = new FormData();
+            ['adCurriculum:CurriculumId', 'adSection:SectionId', 'adLesson:LessonId', 'adTake:TakeCount'].forEach(function (p) {
+                var parts = p.split(':'); var v = el(parts[0]).value.trim();
+                if (v) fd.append(parts[1], v);
+            });
+            return fd;
+        }
+
+        function fullData() {
+            var fd = filterData();
+            [['adTitle', 'Title'], ['adPriority', 'Priority'], ['adDue', 'DueAtLocal'], ['adNote', 'AdminNote']].forEach(function (p) {
+                var v = el(p[0]).value.trim();
+                if (v) fd.append(p[1], v);
+            });
+            root.querySelectorAll('input[name="InstructorIds"]:checked').forEach(function (c) { fd.append('InstructorIds', c.value); });
+            return fd;
+        }
+
+        function invalidatePreview() {
+            el('adConfirm').disabled = true;
+            el('adPreviewBox').hidden = true;
+        }
+
+        function fillSelect(sel, items, allText) {
+            sel.innerHTML = '<option value="">' + allText + '</option>' +
+                items.map(function (x) { return '<option value="' + x.id + '">' + esc(x.title) + '</option>'; }).join('');
+            sel.disabled = items.length === 0;
+        }
+
+        function getJson(url) {
+            return fetch(url, { credentials: 'same-origin' }).then(function (r) {
+                if (!r.ok) throw new Error('http ' + r.status);
+                return r.json();
+            });
+        }
+
+        // المنهج ← المحاور ← المؤشرات (نقاط الجلب الحالية في Admin/Questions)
+        el('adCurriculum').addEventListener('change', function () {
+            fillSelect(el('adSection'), [], 'كل المحاور');
+            fillSelect(el('adLesson'), [], 'كل المؤشرات');
+            var id = this.value;
+            if (!id) return;
+            getJson(urls.sections + '?curriculumId=' + encodeURIComponent(id))
+                .then(function (items) { fillSelect(el('adSection'), items, 'كل المحاور'); })
+                .catch(function () { notice('تعذّر تحميل المحاور. أعد المحاولة.', 'err'); });
+        });
+        el('adSection').addEventListener('change', function () {
+            fillSelect(el('adLesson'), [], 'كل المؤشرات');
+            var id = this.value;
+            if (!id) return;
+            getJson(urls.lessons + '?sectionId=' + encodeURIComponent(id))
+                .then(function (items) { fillSelect(el('adLesson'), items, 'كل المؤشرات'); })
+                .catch(function () { notice('تعذّر تحميل المؤشرات. أعد المحاولة.', 'err'); });
+        });
+
+        // أي تغيير بعد المعاينة يُبطلها
+        el('adForm').addEventListener('input', invalidatePreview);
+        el('adForm').addEventListener('change', invalidatePreview);
+        el('adForm').addEventListener('submit', function (e) { e.preventDefault(); });
+
+        // 1 → 2: المدربون المؤهلون
+        el('adLoadInstructors').addEventListener('click', function () {
+            var btn = this;
+            notice('');
+            var take = parseInt(el('adTake').value, 10);
+            if (!(take >= 1 && take <= 500)) { notice('أدخل عدد أسئلة بين 1 و500.', 'err'); el('adTake').focus(); return; }
+
+            setLoading(btn, true);
+            post(urls.eligible, filterData()).then(function (res) {
+                if (!res.success) { notice(esc(res.message), 'err'); el('adStep2Panel').hidden = true; el('adStep3Panel').hidden = true; return; }
+                var list = (res.data && res.data.instructors) || [];
+                el('adInstructorsInfo').textContent = 'الأسئلة المؤهلة ضمن الفلتر: ' + res.data.questionCount + ' — العبء = أسئلة محجوزة بانتظار المراجعة.';
+                el('adInstructors').innerHTML = list.map(function (i) {
+                    return '<label class="qrt-pick"><input type="checkbox" name="InstructorIds" value="' + i.id + '" checked />' +
+                        '<span class="qrt-pick__name">' + esc(i.fullName) + '</span>' +
+                        '<span class="qrt-pick__load">' + i.activeLockedItems + ' محجوز</span></label>';
+                }).join('');
+                el('adNoInstructors').hidden = list.length > 0;
+                el('adStep2Panel').hidden = false;
+                el('adStep3Panel').hidden = list.length === 0;
+                invalidatePreview();
+            }).catch(function () {
+                notice('تعذّر الاتصال بالخادم. تحقق من الاتصال ثم أعد المحاولة.', 'err');
+            }).then(function () { setLoading(btn, false); });
+        });
+
+        // 3: معاينة
+        el('adPreview').addEventListener('click', function () {
+            var btn = this;
+            notice('');
+            if (el('adTitle').value.trim().length < 3) { notice('أدخل عنوانًا للمهام (3 أحرف على الأقل).', 'err'); el('adTitle').focus(); return; }
+            if (!root.querySelector('input[name="InstructorIds"]:checked')) { notice('اختر مدربًا واحدًا على الأقل.', 'err'); return; }
+
+            setLoading(btn, true);
+            post(urls.preview, fullData()).then(function (res) {
+                if (!res.success) { notice(esc(res.message), 'err'); invalidatePreview(); return; }
+                var d = res.data;
+                el('adPreviewBody').innerHTML = d.lines.map(function (l) {
+                    return '<tr><td>' + esc(l.instructorName) + '</td><td>' + l.currentLoad + '</td><td><b>' + l.assigned + '</b></td><td>' + (l.currentLoad + l.assigned) + '</td></tr>';
+                }).join('');
+                var s = 'إجمالي ' + d.questionCount + ' سؤال على ' + d.lines.length + ' مدرب.';
+                if (d.excludedInstructors > 0) s += ' استُبعد ' + d.excludedInstructors + ' مدرب غير مؤهل: ' + d.excludedInstructorNames.join('، ') + '.';
+                el('adPreviewSummary').textContent = s;
+                el('adPreviewBox').hidden = false;
+                el('adConfirm').disabled = false;
+            }).catch(function () {
+                notice('تعذّر الاتصال بالخادم. تحقق من الاتصال ثم أعد المحاولة.', 'err');
+            }).then(function () { setLoading(btn, false); });
+        });
+
+        // تأكيد: Transaction واحدة في الخادم
+        el('adConfirm').addEventListener('click', function () {
+            var btn = this;
+            notice('');
+            setLoading(btn, true);
+            post(urls.confirm, fullData()).then(function (res) {
+                if (!res.success) { notice(esc(res.message), 'err'); setLoading(btn, false); return; }
+                notice(esc(res.message) + ' <a href="' + urls.index + '">عرض المهام</a>', 'ok');
+                el('adForm').querySelectorAll('input,select,textarea,button').forEach(function (c) { c.disabled = true; });
+                btn.classList.remove('is-loading');
+            }).catch(function () {
+                notice('تعذّر الاتصال بالخادم. لم يتأكد إنشاء المهام — راجع «متابعة المهام» قبل إعادة المحاولة.', 'err');
+                setLoading(btn, false);
+            });
+        });
+    })();
+    </script>
+}

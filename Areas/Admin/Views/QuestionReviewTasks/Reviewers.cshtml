@@ -1,0 +1,137 @@
+@model QdratNew.ViewModels.QuestionReviewTasks.ReviewersReportVm
+@{
+    ViewData["Title"] = "تقرير أداء المراجعين";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/instructor/qrt-review.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/admin-qrt.css" asp-append-version="true" />
+}
+
+<div class="qrt-page container-fluid mt-4" dir="rtl" id="qrtReviewers">
+
+    <header class="qrt-hero">
+        <div class="qrt-hero__top">
+            <div>
+                <div class="qrt-hero__label"><i class="fas fa-chart-column ms-1"></i> بنك الأسئلة</div>
+                <h1>تقرير أداء المراجعين</h1>
+                <p>مهام مُسندة ومكتملة، أسئلة معتمدة، نسبة الإرجاع، متوسط زمن الإنجاز، والمتأخر — لكل مدرب خلال الفترة.</p>
+            </div>
+            <a class="qrt-back" asp-area="Admin" asp-controller="QuestionReviewTasks" asp-action="Index">
+                <i class="fas fa-arrow-right ms-1"></i> متابعة المهام
+            </a>
+        </div>
+    </header>
+
+    <section class="qrt-kpis qrt-kpis--3" aria-label="ملخص الفترة">
+        <div class="qrt-kpi">
+            <div class="qrt-kpi__ico"><i class="fas fa-clipboard-list"></i></div>
+            <div><div class="qrt-kpi__num">@Model.TotalAssigned</div><div class="qrt-kpi__lbl">مهام مُسندة في الفترة</div></div>
+        </div>
+        <div class="qrt-kpi qrt-kpi--ok">
+            <div class="qrt-kpi__ico"><i class="fas fa-circle-check"></i></div>
+            <div><div class="qrt-kpi__num">@Model.TotalApproved</div><div class="qrt-kpi__lbl">أسئلة اعتمدها المراجعون</div></div>
+        </div>
+        <div class="qrt-kpi qrt-kpi--warn">
+            <div class="qrt-kpi__ico"><i class="fas fa-reply"></i></div>
+            <div><div class="qrt-kpi__num">@Model.TotalReturned</div><div class="qrt-kpi__lbl">أسئلة مُرجَعة للإدارة</div></div>
+        </div>
+    </section>
+
+    <section class="qrt-panel" aria-label="فلاتر التقرير">
+        <form method="get" class="qrt-filters qrt-filters--4">
+            <div>
+                <label for="rFrom">من تاريخ</label>
+                <input id="rFrom" name="from" type="date" class="qrt-input" value="@Model.FromLocal" />
+            </div>
+            <div>
+                <label for="rTo">إلى تاريخ</label>
+                <input id="rTo" name="to" type="date" class="qrt-input" value="@Model.ToLocal" />
+            </div>
+            <div>
+                <label for="rInstructor">المدرب</label>
+                <select id="rInstructor" name="instructorId" class="qrt-select">
+                    <option value="">كل المدربين</option>
+                    @foreach (var i in Model.Instructors)
+                    {
+                        <option value="@i.Id" selected="@(Model.InstructorId == i.Id)">@i.Text</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <button type="submit" class="qrt-btn qrt-btn--primary"><i class="fas fa-filter"></i><span>عرض التقرير</span></button>
+            </div>
+        </form>
+        <p class="qrt-hint-line mb-0">الفترة تُحتسب على تاريخ إنشاء المهمة. المهام الملغاة غير محسوبة. «معتمدة» = ما اعتمده المدرب نفسه (مباشرة أو بعد تعديل) دون اعتماد الإدارة.</p>
+    </section>
+
+    <section class="qrt-panel" aria-label="جدول أداء المراجعين">
+        @if (Model.Rows.Count == 0)
+        {
+            <div class="qrt-empty">لا توجد مهام مراجعة في هذه الفترة. غيّر الفترة أو المدرب.</div>
+        }
+        else
+        {
+            <div class="qrt-table-wrap">
+                <table class="qrt-table">
+                    <thead>
+                        <tr>
+                            <th>المدرب</th>
+                            <th>مهام مُسندة</th>
+                            <th>مهام مكتملة</th>
+                            <th>متأخرة</th>
+                            <th>أسئلة معتمدة</th>
+                            <th>مُرجَعة</th>
+                            <th>نسبة الإرجاع</th>
+                            <th>بانتظار المراجعة</th>
+                            <th>متوسط زمن الإنجاز</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in Model.Rows)
+                        {
+                            <tr>
+                                <td><b>@r.InstructorName</b></td>
+                                <td>@r.AssignedTasks</td>
+                                <td>@r.CompletedTasks</td>
+                                <td>
+                                    @if (r.LateTasks > 0)
+                                    {
+                                        <span class="qrt-due is-late">@r.LateTasks</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="qrt-sub">0</span>
+                                    }
+                                </td>
+                                <td>@r.ApprovedQuestions</td>
+                                <td><span class="qrt-pill-return @(r.ReturnedQuestions > 0 ? "has" : "")">@r.ReturnedQuestions</span></td>
+                                <td>
+                                    <div class="qrt-mini">
+                                        <span class="qrt-mini__num">@r.ReturnRatePercent%</span>
+                                        <div class="qrt-bar" role="progressbar" aria-label="نسبة إرجاع @r.InstructorName" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@r.ReturnRatePercent">
+                                            <div class="qrt-bar__fill qrt-bar__fill--handled" style="width:@(r.ReturnRatePercent)%"></div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>@r.PendingQuestions</td>
+                                <td>
+                                    @if (r.AvgCompletionHours.HasValue)
+                                    {
+                                        <span>@(r.AvgCompletionHours.Value >= 48
+                                            ? $"{Math.Round(r.AvgCompletionHours.Value / 24, 1):0.#} يوم"
+                                            : $"{r.AvgCompletionHours.Value:0.#} ساعة")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="qrt-sub">لم تكتمل مهمة</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+</div>

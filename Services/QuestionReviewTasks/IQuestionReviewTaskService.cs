@@ -44,6 +44,18 @@ namespace QdratNew.Services.QuestionReviewTasks
         Task<OperationResult> GetReassignCandidatesAsync(int taskId, CancellationToken ct = default);
 
         /// <summary>
+        /// QRT-S7.2: معاينة التوزيع التلقائي (مدرب ← عدد) دون كتابة أي شيء.
+        /// Data = AutoDistributionPreviewDto. يُستبعد المدرب غير المؤهل (منهج/شريك) ويُذكر في النتيجة.
+        /// </summary>
+        Task<OperationResult> PreviewAutoDistributionAsync(AutoDistributeInput input, CancellationToken ct = default);
+
+        /// <summary>
+        /// QRT-S7.2: توزيع أول N سؤال على المدربين المختارين بالتساوي مع مراعاة العبء؛ مهمة مستقلة لكل مدرب
+        /// في Transaction واحدة (فشل أي جزء = Rollback كامل). Data = { tasks, total }.
+        /// </summary>
+        Task<OperationResult> AutoDistributeAsync(AutoDistributeInput input, ReviewActor actor, CancellationToken ct = default);
+
+        /// <summary>
         /// QRT-S4.3: مزامنة عناصر المهام مع حالة الأسئلة بعد اعتماد/رفض/إلغاء اعتماد من الأدمن (تُستدعى بعد حفظ تغيير السؤال).
         /// مبنية على حالة السؤال الفعلية لا على قائمة معرّفات، فتُصلح أي عنصر فاته التحديث سابقًا.
         /// لا ترمي استثناءً أبدًا: فشلها يُسجَّل فقط ولا يُبطل قرار الأدمن. تُرجع عدد العناصر المحدَّثة.

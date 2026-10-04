@@ -914,6 +914,7 @@ builder.Services.AddScoped<HomeworkReminderJob>();
 builder.Services.AddScoped<AutoCloseLecturesJob>();
 builder.Services.AddScoped<IStudentActivityAIAnalyzer, StudentActivityAIAnalyzer>();
 builder.Services.AddScoped<IAIAnalysisService, AIAnalysisService>();
+builder.Services.AddScoped<QuestionReviewTaskReminderJob>(); // QRT-S7.1
 builder.Services.AddScoped<IChartAIAnalyzer, ChartAIAnalyzer>();
 builder.Services.AddScoped<IStudentPerformanceService, StudentPerformanceService>();
 builder.Services.AddScoped<IHomeworkAssignmentService, HomeworkAssignmentService>();
@@ -1322,6 +1323,13 @@ app.MapRazorPages();
 
 RotativaConfiguration.Setup(app.Environment.WebRootPath, "Rotativa");
 
+
+// QRT-S7.1/7.4: تذكيرات مهام مراجعة الأسئلة + الملخص اليومي — 08:00 بتوقيت الرياض
+RecurringJob.AddOrUpdate<QuestionReviewTaskReminderJob>(
+    "question-review-task-reminders",
+    job => job.RunAsync(),
+    "0 8 * * *",
+    QdratNew.Services.QuestionReviewTasks.QuestionReviewTaskMetrics.DisplayTimeZone);
 app.Run();
 
 #endregion

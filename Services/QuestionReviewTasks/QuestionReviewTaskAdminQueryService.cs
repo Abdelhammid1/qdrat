@@ -459,5 +459,141 @@ namespace QdratNew.Services.QuestionReviewTasks
                     s.Approved, QuestionReviewTaskMetrics.Effective(s.Total, s.Removed))
             };
         }
+
+        // ---------------------------------------------------------------- QRT-S7.3: أداء المراجعين
+
+        private const int MaxReportTasks = 5000;
+        private const int MaxReportDays = 730;
+
+        public async Task<ReviewersReportVm> GetReviewersReportAsync(ReviewersReportFilter filter, CancellationToken ct = default)
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync(ct);
+            var nowUtc = _time.GetUtcNow().UtcDateTime;
+
+            // الفترة بتوقيت العرض: من بداية يوم "من" حتى نهاية يوم "إلى"
+            var todayLocal = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, QuestionReviewTaskMetrics.DisplayTimeZone).Date;
+            var toLocal = (filter.To ?? todayLocal).Date;
+            var fromLocal = (filter.From ?? toLocal.AddDays(-DashboardWindowDays)).Date;
+            if (fromLocal > toLocal)
+                (fromLocal, toLocal) = (toLocal, fromLocal);
+            if ((toLocal - fromLocal).TotalDays > MaxReportDays)
+                fromLocal = toLocal.AddDays(-MaxReportDays);
+
+            var fromUtc = QuestionReviewTaskMetrics.LocalToUtc(fromLocal);
+            var toUtc = QuestionReviewTaskMetrics.LocalToUtc(toLocal.AddDays(1));
+            var instructorId = filter.InstructorId.GetValueOrDefault() > 0 ? filter.InstructorId : null;
+
+            // الملغاة خارج التقرير: لا تُحسب للمراجع ولا عليه
+            var tasksQuery = db.QuestionReviewTasks.AsNoTracking()
+                .Where(t => t.Status != QuestionReviewTaskStatus.Cancelled
+                            && t.CreatedAtUtc >= fromUtc && t.CreatedAtUtc < toUtc);
+            if (instructorId.HasValue)
+                tasksQuery = tasksQuery.Where(t => t.InstructorId == instructorId.Value);
+
+            // استعلام 1: المهام (إسقاط خفيف؛ الحساب الزمني في الذاكرة لأن DATEDIFF غير متاح على كل المزودات)
+            var tasks = await tasksQuery
+                .Select(t => new
+                {
+                    t.InstructorId,
+                    Name = t.Instructor!.FullName,
+                    t.Status,
+                    t.DueAtUtc,
+                    t.CreatedAtUtc,
+                    t.CompletedAtUtc
+                })
+                .Take(MaxReportTasks)
+                .ToListAsync(ct);
+
+            // استعلام 2: العناصر مجمّعة بالمدرب والحالة (GROUP BY واحد)
+            var itemsQuery = db.QuestionReviewTaskItems.AsNoTracking()
+                .Where(i => i.Task!.Status != QuestionReviewTaskStatus.Cancelled
+                            && i.Task.CreatedAtUtc >= fromUtc && i.Task.CreatedAtUtc < toUtc);
+            if (instructorId.HasValue)
+                itemsQuery = itemsQuery.Where(i => i.Task!.InstructorId == instructorId.Value);
+
+            var itemGroups = await itemsQuery
+                .GroupBy(i => new { i.Task!.InstructorId, i.Status })
+                .Select(g => new { g.Key.InstructorId, g.Key.Status, Count = g.Count() })
+                .ToListAsync(ct);
+
+            // استعلام 3: قائمة المدربين لقائمة الفلتر (كل من له مهام)
+            var instructorOptions = await db.QuestionReviewTasks.AsNoTracking()
+                .Select(t => new { t.InstructorId, Name = t.Instructor!.FullName })
+                .Distinct()
+                .OrderBy(x => x.Name)
+                .ToListAsync(ct);
+
+            var itemsByInstructor = itemGroups
+                .GroupBy(x => x.InstructorId)
+                .ToDictionary(g => g.Key, g => g.ToDictionary(x => x.Status, x => x.Count));
+
+            static int Count(Dictionary<QuestionReviewTaskItemStatus, int>? d, params QuestionReviewTaskItemStatus[] statuses)
+                => d is null ? 0 : statuses.Sum(s => d.GetValueOrDefault(s));
+
+            var rows = tasks
+                .GroupBy(t => new { t.InstructorId, t.Name })
+                .Select(g =>
+                {
+                    itemsByInstructor.TryGetValue(g.Key.InstructorId, out var items);
+
+                    var approved = Count(items, QuestionReviewTaskItemStatus.Approved, QuestionReviewTaskItemStatus.EditedAndApproved);
+                    // المُرجَع الذي عالجته الإدارة (ReturnResolved) كان مُرجَعًا من المدرب أصلًا
+                    var returned = Count(items, QuestionReviewTaskItemStatus.Returned, QuestionReviewTaskItemStatus.ReturnResolved);
+                    var handled = approved + returned;
+
+                    var finished = g.Where(t => (t.Status == QuestionReviewTaskStatus.Completed || t.Status == QuestionReviewTaskStatus.Closed)
+                                                && t.CompletedAtUtc.HasValue).ToList();
+
+                    return new ReviewerPerformanceRowVm
+                    {
+                        InstructorId = g.Key.InstructorId,
+                        InstructorName = g.Key.Name ?? "—",
+                        AssignedTasks = g.Count(),
+                        CompletedTasks = g.Count(t => t.Status == QuestionReviewTaskStatus.Completed || t.Status == QuestionReviewTaskStatus.Closed),
+                        LateTasks = g.Count(t =>
+                            QuestionReviewTaskMetrics.IsOverdue(t.Status, t.DueAtUtc, nowUtc)
+                            || (t.DueAtUtc.HasValue && t.CompletedAtUtc.HasValue && t.CompletedAtUtc.Value > t.DueAtUtc.Value)),
+                        ApprovedQuestions = approved,
+                        ReturnedQuestions = returned,
+                        HandledQuestions = handled,
+                        PendingQuestions = Count(items, QuestionReviewTaskItemStatus.Pending),
+                        ReturnRatePercent = handled == 0 ? 0 : (int)Math.Round(returned * 100.0 / handled),
+                        AvgCompletionHours = finished.Count == 0
+                            ? null
+                            : Math.Round(finished.Average(t => (t.CompletedAtUtc!.Value - t.CreatedAtUtc).TotalHours), 1)
+                    };
+                })
+                .OrderByDescending(r => r.AssignedTasks)
+                .ThenBy(r => r.InstructorName)
+                .ToList();
+
+            return new ReviewersReportVm
+            {
+                FromLocal = fromLocal.ToString("yyyy-MM-dd"),
+                ToLocal = toLocal.ToString("yyyy-MM-dd"),
+                InstructorId = instructorId,
+                Instructors = instructorOptions
+                    .Select(i => new AdminFilterOptionVm { Id = i.InstructorId, Text = i.Name ?? "—" })
+                    .ToList(),
+                Rows = rows,
+                TotalAssigned = rows.Sum(r => r.AssignedTasks),
+                TotalApproved = rows.Sum(r => r.ApprovedQuestions),
+                TotalReturned = rows.Sum(r => r.ReturnedQuestions)
+            };
+        }
+
+        // ---------------------------------------------------------------- QRT-S7.2: صفحة التوزيع التلقائي
+
+        public async Task<AutoDistributePageVm> GetAutoDistributePageAsync(CancellationToken ct = default)
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+            var curriculums = await db.Curriculums.AsNoTracking()
+                .OrderBy(c => c.Title)
+                .Select(c => new AdminFilterOptionVm { Id = c.Id, Text = c.Title })
+                .ToListAsync(ct);
+
+            return new AutoDistributePageVm { Curriculums = curriculums };
+        }
     }
 }

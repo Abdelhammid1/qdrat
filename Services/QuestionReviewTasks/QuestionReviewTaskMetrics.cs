@@ -13,6 +13,9 @@ namespace QdratNew.Services.QuestionReviewTasks
             catch (TimeZoneNotFoundException) { return TimeZoneInfo.FindSystemTimeZoneById("Asia/Riyadh"); }
         });
 
+        /// <summary>منطقة العرض الموحدة (تستخدمها جدولة الـ Job أيضًا).</summary>
+        public static TimeZoneInfo DisplayTimeZone => DisplayZone.Value;
+
         public static int Effective(int total, int removed) => Math.Max(total - removed, 0);
 
         /// <summary>نسبة الاعتماد: ما اعتُمد من الأسئلة الفعلية في المهمة.</summary>
