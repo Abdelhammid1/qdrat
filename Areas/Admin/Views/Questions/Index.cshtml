@@ -1282,6 +1282,13 @@
         </button>
 
         <button type="button"
+                class="pr-bulk-btn pr-bulk-btn-warning"
+                onclick="unapproveSelectedQuestions()">
+            <i class="fas fa-rotate-left"></i>
+            إلغاء الاعتماد
+        </button>
+
+        <button type="button"
                 class="pr-bulk-btn pr-bulk-btn-danger pr-bulk-single-only"
                 onclick="deleteSelectedQuestion()">
             <i class="fas fa-trash"></i>
@@ -1597,6 +1604,51 @@
             }
 
             checkSimilar(selected.id);
+        }
+
+        async function unapproveSelectedQuestions() {
+            const selected = getSelectedQuestionsArray();
+            if (!selected.length) {
+                Swal.fire('تنبيه', 'اختر سؤالًا واحدًا على الأقل.', 'warning');
+                return;
+            }
+
+            const confirmResult = await Swal.fire({
+                title: selected.length === 1 ? 'إلغاء اعتماد السؤال؟' : `إلغاء اعتماد ${selected.length} سؤال؟`,
+                text: 'ستعود الأسئلة إلى قائمة الأسئلة قيد المراجعة وتُسجَّل العملية في السجل.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'نعم، إلغاء الاعتماد',
+                cancelButtonText: 'تراجع'
+            });
+
+            if (!confirmResult.isConfirmed) {
+                return;
+            }
+
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value;
+            const formData = new FormData();
+            selected.forEach(function (q) { formData.append('selectedIds', q.id); });
+            formData.append('__RequestVerificationToken', token);
+
+            try {
+                const response = await fetch('/Admin/Questions/UnapproveQuestions', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    clearQuestionsSelection();
+                    questionsTable.ajax.reload(null, false);
+                    Swal.fire('تم', data.message, 'success');
+                } else {
+                    Swal.fire('تنبيه', data.message, 'warning');
+                }
+            } catch {
+                Swal.fire('خطأ', 'حدث خطأ أثناء إلغاء الاعتماد.', 'error');
+            }
         }
 
         function deleteSelectedQuestion() {

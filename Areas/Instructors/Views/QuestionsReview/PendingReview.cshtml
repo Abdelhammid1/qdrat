@@ -1,4 +1,5 @@
-﻿@{
+﻿@model QdratNew.ViewModels.Question.InstructorPendingReviewViewModel
+@{
     ViewData["Title"] = "الأسئلة قيد المراجعة";
     Layout = "~/Views/Shared/_Layout.cshtml";
 }
@@ -8,7 +9,14 @@
     <h2 class="page-title"><i class="fas fa-check-double me-2"></i> الأسئلة قيد المراجعة</h2>
 
     <div class="row g-3 mb-3">
-        <input type="hidden" id="curriculumId" value="@Model.CurriculumId" />
+        <div class="col-md-3">
+            <select id="curriculumId" class="form-select">
+                @foreach (var c in Model.Curriculums)
+                {
+                    <option value="@c.Value" selected="@(c.Value == Model.CurriculumId?.ToString())">@c.Text</option>
+                }
+            </select>
+        </div>
 
         <div class="col-md-3">
             <input type="text" id="titleFilter" class="form-control" placeholder="بحث في عنوان السؤال">
@@ -26,7 +34,7 @@
             </select>
         </div>
 
-        <div class="col-md-2">
+        <div class="col-md-1">
             <button id="btnApplyFilters" class="btn btn-primary w-100">تصفية</button>
         </div>
     </div>
@@ -41,9 +49,28 @@
                 <th>التاريخ</th>
                 <th>الاعتماد</th>
                 <th>تعديل</th>
+                <th>السجل</th>
             </tr>
         </thead>
     </table>
+
+    @if (TempData["Message"] != null)
+    {
+        <div class="alert alert-success">@TempData["Message"]</div>
+    }
+
+    <!-- Modal History -->
+    <div class="modal fade" id="questionHistoryModal" tabindex="-1" dir="rtl">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content text-end">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title">سجل السؤال</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="questionHistoryModalBody"></div>
+            </div>
+        </div>
+    </div>
 
     <!-- Modal Preview -->
     <div class="modal fade" id="questionPreviewModal" tabindex="-1" dir="rtl">
@@ -71,6 +98,12 @@
                 loadSections(curriculumId);
             }
 
+            $('#curriculumId').change(function () {
+                $('#lessonFilter').empty().append('<option value="">اختر المؤشر</option>');
+                loadSections($(this).val());
+                table.ajax.reload();
+            });
+
             // تحميل المؤشرات عند تغيير المحور
             $('#sectionFilter').change(function () {
                 const sectionId = $(this).val();
@@ -89,6 +122,7 @@
                         d.sectionId = $('#sectionFilter').val();
                         d.lessonId = $('#lessonFilter').val();
                         d.searchTitle = $('#titleFilter').val();
+                        d.__RequestVerificationToken = $('input[name="__RequestVerificationToken"]').val();
                     }
                 },
                 columns: [
@@ -125,6 +159,14 @@
                                         <i class="fas fa-edit"></i>
                                     </a>`;
                         }
+                    },
+                    {
+                        data: 'id',
+                        render: function (id) {
+                            return `<button class="btn btn-sm btn-secondary" onclick="showQuestionHistory('${id}')">
+                                        <i class="fas fa-history"></i>
+                                    </button>`;
+                        }
                     }
                 ],
                 language: {
@@ -139,7 +181,7 @@
         });
 
         function loadSections(curriculumId) {
-            fetch(`/Instructors/QuestionsReview/GetSectionsByCurriculum?id=${curriculumId}`)
+            fetch(`/Instructors/QuestionsReview/GetSectionsByCurriculum?curriculumId=${curriculumId}`)
                 .then(res => res.json())
                 .then(sections => {
                     const sectionSelect = $('#sectionFilter');
@@ -151,7 +193,7 @@
         }
 
         function loadLessons(sectionId) {
-            fetch(`/Instructors/QuestionsReview/GetLessonsBySection?id=${sectionId}`)
+            fetch(`/Instructors/QuestionsReview/GetLessonsBySection?sectionId=${sectionId}`)
                 .then(res => res.json())
                 .then(lessons => {
                     const lessonSelect = $('#lessonFilter');
@@ -170,6 +212,22 @@
                     new bootstrap.Modal(document.getElementById('questionPreviewModal')).show();
                 })
                 .catch(err => alert("خطأ في تحميل المعاينة"));
+        }
+
+        function showQuestionHistory(id) {
+            fetch(`/Instructors/QuestionsReview/History?id=${id}`)
+                .then(r => r.json())
+                .then(logs => {
+                    const esc = t => $('<div>').text(t ?? '').html();
+                    const body = logs.length === 0
+                        ? '<div class="text-muted text-center p-3">لا توجد عمليات مسجلة على هذا السؤال.</div>'
+                        : '<table class="table table-sm table-bordered"><thead><tr><th>العملية</th><th>بواسطة</th><th>التاريخ</th><th>التفاصيل</th></tr></thead><tbody>' +
+                          logs.map(l => `<tr><td>${esc(l.action)}</td><td>${esc(l.by)}</td><td>${esc(l.at)}</td><td>${esc(l.summary)}</td></tr>`).join('') +
+                          '</tbody></table>';
+                    $('#questionHistoryModalBody').html(body);
+                    new bootstrap.Modal(document.getElementById('questionHistoryModal')).show();
+                })
+                .catch(() => Swal.fire({ title: 'خطأ', text: 'تعذر تحميل السجل', icon: 'error' }));
         }
 
         function approveSingleQuestion(id) {

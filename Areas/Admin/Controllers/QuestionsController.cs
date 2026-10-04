@@ -3389,6 +3389,83 @@ namespace QdratNew.Areas.Admin.Controllers
             return Json(new { success = true, message = "✅ تم اعتماد السؤال بنجاح وتسجيل العملية في السجل." });
         }
 
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [AdminPermission("Questions", "Approve")]
+        public async Task<IActionResult> UnapproveQuestions(List<Guid> selectedIds)
+        {
+            const int MaxBatch = 500;
+
+            using var _context = _contextFactory.CreateDbContext();
+
+            var ids = (selectedIds ?? new List<Guid>())
+                .Where(x => x != Guid.Empty)
+                .Distinct()
+                .ToList();
+
+            if (ids.Count == 0)
+                return Json(new { success = false, message = "⚠️ لم يتم تحديد أي سؤال." });
+
+            if (ids.Count > MaxBatch)
+                return Json(new { success = false, message = $"⚠️ الحد الأقصى {MaxBatch} سؤال في العملية الواحدة." });
+
+            var questions = await _context.Questions
+                .Where(q => q.IsReviewed && ids.Contains(q.Id))
+                .ToListAsync();
+
+            if (questions.Count == 0)
+                return Json(new { success = false, message = "ℹ️ الأسئلة المحددة غير معتمدة أصلًا." });
+
+            var user = await _context.Users
+                .OfType<ApplicationUser>()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.UserName == User.Identity.Name);
+
+            UserRoleType userRole =
+                User.IsInRole("Admin") ? UserRoleType.Admin :
+                User.IsInRole("SuperAdmin") ? UserRoleType.SuperAdmin :
+                User.IsInRole("Owner") ? UserRoleType.Owner :
+                User.IsInRole("Instructor") ? UserRoleType.Instructor :
+                User.IsInRole("Developer") ? UserRoleType.Developer :
+                UserRoleType.Unknown;
+
+            var now = DateTime.Now;
+            var logs = new List<QuestionAuditLog>(questions.Count);
+
+            foreach (var question in questions)
+            {
+                question.IsReviewed = false;
+                question.ReviewedByUserId = null;
+                question.ReviewedAt = null;
+
+                logs.Add(new QuestionAuditLog
+                {
+                    QuestionId = question.Id,
+                    Action = "إلغاء اعتماد",
+                    PerformedByUserId = user?.Id ?? "SYSTEM",
+                    PerformedByName = user?.FullName ?? user?.UserName ?? "SYSTEM",
+                    PerformedByRole = userRole,
+                    PerformedAt = now,
+                    ChangedFieldsSummary = "تم إلغاء اعتماد السؤال من قائمة الأسئلة وإعادته إلى قائمة الأسئلة قيد المراجعة."
+                });
+            }
+
+            _context.QuestionAuditLogs.AddRange(logs);
+            await _context.SaveChangesAsync();
+
+            int skipped = ids.Count - questions.Count;
+            var message = $"✅ تم إلغاء اعتماد {questions.Count} سؤال وإعادتها إلى قائمة المراجعة.";
+            if (skipped > 0)
+                message += $" (تم تخطي {skipped} لأنها غير معتمدة أصلًا)";
+
+            return Json(new
+            {
+                success = true,
+                message,
+                unapprovedIds = questions.Select(q => q.Id)
+            });
+        }
+
 
 
     }
