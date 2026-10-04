@@ -10,6 +10,7 @@ using QdratNew.Helpers;
 using QdratNew.Security;
 using QdratNew.Security.AdminPermissions;
 using QdratNew.Services;
+using QdratNew.Services.QuestionReviewTasks;
 using QdratNew.ViewModels;
 using QdratNew.ViewModels.Question;
 using QdratNew.ViewModels.Shared;
@@ -24,11 +25,24 @@ namespace QdratNew.Areas.Admin.Controllers
     {
         private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
         private readonly IMemoryCache _cache;
-        public QuestionsController(IDbContextFactory<ApplicationDbContext> contextFactory, IMemoryCache cache)
+        private readonly IQuestionReviewTaskService _reviewTasks;
+
+        public QuestionsController(
+            IDbContextFactory<ApplicationDbContext> contextFactory,
+            IMemoryCache cache,
+            IQuestionReviewTaskService reviewTasks)
         {
             _contextFactory = contextFactory;
             _cache = cache;
+            _reviewTasks = reviewTasks;
         }
+
+        // QRT-S4.3: بعد حفظ قرار الأدمن على الأسئلة نُزامن عناصر مهام المراجعة (لا ترمي استثناءً)
+        private Task SyncReviewTasksAsync(AdminQuestionDecision decision, string? userId, string? userName, UserRoleType role)
+            => _reviewTasks.SyncAdminDecisionAsync(
+                decision,
+                new ReviewActor(userId ?? "SYSTEM", userName ?? "SYSTEM", role),
+                CancellationToken.None);
 
 
         [HttpGet]
@@ -2412,6 +2426,14 @@ namespace QdratNew.Areas.Admin.Controllers
             question.IsRejected = true;
             await _context.SaveChangesAsync();
 
+            var rejecter = await _context.Users.OfType<ApplicationUser>().AsNoTracking()
+                .FirstOrDefaultAsync(u => u.UserName == User.Identity!.Name);
+            await SyncReviewTasksAsync(
+                AdminQuestionDecision.Rejected, rejecter?.Id, rejecter?.FullName ?? rejecter?.UserName,
+                User.IsInRole("SuperAdmin") ? UserRoleType.SuperAdmin :
+                User.IsInRole("Owner") ? UserRoleType.Owner :
+                User.IsInRole("Admin") ? UserRoleType.Admin : UserRoleType.Unknown);
+
             TempData["Message"] = "⚠️ تم رفض السؤال بنجاح.";
             return RedirectToAction("PendingReview");
         }
@@ -2667,6 +2689,7 @@ namespace QdratNew.Areas.Admin.Controllers
             }
 
             await _context.SaveChangesAsync();
+            await SyncReviewTasksAsync(AdminQuestionDecision.Approved, userId, userName, userRole);
 
             TempData["Message"] = $"✅ تم اعتماد {validQuestions.Count} سؤال وتسجيلها في السجل.";
             return RedirectToAction("ApproveReadyQuestions");
@@ -3078,6 +3101,9 @@ namespace QdratNew.Areas.Admin.Controllers
             }
 
             await _context.SaveChangesAsync();
+            await SyncReviewTasksAsync(
+                AdminQuestionDecision.Approved, user?.Id, user?.FullName ?? user?.UserName,
+                User.IsInRole("Admin") ? UserRoleType.Admin : UserRoleType.Unknown);
 
             TempData["Message"] = $"✅ تم اعتماد {validQuestions.Count} سؤال وتسجيلها في السجل.";
             return RedirectToAction("PendingReview");
@@ -3154,6 +3180,7 @@ namespace QdratNew.Areas.Admin.Controllers
             }
 
             await _context.SaveChangesAsync();
+            await SyncReviewTasksAsync(AdminQuestionDecision.Approved, userId, userName, userRole);
 
             TempData["Message"] = $"✅ تم اعتماد {validQuestions.Count} سؤال من النتائج المطابقة للفلاتر.";
             return RedirectToAction("PendingReview", new { curriculumId, sectionId, lessonId });
@@ -3432,6 +3459,7 @@ namespace QdratNew.Areas.Admin.Controllers
             });
 
             await _context.SaveChangesAsync();
+            await SyncReviewTasksAsync(AdminQuestionDecision.Approved, userId, userName, userRole);
 
             return Json(new { success = true, message = "✅ تم اعتماد السؤال بنجاح وتسجيل العملية في السجل." });
         }
@@ -3499,6 +3527,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
             _context.QuestionAuditLogs.AddRange(logs);
             await _context.SaveChangesAsync();
+            await SyncReviewTasksAsync(AdminQuestionDecision.Unapproved, user?.Id, user?.FullName ?? user?.UserName, userRole);
 
             int skipped = ids.Count - questions.Count;
             var message = $"✅ تم إلغاء اعتماد {questions.Count} سؤال وإعادتها إلى قائمة المراجعة.";

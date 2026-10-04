@@ -236,6 +236,20 @@ namespace QdratNew.Services.QuestionReviewTasks
                 .FirstOrDefaultAsync(q => q.Id == questionId.Value, ct);
         }
 
+        public async Task<EditableTaskItem?> GetEditableItemAsync(int instructorId, long itemId, CancellationToken ct = default)
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+            return await db.QuestionReviewTaskItems.AsNoTracking()
+                .Where(i => i.Id == itemId
+                            && i.Status == QuestionReviewTaskItemStatus.Pending
+                            && i.IsLockActive
+                            && i.Task!.InstructorId == instructorId
+                            && (i.Task.Status == QuestionReviewTaskStatus.Assigned || i.Task.Status == QuestionReviewTaskStatus.InProgress))
+                .Select(i => new EditableTaskItem(i.Id, i.QuestionId, i.TaskId, i.Task!.Code))
+                .FirstOrDefaultAsync(ct);
+        }
+
         public async Task<int> GetPendingCountByUserIdAsync(string userId, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(userId))

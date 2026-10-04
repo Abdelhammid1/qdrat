@@ -15,6 +15,9 @@ namespace QdratNew.Services.QuestionReviewTasks
     /// <summary>مدرب مؤهل لاستلام مهمة مراجعة، مع عبء العمل الحالي (أسئلة محجوزة بانتظار مراجعته).</summary>
     public sealed record EligibleInstructorDto(int Id, string FullName, int ActiveLockedItems);
 
+    /// <summary>قرار الأدمن على سؤال خارج المهمة، يُزامَن مع عناصر المهام (QRT-S4.3).</summary>
+    public enum AdminQuestionDecision { Approved = 1, Rejected = 2, Unapproved = 3 }
+
     public enum ReturnResolution { ApproveAsIs = 1, ReleaseToPool = 2, Reject = 3 }  // EditAndApprove يتم عبر شاشة التعديل ثم ApproveAsIs
 
     public interface IQuestionReviewTaskService
@@ -33,6 +36,13 @@ namespace QdratNew.Services.QuestionReviewTasks
         /// Data = IReadOnlyList&lt;EligibleInstructorDto&gt; مرتبة حسب العبء ثم الاسم.
         /// </summary>
         Task<OperationResult> GetEligibleInstructorsAsync(EligibleInstructorsInput input, CancellationToken ct = default);
+
+        /// <summary>
+        /// QRT-S4.3: مزامنة عناصر المهام مع حالة الأسئلة بعد اعتماد/رفض/إلغاء اعتماد من الأدمن (تُستدعى بعد حفظ تغيير السؤال).
+        /// مبنية على حالة السؤال الفعلية لا على قائمة معرّفات، فتُصلح أي عنصر فاته التحديث سابقًا.
+        /// لا ترمي استثناءً أبدًا: فشلها يُسجَّل فقط ولا يُبطل قرار الأدمن. تُرجع عدد العناصر المحدَّثة.
+        /// </summary>
+        Task<int> SyncAdminDecisionAsync(AdminQuestionDecision decision, ReviewActor actor, CancellationToken ct = default);
 
         // المدرب (instructorId من الخادم دائمًا — D6)
         Task<OperationResult> ApproveItemsAsync(int instructorId, int taskId, IReadOnlyCollection<long> itemIds, ReviewActor actor, CancellationToken ct = default);

@@ -23,6 +23,7 @@ namespace QdratNew.Services.QuestionReviewTasks
         private const string AuditActionAssigned = "إسناد لمهمة مراجعة";
         private const string AuditActionApprovedInTask = "اعتماد ضمن مهمة مراجعة";
         private const string AuditActionReturnedFromTask = "إرجاع من مهمة مراجعة";
+        private const string AuditActionSyncedFromAdmin = "مزامنة مع مهمة مراجعة";
         private const int ReturnNoteMin = 10;
         private const int ReturnNoteMax = 500;
 
@@ -468,13 +469,19 @@ namespace QdratNew.Services.QuestionReviewTasks
 
                     var notPending = wanted.Count - targets.Count;
                     var skippedInvalid = 0;
-                    var skippedReviewed = 0;
                     var approvedNow = new List<QuestionReviewTaskItem>();
+                    var alreadyApproved = new List<QuestionReviewTaskItem>();
 
                     foreach (var item in targets)
                     {
                         var q = item.Question!;
-                        if (q.IsReviewed) { skippedReviewed++; continue; }
+                        if (q.IsReviewed)
+                        {
+                            // QRT-S4.3: اعتُمد السؤال من خارج المهمة (الأدمن) — نُحدّث العنصر بدل تركه معلّقًا
+                            MarkApprovedByAdmin(item, q.ReviewedByUserId, null, nowUtc, "اعتُمد السؤال من الإدارة قبل مراجعتك");
+                            alreadyApproved.Add(item);
+                            continue;
+                        }
                         if (!IsApprovable(q)) { skippedInvalid++; continue; }
 
                         q.IsReviewed = true;
@@ -489,18 +496,20 @@ namespace QdratNew.Services.QuestionReviewTasks
                         approvedNow.Add(item);
                     }
 
-                    var skippedTotal = notPending + skippedInvalid + skippedReviewed;
-                    if (approvedNow.Count == 0)
-                        return new ReviewOutcome(OperationResult.Fail(BuildSkipMessage(0, notPending, skippedInvalid, skippedReviewed)));
+                    var skippedTotal = notPending + skippedInvalid + alreadyApproved.Count;
+                    if (approvedNow.Count == 0 && alreadyApproved.Count == 0)
+                        return new ReviewOutcome(OperationResult.Fail(BuildSkipMessage(0, notPending, skippedInvalid, 0)));
 
                     var auditAt = DateTime.Now;
                     db.QuestionAuditLogs.AddRange(approvedNow.Select(i => NewAudit(
                         i.QuestionId, AuditActionApprovedInTask, $"المهمة {task.Code}", actor, auditAt)));
+                    db.QuestionAuditLogs.AddRange(alreadyApproved.Select(i => NewAudit(
+                        i.QuestionId, AuditActionSyncedFromAdmin, $"المهمة {task.Code} — السؤال معتمد مسبقًا من الإدارة", actor, auditAt)));
 
                     var completed = await ApplyTransitionAsync(db, task, nowUtc, ct);
                     if (tx is not null) await tx.CommitAsync(ct);
 
-                    var message = BuildSkipMessage(approvedNow.Count, notPending, skippedInvalid, skippedReviewed);
+                    var message = BuildSkipMessage(approvedNow.Count, notPending, skippedInvalid, alreadyApproved.Count);
                     return new ReviewOutcome(
                         OperationResult.Ok(message, ProgressData(task, approvedNow.Count, skippedTotal)),
                         task.CreatedByUserId, task.Code,
@@ -581,8 +590,196 @@ namespace QdratNew.Services.QuestionReviewTasks
             return outcome.Result;
         }
 
-        public Task<OperationResult> MarkEditedAndApprovedAsync(int instructorId, long itemId, ReviewActor actor, CancellationToken ct = default)
-            => Task.FromResult(OperationResult.Fail(NotImplementedMessage));
+        // QRT-S4.1: يُستدعى بعد أن يحفظ مسار التعديل السؤال ويعتمده (IsReviewed) بيد المدرب نفسه
+        public async Task<OperationResult> MarkEditedAndApprovedAsync(int instructorId, long itemId, ReviewActor actor, CancellationToken ct = default)
+        {
+            var nowUtc = _time.GetUtcNow().UtcDateTime;
+
+            ReviewOutcome outcome;
+            try
+            {
+                await using var db = await _dbFactory.CreateDbContextAsync(ct);
+                var strategy = db.Database.CreateExecutionStrategy();
+
+                outcome = await strategy.ExecuteAsync(async () =>
+                {
+                    db.ChangeTracker.Clear();
+                    await using var tx = db.Database.IsRelational() ? await db.Database.BeginTransactionAsync(ct) : null;
+
+                    // D6: الملكية في شرط الاستعلام نفسه
+                    var item = await db.QuestionReviewTaskItems
+                        .Include(i => i.Task)
+                        .Include(i => i.Question)
+                        .FirstOrDefaultAsync(i => i.Id == itemId && i.Task!.InstructorId == instructorId, ct);
+                    if (item is null)
+                        return new ReviewOutcome(OperationResult.Fail("⚠️ العنصر غير متاح."));
+
+                    var task = item.Task!;
+                    if (!QuestionReviewTaskMetrics.IsActive(task.Status))
+                        return new ReviewOutcome(OperationResult.Fail("⚠️ المهمة لم تعد متاحة للمراجعة."));
+                    if (item.Status != QuestionReviewTaskItemStatus.Pending)
+                        return new ReviewOutcome(OperationResult.Fail("ℹ️ تم التصرف في هذا السؤال مسبقًا."));
+
+                    var q = item.Question!;
+                    if (!q.IsReviewed || q.ReviewedByUserId != actor.UserId)
+                        return new ReviewOutcome(OperationResult.Fail("⚠️ لم يُعتمد السؤال بعد، لا يمكن تسجيله «عُدِّل واعتُمد»."));
+
+                    item.Status = QuestionReviewTaskItemStatus.EditedAndApproved;
+                    item.IsLockActive = false;
+                    item.ActionAtUtc = nowUtc;
+                    item.ActionByUserId = actor.UserId;
+                    item.ActionByName = actor.Name;
+
+                    db.QuestionAuditLogs.Add(NewAudit(
+                        item.QuestionId, AuditActionApprovedInTask, $"المهمة {task.Code} — بعد التعديل", actor, DateTime.Now));
+
+                    var completed = await ApplyTransitionAsync(db, task, nowUtc, ct);
+                    if (tx is not null) await tx.CommitAsync(ct);
+
+                    return new ReviewOutcome(
+                        OperationResult.Ok("✅ تم حفظ التعديل واعتماد السؤال ضمن المهمة.", ProgressData(task, 1, 0)),
+                        task.CreatedByUserId, task.Code,
+                        QuestionReviewTaskMetrics.ApprovalPercent(task.ApprovedItems, QuestionReviewTaskMetrics.Effective(task.TotalItems, task.RemovedItems)),
+                        completed);
+                });
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                _logger.LogWarning(ex, "QRT: concurrency conflict while marking item {ItemId} edited-and-approved", itemId);
+                return OperationResult.Fail("⚠️ تم تعديل هذا العنصر من مستخدم آخر، أعد تحميل الصفحة وحاول مجددًا.");
+            }
+
+            await NotifyCompletionAsync(outcome, actor, ct);
+            return outcome.Result;
+        }
+
+        // ===== QRT-S4.3: مزامنة قرارات الأدمن مع عناصر المهام =====
+        public async Task<int> SyncAdminDecisionAsync(AdminQuestionDecision decision, ReviewActor actor, CancellationToken ct = default)
+        {
+            try
+            {
+                await using var db = await _dbFactory.CreateDbContextAsync(ct);
+                var nowUtc = _time.GetUtcNow().UtcDateTime;
+
+                // الاستعلام بحالة السؤال نفسها (بلا قائمة معرّفات) → لا Contains ولا OPENJSON، ويُصلح ما فات سابقًا
+                var open = db.QuestionReviewTaskItems
+                    .Where(i => i.Status == QuestionReviewTaskItemStatus.Pending || i.Status == QuestionReviewTaskItemStatus.Returned);
+
+                List<QuestionReviewTaskItem> items;
+                switch (decision)
+                {
+                    case AdminQuestionDecision.Approved:
+                        items = await open.Where(i => i.Question!.IsReviewed).ToListAsync(ct);
+                        break;
+
+                    case AdminQuestionDecision.Rejected:
+                        items = await open.Where(i => i.Question!.IsRejected && !i.Question.IsReviewed).ToListAsync(ct);
+                        break;
+
+                    case AdminQuestionDecision.Unapproved:
+                        items = await db.QuestionReviewTaskItems
+                            .Where(i => (i.Status == QuestionReviewTaskItemStatus.Approved
+                                         || i.Status == QuestionReviewTaskItemStatus.EditedAndApproved
+                                         || i.Status == QuestionReviewTaskItemStatus.ApprovedByAdmin)
+                                        && !i.Question!.IsReviewed
+                                        && i.Task!.Status != QuestionReviewTaskStatus.Closed
+                                        && i.Task.Status != QuestionReviewTaskStatus.Cancelled)
+                            .ToListAsync(ct);
+                        break;
+
+                    default:
+                        return 0;
+                }
+
+                if (items.Count == 0)
+                    return 0;
+
+                var taskIds = items.Select(i => i.TaskId).Distinct().ToList();
+                var tasks = await db.QuestionReviewTasks.Where(t => taskIds.Contains(t.Id)).ToListAsync(ct);
+                var codeByTask = tasks.ToDictionary(t => t.Id, t => t.Code);
+
+                var auditAt = DateTime.Now;
+                var audits = new List<QuestionAuditLog>(items.Count);
+                foreach (var item in items)
+                {
+                    var code = codeByTask.GetValueOrDefault(item.TaskId, "—");
+                    string summary;
+                    switch (decision)
+                    {
+                        case AdminQuestionDecision.Approved:
+                            MarkApprovedByAdmin(item, actor.UserId, actor.Name, nowUtc, "اعتمدها الأدمن مباشرة");
+                            summary = $"المهمة {code} — اعتمدها الأدمن مباشرة";
+                            break;
+
+                        case AdminQuestionDecision.Rejected:
+                            // معلّق ← أُزيل من المهمة، ومرتجع ← عولج بالرفض النهائي
+                            item.Status = item.Status == QuestionReviewTaskItemStatus.Pending
+                                ? QuestionReviewTaskItemStatus.Removed
+                                : QuestionReviewTaskItemStatus.ReturnResolved;
+                            item.IsLockActive = false;
+                            item.ActionAtUtc = nowUtc;
+                            item.ActionByUserId = actor.UserId;
+                            item.ActionByName = actor.Name;
+                            item.AdminResolutionNote = "رفضها الأدمن";
+                            summary = $"المهمة {code} — رفضها الأدمن";
+                            break;
+
+                        default: // Unapproved ← يخرج من احتساب المهمة ويعود السؤال للمسار العام
+                            item.Status = QuestionReviewTaskItemStatus.Removed;
+                            item.IsLockActive = false;
+                            item.ActionAtUtc = nowUtc;
+                            item.ActionByUserId = actor.UserId;
+                            item.ActionByName = actor.Name;
+                            item.AdminResolutionNote = "ألغى الأدمن اعتماده";
+                            summary = $"المهمة {code} — ألغى الأدمن اعتماد السؤال فأُزيل من احتساب المهمة";
+                            break;
+                    }
+
+                    audits.Add(NewAudit(item.QuestionId, AuditActionSyncedFromAdmin, summary, actor, auditAt));
+                }
+
+                db.QuestionAuditLogs.AddRange(audits);
+                await db.SaveChangesAsync(ct);
+
+                // العدادات: GROUP BY واحد لكل المهام المتأثرة (بلا استعلام داخل Loop)
+                var groups = await db.QuestionReviewTaskItems.AsNoTracking()
+                    .Where(i => taskIds.Contains(i.TaskId))
+                    .GroupBy(i => new { i.TaskId, i.Status })
+                    .Select(g => new { g.Key.TaskId, g.Key.Status, Count = g.Count() })
+                    .ToListAsync(ct);
+
+                foreach (var task in tasks)
+                {
+                    ApplyCounters(task, groups.Where(g => g.TaskId == task.Id).Select(g => (g.Status, g.Count)).ToList());
+
+                    if (task.PendingItems == 0 && QuestionReviewTaskMetrics.IsActive(task.Status))
+                    {
+                        task.StartedAtUtc ??= nowUtc;
+                        task.Status = QuestionReviewTaskStatus.Completed;
+                        task.CompletedAtUtc = nowUtc;
+                    }
+                }
+
+                await db.SaveChangesAsync(ct);
+                return items.Count;
+            }
+            catch (Exception ex)
+            {
+                // قرار الأدمن على السؤال محفوظ بالفعل؛ المزامنة تُصلح نفسها في أول قرار لاحق
+                _logger.LogError(ex, "QRT: failed to sync admin decision {Decision} with review tasks", decision);
+                return 0;
+            }
+        }
+
+        private static void MarkApprovedByAdmin(QuestionReviewTaskItem item, string? byUserId, string? byName, DateTime nowUtc, string note)
+        {
+            item.Status = QuestionReviewTaskItemStatus.ApprovedByAdmin;
+            item.IsLockActive = false;
+            item.ActionAtUtc = nowUtc;
+            item.ActionByUserId = byUserId;
+            item.ActionByName = byName;
+            item.AdminResolutionNote = note;
+        }
 
         // نفس تحقق ApproveSingleQuestion الحالي: مكتمل، غير مرفوض، إجابة صحيحة مرتبطة بخيار فعلي
         private static bool IsApprovable(Question q)
@@ -600,7 +797,7 @@ namespace QdratNew.Services.QuestionReviewTasks
             var parts = new List<string>();
             if (approved > 0) parts.Add($"✅ تم اعتماد {approved} سؤال.");
             if (invalid > 0) parts.Add($"⚠️ تعذّر اعتماد {invalid} سؤال لأنها غير مكتملة أو مرفوضة أو إجابتها غير مرتبطة بخيار — استخدم الإرجاع أو التعديل.");
-            if (reviewed > 0) parts.Add($"ℹ️ {reviewed} سؤال معتمد مسبقًا من جهة أخرى.");
+            if (reviewed > 0) parts.Add($"ℹ️ {reviewed} سؤال كانت الإدارة قد اعتمدته مسبقًا، وتم تحديثه في المهمة.");
             if (notPending > 0) parts.Add($"ℹ️ {notPending} عنصر لم يعد بانتظار المراجعة.");
             return string.Join(" ", parts);
         }
@@ -705,15 +902,23 @@ namespace QdratNew.Services.QuestionReviewTasks
                 .Select(g => new { Status = g.Key, Count = g.Count() })
                 .ToListAsync(ct);
 
-            int CountOf(params QuestionReviewTaskItemStatus[] statuses)
-                => groups.Where(g => statuses.Contains(g.Status)).Sum(g => g.Count);
-
             var task = await db.QuestionReviewTasks.FirstOrDefaultAsync(t => t.Id == taskId, ct);
             if (task is null)
             {
                 _logger.LogWarning("RecalculateCounters: task {TaskId} not found", taskId);
                 return;
             }
+
+            ApplyCounters(task, groups.Select(g => (g.Status, g.Count)).ToList());
+
+            await db.SaveChangesAsync(ct);
+        }
+
+        // تعريف العدادات في مكان واحد (D10) — يستخدمه RecalculateCountersAsync والمزامنة
+        private static void ApplyCounters(QuestionReviewTask task, IReadOnlyCollection<(QuestionReviewTaskItemStatus Status, int Count)> groups)
+        {
+            int CountOf(params QuestionReviewTaskItemStatus[] statuses)
+                => groups.Where(g => statuses.Contains(g.Status)).Sum(g => g.Count);
 
             task.TotalItems = groups.Sum(g => g.Count);
             task.PendingItems = CountOf(QuestionReviewTaskItemStatus.Pending);
@@ -723,8 +928,6 @@ namespace QdratNew.Services.QuestionReviewTasks
                 QuestionReviewTaskItemStatus.ApprovedByAdmin);
             task.ReturnedItems = CountOf(QuestionReviewTaskItemStatus.Returned);
             task.RemovedItems = CountOf(QuestionReviewTaskItemStatus.Removed);
-
-            await db.SaveChangesAsync(ct);
         }
     }
 }

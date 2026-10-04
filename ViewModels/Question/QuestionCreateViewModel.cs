@@ -111,6 +111,16 @@ namespace QdratNew.ViewModels.Question
 
         public List<SelectListItem> Units { get; set; } = new();
         public bool IsRTL { get; internal set; }
+
+        /// <summary>
+        /// QRT-S4.1: للعرض فقط — عنصر مهمة المراجعة عند فتح التعديل من داخل مهمة.
+        /// لا يُربط من النموذج؛ الخادم يستقبل taskItemId كمعامل مستقل ويتحقق من ملكيته.
+        /// </summary>
+        [Microsoft.AspNetCore.Mvc.ModelBinding.BindNever]
+        public long? ReviewTaskItemId { get; set; }
+
+        [Microsoft.AspNetCore.Mvc.ModelBinding.BindNever]
+        public int? ReviewTaskId { get; set; }
     }
 
     public class QuestionOptionViewModel

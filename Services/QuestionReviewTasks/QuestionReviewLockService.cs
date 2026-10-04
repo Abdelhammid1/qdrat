@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using QdratNew.Data;
+using QdratNew.Enums;
 
 namespace QdratNew.Services.QuestionReviewTasks
 {
@@ -32,6 +33,27 @@ namespace QdratNew.Services.QuestionReviewTasks
             return db.QuestionReviewTaskItems.AsNoTracking()
                 .Where(i => i.IsLockActive)
                 .Select(i => i.QuestionId);
+        }
+
+        public IQueryable<Guid> HeldQuestionIds(ApplicationDbContext db)
+        {
+            return db.QuestionReviewTaskItems.AsNoTracking()
+                .Where(i => i.IsLockActive || i.Status == QuestionReviewTaskItemStatus.Returned)
+                .Select(i => i.QuestionId);
+        }
+
+        public async Task<QuestionHoldInfo?> GetHoldAsync(Guid questionId, CancellationToken ct = default)
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+            // الحجز النشط يسبق المرتجع؛ سؤال واحد قد يملك عدة عناصر تاريخية فنأخذ الأحدث
+            return await db.QuestionReviewTaskItems.AsNoTracking()
+                .Where(i => i.QuestionId == questionId
+                            && (i.IsLockActive || i.Status == QuestionReviewTaskItemStatus.Returned))
+                .OrderByDescending(i => i.IsLockActive)
+                .ThenByDescending(i => i.Id)
+                .Select(i => new QuestionHoldInfo(i.Id, i.TaskId, i.Task!.Code, i.Task.InstructorId, i.Status))
+                .FirstOrDefaultAsync(ct);
         }
     }
 }

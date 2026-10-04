@@ -8,6 +8,7 @@ using QdratNew.Enums;
 using QdratNew.Helpers;
 using QdratNew.Services;
 using QdratNew.Services.Instructors.Interfaces;
+using QdratNew.Services.QuestionReviewTasks;
 using QdratNew.ViewModels.Question;
 
 namespace QdratNew.Areas.Instructors.Controllers
@@ -24,14 +25,49 @@ namespace QdratNew.Areas.Instructors.Controllers
         private const string QuestionUploadVirtualPath = "/uploads/questions/";
 
         private readonly ApplicationDbContext _context;
+        private readonly IQuestionReviewLockService _locks;
+        private readonly IQuestionReviewTaskService _reviewTasks;
+        private readonly IQuestionReviewTaskQueryService _taskQuery;
 
         public QuestionsReviewController(
             ApplicationDbContext context,
             UserManager<ApplicationUser> userManager,
-            IInstructorScopeService scopeService)
+            IInstructorScopeService scopeService,
+            IQuestionReviewLockService locks,
+            IQuestionReviewTaskService reviewTasks,
+            IQuestionReviewTaskQueryService taskQuery)
             : base(userManager, scopeService)
         {
             _context = context;
+            _locks = locks;
+            _reviewTasks = reviewTasks;
+            _taskQuery = taskQuery;
+        }
+
+        // ─── QRT-S4.2: حماية المسار العام من الأسئلة المحتجزة بمهام المراجعة ───
+        // سؤال محجوز (Pending) أو مُرجَع للإدارة (Returned) لا يُعتمد ولا يُعدَّل إلا من داخل مهمته.
+        private async Task<string?> HoldMessageAsync(Guid questionId)
+        {
+            var hold = await _locks.GetHoldAsync(questionId);
+            if (hold is null) return null;
+
+            return hold.ItemStatus == QuestionReviewTaskItemStatus.Returned
+                ? $"🔒 هذا السؤال أُرجع للإدارة ضمن المهمة {hold.TaskCode} وبانتظار قرارها، ولا يمكن اعتماده أو تعديله من هنا."
+                : $"🔒 هذا السؤال محجوز ضمن مهمة المراجعة {hold.TaskCode}؛ افتحه من «مهام المراجعة» لاعتماده أو تعديله.";
+        }
+
+        // QRT-S4.1: التحقق من أن العنصر معلّق ويخص مهمة هذا المدرب ويطابق السؤال (لا IDOR)
+        private async Task<(EditableTaskItem? Item, IActionResult? Reject)> ResolveTaskEditAsync(Guid questionId, long taskItemId)
+        {
+            var instructorId = await RequireInstructorAsync();
+            var item = instructorId == 0 ? null : await _taskQuery.GetEditableItemAsync(instructorId, taskItemId);
+            if (item is null || item.QuestionId != questionId)
+            {
+                TempData["Message"] = "⚠️ هذا السؤال لم يعد متاحًا للتعديل ضمن مهمة المراجعة.";
+                return (null, RedirectToAction("Index", "QuestionReviewTasks", new { area = "Instructors" }));
+            }
+
+            return (item, null);
         }
 
         private bool IsPrivileged =>
@@ -142,6 +178,7 @@ namespace QdratNew.Areas.Instructors.Controllers
                 .Where(q => q.CurriculumId == curriculumId.Value)
                 .Where(q => q.IsComplete && !q.IsReviewed && !q.IsRejected)
                 .Where(q => !string.IsNullOrWhiteSpace(q.CorrectAnswer))
+                .Where(q => !_locks.HeldQuestionIds(_context).Contains(q.Id)) // QRT-S4.2: المحجوز/المرتجع خارج المسار العام
                 .Where(q => !sectionId.HasValue || q.SectionId == sectionId.Value)
                 .Where(q => !lessonId.HasValue || q.LessonId == lessonId.Value)
                 .Where(q => string.IsNullOrWhiteSpace(searchTitle) || (q.Title != null && q.Title.Contains(searchTitle)));
@@ -399,6 +436,10 @@ namespace QdratNew.Areas.Instructors.Controllers
             if (question.IsReviewed)
                 return Json(new { success = false, message = "ℹ️ السؤال معتمد مسبقًا." });
 
+            var holdMessage = await HoldMessageAsync(question.Id);
+            if (holdMessage is not null)
+                return Json(new { success = false, message = holdMessage });
+
             if (!question.IsComplete || question.IsRejected || string.IsNullOrWhiteSpace(question.CorrectAnswer))
                 return Json(new { success = false, message = "⚠️ لا يمكن اعتماد هذا السؤال لأنه غير مكتمل أو مرفوض أو بدون إجابة صحيحة." });
 
@@ -462,9 +503,26 @@ namespace QdratNew.Areas.Instructors.Controllers
 
         // ─── تعديل سؤال ───────────────────────────────────────────
         [HttpGet]
-        public async Task<IActionResult> Edit(Guid id)
+        public async Task<IActionResult> Edit(Guid id, long? taskItemId = null)
         {
             ModelState.Clear();
+
+            EditableTaskItem? taskItem = null;
+            if (taskItemId.HasValue)
+            {
+                var (item, reject) = await ResolveTaskEditAsync(id, taskItemId.Value);
+                if (reject is not null) return reject;
+                taskItem = item;
+            }
+            else
+            {
+                var holdMessage = await HoldMessageAsync(id);
+                if (holdMessage is not null)
+                {
+                    TempData["Message"] = holdMessage;
+                    return RedirectToAction("PendingReview");
+                }
+            }
 
             var model = await BuildEditModelAsync(id);
             if (model == null) return NotFound();
@@ -472,13 +530,36 @@ namespace QdratNew.Areas.Instructors.Controllers
             if (!await CanAccessCurriculumAsync(model.CurriculumId))
                 return Forbid();
 
+            model.ReviewTaskItemId = taskItem?.ItemId;
+            model.ReviewTaskId = taskItem?.TaskId;
             return View("Edit", model);
         }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(Guid id, QuestionCreateViewModel model, bool approveAfterEdit = false)
+        public async Task<IActionResult> Edit(Guid id, QuestionCreateViewModel model, bool approveAfterEdit = false, long? taskItemId = null)
         {
+            // QRT-S4.1/S4.2: داخل مهمة ← التحقق من العنصر، وخارجها ← رفض الأسئلة المحتجزة
+            EditableTaskItem? taskItem = null;
+            if (taskItemId.HasValue)
+            {
+                var (item, reject) = await ResolveTaskEditAsync(id, taskItemId.Value);
+                if (reject is not null) return reject;
+                taskItem = item;
+            }
+            else
+            {
+                var holdMessage = await HoldMessageAsync(id);
+                if (holdMessage is not null)
+                {
+                    TempData["Message"] = holdMessage;
+                    return RedirectToAction("PendingReview");
+                }
+            }
+
+            model.ReviewTaskItemId = taskItem?.ItemId;
+            model.ReviewTaskId = taskItem?.TaskId;
+
             bool allowEmptyTitle = model.SectionId == 10;
             if (!allowEmptyTitle && string.IsNullOrWhiteSpace(model.Title))
                 ModelState.AddModelError("Title", "يجب كتابة نص السؤال لهذا القسم.");
@@ -642,6 +723,9 @@ namespace QdratNew.Areas.Instructors.Controllers
 
             DeleteImageFiles(imageUrlsToDeleteAfterSave, retained);
 
+            if (taskItem is not null)
+                return await CompleteTaskEditAsync(taskItem, user, approved, approveAfterEdit && !wasReviewed);
+
             TempData["Message"] = approved
                 ? "✅ تم حفظ التعديل واعتماد السؤال، وسُجلت العملية في سجل البنك."
                 : approveAfterEdit && !wasReviewed
@@ -649,6 +733,35 @@ namespace QdratNew.Areas.Instructors.Controllers
                     : "✅ تم حفظ التعديل وسُجلت العملية في سجل البنك.";
 
             return RedirectToAction("PendingReview", new { curriculumId = question.CurriculumId });
+        }
+
+        // QRT-S4.1: ختام التعديل داخل مهمة — تسجيل «عُدِّل واعتُمد» على العنصر والعودة لصفحة المهمة
+        private async Task<IActionResult> CompleteTaskEditAsync(
+            EditableTaskItem taskItem, (string Id, string Name) user, bool approved, bool approvalRequested)
+        {
+            string message;
+            if (approved)
+            {
+                var instructorId = await RequireInstructorAsync();
+                var marked = await _reviewTasks.MarkEditedAndApprovedAsync(
+                    instructorId, taskItem.ItemId, new ReviewActor(user.Id, user.Name, CurrentRole()));
+                _taskQuery.InvalidatePendingCount(user.Id);
+
+                message = marked.Success
+                    ? $"✅ تم حفظ التعديل واعتماد السؤال ضمن المهمة {taskItem.TaskCode}."
+                    : $"✅ حُفظ التعديل واعتُمد السؤال، لكن تعذّر تحديث المهمة: {marked.Message}";
+            }
+            else if (approvalRequested)
+            {
+                message = "⚠️ تم حفظ التعديل لكن لم يُعتمد السؤال لأنه غير مكتمل أو بدون إجابة صحيحة؛ ما زال بانتظار مراجعتك في المهمة.";
+            }
+            else
+            {
+                message = "✅ تم حفظ التعديل، وما زال السؤال بانتظار اعتمادك في المهمة.";
+            }
+
+            TempData["Message"] = message;
+            return RedirectToAction("Review", "QuestionReviewTasks", new { area = "Instructors", id = taskItem.TaskId });
         }
 
         // ─── مساعدات بناء نموذج التعديل ──────────────────────────
