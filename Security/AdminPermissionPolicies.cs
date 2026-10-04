@@ -15,6 +15,13 @@
         public const string Questions_ViewAudit = "Questions:ViewAudit";
 
         // ===============================
+        // QuestionReviewTasks
+        // ===============================
+        public const string QuestionReviewTasks_Read = "QuestionReviewTasks:Read";
+        public const string QuestionReviewTasks_Create = "QuestionReviewTasks:Create";
+        public const string QuestionReviewTasks_Manage = "QuestionReviewTasks:Manage"; // إلغاء/إغلاق/إعادة إسناد/معالجة مرتجعات
+
+        // ===============================
         // Curriculums
         // ===============================
         public const string Curriculums_Read = "Curriculums:Read";

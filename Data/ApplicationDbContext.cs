@@ -105,6 +105,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<RemedialQuiz> RemedialQuizzes { get; set; }
 
     public DbSet<QuestionAuditLog> QuestionAuditLogs { get; set; }
+    public DbSet<QuestionReviewTask> QuestionReviewTasks { get; set; }
+    public DbSet<QuestionReviewTaskItem> QuestionReviewTaskItems { get; set; }
     public DbSet<HomeworkSet> HomeworkSets { get; set; }
     public DbSet<HomeworkArchiveAccess> HomeworkArchiveAccesses { get; set; }
     public DbSet<AttendanceBatchArchiveAccess> AttendanceBatchArchiveAccesses { get; set; }
@@ -1522,6 +1524,35 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             .IsUnique()
             .HasFilter("[IsResolved] = 0")
             .HasDatabaseName("IX_IntegrityViolationLogs_ActiveViolation");
+
+        // ==== QRT — مهام مراجعة الأسئلة ====
+        modelBuilder.Entity<QuestionReviewTask>(e =>
+        {
+            e.ToTable("QuestionReviewTasks");
+            e.HasIndex(x => x.Code).IsUnique();
+            e.HasIndex(x => new { x.InstructorId, x.Status });
+            e.HasIndex(x => new { x.Status, x.DueAtUtc });
+
+            e.HasOne(x => x.Instructor).WithMany().HasForeignKey(x => x.InstructorId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Curriculum).WithMany().HasForeignKey(x => x.CurriculumId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.ParentTask).WithMany().HasForeignKey(x => x.ParentTaskId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<QuestionReviewTaskItem>(e =>
+        {
+            e.ToTable("QuestionReviewTaskItems");
+            e.HasIndex(x => new { x.TaskId, x.Status });
+            e.HasIndex(x => new { x.TaskId, x.QuestionId }).IsUnique();
+
+            // D3: الحجز الحصري — سؤال واحد فقط له عنصر نشط
+            e.HasIndex(x => x.QuestionId)
+             .HasDatabaseName("UX_QuestionReviewTaskItems_ActiveLock")
+             .IsUnique()
+             .HasFilter("[IsLockActive] = 1");
+
+            e.HasOne(x => x.Task).WithMany(t => t.Items).HasForeignKey(x => x.TaskId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Question).WithMany().HasForeignKey(x => x.QuestionId).OnDelete(DeleteBehavior.Restrict);
+        });
 
     }
 

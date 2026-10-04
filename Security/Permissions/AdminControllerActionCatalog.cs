@@ -24,6 +24,13 @@
                     new AdminActionDescriptor { Key = "ViewAudit", DisplayNameAr = "عرض سجل التعديلات" }
                 },
 
+                "QuestionReviewTasks" => new[]
+                {
+                    new AdminActionDescriptor { Key = "Read", DisplayNameAr = "عرض مهام مراجعة الأسئلة" },
+                    new AdminActionDescriptor { Key = "Create", DisplayNameAr = "إسناد مهمة مراجعة" },
+                    new AdminActionDescriptor { Key = "Manage", DisplayNameAr = "إدارة المهام (إلغاء / إغلاق / إعادة إسناد / معالجة المرتجعات)" }
+                },
+
                 "Curriculums" => new[]
                 {
                     new AdminActionDescriptor { Key = "Read", DisplayNameAr = "عرض المناهج" },

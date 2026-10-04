@@ -261,6 +261,21 @@ builder.Services.AddAuthorization(options =>
         new AdminPermissionAuthorizationRequirement(
             AdminPermissionPolicies.Questions_ViewAudit)));
 
+    options.AddPolicy(
+        AdminPermissionPolicies.QuestionReviewTasks_Read,
+        policy => policy.Requirements.Add(
+            new AdminPermissionAuthorizationRequirement(AdminPermissionPolicies.QuestionReviewTasks_Read)));
+
+    options.AddPolicy(
+        AdminPermissionPolicies.QuestionReviewTasks_Create,
+        policy => policy.Requirements.Add(
+            new AdminPermissionAuthorizationRequirement(AdminPermissionPolicies.QuestionReviewTasks_Create)));
+
+    options.AddPolicy(
+        AdminPermissionPolicies.QuestionReviewTasks_Manage,
+        policy => policy.Requirements.Add(
+            new AdminPermissionAuthorizationRequirement(AdminPermissionPolicies.QuestionReviewTasks_Manage)));
+
 
 
     // ===============================
@@ -978,6 +993,11 @@ builder.Services.AddScoped<IPartnerDashboardSnapshotService, PartnerDashboardSna
 builder.Services.AddScoped<IPartnerDashboardDataService, PartnerDashboardDataService>();
 builder.Services.AddScoped<IStudentHomeworkStatusService, StudentHomeworkStatusService>();
 builder.Services.AddScoped<IInstructorScopeService, InstructorScopeService>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<QdratNew.Services.QuestionReviewTasks.IQuestionReviewLockService,
+                           QdratNew.Services.QuestionReviewTasks.QuestionReviewLockService>();
+builder.Services.AddScoped<QdratNew.Services.QuestionReviewTasks.IQuestionReviewTaskService,
+                           QdratNew.Services.QuestionReviewTasks.QuestionReviewTaskService>();
 builder.Services.AddScoped<ILectureInstructorSyncService, LectureInstructorSyncService>();
 builder.Services.AddScoped<IEmployeeBatchAccessService, EmployeeBatchAccessService>();
 builder.Services.AddScoped<QdratNew.Services.Admin.EmployeeDashboard.IEmployeeDashboardService,
