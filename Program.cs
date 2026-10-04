@@ -1132,6 +1132,15 @@ builder.Services.AddRateLimiter(o =>
             Window = TimeSpan.FromMinutes(1),
             QueueLimit = 0
         }));
+    // RTK-S5: حفظ إجابات اختبار 101/102 — 120 طلب / دقيقة لكل مستخدم (حفظ عند كل اختيار)
+    o.AddPolicy("rtk-exam", ctx => System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+        ctx.User?.Identity?.Name ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "anon",
+        _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 120,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        }));
     o.OnRejected = async (context, token) =>
     {
         context.HttpContext.Response.ContentType = "text/plain; charset=utf-8";

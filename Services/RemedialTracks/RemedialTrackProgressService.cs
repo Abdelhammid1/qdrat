@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using QdratNew.Data;
@@ -18,7 +19,7 @@ namespace QdratNew.Services.RemedialTracks
 
     /// <summary>
     /// RTK-S4: ما يراه الطالب (القائمة، الخطة، المحور) + تسجيل تقدّم الفيديو بزمن الخادم (D4/D5).
-    /// انتقالات الاختبارات (101/102) تُضاف في RTK-S5 على نفس الخدمة.
+    /// RTK-S5: انتقالات آلة الحالة (اكتمال الفيديوهات، تسليم 101/102، فتح الأدمن للتالي) داخل Transaction + RowVersion.
     /// </summary>
     public sealed class RemedialTrackProgressService : IRemedialTrackProgressService
     {
@@ -180,7 +181,8 @@ namespace QdratNew.Services.RemedialTracks
                     a.Round,
                     AxisTitle = a.Axis!.TitleOverride ?? a.Axis.Section!.Title,
                     TrackTitle = a.Enrollment!.Publication!.Track!.Title,
-                    MinWatch = a.Enrollment.Publication.Track.MinWatchPercent
+                    MinWatch = a.Enrollment.Publication.Track.MinWatchPercent,
+                    ExamMinutes = a.Axis.ExamDurationMinutes
                 })
                 .FirstOrDefaultAsync(ct);
 
@@ -233,6 +235,27 @@ namespace QdratNew.Services.RemedialTracks
                 previousDone = previousDone && r.IsCompleted;
             }
 
+            var pendingExam = ap.Status switch
+            {
+                RemedialTrackAxisStatus.AwaitingExam101 => RemedialTrackExamNumber.Exam101,
+                RemedialTrackAxisStatus.AwaitingExam102 => RemedialTrackExamNumber.Exam102,
+                _ => (RemedialTrackExamNumber?)null
+            };
+
+            // RTK-S5: محاولات المحور (استعلام واحد صغير)
+            var attempts = await db.RemedialTrackExamAttempts.AsNoTracking()
+                .Where(x => x.AxisProgressId == ap.Id)
+                .OrderBy(x => x.ExamNumber)
+                .Select(x => new StudentRemedialTrackAttemptItemVm
+                {
+                    AttemptId = x.Id,
+                    ExamNumber = x.ExamNumber,
+                    Status = x.Status,
+                    ScorePercent = x.ScorePercent,
+                    IsPassed = x.IsPassed
+                })
+                .ToListAsync(ct);
+
             return new StudentRemedialTrackAxisVm
             {
                 EnrollmentId = enrollmentId,
@@ -245,12 +268,12 @@ namespace QdratNew.Services.RemedialTracks
                 CanWatch = canWatch,
                 AllVideosDone = videos.Count > 0 && videos.All(v => v.IsCompleted),
                 ExamReady = ap.Status is RemedialTrackAxisStatus.AwaitingExam101 or RemedialTrackAxisStatus.AwaitingExam102,
-                PendingExam = ap.Status switch
-                {
-                    RemedialTrackAxisStatus.AwaitingExam101 => RemedialTrackExamNumber.Exam101,
-                    RemedialTrackAxisStatus.AwaitingExam102 => RemedialTrackExamNumber.Exam102,
-                    _ => null
-                },
+                PendingExam = pendingExam,
+                ExamDurationMinutes = ap.ExamMinutes,
+                InProgressAttemptId = pendingExam.HasValue
+                    ? attempts.Where(x => x.ExamNumber == pendingExam.Value && !x.IsClosed).Select(x => (int?)x.AttemptId).FirstOrDefault()
+                    : null,
+                Attempts = attempts,
                 Videos = videos
             };
         }
@@ -556,6 +579,287 @@ namespace QdratNew.Services.RemedialTracks
                 Url = next.Url
             }, !anyPending);
         }
+
+        // ═════════════════ RTK-S5.1: الانتقالات فوق آلة الحالة ═════════════════
+
+        private static string Pct(double? v) => (v ?? 0).ToString("0.#", CultureInfo.InvariantCulture);
+
+        // Transaction واحدة (للقواعد العلائقية فقط) + إعادة محاولة واحدة عند تعارض RowVersion (تُعاد القراءة كاملة)
+        private async Task<T> InTransactionAsync<T>(Func<ApplicationDbContext, Task<T>> work, CancellationToken ct)
+        {
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    await using var db = await _dbFactory.CreateDbContextAsync(ct);
+                    var strategy = db.Database.CreateExecutionStrategy();
+
+                    return await strategy.ExecuteAsync(async () =>
+                    {
+                        db.ChangeTracker.Clear();
+                        await using var tx = db.Database.IsRelational()
+                            ? await db.Database.BeginTransactionAsync(ct)
+                            : null;
+
+                        var result = await work(db);
+                        if (tx is not null) await tx.CommitAsync(ct);
+                        return result;
+                    });
+                }
+                catch (DbUpdateConcurrencyException) when (attempt < 2)
+                {
+                    // تعارض مع طلب متزامن: أعد القراءة والتنفيذ (الدوال Idempotent فتتعرّف على ما تمّ)
+                }
+            }
+        }
+
+        public Task<RemedialTrackTransitionResult> OnAllVideosCompletedAsync(int axisProgressId, CancellationToken ct = default) =>
+            InTransactionAsync(async db =>
+            {
+                var ap = await db.RemedialTrackAxisProgresses.FirstOrDefaultAsync(a => a.Id == axisProgressId, ct);
+                if (ap is null) return new RemedialTrackTransitionResult(false, null, 0, "المحور غير موجود.");
+                if (ap.Status == RemedialTrackAxisStatus.Locked)
+                    return new RemedialTrackTransitionResult(false, ap.Status, ap.Round, "المحور مغلق.");
+                if (ap.Status is not (RemedialTrackAxisStatus.Videos or RemedialTrackAxisStatus.Rewatch))
+                    return new RemedialTrackTransitionResult(false, ap.Status, ap.Round);   // مُنفَّذ سابقًا
+
+                var total = await db.RemedialTrackVideoProgresses.AsNoTracking()
+                    .CountAsync(x => x.AxisProgressId == ap.Id && x.Round == ap.Round && x.Video!.IsActive, ct);
+                var pending = await db.RemedialTrackVideoProgresses.AsNoTracking()
+                    .CountAsync(x => x.AxisProgressId == ap.Id && x.Round == ap.Round && x.Video!.IsActive && !x.IsCompleted, ct);
+                if (total == 0 || pending > 0)
+                    return new RemedialTrackTransitionResult(false, ap.Status, ap.Round, "لم تكتمل مشاهدة كل فيديوهات الجولة.");
+
+                var t = RemedialTrackStateMachine.OnAllVideosCompleted(ap.Status, ap.Round);
+                ap.Status = t.NewStatus;
+                ap.Round = t.NewRound;
+                await db.SaveChangesAsync(ct);
+                return new RemedialTrackTransitionResult(true, ap.Status, ap.Round);
+            }, ct);
+
+        public Task<RemedialTrackTransitionResult> OnExamSubmittedAsync(int attemptId, CancellationToken ct = default) =>
+            InTransactionAsync(async db =>
+            {
+                var now = _time.GetUtcNow().UtcDateTime;
+
+                var att = await db.RemedialTrackExamAttempts.AsNoTracking()
+                    .Where(a => a.Id == attemptId)
+                    .Select(a => new { a.AxisProgressId, a.ExamNumber, a.Status, a.ScorePercent, a.IsPassed })
+                    .FirstOrDefaultAsync(ct);
+                if (att is null) return new RemedialTrackTransitionResult(false, null, 0, "المحاولة غير موجودة.");
+                if (att.Status == RemedialTrackAttemptStatus.InProgress)
+                    return new RemedialTrackTransitionResult(false, null, 0, "المحاولة لم تُسلَّم بعد.");
+
+                var ap = await db.RemedialTrackAxisProgresses.FirstAsync(a => a.Id == att.AxisProgressId, ct);
+
+                // Idempotent: التسليم المزدوج/إعادة الاستدعاء لا أثر له بعد أن تحوّلت الحالة
+                var expected = att.ExamNumber == RemedialTrackExamNumber.Exam101
+                    ? RemedialTrackAxisStatus.AwaitingExam101
+                    : RemedialTrackAxisStatus.AwaitingExam102;
+                if (ap.Status != expected)
+                    return new RemedialTrackTransitionResult(false, ap.Status, ap.Round);
+
+                var info = await db.RemedialTrackAxisProgresses.AsNoTracking()
+                    .Where(a => a.Id == ap.Id)
+                    .Select(a => new
+                    {
+                        a.EnrollmentId,
+                        a.AxisId,
+                        Title = a.Axis!.TitleOverride ?? a.Axis.Section!.Title,
+                        Pass = a.Enrollment!.Publication!.Track!.PassPercent
+                    })
+                    .FirstAsync(ct);
+
+                var t = RemedialTrackStateMachine.OnExamSubmitted(ap.Status, att.ExamNumber, att.IsPassed);
+                var examNo = (int)att.ExamNumber;
+                var score = Pct(att.ScorePercent);
+
+                if (att.ExamNumber == RemedialTrackExamNumber.Exam101) ap.Exam101Percent = att.ScorePercent;
+                else ap.Exam102Percent = att.ScorePercent;
+                ap.Status = t.NewStatus;
+                ap.Round = t.NewRound;
+
+                if (att.IsPassed)
+                {
+                    ap.PassedAtUtc = now;
+                    AddEvent(db, info.EnrollmentId, info.AxisId, RemedialTrackEventType.ExamPassed,
+                        $"اجتاز الطالب اختبار {examNo} للمحور «{info.Title}» بنسبة {score}%.", now);
+                    if (t.UnlockNextAxis)
+                        await OpenNextAxisAsync(db, info.EnrollmentId, ap.Order, now, ct);
+                }
+                else
+                {
+                    // صياغة محايدة: هذه الأحداث قد تظهر في خط الطالب الزمني (S6)
+                    AddEvent(db, info.EnrollmentId, info.AxisId, RemedialTrackEventType.ExamFailed,
+                        $"نتيجة اختبار {examNo} للمحور «{info.Title}»: {score}% (نسبة الاجتياز {info.Pass}%).", now);
+
+                    if (t.StartRewatchRound)
+                    {
+                        AddEvent(db, info.EnrollmentId, info.AxisId, RemedialTrackEventType.AxisRewatchOpened,
+                            $"أُعيدت فيديوهات المحور «{info.Title}» للمشاهدة (الجولة 2).", now);
+                        await AddRewatchRowsAsync(db, ap.Id, info.AxisId, ct);
+                    }
+                    if (t.RecordNotPassed)
+                    {
+                        ap.FailedAtUtc = now;
+                        AddEvent(db, info.EnrollmentId, info.AxisId, RemedialTrackEventType.AxisNotPassed,
+                            $"لم يجتز الطالب الخطة العلاجية للمحور «{info.Title}» (101: {Pct(ap.Exam101Percent)}%، 102: {Pct(ap.Exam102Percent)}%).", now);
+                    }
+                }
+
+                await db.SaveChangesAsync(ct);
+
+                if (att.IsPassed || t.RecordNotPassed)
+                    await FinalizeEnrollmentAsync(db, info.EnrollmentId, now, ct);
+
+                return new RemedialTrackTransitionResult(true, ap.Status, ap.Round);
+            }, ct);
+
+        public Task<RemedialTrackTransitionResult> AdminOpenNextAsync(
+            int axisProgressId, string? reason, RemedialTrackActor actor, CancellationToken ct = default)
+        {
+            var cleanReason = reason?.Trim();
+            if (string.IsNullOrEmpty(cleanReason))
+                return Task.FromResult(new RemedialTrackTransitionResult(false, null, 0, "سبب فتح المحور التالي مطلوب."));
+            if (cleanReason.Length > 300)
+                return Task.FromResult(new RemedialTrackTransitionResult(false, null, 0, "سبب الفتح يجب ألا يتجاوز 300 حرف."));
+
+            return InTransactionAsync(async db =>
+            {
+                var now = _time.GetUtcNow().UtcDateTime;
+
+                var ap = await db.RemedialTrackAxisProgresses.FirstOrDefaultAsync(a => a.Id == axisProgressId, ct);
+                if (ap is null) return new RemedialTrackTransitionResult(false, null, 0, "المحور غير موجود.");
+                if (ap.Status == RemedialTrackAxisStatus.FailedOpenedByAdmin)
+                    return new RemedialTrackTransitionResult(false, ap.Status, ap.Round);   // Idempotent
+                if (ap.Status != RemedialTrackAxisStatus.FailedBlocked)
+                    return new RemedialTrackTransitionResult(false, ap.Status, ap.Round,
+                        "فتح المحور التالي مسموح فقط لمحور لم يجتزه الطالب في الاختبارين.");
+
+                var info = await db.RemedialTrackAxisProgresses.AsNoTracking()
+                    .Where(a => a.Id == ap.Id)
+                    .Select(a => new { a.EnrollmentId, a.AxisId, Title = a.Axis!.TitleOverride ?? a.Axis.Section!.Title })
+                    .FirstAsync(ct);
+
+                var t = RemedialTrackStateMachine.OnAdminOpenNext(ap.Status);
+                ap.Status = t.NewStatus;
+                ap.Round = t.NewRound;
+                ap.AdminOpenedByUserId = Truncate(actor.UserId, 450);
+                ap.AdminOpenedByName = Truncate(actor.Name, 200);
+                ap.AdminOpenReason = cleanReason;
+                ap.AdminOpenedAtUtc = now;
+
+                db.RemedialTrackEvents.Add(new RemedialTrackEvent
+                {
+                    EnrollmentId = info.EnrollmentId,
+                    AxisId = info.AxisId,
+                    Type = RemedialTrackEventType.AdminOpenedNext,
+                    Message = Truncate($"فتحت الإدارة المحور التالي بعد المحور «{info.Title}».", 500),
+                    ActorUserId = Truncate(actor.UserId, 450),
+                    ActorName = Truncate(actor.Name, 200),
+                    CreatedAtUtc = now
+                });
+
+                await OpenNextAxisAsync(db, info.EnrollmentId, ap.Order, now, ct);
+                await db.SaveChangesAsync(ct);
+                await FinalizeEnrollmentAsync(db, info.EnrollmentId, now, ct);
+
+                return new RemedialTrackTransitionResult(true, ap.Status, ap.Round);
+            }, ct);
+        }
+
+        // يفتح المحور التالي (Locked → Videos/جولة 1) ويحدّث CurrentAxisId؛ لا يحفظ (المستدعي يحفظ). يعيد true إن فُتح محور.
+        private static async Task<bool> OpenNextAxisAsync(ApplicationDbContext db, int enrollmentId, int currentOrder, DateTime now, CancellationToken ct)
+        {
+            var next = await db.RemedialTrackAxisProgresses
+                .Where(a => a.EnrollmentId == enrollmentId && a.Order > currentOrder)
+                .OrderBy(a => a.Order)
+                .FirstOrDefaultAsync(ct);
+            if (next is null) return false;
+            if (next.Status != RemedialTrackAxisStatus.Locked) return false;   // مفتوح سابقًا
+
+            next.Status = RemedialTrackAxisStatus.Videos;
+            next.Round = 1;
+            next.OpenedAtUtc = now;
+
+            var title = await db.RemedialTrackAxes.AsNoTracking()
+                .Where(x => x.Id == next.AxisId)
+                .Select(x => x.TitleOverride ?? x.Section!.Title)
+                .FirstOrDefaultAsync(ct);
+
+            var enrollment = await db.RemedialTrackEnrollments.FirstAsync(e => e.Id == enrollmentId, ct);
+            enrollment.CurrentAxisId = next.AxisId;
+
+            AddEvent(db, enrollmentId, next.AxisId, RemedialTrackEventType.AxisOpened,
+                $"فُتح المحور «{title}».", now);
+            return true;
+        }
+
+        // بعد حفظ حالات المحاور: حالة التسجيل (اكتمال/اكتمال مع تعثّر) + CompletedAtUtc + حدث TrackCompleted
+        private static async Task FinalizeEnrollmentAsync(ApplicationDbContext db, int enrollmentId, DateTime now, CancellationToken ct)
+        {
+            var enrollment = await db.RemedialTrackEnrollments.FirstAsync(e => e.Id == enrollmentId, ct);
+            if (enrollment.Status == RemedialTrackEnrollmentStatus.Cancelled) return;
+
+            var statuses = await db.RemedialTrackAxisProgresses.AsNoTracking()
+                .Where(a => a.EnrollmentId == enrollmentId)
+                .OrderBy(a => a.Order)
+                .Select(a => a.Status)
+                .ToListAsync(ct);
+
+            var resolved = RemedialTrackStateMachine.ResolveEnrollmentStatus(statuses);
+            if (resolved is RemedialTrackEnrollmentStatus.Completed or RemedialTrackEnrollmentStatus.CompletedWithFailures)
+            {
+                if (enrollment.Status == resolved) return;
+                enrollment.Status = resolved;
+                enrollment.CompletedAtUtc ??= now;
+                AddEvent(db, enrollmentId, null, RemedialTrackEventType.TrackCompleted,
+                    resolved == RemedialTrackEnrollmentStatus.Completed
+                        ? "أنهى الطالب جميع محاور الخطة العلاجية."
+                        : "أنهى الطالب الخطة العلاجية، وبعض المحاور تحتاج متابعة مع الإدارة.", now);
+            }
+            else if (resolved == RemedialTrackEnrollmentStatus.InProgress && enrollment.Status == RemedialTrackEnrollmentStatus.NotStarted)
+            {
+                enrollment.Status = RemedialTrackEnrollmentStatus.InProgress;
+            }
+            await db.SaveChangesAsync(ct);
+        }
+
+        // الجولة 2: صفوف تقدّم لكل الفيديوهات الفعّالة دفعة واحدة (AddRange؛ يحفظها SaveChanges المستدعي). فيديوهات الجولة 1 تبقى للسجل.
+        private static async Task AddRewatchRowsAsync(ApplicationDbContext db, int axisProgressId, int axisId, CancellationToken ct)
+        {
+            var videos = await db.RemedialTrackVideos.AsNoTracking()
+                .Where(v => v.AxisId == axisId && v.IsActive)
+                .OrderBy(v => v.Order)
+                .Select(v => new { v.Id, v.Order, v.DurationSeconds })
+                .ToListAsync(ct);
+
+            var existing = new HashSet<int>(await db.RemedialTrackVideoProgresses.AsNoTracking()
+                .Where(v => v.AxisProgressId == axisProgressId && v.Round == 2)
+                .Select(v => v.VideoId)
+                .ToListAsync(ct));
+
+            db.RemedialTrackVideoProgresses.AddRange(videos
+                .Where(v => !existing.Contains(v.Id))
+                .Select(v => new RemedialTrackVideoProgress
+                {
+                    AxisProgressId = axisProgressId,
+                    VideoId = v.Id,
+                    VideoOrder = v.Order,
+                    Round = 2,
+                    DurationSeconds = v.DurationSeconds
+                }));
+        }
+
+        private static void AddEvent(ApplicationDbContext db, int enrollmentId, int? axisId, RemedialTrackEventType type, string message, DateTime now) =>
+            db.RemedialTrackEvents.Add(new RemedialTrackEvent
+            {
+                EnrollmentId = enrollmentId,
+                AxisId = axisId,
+                Type = type,
+                Message = Truncate(message, 500),
+                CreatedAtUtc = now
+            });
 
         private static RemedialTrackPingResult Fail(RemedialTrackPingStatus status, string reason, string message) =>
             new(status, new RemedialTrackVideoPingResponse { Ok = false, Reason = reason, Message = message });

@@ -1,0 +1,72 @@
+@using QdratNew.Enums
+@model QdratNew.ViewModels.RemedialTracks.StudentRemedialTrackSolveVm
+@{
+    ViewData["Title"] = $"اختبار {(int)Model.ExamNumber} — {Model.AxisTitle}";
+    var total = Model.Questions.Count;
+}
+@section Styles {
+    <link href="~/css/student-rtk.css" rel="stylesheet" asp-append-version="true" />
+}
+
+@await Html.PartialAsync("_ExamBackGuard")
+
+<div class="rtk-page rtk-exam">
+    <div class="rtk-exam-bar" id="rtkExamBar">
+        <div class="rtk-exam-title">
+            <strong>اختبار @((int)Model.ExamNumber)</strong>
+            <small>@Model.AxisTitle</small>
+        </div>
+        <div class="rtk-exam-meta">
+            <span class="rtk-exam-progress" id="rtkAnswered" aria-live="polite">أجبت عن <b id="rtkAnsweredCount">@Model.AnsweredCount</b> من @total</span>
+            <span class="rtk-exam-timer" id="rtkTimer" role="timer" aria-label="الوقت المتبقي">--:--</span>
+        </div>
+    </div>
+
+    <div class="rtk-save-state" id="rtkSaveState" role="status" aria-live="polite"></div>
+
+    @if (total == 0)
+    {
+        <div class="rtk-card rtk-empty"><i class="fas fa-circle-question"></i><p class="mb-0">لا توجد أسئلة في هذا الاختبار.</p></div>
+    }
+    else
+    {
+        <form id="rtkExamForm" asp-action="Submit" asp-area="Students" method="post"
+              data-attempt-id="@Model.AttemptId"
+              data-remaining="@Model.RemainingSeconds"
+              data-total="@total"
+              data-save-url="@Url.Action("SaveAnswer", "RemedialTrack", new { area = "Students" })">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="attemptId" value="@Model.AttemptId" />
+
+            @foreach (var q in Model.Questions)
+            {
+                <section class="rtk-q" data-question-id="@q.QuestionId" data-saved="@(string.IsNullOrWhiteSpace(q.SelectedAnswer) ? "0" : "1")">
+                    <div class="rtk-q-head">
+                        <span class="rtk-q-num">سؤال @q.Index من @total</span>
+                        <span class="rtk-q-saved" data-role="saved" hidden><i class="fas fa-check" aria-hidden="true"></i> تم الحفظ</span>
+                    </div>
+                    @await Html.PartialAsync("_ExamQuestionContent", new QdratNew.ViewModels.Students.ExamQuestionContentVm
+                    {
+                        Question = q.Question,
+                        OptionFieldName = "ans_" + q.Index,
+                        SelectedAnswer = q.SelectedAnswer
+                    })
+                </section>
+            }
+
+            <div class="rtk-exam-footer">
+                <button type="submit" class="rtk-btn" id="rtkSubmitBtn"><i class="fas fa-paper-plane" aria-hidden="true"></i> تسليم الاختبار</button>
+                <p class="rtk-hint mb-0">يُحفظ كل اختيار تلقائيًا. عند انتهاء الوقت يُسلَّم الاختبار تلقائيًا.</p>
+            </div>
+        </form>
+    }
+</div>
+
+@await Html.PartialAsync("_UnifiedExamStyles")
+
+@section Scripts {
+    @if (total > 0)
+    {
+        <script src="~/js/remedial-track-exam.js" asp-append-version="true"></script>
+    }
+}

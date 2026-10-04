@@ -18,17 +18,20 @@ namespace QdratNew.Areas.Students.Controllers
         private readonly IStudentIdentityService _identity;
         private readonly IRemedialTrackAccessService _access;
         private readonly IRemedialTrackProgressService _progress;
+        private readonly IRemedialTrackExamService _exams;
         private readonly ITimeZoneService _tz;
 
         public RemedialTrackController(
             IStudentIdentityService identity,
             IRemedialTrackAccessService access,
             IRemedialTrackProgressService progress,
+            IRemedialTrackExamService exams,
             ITimeZoneService tz)
         {
             _identity = identity;
             _access = access;
             _progress = progress;
+            _exams = exams;
             _tz = tz;
         }
 
@@ -130,6 +133,133 @@ namespace QdratNew.Areas.Students.Controllers
                 RemedialTrackPingStatus.NotFound => NotFound(result.Body),
                 RemedialTrackPingStatus.Conflict => Conflict(result.Body),
                 _ => StatusCode(StatusCodes.Status403Forbidden, result.Body)
+            };
+        }
+
+        // ───────────── RTK-S5.2: بدء الاختبار ─────────────
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> StartExam(int enrollmentId, int axisProgressId, CancellationToken ct)
+        {
+            var studentId = await _identity.GetCurrentStudentIdAsync(User);
+            if (studentId == 0) return Challenge();
+
+            var gate = await _access.EvaluateAsync(studentId, enrollmentId, ct);
+            var blocked = HandleGate(gate, enrollmentId);
+            if (blocked is not null) return blocked;
+
+            var result = await _exams.StartExamAsync(studentId, enrollmentId, axisProgressId, ct);
+            switch (result.Status)
+            {
+                case RemedialTrackExamStartStatus.Created:
+                case RemedialTrackExamStartStatus.Existing:
+                    return RedirectToAction(nameof(Solve), new { attemptId = result.AttemptId });
+
+                case RemedialTrackExamStartStatus.NotFound:
+                    return NotFound();
+
+                case RemedialTrackExamStartStatus.Forbidden:
+                    return View("Unavailable");
+
+                case RemedialTrackExamStartStatus.NeedsCode:
+                    return RedirectToAction(nameof(Open), new { enrollmentId });
+
+                default: // Conflict | NoQuestions — رسالة وعودة لصفحة المحور (الخدمة ترجع 409 دلاليًا)
+                    TempData["RtkMessage"] = result.Message ?? "تعذّر بدء الاختبار الآن.";
+                    return RedirectToAction(nameof(Axis), new { enrollmentId, axisProgressId });
+            }
+        }
+
+        // ───────────── RTK-S5.2: واجهة الحل ─────────────
+
+        [HttpGet]
+        public async Task<IActionResult> Solve(int attemptId, CancellationToken ct)
+        {
+            var studentId = await _identity.GetCurrentStudentIdAsync(User);
+            if (studentId == 0) return Challenge();
+
+            var result = await _exams.GetSolveAsync(studentId, attemptId, ct);
+            return result.Status switch
+            {
+                RemedialTrackSolveStatus.Ok => View(result.Model),
+                RemedialTrackSolveStatus.Closed => RedirectToAction(nameof(Result), new { attemptId }),
+                RemedialTrackSolveStatus.Forbidden => View("Unavailable"),
+                _ => NotFound()
+            };
+        }
+
+        // ───────────── RTK-S5.2: حفظ إجابة (JSON) ─────────────
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [EnableRateLimiting("rtk-exam")]
+        public async Task<IActionResult> SaveAnswer([FromBody] RemedialTrackSaveAnswerRequest request, CancellationToken ct)
+        {
+            if (request is null) return BadRequest(new RemedialTrackSaveAnswerResponse { Ok = false, Reason = "bad-request" });
+
+            var studentId = await _identity.GetCurrentStudentIdAsync(User);
+            if (studentId == 0) return Unauthorized();
+
+            var r = await _exams.SaveAnswerAsync(studentId, request.AttemptId, request.QuestionId, request.Answer, ct);
+            var body = new RemedialTrackSaveAnswerResponse
+            {
+                Ok = r.Status == RemedialTrackSaveAnswerStatus.Ok,
+                Message = r.Message,
+                RemainingSeconds = r.RemainingSeconds,
+                Reason = r.Status switch
+                {
+                    RemedialTrackSaveAnswerStatus.BadRequest => "bad-request",
+                    RemedialTrackSaveAnswerStatus.NotFound => "notfound",
+                    RemedialTrackSaveAnswerStatus.Expired => "expired",
+                    RemedialTrackSaveAnswerStatus.Forbidden => "forbidden",
+                    _ => null
+                }
+            };
+            return r.Status switch
+            {
+                RemedialTrackSaveAnswerStatus.Ok => Ok(body),
+                RemedialTrackSaveAnswerStatus.BadRequest => BadRequest(body),
+                RemedialTrackSaveAnswerStatus.NotFound => NotFound(body),
+                RemedialTrackSaveAnswerStatus.Expired => Conflict(body),
+                _ => StatusCode(StatusCodes.Status403Forbidden, body)
+            };
+        }
+
+        // ───────────── RTK-S5.3: التسليم ─────────────
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Submit(int attemptId, CancellationToken ct)
+        {
+            var studentId = await _identity.GetCurrentStudentIdAsync(User);
+            if (studentId == 0) return Challenge();
+
+            var r = await _exams.SubmitAsync(studentId, attemptId, ct);
+            return r.Status switch
+            {
+                RemedialTrackSubmitStatus.Submitted or RemedialTrackSubmitStatus.AlreadyClosed
+                    => RedirectToAction(nameof(Result), new { attemptId }),
+                RemedialTrackSubmitStatus.Forbidden => View("Unavailable"),
+                _ => NotFound()
+            };
+        }
+
+        // ───────────── RTK-S5.3: النتيجة ─────────────
+
+        [HttpGet]
+        public async Task<IActionResult> Result(int attemptId, CancellationToken ct)
+        {
+            var studentId = await _identity.GetCurrentStudentIdAsync(User);
+            if (studentId == 0) return Challenge();
+
+            var r = await _exams.GetResultAsync(studentId, attemptId, ct);
+            return r.Status switch
+            {
+                RemedialTrackResultStatus.Ok => View(r.Model),
+                RemedialTrackResultStatus.InProgress => RedirectToAction(nameof(Solve), new { attemptId }),
+                RemedialTrackResultStatus.Forbidden => View("Unavailable"),
+                _ => NotFound()
             };
         }
 

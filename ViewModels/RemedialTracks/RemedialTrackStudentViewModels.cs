@@ -95,8 +95,11 @@ namespace QdratNew.ViewModels.RemedialTracks
         public int Round { get; set; }
         public bool CanWatch { get; set; }        // Videos/Rewatch فقط
         public bool AllVideosDone { get; set; }
-        public bool ExamReady { get; set; }       // AwaitingExam101/102 (الاختبار نفسه يُبنى في S5)
+        public bool ExamReady { get; set; }       // AwaitingExam101/102
         public RemedialTrackExamNumber? PendingExam { get; set; }
+        public int ExamDurationMinutes { get; set; }                       // RTK-S5
+        public int? InProgressAttemptId { get; set; }                      // RTK-S5: محاولة الاختبار المعلّق قيد الحل
+        public IReadOnlyList<StudentRemedialTrackAttemptItemVm> Attempts { get; set; } = Array.Empty<StudentRemedialTrackAttemptItemVm>();
         public IReadOnlyList<StudentRemedialTrackVideoItemVm> Videos { get; set; } = Array.Empty<StudentRemedialTrackVideoItemVm>();
     }
 
