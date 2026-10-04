@@ -1,4 +1,9 @@
-﻿BEGIN TRANSACTION;
+﻿-- RTK-S7.4: الفهرس المُصفّى UX_RemedialTrackPublications_ActiveCode يتطلب QUOTED_IDENTIFIER ON (افتراضي SSMS/Azure Data Studio؛ sqlcmd بدون -I يجعله OFF).
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
+GO
+
+BEGIN TRANSACTION;
 GO
 
 IF NOT EXISTS (

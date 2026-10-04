@@ -79,3 +79,42 @@ BACKUP DATABASE [QdratNewDB] TO DISK = N'/var/opt/mssql/backup/QdratNewDB_before
 
 ### 5) الاختبارات
 `dotnet test QdratNew.Tests` — 58 اختبارًا (تشمل RL: كتالوج، SubmitLead، /register GET/POST/429، حماية الأدمن، UpdateStatus). اختبارات التكامل تحتاج SQL Server محليًا وقاعدة `QdratNewDB` (تُنسخ إلى `QdratNewDB_IntegrationTests`)، وتعمل في Collection واحدة متسلسلة لأنها تشترك في نفس القاعدة.
+
+
+## 📋 نشر Epic RTK (الخطة العلاجية العاجلة) — RTK-S7.4
+
+### 1) قبل النشر (Backup إلزامي)
+```sql
+BACKUP DATABASE [QdratNewDB] TO DISK = N'/var/opt/mssql/backup/QdratNewDB_before_RTK.bak' WITH INIT, COMPRESSION;
+```
+لا تُطبَّق الـ Migration آليًا على الإنتاج. شغّل يدويًا بالترتيب (كلاهما Idempotent وإضافات فقط، يمكن إعادة تشغيلهما بأمان):
+1. `Migrations/Scripts/RTK_RemedialTracks.sql` — 10 جداول `RemedialTrack*` + فهارسها (منها الفهرس الفريد المُصفّى `UX_RemedialTrackPublications_ActiveCode`). كل خطوة داخل `IF NOT EXISTS (… __EFMigrationsHistory …)`.
+2. `Migrations/Scripts/RTK_FeatureFlag.sql` — صف واحد في `SystemSettings` للمفتاح `RemedialTrack.Enabled` (= `true`). التطبيق يزرعه أيضًا عند الإقلاع (`SystemSettingsSeeder`)، والسكربت للتحكم قبل نشر الكود.
+
+### 2) التحقق بعد تشغيل السكربت
+```sql
+SELECT COUNT(*) FROM sys.tables WHERE name LIKE N'RemedialTrack%';   -- المتوقع 10
+SELECT name, filter_definition FROM sys.indexes
+ WHERE name = N'UX_RemedialTrackPublications_ActiveCode';           -- المتوقع: ([AccessCode] IS NOT NULL AND [Status]=(1))
+SELECT [Value] FROM SystemSettings WHERE [Key] = N'RemedialTrack.Enabled';   -- المتوقع true
+```
+
+### 3) بعد نشر الكود
+- تأكد من `symlink` مجلدي `uploads` و`images/profiles` (القسمان الأوّلان في هذا الملف).
+- ⚠ **فحص CSP / الـ iframe (يدوي — لا يوجد `Content-Security-Policy` ولا `X-Frame-Options` في كود التطبيق):** تحقق في إعدادات Nginx (qdrat-server) أو Azure أن أي `Content-Security-Policy` مُضاف هناك يسمح بـ `script-src https://www.youtube.com https://www.youtube-nocookie.com https://s.ytimg.com https://player.vimeo.com` و`frame-src https://www.youtube.com https://www.youtube-nocookie.com https://player.vimeo.com`. لا تضف CSP صارمة جديدة تكسر بقية المنصة.
+- جرّب نشرًا تجريبيًا: خطة صغيرة (محور + فيديو + نموذجا 101/102) ← أمر نشر على دفعة تجريبية بطالب اختبار (أونلاين ثم حضوري) ← ادخل بحساب الطالب وتأكد من البوابة والمشغّل والاختبار.
+- `UseForwardedHeaders` مفعّل في Program.cs؛ تأكد من أن عنوان الـ Proxy ضمن الإعدادات كي يُحسب Rate Limit بالمستخدم (سياسات `rtk-code` 10/10د، `rtk-ping` 20/د، `rtk-exam` 120/د مفتاحها المستخدم لا الـ IP).
+
+### 4) مفتاح التعطيل وخطة التراجع (بلا حذف جداول)
+```sql
+UPDATE SystemSettings SET [Value] = N'false' WHERE [Key] = N'RemedialTrack.Enabled';   -- تعطيل
+UPDATE SystemSettings SET [Value] = N'true'  WHERE [Key] = N'RemedialTrack.Enabled';   -- تفعيل
+```
+- عند `false`: يختفي بند «الخطة العلاجية» من قائمة الطالب، وتُرجع كل أكشنات الطالب 404 (صفحة صيانة، أو JSON `{ok:false, reason:"disabled"}` لنداءات fetch)، دون المساس بالبيانات. لوحات الأدمن والتقارير تبقى متاحة.
+- يسري التغيير خلال **30 ثانية** (كاش المفتاح) بلا إعادة تشغيل. الغياب أو قيمة غير صالحة = مفعّل؛ فقط `false` الصريحة تعطّل.
+- إيقاف أمر نشر نشط بعينه: «إلغاء أمر النشر» من لوحة الأدمن (يُحرّر الرقم المرجعي ويحجب الوصول).
+
+### 5) الاختبارات
+- بلا قاعدة بيانات: `dotnet test QdratNew.Tests --filter "FullyQualifiedName~RemedialTrack"` (وحدات + حارس أمني + خدمات InMemory).
+- SQL Server حقيقي (S7.2/S7.3): اضبط `QDRAT_TEST_SQL` على قاعدة اسمها يحوي `Test` (مثل `QdratNewDB_IntegrationTests`) — الفهارس الفريدة، RowVersion، ExecuteUpdate تحت CompatibilityLevel(120)، تكامل HTTP، وE2E Playwright (375px).
+- الحمل (اختياري، مكلف): `RTK_LOAD=1` مع `QDRAT_TEST_SQL` — 500 طالب × نبضة/15ث × 5 دقائق؛ يكتب `rtk-load-report.txt` بجوار ملفات الاختبار. لا يُشغَّل أبدًا على قاعدة الإنتاج.

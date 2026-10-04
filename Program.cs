@@ -1041,6 +1041,10 @@ builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackExamSe
                            QdratNew.Services.RemedialTracks.RemedialTrackExamService>();
 builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackReportService,
                            QdratNew.Services.RemedialTracks.RemedialTrackReportService>();
+// RTK-S7.4: مفتاح تعطيل الميزة (SystemSettings: RemedialTrack.Enabled)
+builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackFeatureService,
+                           QdratNew.Services.RemedialTracks.RemedialTrackFeatureService>();
+builder.Services.AddScoped<QdratNew.Filters.RemedialTrackEnabledFilter>();
 builder.Services.AddScoped<ILectureInstructorSyncService, LectureInstructorSyncService>();
 builder.Services.AddScoped<IEmployeeBatchAccessService, EmployeeBatchAccessService>();
 builder.Services.AddScoped<QdratNew.Services.Admin.EmployeeDashboard.IEmployeeDashboardService,

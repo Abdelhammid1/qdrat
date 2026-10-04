@@ -13,18 +13,22 @@ namespace QdratNew.ViewComponents
         private readonly IStudentIdentityService _identity;
         private readonly IRemedialTrackAccessService _access;
         private readonly IMemoryCache _cache;
+        private readonly IRemedialTrackFeatureService _feature;
 
         public StudentRemedialTrackNavViewComponent(
-            IStudentIdentityService identity, IRemedialTrackAccessService access, IMemoryCache cache)
+            IStudentIdentityService identity, IRemedialTrackAccessService access, IMemoryCache cache,
+            IRemedialTrackFeatureService feature)
         {
             _identity = identity;
             _access = access;
             _cache = cache;
+            _feature = feature;
         }
 
         public async Task<IViewComponentResult> InvokeAsync()
         {
             if (HttpContext.User.Identity?.IsAuthenticated != true) return Content(string.Empty);
+            if (!await _feature.IsEnabledAsync(HttpContext.RequestAborted)) return Content(string.Empty);   // RTK-S7.4
 
             var studentId = await _identity.GetCurrentStudentIdAsync(HttpContext.User);
             if (studentId == 0) return Content(string.Empty);

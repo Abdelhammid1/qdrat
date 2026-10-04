@@ -13,6 +13,7 @@ namespace QdratNew.Areas.Students.Controllers
     /// </summary>
     [Area("Students")]
     [Authorize(Roles = "Student")]
+    [ServiceFilter(typeof(QdratNew.Filters.RemedialTrackEnabledFilter))]   // RTK-S7.4: مفتاح التعطيل
     public class RemedialTrackController : Controller
     {
         private readonly IStudentIdentityService _identity;
