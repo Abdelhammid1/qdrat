@@ -888,6 +888,8 @@ builder.Services.AddScoped<IDropdownService, DropdownService>();
 builder.Services.AddScoped<IStudentActivityLogger, StudentActivityLogger>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<IAdvancedNotificationService, AdvancedNotificationService>();
+// RTK: INotificationService (كان بلا تسجيل ← فشل بناء الـ DI لخدمة نشر الخطة العلاجية) يُنفَّذ بنفس خدمة الإشعارات المتقدمة
+builder.Services.AddScoped<INotificationService, AdvancedNotificationService>();
 builder.Services.AddScoped<IBatchLectureAutoGenerationService, BatchLectureAutoGenerationService>();
 builder.Services.AddScoped<IAutoExamGenerationService, AutoExamGenerationService>();
 builder.Services.AddScoped<IStudentAnalyticsService, StudentAnalyticsService>();
@@ -912,9 +914,9 @@ builder.Services.AddScoped<IAdminActivityLogger, AdminActivityLogger>();
 builder.Services.AddScoped<INotificationCenterService, NotificationCenterService>();
 builder.Services.AddScoped<HomeworkReminderJob>();
 builder.Services.AddScoped<AutoCloseLecturesJob>();
+builder.Services.AddScoped<QuestionReviewTaskReminderJob>(); // QRT-S7.1
 builder.Services.AddScoped<IStudentActivityAIAnalyzer, StudentActivityAIAnalyzer>();
 builder.Services.AddScoped<IAIAnalysisService, AIAnalysisService>();
-builder.Services.AddScoped<QuestionReviewTaskReminderJob>(); // QRT-S7.1
 builder.Services.AddScoped<IChartAIAnalyzer, ChartAIAnalyzer>();
 builder.Services.AddScoped<IStudentPerformanceService, StudentPerformanceService>();
 builder.Services.AddScoped<IHomeworkAssignmentService, HomeworkAssignmentService>();
@@ -1112,6 +1114,24 @@ builder.Services.AddRateLimiter(o =>
             Window = TimeSpan.FromMinutes(10),
             QueueLimit = 0
         }));
+    // RTK-S4 (D8/R5): الرقم المرجعي للخطة العلاجية — 10 طلبات / 10 دقائق لكل مستخدم
+    o.AddPolicy("rtk-code", ctx => System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+        ctx.User?.Identity?.Name ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "anon",
+        _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 10,
+            Window = TimeSpan.FromMinutes(10),
+            QueueLimit = 0
+        }));
+    // RTK-S4 (R5): نبضات الفيديو — 20 طلب / دقيقة لكل مستخدم (النبضة العادية كل 15ث + أحداث pause/ended)
+    o.AddPolicy("rtk-ping", ctx => System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+        ctx.User?.Identity?.Name ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "anon",
+        _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 20,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        }));
     o.OnRejected = async (context, token) =>
     {
         context.HttpContext.Response.ContentType = "text/plain; charset=utf-8";
@@ -1251,8 +1271,6 @@ app.UseMiddleware<QdratNew.Middleware.RequestTimingMiddleware>();
 
 app.UseRouting();
 
-app.UseRateLimiter();
-
 app.UseCors("AllowFrontend");
 
 app.UseSession();
@@ -1266,6 +1284,9 @@ app.UseMiddleware<QdratNew.Middleware.ImpersonationMiddleware>();
 
 // ── منع الموقوفين: يسجّل خروج أي مستخدم IsActive=false فور أي طلب ──
 app.UseMiddleware<QdratNew.Middleware.ActiveUserMiddleware>();
+
+// RTK-S4: بعد المصادقة ليقرأ rate-limiter هوية المستخدم (سياستا rtk-code / rtk-ping مفتاحهما المستخدم، لا الـ IP — الحضوري خلف NAT واحد)
+app.UseRateLimiter();
 
 app.UseAuthorization();
 
@@ -1302,6 +1323,13 @@ RecurringJob.AddOrUpdate<IPlacementExamAutoCloseService>(
     "auto-close-placement-exams-job",
     service => service.CloseExpiredExamsAsync(),
     "*/5 * * * *"); // كل 5 دقائق
+
+// QRT-S7.1/7.4: تذكيرات مهام مراجعة الأسئلة + الملخص اليومي — 08:00 بتوقيت الرياض
+RecurringJob.AddOrUpdate<QuestionReviewTaskReminderJob>(
+    "question-review-task-reminders",
+    job => job.RunAsync(),
+    "0 8 * * *",
+    QdratNew.Services.QuestionReviewTasks.QuestionReviewTaskMetrics.DisplayTimeZone);
 #endregion
 
 
@@ -1323,13 +1351,6 @@ app.MapRazorPages();
 
 RotativaConfiguration.Setup(app.Environment.WebRootPath, "Rotativa");
 
-
-// QRT-S7.1/7.4: تذكيرات مهام مراجعة الأسئلة + الملخص اليومي — 08:00 بتوقيت الرياض
-RecurringJob.AddOrUpdate<QuestionReviewTaskReminderJob>(
-    "question-review-task-reminders",
-    job => job.RunAsync(),
-    "0 8 * * *",
-    QdratNew.Services.QuestionReviewTasks.QuestionReviewTaskMetrics.DisplayTimeZone);
 app.Run();
 
 #endregion

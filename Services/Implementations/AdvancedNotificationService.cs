@@ -6,7 +6,7 @@ using QdratNew.Services.Interfaces;
 
 namespace QdratNew.Services.Implementations
 {
-    public class AdvancedNotificationService : IAdvancedNotificationService
+    public class AdvancedNotificationService : IAdvancedNotificationService, INotificationService
     {
         private readonly ApplicationDbContext _context;
 
