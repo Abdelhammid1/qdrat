@@ -1,0 +1,306 @@
+@model QdratNew.ViewModels.RemedialTracks.RemedialTrackPublishFormVm
+@using QdratNew.Enums
+@{
+    ViewData["Title"] = "نشر خطة علاجية";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/admin-rtk.css" asp-append-version="true" />
+}
+
+@Html.AntiForgeryToken()
+
+<div class="rtk-page container-fluid mt-4" dir="rtl" id="rtkPublish" data-max="@QdratNew.ViewModels.RemedialTracks.RemedialTrackPublishFormVm.MaxStudentsPerPublication">
+
+    <header class="rtk-hero">
+        <div class="rtk-hero__top">
+            <div>
+                <div class="rtk-hero__label"><i class="fas fa-paper-plane ms-1"></i> الخطة العلاجية العاجلة</div>
+                <h1>نشر خطة علاجية</h1>
+                <p>اختر خطة جاهزة ودفعة، ثم حدّد الطلاب والنمط ووقت النشر. بعد أول نشر تُقفل بنية الخطة.</p>
+            </div>
+            <a class="rtk-btn rtk-btn--light" asp-area="Admin" asp-controller="RemedialTrackPublications" asp-action="Index">
+                <i class="fas fa-arrow-right"></i> أوامر النشر
+            </a>
+        </div>
+    </header>
+
+    <div class="rtk-alert rtk-alert--error" id="rtkFormError" role="alert" hidden></div>
+
+    @if (Model.Tracks.Count == 0)
+    {
+        <div class="rtk-empty"><i class="fas fa-route"></i> لا توجد خطط بحالة «جاهزة». جهّز خطة من صفحة البناء أولًا.</div>
+    }
+    else if (Model.Batches.Count == 0)
+    {
+        <div class="rtk-empty"><i class="fas fa-users"></i> لا توجد دفعات متاحة لك للنشر عليها.</div>
+    }
+    else
+    {
+        <form id="rtkPublishForm" novalidate>
+            <section class="rtk-panel">
+                <h2>١. الخطة والدفعة</h2>
+                <div class="rtk-grid">
+                    <div class="rtk-field">
+                        <label for="TrackId">الخطة (الجاهزة فقط)</label>
+                        <select id="TrackId" name="TrackId" required>
+                            <option value="">— اختر الخطة —</option>
+                            @foreach (var t in Model.Tracks)
+                            {
+                                <option value="@t.Id" selected="@(Model.Input.TrackId == t.Id)">@t.Text</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="rtk-field">
+                        <label for="BatchId">الدفعة</label>
+                        <select id="BatchId" name="BatchId" required>
+                            <option value="">— اختر الدفعة —</option>
+                            @foreach (var b in Model.Batches)
+                            {
+                                <option value="@b.Id">@b.Text</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+            </section>
+
+            <section class="rtk-panel">
+                <h2>٢. الاستهداف</h2>
+                <div class="rtk-choice" role="radiogroup" aria-label="نطاق الاستهداف">
+                    <label class="rtk-choice__item">
+                        <input type="radio" name="Scope" value="@((int)RemedialTrackPublicationScope.WholeBatch)" checked />
+                        <span>الدفعة كاملة</span>
+                    </label>
+                    <label class="rtk-choice__item">
+                        <input type="radio" name="Scope" value="@((int)RemedialTrackPublicationScope.SelectedStudents)" />
+                        <span>طلاب محددون من الدفعة</span>
+                    </label>
+                </div>
+
+                <div id="rtkStudentsBox" hidden>
+                    <div class="rtk-grid mt-3">
+                        <div class="rtk-field">
+                            <label for="rtkStudentSearch">بحث بالاسم</label>
+                            <input id="rtkStudentSearch" type="search" maxlength="100" autocomplete="off" placeholder="اكتب جزءًا من الاسم" />
+                        </div>
+                        <div class="rtk-field" style="align-self:end">
+                            <button type="button" class="rtk-btn rtk-btn--outline" id="rtkSelectPage" style="width:100%">تحديد طلاب الصفحة</button>
+                        </div>
+                    </div>
+                    <div class="rtk-hint mt-2">المحدَّدون: <strong id="rtkSelectedCount">0</strong> (الحد الأقصى @QdratNew.ViewModels.RemedialTracks.RemedialTrackPublishFormVm.MaxStudentsPerPublication)</div>
+                    <div id="rtkStudentsState" class="rtk-empty mt-2" hidden></div>
+                    <ul class="rtk-students" id="rtkStudentsList"></ul>
+                    <div class="rtk-pager" id="rtkStudentsPager"></div>
+                </div>
+            </section>
+
+            <section class="rtk-panel">
+                <h2>٣. النمط ووقت النشر</h2>
+                <div class="rtk-choice" role="radiogroup" aria-label="نمط التقديم">
+                    <label class="rtk-choice__item">
+                        <input type="radio" name="Mode" value="@((int)RemedialTrackDeliveryMode.Online)" checked />
+                        <span>أونلاين (تظهر في صفحة الطالب)</span>
+                    </label>
+                    <label class="rtk-choice__item">
+                        <input type="radio" name="Mode" value="@((int)RemedialTrackDeliveryMode.InPerson)" />
+                        <span>حضوري (برقم مرجعي من 6 أرقام)</span>
+                    </label>
+                </div>
+                <div class="rtk-hint" id="rtkInPersonHint" hidden>سيُولَّد رقم مرجعي فريد بعد النشر، ويظهر في صفحة التفاصيل لمن يملك صلاحية إدارته.</div>
+
+                <div class="rtk-grid mt-3">
+                    <div class="rtk-field">
+                        <label for="PublishAtLocal">وقت النشر (اختياري — الافتراضي الآن)</label>
+                        <input id="PublishAtLocal" name="PublishAtLocal" type="datetime-local" />
+                        <div class="rtk-hint">بتوقيت السعودية. لا يُقبل وقت أقدم من ساعة مضت.</div>
+                    </div>
+                    <div class="rtk-field rtk-field--wide">
+                        <label for="AdminNote">ملاحظة (اختياري)</label>
+                        <textarea id="AdminNote" name="AdminNote" maxlength="500"></textarea>
+                    </div>
+                </div>
+            </section>
+
+            <div class="rtk-form-actions">
+                <button type="submit" class="rtk-btn" id="rtkPublishSubmit"><i class="fas fa-paper-plane"></i> نشر الخطة</button>
+                <a class="rtk-btn rtk-btn--outline" asp-area="Admin" asp-controller="RemedialTrackPublications" asp-action="Index">إلغاء</a>
+            </div>
+        </form>
+    }
+
+    <div class="rtk-toast" id="rtkToast" role="status" aria-live="polite"></div>
+</div>
+
+@section Scripts {
+    <script>
+    (function () {
+        'use strict';
+        var root = document.getElementById('rtkPublish');
+        var form = document.getElementById('rtkPublishForm');
+        if (!root || !form || root.dataset.bound === '1') return;   // منع تكرار الربط
+        root.dataset.bound = '1';
+
+        var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+        var urls = {
+            create: '@Url.Action("Create", "RemedialTrackPublications", new { area = "Admin" })',
+            students: '@Url.Action("StudentsOfBatch", "RemedialTrackPublications", new { area = "Admin" })'
+        };
+        var MAX = parseInt(root.getAttribute('data-max'), 10) || 1000;
+
+        var batchSel = document.getElementById('BatchId');
+        var box = document.getElementById('rtkStudentsBox');
+        var listEl = document.getElementById('rtkStudentsList');
+        var pagerEl = document.getElementById('rtkStudentsPager');
+        var stateEl = document.getElementById('rtkStudentsState');
+        var countEl = document.getElementById('rtkSelectedCount');
+        var searchEl = document.getElementById('rtkStudentSearch');
+        var errBox = document.getElementById('rtkFormError');
+        var toast = document.getElementById('rtkToast');
+        var submitBtn = document.getElementById('rtkPublishSubmit');
+
+        var selected = {};      // id -> true (يبقى عبر الصفحات والبحث)
+        var pageItems = [];     // طلاب الصفحة الحالية
+        var loadSeq = 0;
+        var submitting = false;
+
+        function esc(t) { var d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; }
+        function scope() { return form.querySelector('input[name="Scope"]:checked').value; }
+        function mode() { return form.querySelector('input[name="Mode"]:checked').value; }
+        function selectedIds() { return Object.keys(selected); }
+
+        function showToast(msg, ok) {
+            toast.innerHTML = '<div class="rtk-alert ' + (ok ? 'rtk-alert--ok' : 'rtk-alert--error') + '">' + esc(msg) + '</div>';
+            clearTimeout(showToast._t);
+            showToast._t = setTimeout(function () { toast.innerHTML = ''; }, ok ? 3000 : 7000);
+        }
+        function showError(msg) {
+            errBox.textContent = msg || '';
+            errBox.hidden = !msg;
+            if (msg) errBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        function updateCount() { countEl.textContent = selectedIds().length; }
+        function showState(msg) { stateEl.textContent = msg || ''; stateEl.hidden = !msg; }
+
+        function renderList() {
+            listEl.innerHTML = pageItems.map(function (s) {
+                return '<li><label class="rtk-student"><input type="checkbox" data-sid="' + s.id + '"' +
+                    (selected[s.id] ? ' checked' : '') + ' /> <span>' + esc(s.name) + '</span></label></li>';
+            }).join('');
+        }
+        function renderPager(page, totalPages) {
+            if (totalPages <= 1) { pagerEl.innerHTML = ''; return; }
+            var html = '';
+            for (var i = 1; i <= totalPages; i++) {
+                html += i === page
+                    ? '<span class="is-current">' + i + '</span>'
+                    : '<a href="#" data-page="' + i + '">' + i + '</a>';
+            }
+            pagerEl.innerHTML = html;
+        }
+
+        function loadStudents(page) {
+            var batchId = batchSel.value;
+            pageItems = []; renderList(); pagerEl.innerHTML = '';
+            if (!batchId) { showState('اختر الدفعة أولًا.'); return; }
+            showState('جارٍ تحميل الطلاب…');
+            var seq = ++loadSeq;
+            var url = urls.students + '?batchId=' + encodeURIComponent(batchId) +
+                '&page=' + (page || 1) + '&q=' + encodeURIComponent(searchEl.value.trim());
+
+            fetch(url, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                .then(function (res) {
+                    if (seq !== loadSeq) return;   // تجاهل الاستجابات المتأخرة
+                    if (!res.success) { showState(res.message || 'تعذّر تحميل الطلاب.'); return; }
+                    pageItems = res.data.items || [];
+                    if (!pageItems.length) { showState('لا يوجد طلاب مطابقون.'); return; }
+                    showState('');
+                    renderList();
+                    renderPager(res.data.page, res.data.totalPages);
+                })
+                .catch(function () { if (seq === loadSeq) showState('تعذّر الاتصال بالخادم. أعد المحاولة بتغيير الدفعة.'); });
+        }
+
+        function syncScope() {
+            var sel = scope() === '2';
+            box.hidden = !sel;
+            if (sel) loadStudents(1);
+        }
+        function syncMode() {
+            document.getElementById('rtkInPersonHint').hidden = mode() !== '2';
+        }
+
+        form.addEventListener('change', function (e) {
+            if (e.target.name === 'Scope') syncScope();
+            else if (e.target.name === 'Mode') syncMode();
+            else if (e.target === batchSel) { selected = {}; updateCount(); if (scope() === '2') loadStudents(1); }
+            else if (e.target.matches('input[data-sid]')) {
+                var id = e.target.getAttribute('data-sid');
+                if (e.target.checked) selected[id] = true; else delete selected[id];
+                updateCount();
+            }
+        });
+
+        var searchTimer;
+        searchEl.addEventListener('input', function () {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(function () { loadStudents(1); }, 350);
+        });
+        pagerEl.addEventListener('click', function (e) {
+            var a = e.target.closest('a[data-page]');
+            if (!a) return;
+            e.preventDefault();
+            loadStudents(parseInt(a.getAttribute('data-page'), 10));
+        });
+        document.getElementById('rtkSelectPage').addEventListener('click', function () {
+            pageItems.forEach(function (s) { selected[s.id] = true; });
+            renderList(); updateCount();
+        });
+
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            if (submitting) return;
+            showError('');
+
+            if (!form.TrackId.value) { showError('⚠️ اختر الخطة.'); return; }
+            if (!batchSel.value) { showError('⚠️ اختر الدفعة.'); return; }
+            var ids = selectedIds();
+            if (scope() === '2') {
+                if (!ids.length) { showError('⚠️ اختر طالبًا واحدًا على الأقل.'); return; }
+                if (ids.length > MAX) { showError('⚠️ الحد الأقصى ' + MAX + ' طالب لأمر النشر الواحد.'); return; }
+            }
+
+            var fd = new FormData();
+            fd.set('__RequestVerificationToken', token);
+            fd.set('TrackId', form.TrackId.value);
+            fd.set('BatchId', batchSel.value);
+            fd.set('Scope', scope());
+            fd.set('Mode', mode());
+            if (form.PublishAtLocal.value) fd.set('PublishAtLocal', form.PublishAtLocal.value);
+            if (form.AdminNote.value.trim()) fd.set('AdminNote', form.AdminNote.value.trim());
+            if (scope() === '2') ids.forEach(function (id) { fd.append('StudentIds', id); });
+
+            submitting = true;
+            submitBtn.disabled = true; submitBtn.classList.add('is-busy');
+
+            fetch(urls.create, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                .then(function (res) {
+                    if (!res.success) {
+                        showError(res.message || 'تعذّر النشر.');
+                        submitting = false; submitBtn.disabled = false; submitBtn.classList.remove('is-busy');
+                        return;
+                    }
+                    showToast(res.message || 'تم النشر.', true);
+                    setTimeout(function () { window.location.href = res.data.url; }, 900);
+                })
+                .catch(function () {
+                    showError('تعذّر الاتصال بالخادم. تحقق من الشبكة ثم تأكد من قائمة أوامر النشر قبل إعادة المحاولة كي لا يتكرر النشر.');
+                    submitting = false; submitBtn.disabled = false; submitBtn.classList.remove('is-busy');
+                });
+        });
+
+        syncScope(); syncMode(); updateCount();
+    })();
+    </script>
+}

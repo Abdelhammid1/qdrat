@@ -1,0 +1,227 @@
+@model QdratNew.ViewModels.RemedialTracks.RemedialTrackPublicationDetailsVm
+@using QdratNew.Enums
+@inject QdratNew.Services.Interfaces.ITimeZoneService Tz
+@functions {
+    static string StatusLabel(RemedialTrackPublicationStatus s) => s switch
+    {
+        RemedialTrackPublicationStatus.Active => "نشط",
+        RemedialTrackPublicationStatus.Cancelled => "ملغى",
+        _ => "مغلق"
+    };
+    static string EnrollmentLabel(RemedialTrackEnrollmentStatus s) => s switch
+    {
+        RemedialTrackEnrollmentStatus.NotStarted => "لم تبدأ",
+        RemedialTrackEnrollmentStatus.InProgress => "قيد التنفيذ",
+        RemedialTrackEnrollmentStatus.Completed => "مكتملة",
+        RemedialTrackEnrollmentStatus.CompletedWithFailures => "مكتملة مع تعثّر",
+        _ => "ملغاة"
+    };
+}
+@{
+    ViewData["Title"] = "أمر نشر — " + Model.TrackCode;
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/admin-rtk.css" asp-append-version="true" />
+}
+
+@Html.AntiForgeryToken()
+
+<div class="rtk-page container-fluid mt-4" dir="rtl" id="rtkPubDetails" data-id="@Model.Id">
+
+    <header class="rtk-hero">
+        <div class="rtk-hero__top">
+            <div>
+                <div class="rtk-hero__label"><i class="fas fa-paper-plane ms-1"></i> <span class="rtk-code" style="color:#fff">@Model.TrackCode</span></div>
+                <h1>@Model.TrackTitle</h1>
+                <p>@Model.CurriculumTitle · @Model.BatchName</p>
+                <div class="mt-2 d-flex gap-2 flex-wrap">
+                    <span class="rtk-badge hero-badge">@StatusLabel(Model.Status)</span>
+                    <span class="rtk-badge hero-badge">@(Model.IsInPerson ? "حضوري" : "أونلاين")</span>
+                    <span class="rtk-badge hero-badge">@(Model.Scope == RemedialTrackPublicationScope.WholeBatch ? "الدفعة كاملة" : "طلاب محددون")</span>
+                </div>
+            </div>
+            <div class="rtk-hero__actions">
+                <a class="rtk-btn rtk-btn--light" asp-area="Admin" asp-controller="RemedialTrackPublications" asp-action="Index">
+                    <i class="fas fa-arrow-right"></i> أوامر النشر
+                </a>
+                @if (Model.CanCancel && Model.IsActive)
+                {
+                    <button type="button" class="rtk-btn rtk-btn--light" data-rtk-act="cancel-open">
+                        <i class="fas fa-ban"></i> إلغاء أمر النشر
+                    </button>
+                }
+            </div>
+        </div>
+    </header>
+
+    @if (Model.Status == RemedialTrackPublicationStatus.Cancelled)
+    {
+        <div class="rtk-alert rtk-alert--warn" role="status">
+            أُلغي أمر النشر @(Model.CancelledAtUtc.HasValue ? "بتاريخ " + Tz.ConvertToSaudi(Model.CancelledAtUtc.Value).ToString("yyyy-MM-dd HH:mm") : "")
+            @if (!string.IsNullOrWhiteSpace(Model.CancelReason)) { <text>— السبب: @Model.CancelReason</text> }
+        </div>
+    }
+
+    <section class="rtk-panel">
+        <h2>ملخص الأمر</h2>
+        <dl class="rtk-dl">
+            <div><dt>وقت النشر</dt><dd>@Tz.ConvertToSaudi(Model.PublishAtUtc).ToString("yyyy-MM-dd HH:mm")</dd></div>
+            <div><dt>أُنشئ بتاريخ</dt><dd>@Tz.ConvertToSaudi(Model.CreatedAtUtc).ToString("yyyy-MM-dd HH:mm")</dd></div>
+            <div><dt>أنشأه</dt><dd>@(Model.CreatedByName ?? "—")</dd></div>
+            <div><dt>عدد الطلاب</dt><dd>@Model.TotalStudents</dd></div>
+            @if (!string.IsNullOrWhiteSpace(Model.AdminNote))
+            {
+                <div class="rtk-dl__wide"><dt>ملاحظة</dt><dd>@Model.AdminNote</dd></div>
+            }
+        </dl>
+    </section>
+
+    @if (Model.IsInPerson && Model.CanManageCode)
+    {
+        <section class="rtk-panel" aria-label="الرقم المرجعي">
+            <h2>الرقم المرجعي (حضوري)</h2>
+            @if (Model.IsActive && !string.IsNullOrEmpty(Model.AccessCode))
+            {
+                <div class="rtk-codebox" id="rtkCodeBox">
+                    <span id="rtkCodeValue" dir="ltr">@Model.AccessCode</span>
+                </div>
+                <div class="rtk-hint">
+                    النسخة @Model.CodeVersion
+                    @if (Model.CodeGeneratedAtUtc.HasValue) { <text>· وُلِّد @Tz.ConvertToSaudi(Model.CodeGeneratedAtUtc.Value).ToString("yyyy-MM-dd HH:mm")</text> }
+                </div>
+                <div class="rtk-form-actions">
+                    <button type="button" class="rtk-btn rtk-btn--outline" data-rtk-act="regen">
+                        <i class="fas fa-rotate"></i> تجديد الرقم
+                    </button>
+                </div>
+                <div class="rtk-hint">لا يُرسَل الرقم في الإشعارات؛ سلّمه للطلاب حضوريًا.</div>
+            }
+            else
+            {
+                <div class="rtk-empty">الرقم المرجعي غير متاح (الأمر غير نشط).</div>
+            }
+        </section>
+    }
+
+    <section class="rtk-panel" aria-label="الطلاب">
+        <h2>الطلاب</h2>
+        @if (Model.StatusCounts.Count > 0)
+        {
+            <div class="d-flex gap-2 flex-wrap mb-3">
+                @foreach (var c in Model.StatusCounts.OrderBy(c => c.Status))
+                {
+                    <span class="rtk-badge">@EnrollmentLabel(c.Status): @c.Count</span>
+                }
+            </div>
+        }
+        @if (Model.Students.Count == 0)
+        {
+            <div class="rtk-empty"><i class="fas fa-users"></i> لا يوجد طلاب مسجَّلون في هذا الأمر.</div>
+        }
+        else
+        {
+            <div class="rtk-table-wrap">
+                <table class="rtk-table">
+                    <thead><tr><th>الطالب</th><th>الحالة</th></tr></thead>
+                    <tbody>
+                        @foreach (var s in Model.Students)
+                        {
+                            <tr><td>@s.StudentName</td><td>@EnrollmentLabel(s.Status)</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @if (Model.StudentsTruncated)
+            {
+                <div class="rtk-hint mt-2">عُرض أول @QdratNew.ViewModels.RemedialTracks.RemedialTrackPublicationDetailsVm.MaxStudentsListed طالب فقط. المتابعة الكاملة تُضاف في Sprint 6.</div>
+            }
+        }
+    </section>
+
+    @if (Model.CanCancel && Model.IsActive)
+    {
+        <section class="rtk-panel" id="rtkCancelBox" hidden>
+            <h2>إلغاء أمر النشر</h2>
+            <p class="rtk-hint">سيتوقف تقدّم الطلاب غير المنتهين ويُحرَّر الرقم المرجعي. لا يُحذف أي سجل.</p>
+            <div class="rtk-field">
+                <label for="rtkCancelReason">سبب الإلغاء (5–300 حرف)</label>
+                <textarea id="rtkCancelReason" maxlength="300"></textarea>
+            </div>
+            <div class="rtk-form-actions">
+                <button type="button" class="rtk-btn rtk-btn--danger" data-rtk-act="cancel-confirm"><i class="fas fa-ban"></i> تأكيد الإلغاء</button>
+                <button type="button" class="rtk-btn rtk-btn--outline" data-rtk-act="cancel-close">تراجع</button>
+            </div>
+        </section>
+    }
+
+    <div class="rtk-toast" id="rtkToast" role="status" aria-live="polite"></div>
+</div>
+
+@section Scripts {
+    <script>
+    (function () {
+        'use strict';
+        var root = document.getElementById('rtkPubDetails');
+        if (!root || root.dataset.bound === '1') return;   // منع تكرار الربط
+        root.dataset.bound = '1';
+
+        var id = root.getAttribute('data-id');
+        var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+        var urls = {
+            regen: '@Url.Action("RegenerateCode", "RemedialTrackPublications", new { area = "Admin" })',
+            cancel: '@Url.Action("Cancel", "RemedialTrackPublications", new { area = "Admin" })'
+        };
+        var toast = document.getElementById('rtkToast');
+        var busy = false;
+
+        function esc(t) { var d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; }
+        function showToast(msg, ok) {
+            toast.innerHTML = '<div class="rtk-alert ' + (ok ? 'rtk-alert--ok' : 'rtk-alert--error') + '">' + esc(msg) + '</div>';
+            clearTimeout(showToast._t);
+            showToast._t = setTimeout(function () { toast.innerHTML = ''; }, ok ? 3000 : 7000);
+        }
+
+        function post(url, fd, btn, onOk) {
+            if (busy) return;
+            busy = true; btn.disabled = true; btn.classList.add('is-busy');
+            fd.set('__RequestVerificationToken', token);
+            fd.set('id', id);
+            fetch(url, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                .then(function (res) {
+                    if (!res.success) { showToast(res.message || 'تعذّر تنفيذ العملية.', false); return; }
+                    showToast(res.message || 'تم.', true);
+                    onOk(res);
+                })
+                .catch(function () { showToast('تعذّر الاتصال بالخادم. تحقق من الشبكة وأعد المحاولة.', false); })
+                .finally(function () { busy = false; btn.disabled = false; btn.classList.remove('is-busy'); });
+        }
+
+        root.addEventListener('click', function (e) {
+            var btn = e.target.closest('[data-rtk-act]');
+            if (!btn || !root.contains(btn)) return;
+            var act = btn.getAttribute('data-rtk-act');
+            var cancelBox = document.getElementById('rtkCancelBox');
+
+            if (act === 'regen') {
+                if (!window.confirm('سيُطلب من الطلاب إدخال الرقم الجديد عند فتح محور أو فيديو أو بدء اختبار. هل تريد تجديد الرقم؟')) return;
+                post(urls.regen, new FormData(), btn, function (res) {
+                    var v = document.getElementById('rtkCodeValue');
+                    if (v && res.data) v.textContent = res.data;
+                    setTimeout(function () { window.location.reload(); }, 900);
+                });
+            } else if (act === 'cancel-open') {
+                if (cancelBox) { cancelBox.hidden = false; cancelBox.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+            } else if (act === 'cancel-close') {
+                if (cancelBox) cancelBox.hidden = true;
+            } else if (act === 'cancel-confirm') {
+                var reason = document.getElementById('rtkCancelReason').value.trim();
+                if (reason.length < 5 || reason.length > 300) { showToast('⚠️ سبب الإلغاء إلزامي (5–300 حرف).', false); return; }
+                var fd = new FormData(); fd.set('reason', reason);
+                post(urls.cancel, fd, btn, function () { setTimeout(function () { window.location.reload(); }, 900); });
+            }
+        });
+    })();
+    </script>
+}

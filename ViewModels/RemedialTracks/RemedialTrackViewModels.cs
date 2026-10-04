@@ -207,6 +207,7 @@ namespace QdratNew.ViewModels.RemedialTracks
         public bool CanEdit { get; set; }
         public bool CanCreate { get; set; }
         public bool CanArchive { get; set; }
+        public bool CanPublish { get; set; }   // RTK-S3: RemedialTrackPublications:Publish
 
         public bool IsArchived => Status == RemedialTrackStatus.Archived;
         public bool CanModifyStructure => CanEdit && !IsStructureLocked && !IsArchived;

@@ -1,0 +1,118 @@
+@model QdratNew.ViewModels.RemedialTracks.RemedialTrackPublicationIndexVm
+@using QdratNew.Enums
+@inject QdratNew.Services.Interfaces.ITimeZoneService Tz
+@functions {
+    static string StatusLabel(RemedialTrackPublicationStatus s) => s switch
+    {
+        RemedialTrackPublicationStatus.Active => "نشط",
+        RemedialTrackPublicationStatus.Cancelled => "ملغى",
+        _ => "مغلق"
+    };
+    static string StatusClass(RemedialTrackPublicationStatus s) => s switch
+    {
+        RemedialTrackPublicationStatus.Active => "rtk-badge--ready",
+        RemedialTrackPublicationStatus.Cancelled => "rtk-badge--lock",
+        _ => "rtk-badge--archived"
+    };
+}
+@{
+    ViewData["Title"] = "أوامر نشر الخطة العلاجية";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/admin-rtk.css" asp-append-version="true" />
+}
+
+<div class="rtk-page container-fluid mt-4" dir="rtl">
+
+    <header class="rtk-hero">
+        <div class="rtk-hero__top">
+            <div>
+                <div class="rtk-hero__label"><i class="fas fa-paper-plane ms-1"></i> الخطة العلاجية العاجلة</div>
+                <h1>أوامر النشر</h1>
+                <p>كل أمر نشر يربط خطة جاهزة بدفعة أو بطلاب محددين، أونلاين أو حضوريًا برقم مرجعي.</p>
+            </div>
+            <div class="rtk-hero__actions">
+                <a class="rtk-btn rtk-btn--light" asp-area="Admin" asp-controller="RemedialTracks" asp-action="Index">
+                    <i class="fas fa-route"></i> الخطط
+                </a>
+                @if (Model.CanPublish)
+                {
+                    <a class="rtk-btn rtk-btn--light" asp-area="Admin" asp-controller="RemedialTrackPublications" asp-action="Create">
+                        <i class="fas fa-plus"></i> نشر خطة
+                    </a>
+                }
+            </div>
+        </div>
+    </header>
+
+    <section class="rtk-panel" aria-label="قائمة أوامر النشر">
+        @if (Model.Items.Count == 0)
+        {
+            <div class="rtk-empty">
+                <i class="fas fa-paper-plane"></i>
+                لا توجد أوامر نشر بعد.
+                @if (Model.CanPublish)
+                {
+                    <div class="mt-2"><a class="rtk-btn" asp-area="Admin" asp-controller="RemedialTrackPublications" asp-action="Create">نشر أول خطة</a></div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="rtk-table-wrap">
+                <table class="rtk-table">
+                    <thead>
+                        <tr>
+                            <th>الخطة</th>
+                            <th>الدفعة</th>
+                            <th>النمط</th>
+                            <th>وقت النشر</th>
+                            <th>الطلاب</th>
+                            <th>الحالة</th>
+                            <th><span class="visually-hidden">فتح</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in Model.Items)
+                        {
+                            <tr>
+                                <td><span class="rtk-code">@p.TrackCode</span><br /><strong>@p.TrackTitle</strong></td>
+                                <td>@p.BatchName</td>
+                                <td>
+                                    <span class="rtk-badge">@(p.Mode == RemedialTrackDeliveryMode.InPerson ? "حضوري" : "أونلاين")</span>
+                                    <div class="rtk-hint">@(p.Scope == RemedialTrackPublicationScope.WholeBatch ? "الدفعة كاملة" : "طلاب محددون")</div>
+                                </td>
+                                <td>@Tz.ConvertToSaudi(p.PublishAtUtc).ToString("yyyy-MM-dd HH:mm")</td>
+                                <td>@p.TotalStudents</td>
+                                <td><span class="rtk-badge @StatusClass(p.Status)">@StatusLabel(p.Status)</span></td>
+                                <td>
+                                    <a class="rtk-btn rtk-btn--outline rtk-btn--sm" asp-area="Admin" asp-controller="RemedialTrackPublications" asp-action="Details" asp-route-id="@p.Id">
+                                        <i class="fas fa-eye"></i> التفاصيل
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @if (Model.TotalPages > 1)
+            {
+                <nav class="rtk-pager" aria-label="الصفحات">
+                    @for (var i = 1; i <= Model.TotalPages; i++)
+                    {
+                        if (i == Model.Page)
+                        {
+                            <span class="is-current" aria-current="page">@i</span>
+                        }
+                        else
+                        {
+                            <a asp-area="Admin" asp-controller="RemedialTrackPublications" asp-action="Index" asp-route-page="@i">@i</a>
+                        }
+                    }
+                </nav>
+            }
+        }
+    </section>
+</div>

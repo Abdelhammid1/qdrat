@@ -99,6 +99,7 @@ namespace QdratNew.Areas.Admin.Controllers
             vm.CanEdit = await CanAsync(AdminPermissionPolicies.RemedialTracks_Edit);
             vm.CanCreate = await CanAsync(AdminPermissionPolicies.RemedialTracks_Create);
             vm.CanArchive = await CanAsync(AdminPermissionPolicies.RemedialTracks_Archive);
+            vm.CanPublish = await CanAsync(AdminPermissionPolicies.RemedialTrackPublications_Publish);
             return View(vm);
         }
 
