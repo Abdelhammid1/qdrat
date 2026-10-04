@@ -13,6 +13,13 @@ namespace QdratNew.Tests.Integration
     {
         public string BaseUrl { get; }
         private readonly Process _process;
+        private static readonly System.Text.StringBuilder OutputBuffer = new();
+
+        // آخر مخرجات الخادم الفرعي (stdout+stderr) لتشخيص فشل الاختبارات؛ تُستنزف دومًا كي لا تمتلئ الأنابيب.
+        public string RecentOutput
+        {
+            get { lock (OutputBuffer) { return OutputBuffer.Length > 6000 ? OutputBuffer.ToString(OutputBuffer.Length - 6000, 6000) : OutputBuffer.ToString(); } }
+        }
 
         private RealServerFixture(Process process, string baseUrl)
         {
@@ -20,11 +27,10 @@ namespace QdratNew.Tests.Integration
             BaseUrl = baseUrl;
         }
 
-        public static async Task<RealServerFixture> StartAsync()
+        public static async Task<RealServerFixture> StartAsync(int port = 5299)
         {
             await TestDatabaseBaseline.EnsureAsync();
 
-            const int port = 5299;
             var baseUrl = $"http://127.0.0.1:{port}";
 
             var dllPath = Path.GetFullPath(Path.Combine(
@@ -69,6 +75,11 @@ namespace QdratNew.Tests.Integration
 
             var process = Process.Start(startInfo)
                 ?? throw new InvalidOperationException("تعذّر تشغيل عملية QdratNew الفرعية.");
+            lock (OutputBuffer) OutputBuffer.Clear();
+            process.OutputDataReceived += (_, e) => { if (e.Data != null) lock (OutputBuffer) OutputBuffer.AppendLine(e.Data); };
+            process.ErrorDataReceived += (_, e) => { if (e.Data != null) lock (OutputBuffer) OutputBuffer.AppendLine(e.Data); };
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
 
             using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
             var ready = false;
@@ -77,7 +88,9 @@ namespace QdratNew.Tests.Integration
             {
                 if (process.HasExited)
                 {
-                    var stderr = await process.StandardError.ReadToEndAsync();
+                    await Task.Delay(300);
+                    string stderr;
+                    lock (OutputBuffer) stderr = OutputBuffer.ToString();
                     throw new InvalidOperationException($"عملية QdratNew الفرعية أُنهيت مبكرًا (ExitCode={process.ExitCode}):\n{stderr}");
                 }
 

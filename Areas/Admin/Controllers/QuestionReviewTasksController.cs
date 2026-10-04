@@ -58,7 +58,7 @@ namespace QdratNew.Areas.Admin.Controllers
             };
 
             var page = await _adminQuery.GetTasksPageAsync(filter, start, length, orderColumn, orderDesc, ct);
-            return Json(new
+            return CamelJson(new
             {
                 draw,
                 recordsTotal = page.Total,
@@ -84,7 +84,7 @@ namespace QdratNew.Areas.Admin.Controllers
         {
             var draw = Request.Form["draw"].ToString();
             if (!int.TryParse(Request.Form["taskId"], out var taskId))
-                return Json(new { draw, recordsTotal = 0, recordsFiltered = 0, data = Array.Empty<object>() });
+                return CamelJson(new { draw, recordsTotal = 0, recordsFiltered = 0, data = Array.Empty<object>() });
 
             var start = int.TryParse(Request.Form["start"], out var st) ? st : 0;
             var length = int.TryParse(Request.Form["length"], out var ln) ? ln : 25;
@@ -93,9 +93,9 @@ namespace QdratNew.Areas.Admin.Controllers
 
             var page = await _adminQuery.GetItemsPageAsync(taskId, start, length, statusFilter, search, ct);
             if (page is null)
-                return Json(new { draw, recordsTotal = 0, recordsFiltered = 0, data = Array.Empty<object>() });
+                return CamelJson(new { draw, recordsTotal = 0, recordsFiltered = 0, data = Array.Empty<object>() });
 
-            return Json(new
+            return CamelJson(new
             {
                 draw,
                 recordsTotal = page.Total,
@@ -123,10 +123,10 @@ namespace QdratNew.Areas.Admin.Controllers
         public async Task<IActionResult> ReassignCandidates([FromForm] int taskId, CancellationToken ct)
         {
             if (taskId <= 0)
-                return Json(new { success = false, message = "⚠️ مهمة غير صالحة." });
+                return CamelJson(new { success = false, message = "⚠️ مهمة غير صالحة." });
 
             var result = await _service.GetReassignCandidatesAsync(taskId, ct);
-            return Json(new { success = result.Success, message = result.Message, data = result.Data });
+            return CamelJson(new { success = result.Success, message = result.Message, data = result.Data });
         }
 
         [HttpPost, ValidateAntiForgeryToken]
@@ -144,14 +144,14 @@ namespace QdratNew.Areas.Admin.Controllers
         public async Task<IActionResult> Close([FromForm] int taskId, CancellationToken ct)
         {
             if (taskId <= 0)
-                return Json(new { success = false, message = "⚠️ مهمة غير صالحة." });
+                return CamelJson(new { success = false, message = "⚠️ مهمة غير صالحة." });
 
             var actor = await ActorAsync();
             if (actor is null)
-                return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
+                return CamelJson(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
 
             var result = await _service.CloseTaskAsync(taskId, actor, ct);
-            return Json(new { success = result.Success, message = result.Message, data = result.Data });
+            return CamelJson(new { success = result.Success, message = result.Message, data = result.Data });
         }
 
         [HttpPost, ValidateAntiForgeryToken]
@@ -165,15 +165,18 @@ namespace QdratNew.Areas.Admin.Controllers
             where TInput : class
         {
             if (input is null || !ModelState.IsValid)
-                return Json(new { success = false, message = BuildValidationMessage() });
+                return CamelJson(new { success = false, message = BuildValidationMessage() });
 
             var actor = await ActorAsync();
             if (actor is null)
-                return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
+                return CamelJson(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
 
             var result = await operation(actor);
-            return Json(new { success = result.Success, message = result.Message, data = result.Data });
+            return CamelJson(new { success = result.Success, message = result.Message, data = result.Data });
         }
+
+        // Program.cs يضبط PropertyNamingPolicy = null عالميًا؛ واجهات QRT تقرأ camelCase (QuestionReviewTaskJson)
+        private JsonResult CamelJson(object? value) => Json(value, QuestionReviewTaskJson.Options);
 
         private static TEnum? ParseEnum<TEnum>(string? raw) where TEnum : struct, Enum
             => int.TryParse(raw, out var n) && Enum.IsDefined(typeof(TEnum), n) ? (TEnum)(object)n : null;
@@ -183,14 +186,14 @@ namespace QdratNew.Areas.Admin.Controllers
         public async Task<IActionResult> Create([FromForm] CreateQuestionReviewTaskInput input, CancellationToken ct)
         {
             if (!ModelState.IsValid)
-                return Json(new { success = false, message = BuildValidationMessage() });
+                return CamelJson(new { success = false, message = BuildValidationMessage() });
 
             var actor = await ActorAsync();
             if (actor is null)
-                return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
+                return CamelJson(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
 
             var result = await _service.CreateTaskAsync(input, actor, ct);
-            return Json(new { success = result.Success, message = result.Message, data = result.Data });
+            return CamelJson(new { success = result.Success, message = result.Message, data = result.Data });
         }
 
         // يعيد المدربين المؤهلين لمناهج الأسئلة المحددة (أو لأول N حسب الفلتر)
@@ -199,10 +202,10 @@ namespace QdratNew.Areas.Admin.Controllers
         public async Task<IActionResult> EligibleInstructors([FromForm] EligibleInstructorsInput input, CancellationToken ct)
         {
             if (!ModelState.IsValid)
-                return Json(new { success = false, message = BuildValidationMessage() });
+                return CamelJson(new { success = false, message = BuildValidationMessage() });
 
             var result = await _service.GetEligibleInstructorsAsync(input, ct);
-            return Json(new { success = result.Success, message = result.Message, data = result.Data });
+            return CamelJson(new { success = result.Success, message = result.Message, data = result.Data });
         }
 
         // ---------------- QRT-S7: توزيع تلقائي + تقرير أداء المراجعين ----------------
@@ -218,10 +221,10 @@ namespace QdratNew.Areas.Admin.Controllers
         public async Task<IActionResult> PreviewAutoDistribution([FromForm] AutoDistributeInput input, CancellationToken ct)
         {
             if (!ModelState.IsValid)
-                return Json(new { success = false, message = BuildValidationMessage() });
+                return CamelJson(new { success = false, message = BuildValidationMessage() });
 
             var result = await _service.PreviewAutoDistributionAsync(input, ct);
-            return Json(new { success = result.Success, message = result.Message, data = result.Data });
+            return CamelJson(new { success = result.Success, message = result.Message, data = result.Data });
         }
 
         [HttpPost, ValidateAntiForgeryToken]
@@ -229,14 +232,14 @@ namespace QdratNew.Areas.Admin.Controllers
         public async Task<IActionResult> AutoDistributeConfirm([FromForm] AutoDistributeInput input, CancellationToken ct)
         {
             if (!ModelState.IsValid)
-                return Json(new { success = false, message = BuildValidationMessage() });
+                return CamelJson(new { success = false, message = BuildValidationMessage() });
 
             var actor = await ActorAsync();
             if (actor is null)
-                return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
+                return CamelJson(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
 
             var result = await _service.AutoDistributeAsync(input, actor, ct);
-            return Json(new { success = result.Success, message = result.Message, data = result.Data });
+            return CamelJson(new { success = result.Success, message = result.Message, data = result.Data });
         }
 
         [HttpGet]

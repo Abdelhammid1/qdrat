@@ -64,7 +64,7 @@ namespace QdratNew.Areas.Instructors.Controllers
             var instructorId = await RequireInstructorAsync();
             var draw = Request.Form["draw"].ToString();
             if (instructorId == 0 || !int.TryParse(Request.Form["taskId"], out var taskId))
-                return Json(EmptyTable(draw));
+                return CamelJson(EmptyTable(draw));
 
             var start = int.TryParse(Request.Form["start"], out var st) ? st : 0;
             var length = int.TryParse(Request.Form["length"], out var ln) ? ln : 25;
@@ -73,9 +73,9 @@ namespace QdratNew.Areas.Instructors.Controllers
 
             var page = await _query.GetItemsPageAsync(instructorId, taskId, start, length, statusFilter, search, ct);
             if (page is null)
-                return Json(EmptyTable(draw));
+                return CamelJson(EmptyTable(draw));
 
-            return Json(new
+            return CamelJson(new
             {
                 draw,
                 recordsTotal = page.Total,
@@ -116,15 +116,15 @@ namespace QdratNew.Areas.Instructors.Controllers
         {
             var instructorId = await RequireInstructorAsync();
             if (instructorId == 0)
-                return Json(new { success = false, message = NoInstructorMessage });
+                return CamelJson(new { success = false, message = NoInstructorMessage });
 
             var actor = await ActorAsync();
             if (actor is null)
-                return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
+                return CamelJson(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
 
             var result = await _service.ApproveItemsAsync(instructorId, taskId, itemIds ?? new List<long>(), actor, ct);
             _query.InvalidatePendingCount(actor.UserId);
-            return Json(new { success = result.Success, message = result.Message, data = result.Data });
+            return CamelJson(new { success = result.Success, message = result.Message, data = result.Data });
         }
 
         // ─── إرجاع للإدارة بملاحظة إلزامية ───────────────────────
@@ -133,16 +133,19 @@ namespace QdratNew.Areas.Instructors.Controllers
         {
             var instructorId = await RequireInstructorAsync();
             if (instructorId == 0)
-                return Json(new { success = false, message = NoInstructorMessage });
+                return CamelJson(new { success = false, message = NoInstructorMessage });
 
             var actor = await ActorAsync();
             if (actor is null)
-                return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
+                return CamelJson(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
 
             var result = await _service.ReturnItemAsync(instructorId, itemId, note, actor, ct);
             _query.InvalidatePendingCount(actor.UserId);
-            return Json(new { success = result.Success, message = result.Message, data = result.Data });
+            return CamelJson(new { success = result.Success, message = result.Message, data = result.Data });
         }
+
+        // Program.cs يضبط PropertyNamingPolicy = null عالميًا؛ واجهات QRT تقرأ camelCase (QuestionReviewTaskJson)
+        private JsonResult CamelJson(object? value) => Json(value, QuestionReviewTaskJson.Options);
 
         private static object EmptyTable(string draw) => new
         {
