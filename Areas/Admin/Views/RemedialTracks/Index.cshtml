@@ -1,0 +1,155 @@
+@model QdratNew.ViewModels.RemedialTracks.RemedialTrackIndexVm
+@using QdratNew.Enums
+@inject QdratNew.Services.Interfaces.ITimeZoneService Tz
+@functions {
+    static string StatusLabel(RemedialTrackStatus s) => s switch
+    {
+        RemedialTrackStatus.Draft => "مسودة",
+        RemedialTrackStatus.Ready => "جاهزة",
+        _ => "مؤرشفة"
+    };
+    static string StatusClass(RemedialTrackStatus s) => s switch
+    {
+        RemedialTrackStatus.Draft => "rtk-badge--draft",
+        RemedialTrackStatus.Ready => "rtk-badge--ready",
+        _ => "rtk-badge--archived"
+    };
+}
+@{
+    ViewData["Title"] = "الخطة العلاجية العاجلة";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/admin-rtk.css" asp-append-version="true" />
+}
+
+<div class="rtk-page container-fluid mt-4" dir="rtl">
+
+    <header class="rtk-hero">
+        <div class="rtk-hero__top">
+            <div>
+                <div class="rtk-hero__label"><i class="fas fa-route ms-1"></i> الخطة العلاجية العاجلة</div>
+                <h1>الخطط العلاجية</h1>
+                <p>ابنِ خطة بمحاور وفيديوهات متسلسلة ونموذجي اختبار 101/102 لكل محور، ثم انشرها لاحقًا لدفعة أو طلاب محددين.</p>
+            </div>
+            @if (Model.CanCreate)
+            {
+                <div class="rtk-hero__actions">
+                    <a class="rtk-btn rtk-btn--light" asp-area="Admin" asp-controller="RemedialTracks" asp-action="Create">
+                        <i class="fas fa-plus"></i> خطة جديدة
+                    </a>
+                </div>
+            }
+        </div>
+    </header>
+
+    <section class="rtk-panel" aria-label="بحث وفلترة">
+        <form method="get" asp-area="Admin" asp-controller="RemedialTracks" asp-action="Index">
+            <div class="rtk-grid">
+                <div class="rtk-field">
+                    <label for="fSearch">بحث بالاسم أو الكود</label>
+                    <input id="fSearch" name="search" value="@Model.Search" maxlength="100" autocomplete="off" />
+                </div>
+                <div class="rtk-field">
+                    <label for="fCurriculum">المنهج</label>
+                    <select id="fCurriculum" name="curriculumId">
+                        <option value="">كل المناهج</option>
+                        @foreach (var c in Model.Curricula)
+                        {
+                            <option value="@c.Id" selected="@(Model.CurriculumId == c.Id)">@c.Text</option>
+                        }
+                    </select>
+                </div>
+                <div class="rtk-field">
+                    <label for="fStatus">الحالة</label>
+                    <select id="fStatus" name="status">
+                        <option value="">كل الحالات</option>
+                        <option value="@((int)RemedialTrackStatus.Draft)" selected="@(Model.Status == RemedialTrackStatus.Draft)">مسودة</option>
+                        <option value="@((int)RemedialTrackStatus.Ready)" selected="@(Model.Status == RemedialTrackStatus.Ready)">جاهزة</option>
+                        <option value="@((int)RemedialTrackStatus.Archived)" selected="@(Model.Status == RemedialTrackStatus.Archived)">مؤرشفة</option>
+                    </select>
+                </div>
+                <div class="rtk-field" style="align-self:end">
+                    <button type="submit" class="rtk-btn rtk-btn--outline" style="width:100%"><i class="fas fa-search"></i> بحث</button>
+                </div>
+            </div>
+        </form>
+    </section>
+
+    <section class="rtk-panel" aria-label="قائمة الخطط">
+        @if (Model.Items.Count == 0)
+        {
+            <div class="rtk-empty">
+                <i class="fas fa-folder-open"></i>
+                لا توجد خطط علاجية مطابقة.
+                @if (Model.CanCreate)
+                {
+                    <div class="mt-2"><a class="rtk-btn" asp-area="Admin" asp-controller="RemedialTracks" asp-action="Create">إنشاء أول خطة</a></div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="rtk-table-wrap">
+                <table class="rtk-table">
+                    <thead>
+                        <tr>
+                            <th>الكود</th>
+                            <th>الخطة</th>
+                            <th>المنهج</th>
+                            <th>المحاور</th>
+                            <th>الفيديوهات</th>
+                            <th>الحالة</th>
+                            <th>أُنشئت</th>
+                            <th><span class="visually-hidden">فتح</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var t in Model.Items)
+                        {
+                            <tr>
+                                <td><span class="rtk-code">@t.Code</span></td>
+                                <td><strong>@t.Title</strong></td>
+                                <td>@t.CurriculumTitle</td>
+                                <td>@t.AxesCount</td>
+                                <td>@t.VideosCount</td>
+                                <td>
+                                    <span class="rtk-badge @StatusClass(t.Status)">@StatusLabel(t.Status)</span>
+                                    @if (t.IsStructureLocked)
+                                    {
+                                        <span class="rtk-badge rtk-badge--lock" title="بنية الخطة مقفلة بعد أول نشر"><i class="fas fa-lock"></i></span>
+                                    }
+                                </td>
+                                <td>@Tz.ConvertToSaudi(t.CreatedAtUtc).ToString("yyyy-MM-dd")</td>
+                                <td>
+                                    <a class="rtk-btn rtk-btn--outline rtk-btn--sm" asp-area="Admin" asp-controller="RemedialTracks" asp-action="Builder" asp-route-id="@t.Id">
+                                        <i class="fas fa-pen-ruler"></i> فتح
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @if (Model.TotalPages > 1)
+            {
+                <nav class="rtk-pager" aria-label="الصفحات">
+                    @for (var p = 1; p <= Model.TotalPages; p++)
+                    {
+                        if (p == Model.Page)
+                        {
+                            <span class="is-current" aria-current="page">@p</span>
+                        }
+                        else
+                        {
+                            <a asp-area="Admin" asp-controller="RemedialTracks" asp-action="Index"
+                               asp-route-search="@Model.Search" asp-route-curriculumId="@Model.CurriculumId"
+                               asp-route-status="@(Model.Status.HasValue ? (int?)Model.Status.Value : null)" asp-route-page="@p">@p</a>
+                        }
+                    }
+                </nav>
+            }
+        }
+    </section>
+</div>

@@ -1,0 +1,591 @@
+@model QdratNew.ViewModels.RemedialTracks.RemedialTrackBuilderVm
+@using QdratNew.Enums
+@inject QdratNew.Services.Interfaces.ITimeZoneService Tz
+@functions {
+    static string StatusLabel(RemedialTrackStatus s) => s switch
+    {
+        RemedialTrackStatus.Draft => "مسودة",
+        RemedialTrackStatus.Ready => "جاهزة",
+        _ => "مؤرشفة"
+    };
+    static string ProviderLabel(RemedialTrackVideoProvider p) => p switch
+    {
+        RemedialTrackVideoProvider.YouTube => "YouTube",
+        RemedialTrackVideoProvider.Vimeo => "Vimeo",
+        _ => "منصة أخرى"
+    };
+    static string ProviderClass(RemedialTrackVideoProvider p) => p switch
+    {
+        RemedialTrackVideoProvider.YouTube => "rtk-provider--yt",
+        RemedialTrackVideoProvider.Vimeo => "rtk-provider--vm",
+        _ => ""
+    };
+    static string FormatDuration(int? seconds)
+    {
+        if (seconds is null) return "المدة تُحدَّد من المشغّل";
+        var t = TimeSpan.FromSeconds(seconds.Value);
+        return t.TotalHours >= 1 ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}" : $"{t.Minutes}:{t.Seconds:00}";
+    }
+}
+@{
+    ViewData["Title"] = "بناء الخطة — " + Model.Code;
+    var statusClass = Model.Status switch
+    {
+        RemedialTrackStatus.Draft => "rtk-badge--draft",
+        RemedialTrackStatus.Ready => "rtk-badge--ready",
+        _ => "rtk-badge--archived"
+    };
+    var flash = TempData["RtkSuccess"] as string;
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/admin-rtk.css" asp-append-version="true" />
+}
+
+@Html.AntiForgeryToken()
+
+<div class="rtk-page container-fluid mt-4" dir="rtl" id="rtkBuilder" data-track-id="@Model.Id">
+
+    <header class="rtk-hero">
+        <div class="rtk-hero__top">
+            <div>
+                <div class="rtk-hero__label">
+                    <i class="fas fa-route ms-1"></i> <span class="rtk-code" style="color:#fff">@Model.Code</span>
+                </div>
+                <h1>@Model.Title</h1>
+                <p>
+                    @Model.CurriculumTitle · نجاح @Model.PassPercent% · مشاهدة @Model.MinWatchPercent%
+                </p>
+                <div class="mt-2 d-flex gap-2 flex-wrap">
+                    <span class="rtk-badge hero-badge">@StatusLabel(Model.Status)</span>
+                    @if (Model.IsStructureLocked)
+                    {
+                        <span class="rtk-badge hero-badge"><i class="fas fa-lock ms-1"></i> البنية مقفلة بعد أول نشر</span>
+                    }
+                </div>
+            </div>
+            <div class="rtk-hero__actions">
+                <a class="rtk-btn rtk-btn--light" asp-area="Admin" asp-controller="RemedialTracks" asp-action="Index">
+                    <i class="fas fa-arrow-right"></i> الخطط
+                </a>
+                @if (Model.CanModifyContent)
+                {
+                    <button type="button" class="rtk-btn rtk-btn--light" data-rtk-act="mark-ready" data-id="@Model.Id">
+                        <i class="fas fa-circle-check"></i> تحقق وتجهيز للنشر
+                    </button>
+                }
+                @if (Model.CanCreate)
+                {
+                    <button type="button" class="rtk-btn rtk-btn--light" data-rtk-act="duplicate" data-id="@Model.Id">
+                        <i class="fas fa-copy"></i> نسخ الخطة
+                    </button>
+                }
+                @if (Model.CanArchive && !Model.IsArchived)
+                {
+                    <button type="button" class="rtk-btn rtk-btn--light" data-rtk-act="archive" data-id="@Model.Id">
+                        <i class="fas fa-box-archive"></i> أرشفة
+                    </button>
+                }
+            </div>
+        </div>
+    </header>
+
+    @if (!string.IsNullOrEmpty(flash))
+    {
+        <div class="rtk-alert rtk-alert--ok" role="status">@flash</div>
+    }
+    @if (Model.IsArchived)
+    {
+        <div class="rtk-alert rtk-alert--warn" role="status"><i class="fas fa-box-archive ms-1"></i> الخطة مؤرشفة ولا يمكن تعديلها. يمكنك نسخها كمسودة جديدة.</div>
+    }
+    else if (Model.IsStructureLocked)
+    {
+        <div class="rtk-alert rtk-alert--warn" role="status">
+            <i class="fas fa-lock ms-1"></i> نُشرت هذه الخطة، فلا يمكن إضافة/حذف/ترتيب المحاور أو الفيديوهات أو تغيير النموذجين.
+            المسموح: تعديل الاسم والوصف وعنوان ورابط ومدة الفيديو. لتغيير البنية استخدم «نسخ الخطة».
+        </div>
+    }
+
+    <div id="rtkIssues" class="rtk-alert rtk-alert--error" role="alert" hidden></div>
+
+    <!-- الترويسة -->
+    <section class="rtk-panel" aria-label="بيانات الخطة">
+        <h2><i class="fas fa-file-lines ms-1"></i> بيانات الخطة</h2>
+        <form data-rtk-form="EditHeader" novalidate>
+            <input type="hidden" name="Id" value="@Model.Id" />
+            <div class="rtk-grid">
+                <div class="rtk-field rtk-field--wide">
+                    <label for="hTitle">اسم الخطة</label>
+                    <input id="hTitle" name="Title" value="@Model.Title" maxlength="200" required disabled="@(!Model.CanModifyContent)" />
+                </div>
+                <div class="rtk-field rtk-field--wide">
+                    <label for="hDesc">الوصف</label>
+                    <textarea id="hDesc" name="Description" maxlength="1000" disabled="@(!Model.CanModifyContent)">@Model.Description</textarea>
+                </div>
+                <div class="rtk-field">
+                    <label for="hCur">المنهج</label>
+                    @if (Model.CanModifyStructure)
+                    {
+                        <select id="hCur" name="CurriculumId">
+                            @foreach (var c in Model.Curricula)
+                            {
+                                <option value="@c.Id" selected="@(c.Id == Model.CurriculumId)">@c.Text</option>
+                            }
+                        </select>
+                        @if (Model.Axes.Count > 0)
+                        {
+                            <div class="rtk-hint">لتغيير المنهج احذف المحاور أولًا.</div>
+                        }
+                    }
+                    else
+                    {
+                        <input id="hCur" value="@Model.CurriculumTitle" disabled />
+                    }
+                </div>
+                <div class="rtk-field">
+                    <label for="hPass">نسبة النجاح %</label>
+                    <input id="hPass" name="PassPercent" type="text" inputmode="numeric" maxlength="3" value="@Model.PassPercent" disabled="@(!Model.CanModifyStructure)" />
+                </div>
+                <div class="rtk-field">
+                    <label for="hWatch">حد المشاهدة %</label>
+                    <input id="hWatch" name="MinWatchPercent" type="text" inputmode="numeric" maxlength="3" value="@Model.MinWatchPercent" disabled="@(!Model.CanModifyStructure)" />
+                </div>
+            </div>
+            @if (Model.CanModifyContent)
+            {
+                <div class="rtk-form-actions">
+                    <button type="submit" class="rtk-btn"><i class="fas fa-floppy-disk"></i> حفظ البيانات</button>
+                </div>
+            }
+        </form>
+    </section>
+
+    <!-- المحاور -->
+    <section aria-label="محاور الخطة">
+        <h2 class="h6 fw-bold mb-3"><i class="fas fa-layer-group ms-1" style="color:#339999"></i> محاور الخطة (@Model.Axes.Count)</h2>
+
+        @if (Model.Axes.Count == 0)
+        {
+            <div class="rtk-panel">
+                <div class="rtk-empty">
+                    <i class="fas fa-layer-group"></i>
+                    لا توجد محاور بعد.
+                    @if (Model.CanModifyStructure)
+                    {
+                        <div class="mt-1">أضف أول محور من النموذج أسفل الصفحة.</div>
+                    }
+                </div>
+            </div>
+        }
+
+        @foreach (var axis in Model.Axes)
+        {
+            <article class="rtk-axis" data-axis-id="@axis.Id">
+                <div class="rtk-axis__head">
+                    <div class="rtk-axis__title">
+                        <span class="rtk-axis__num">@axis.Order</span>
+                        <span>@axis.DisplayTitle</span>
+                    </div>
+                    @if (Model.CanModifyStructure)
+                    {
+                        <div class="rtk-axis__tools">
+                            <button type="button" class="rtk-btn rtk-btn--outline rtk-btn--sm" data-rtk-act="move-axis" data-id="@axis.Id" data-dir="-1" aria-label="تحريك المحور للأعلى" title="للأعلى" disabled="@(axis.Order == 1)"><i class="fas fa-arrow-up"></i></button>
+                            <button type="button" class="rtk-btn rtk-btn--outline rtk-btn--sm" data-rtk-act="move-axis" data-id="@axis.Id" data-dir="1" aria-label="تحريك المحور للأسفل" title="للأسفل" disabled="@(axis.Order == Model.Axes.Count)"><i class="fas fa-arrow-down"></i></button>
+                            <button type="button" class="rtk-btn rtk-btn--danger rtk-btn--sm" data-rtk-act="remove-axis" data-id="@axis.Id" data-name="@axis.DisplayTitle" aria-label="حذف المحور" title="حذف المحور"><i class="fas fa-trash"></i></button>
+                        </div>
+                    }
+                </div>
+
+                <div class="rtk-axis__body">
+                    <!-- الفيديوهات -->
+                    <div class="rtk-sub"><i class="fas fa-circle-play" style="color:#339999"></i> الفيديوهات (@axis.Videos.Count) — تُفتح بالترتيب</div>
+
+                    @if (axis.Videos.Count == 0)
+                    {
+                        <div class="rtk-empty"><i class="fas fa-video-slash"></i> لا توجد فيديوهات في هذا المحور.</div>
+                    }
+                    else
+                    {
+                        <ul class="rtk-videos">
+                            @foreach (var v in axis.Videos)
+                            {
+                                <li class="rtk-video" data-video-id="@v.Id">
+                                    <span class="rtk-video__n">@v.Order</span>
+                                    <div>
+                                        <div class="rtk-video__title">@v.Title</div>
+                                        <div class="rtk-video__meta">
+                                            <span class="rtk-provider @ProviderClass(v.Provider)">@ProviderLabel(v.Provider)</span>
+                                            <span>@FormatDuration(v.DurationSeconds)</span>
+                                            @if (!v.IsActive)
+                                            {
+                                                <span class="rtk-badge rtk-badge--archived">غير فعّال</span>
+                                            }
+                                            <a href="@v.Url" target="_blank" rel="noopener noreferrer">فتح الرابط</a>
+                                        </div>
+                                    </div>
+                                    <div class="rtk-video__tools">
+                                        @if (!string.IsNullOrEmpty(v.EmbedUrl))
+                                        {
+                                            <button type="button" class="rtk-btn rtk-btn--outline rtk-btn--sm" data-rtk-act="preview" data-embed="@v.EmbedUrl" aria-label="معاينة الفيديو" title="معاينة"><i class="fas fa-eye"></i></button>
+                                        }
+                                        @if (Model.CanModifyContent)
+                                        {
+                                            <button type="button" class="rtk-btn rtk-btn--outline rtk-btn--sm" data-rtk-act="toggle" data-target="editVideo-@v.Id" aria-label="تعديل الفيديو" title="تعديل"><i class="fas fa-pen"></i></button>
+                                        }
+                                        @if (Model.CanModifyStructure)
+                                        {
+                                            <button type="button" class="rtk-btn rtk-btn--outline rtk-btn--sm" data-rtk-act="move-video" data-id="@v.Id" data-dir="-1" aria-label="تحريك الفيديو للأعلى" title="للأعلى" disabled="@(v.Order == axis.Videos.Min(x => x.Order))"><i class="fas fa-arrow-up"></i></button>
+                                            <button type="button" class="rtk-btn rtk-btn--outline rtk-btn--sm" data-rtk-act="move-video" data-id="@v.Id" data-dir="1" aria-label="تحريك الفيديو للأسفل" title="للأسفل" disabled="@(v.Order == axis.Videos.Max(x => x.Order))"><i class="fas fa-arrow-down"></i></button>
+                                            <button type="button" class="rtk-btn rtk-btn--danger rtk-btn--sm" data-rtk-act="remove-video" data-id="@v.Id" data-name="@v.Title" aria-label="حذف الفيديو" title="حذف"><i class="fas fa-trash"></i></button>
+                                        }
+                                    </div>
+
+                                    <div class="rtk-preview" data-preview-for="@v.Id" hidden></div>
+
+                                    @if (Model.CanModifyContent)
+                                    {
+                                        <form class="rtk-inline-form" style="grid-column:1/-1" id="editVideo-@v.Id" data-rtk-form="EditVideo" hidden novalidate>
+                                            <input type="hidden" name="VideoId" value="@v.Id" />
+                                            <div class="rtk-grid">
+                                                <div class="rtk-field rtk-field--wide">
+                                                    <label for="evt-@v.Id">عنوان الفيديو</label>
+                                                    <input id="evt-@v.Id" name="Title" value="@v.Title" maxlength="200" required />
+                                                </div>
+                                                <div class="rtk-field rtk-field--wide">
+                                                    <label for="evu-@v.Id">الرابط (https)</label>
+                                                    <input id="evu-@v.Id" name="Url" value="@v.Url" maxlength="500" dir="ltr" required />
+                                                </div>
+                                                <div class="rtk-field">
+                                                    <label for="evd-@v.Id">المدة بالثواني</label>
+                                                    <input id="evd-@v.Id" name="DurationSeconds" type="text" inputmode="numeric" maxlength="5" value="@v.DurationSeconds" />
+                                                    <div class="rtk-hint">إلزامية (10 على الأقل) لمنصة غير YouTube/Vimeo.</div>
+                                                </div>
+                                            </div>
+                                            <div class="rtk-form-actions">
+                                                <button type="submit" class="rtk-btn rtk-btn--sm"><i class="fas fa-floppy-disk"></i> حفظ</button>
+                                                <button type="button" class="rtk-btn rtk-btn--outline rtk-btn--sm" data-rtk-act="toggle" data-target="editVideo-@v.Id">إغلاق</button>
+                                            </div>
+                                        </form>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    }
+
+                    @if (Model.CanModifyStructure)
+                    {
+                        <div class="mt-2">
+                            <button type="button" class="rtk-btn rtk-btn--outline rtk-btn--sm" data-rtk-act="toggle" data-target="addVideo-@axis.Id"><i class="fas fa-plus"></i> إضافة فيديو</button>
+                        </div>
+                        <form class="rtk-inline-form" id="addVideo-@axis.Id" data-rtk-form="AddVideo" hidden novalidate>
+                            <input type="hidden" name="AxisId" value="@axis.Id" />
+                            <div class="rtk-grid">
+                                <div class="rtk-field rtk-field--wide">
+                                    <label for="avt-@axis.Id">عنوان الفيديو</label>
+                                    <input id="avt-@axis.Id" name="Title" maxlength="200" required autocomplete="off" />
+                                </div>
+                                <div class="rtk-field rtk-field--wide">
+                                    <label for="avu-@axis.Id">رابط الفيديو (https — YouTube / Vimeo / منصة أخرى)</label>
+                                    <input id="avu-@axis.Id" name="Url" maxlength="500" dir="ltr" required autocomplete="off" placeholder="https://www.youtube.com/watch?v=..." />
+                                </div>
+                                <div class="rtk-field">
+                                    <label for="avd-@axis.Id">المدة بالثواني</label>
+                                    <input id="avd-@axis.Id" name="DurationSeconds" type="text" inputmode="numeric" maxlength="5" autocomplete="off" />
+                                    <div class="rtk-hint">اختيارية لـ YouTube/Vimeo، إلزامية (10 على الأقل) لأي منصة أخرى.</div>
+                                </div>
+                            </div>
+                            <div class="rtk-form-actions">
+                                <button type="submit" class="rtk-btn rtk-btn--sm"><i class="fas fa-plus"></i> إضافة</button>
+                                <button type="button" class="rtk-btn rtk-btn--outline rtk-btn--sm" data-rtk-act="toggle" data-target="addVideo-@axis.Id">إلغاء</button>
+                            </div>
+                        </form>
+                    }
+
+                    <!-- نموذجا الاختبار -->
+                    <div class="rtk-sub"><i class="fas fa-clipboard-question" style="color:#339999"></i> نموذجا الاختبار</div>
+                    <div class="rtk-grid">
+                        <div><span class="rtk-hint">اختبار 101</span><div><strong>@axis.Exam101Title</strong></div></div>
+                        <div><span class="rtk-hint">اختبار 102</span><div><strong>@axis.Exam102Title</strong></div></div>
+                        <div><span class="rtk-hint">مدة الاختبار</span><div><strong>@axis.ExamDurationMinutes دقيقة</strong></div></div>
+                    </div>
+                    @if (Model.CanModifyStructure)
+                    {
+                        <div class="mt-2">
+                            <button type="button" class="rtk-btn rtk-btn--outline rtk-btn--sm" data-rtk-act="toggle" data-target="exams-@axis.Id" data-fill="exams-@axis.Id"><i class="fas fa-pen"></i> تغيير النموذجين</button>
+                        </div>
+                        <form class="rtk-inline-form" id="exams-@axis.Id" data-rtk-form="SaveAxisExams" hidden novalidate>
+                            <input type="hidden" name="AxisId" value="@axis.Id" />
+                            <div class="rtk-grid">
+                                <div class="rtk-field">
+                                    <label for="e101-@axis.Id">نموذج اختبار 101</label>
+                                    <select id="e101-@axis.Id" name="Exam101ModelId" data-models data-selected="@axis.Exam101ModelId"></select>
+                                </div>
+                                <div class="rtk-field">
+                                    <label for="e102-@axis.Id">نموذج اختبار 102</label>
+                                    <select id="e102-@axis.Id" name="Exam102ModelId" data-models data-selected="@axis.Exam102ModelId"></select>
+                                </div>
+                                <div class="rtk-field">
+                                    <label for="edur-@axis.Id">مدة الاختبار (دقيقة)</label>
+                                    <input id="edur-@axis.Id" name="ExamDurationMinutes" type="text" inputmode="numeric" maxlength="3" value="@axis.ExamDurationMinutes" />
+                                </div>
+                            </div>
+                            <div class="rtk-form-actions">
+                                <button type="submit" class="rtk-btn rtk-btn--sm"><i class="fas fa-floppy-disk"></i> حفظ</button>
+                                <button type="button" class="rtk-btn rtk-btn--outline rtk-btn--sm" data-rtk-act="toggle" data-target="exams-@axis.Id">إغلاق</button>
+                            </div>
+                        </form>
+                    }
+                </div>
+            </article>
+        }
+    </section>
+
+    <!-- إضافة محور -->
+    @if (Model.CanModifyStructure)
+    {
+        <section class="rtk-panel" aria-label="إضافة محور">
+            <h2><i class="fas fa-plus ms-1"></i> إضافة محور من المنهج</h2>
+            @if (Model.AvailableSections.Count == 0)
+            {
+                <div class="rtk-empty"><i class="fas fa-circle-check"></i> لا توجد محاور متاحة: كل محاور المنهج مضافة أو لا يحتوي المنهج محاور.</div>
+            }
+            else if (Model.ExamModels.Count < 2)
+            {
+                <div class="rtk-empty"><i class="fas fa-clipboard-question"></i> يلزم نموذجا اختبار على الأقل (غير مؤرشفين) لإضافة محور.</div>
+            }
+            else
+            {
+                <form data-rtk-form="AddAxis" novalidate>
+                    <input type="hidden" name="TrackId" value="@Model.Id" />
+                    <div class="rtk-grid">
+                        <div class="rtk-field">
+                            <label for="aSection">المحور</label>
+                            <select id="aSection" name="SectionId" required>
+                                <option value="">— اختر المحور —</option>
+                                @foreach (var s in Model.AvailableSections)
+                                {
+                                    <option value="@s.Id">@s.Text</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="rtk-field">
+                            <label for="a101">نموذج اختبار 101</label>
+                            <select id="a101" name="Exam101ModelId" data-models required></select>
+                        </div>
+                        <div class="rtk-field">
+                            <label for="a102">نموذج اختبار 102</label>
+                            <select id="a102" name="Exam102ModelId" data-models required></select>
+                        </div>
+                        <div class="rtk-field">
+                            <label for="aDur">مدة الاختبار (دقيقة)</label>
+                            <input id="aDur" name="ExamDurationMinutes" type="text" inputmode="numeric" maxlength="3" value="30" />
+                            <div class="rtk-hint">من 5 إلى 180.</div>
+                        </div>
+                    </div>
+                    <div class="rtk-hint mt-2">النموذجان يجب أن يختلفا، وأن يحتوي كل منهما أسئلة لها إجابة صحيحة.</div>
+                    <div class="rtk-form-actions">
+                        <button type="submit" class="rtk-btn"><i class="fas fa-plus"></i> إضافة المحور</button>
+                    </div>
+                </form>
+            }
+        </section>
+    }
+
+    <p class="text-muted small">
+        أُنشئت: @Tz.ConvertToSaudi(Model.CreatedAtUtc).ToString("yyyy-MM-dd HH:mm")
+        @if (Model.UpdatedAtUtc.HasValue)
+        {
+            <span> · آخر تعديل: @Tz.ConvertToSaudi(Model.UpdatedAtUtc.Value).ToString("yyyy-MM-dd HH:mm")</span>
+        }
+    </p>
+
+    <select id="rtkModelsTpl" hidden aria-hidden="true">
+        <option value="">— اختر النموذج —</option>
+        @foreach (var m in Model.ExamModels)
+        {
+            <option value="@m.Id">@m.Text@(m.CurriculumId.HasValue && m.CurriculumId.Value != Model.CurriculumId ? " (منهج آخر)" : "")</option>
+        }
+    </select>
+
+    <div class="rtk-toast" id="rtkToast" role="status" aria-live="polite"></div>
+</div>
+
+@section Scripts {
+    <script>
+    (function () {
+        'use strict';
+
+        var root = document.getElementById('rtkBuilder');
+        if (!root || root.dataset.bound === '1') return;   // منع تكرار الربط
+        root.dataset.bound = '1';
+
+        var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+        // المسارات من Url.Action لضمان مطابقة الـ Routing
+        var urls = {};
+        urls.EditHeader = '@Url.Action("EditHeader", "RemedialTracks", new { area = "Admin" })';
+        urls.AddAxis = '@Url.Action("AddAxis", "RemedialTracks", new { area = "Admin" })';
+        urls.MoveAxis = '@Url.Action("MoveAxis", "RemedialTracks", new { area = "Admin" })';
+        urls.RemoveAxis = '@Url.Action("RemoveAxis", "RemedialTracks", new { area = "Admin" })';
+        urls.SaveAxisExams = '@Url.Action("SaveAxisExams", "RemedialTracks", new { area = "Admin" })';
+        urls.AddVideo = '@Url.Action("AddVideo", "RemedialTracks", new { area = "Admin" })';
+        urls.EditVideo = '@Url.Action("EditVideo", "RemedialTracks", new { area = "Admin" })';
+        urls.MoveVideo = '@Url.Action("MoveVideo", "RemedialTracks", new { area = "Admin" })';
+        urls.RemoveVideo = '@Url.Action("RemoveVideo", "RemedialTracks", new { area = "Admin" })';
+        urls.MarkReady = '@Url.Action("MarkReady", "RemedialTracks", new { area = "Admin" })';
+        urls.Archive = '@Url.Action("Archive", "RemedialTracks", new { area = "Admin" })';
+        urls.Duplicate = '@Url.Action("Duplicate", "RemedialTracks", new { area = "Admin" })';
+
+        var issuesBox = document.getElementById('rtkIssues');
+        var toast = document.getElementById('rtkToast');
+        var tpl = document.getElementById('rtkModelsTpl');
+        var busy = false;
+
+        function esc(t) { var d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; }
+
+        function showToast(msg, ok) {
+            toast.innerHTML = '<div class="rtk-alert ' + (ok ? 'rtk-alert--ok' : 'rtk-alert--error') + '">' + esc(msg) + '</div>';
+            clearTimeout(showToast._t);
+            showToast._t = setTimeout(function () { toast.innerHTML = ''; }, ok ? 3000 : 7000);
+        }
+
+        function showIssues(msg, list) {
+            if (!list || !list.length) { issuesBox.hidden = true; return; }
+            issuesBox.innerHTML = '<strong>' + esc(msg) + '</strong><ul>' +
+                list.map(function (i) { return '<li>' + esc(i) + '</li>'; }).join('') + '</ul>';
+            issuesBox.hidden = false;
+            issuesBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        function setBusy(el, on) {
+            busy = on;
+            if (!el) return;
+            el.disabled = on;
+            el.classList.toggle('is-busy', on);
+        }
+
+        // POST موحّد: loading + نجاح + أخطاء تحقق + أخطاء شبكة/خادم
+        function post(action, fd, trigger, opts) {
+            if (busy) return;
+            opts = opts || {};
+            fd.set('__RequestVerificationToken', token);
+            issuesBox.hidden = true;
+            setBusy(trigger, true);
+
+            fetch(urls[action], {
+                method: 'POST',
+                body: fd,
+                credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function (res) {
+                if (!res.success) {
+                    showToast(res.message || 'تعذّر تنفيذ العملية.', false);
+                    if (Array.isArray(res.data)) showIssues(res.message, res.data);
+                    setBusy(trigger, false);
+                    return;
+                }
+                showToast(res.message || 'تم.', true);
+                if (opts.onSuccess) { opts.onSuccess(res); return; }
+                setTimeout(function () { window.location.reload(); }, 500);
+            })
+            .catch(function () {
+                showToast('تعذّر الاتصال بالخادم. تحقق من الشبكة وأعد المحاولة.', false);
+                setBusy(trigger, false);
+            });
+        }
+
+        function fillModels(select) {
+            if (!select || select.options.length > 0) return;
+            Array.prototype.forEach.call(tpl.options, function (o) { select.appendChild(o.cloneNode(true)); });
+            var sel = select.getAttribute('data-selected');
+            if (sel) select.value = sel;
+        }
+
+        // قوائم النماذج في نموذج إضافة المحور
+        document.querySelectorAll('form[data-rtk-form="AddAxis"] select[data-models]').forEach(fillModels);
+
+        root.addEventListener('submit', function (e) {
+            var form = e.target.closest('form[data-rtk-form]');
+            if (!form) return;
+            e.preventDefault();
+            post(form.getAttribute('data-rtk-form'), new FormData(form), form.querySelector('button[type="submit"]'));
+        });
+
+        root.addEventListener('click', function (e) {
+            var btn = e.target.closest('[data-rtk-act]');
+            if (!btn || !root.contains(btn)) return;
+            var act = btn.getAttribute('data-rtk-act');
+            var id = btn.getAttribute('data-id');
+            var fd = new FormData();
+
+            switch (act) {
+                case 'toggle':
+                    var target = document.getElementById(btn.getAttribute('data-target'));
+                    if (target) {
+                        target.hidden = !target.hidden;
+                        if (!target.hidden) target.querySelectorAll('select[data-models]').forEach(fillModels);
+                    }
+                    break;
+
+                case 'preview':
+                    var holder = btn.closest('.rtk-video').querySelector('.rtk-preview');
+                    if (!holder.hidden) { holder.hidden = true; holder.innerHTML = ''; break; }
+                    var src = btn.getAttribute('data-embed') || '';
+                    // الرابط مبني في الخادم من المعرّف؛ تحقق إضافي من النطاق
+                    if (src.indexOf('https://www.youtube-nocookie.com/embed/') !== 0 && src.indexOf('https://player.vimeo.com/video/') !== 0) break;
+                    var f = document.createElement('iframe');
+                    f.src = src;
+                    f.title = 'معاينة الفيديو';
+                    f.allow = 'fullscreen; picture-in-picture';
+                    f.referrerPolicy = 'strict-origin-when-cross-origin';
+                    f.loading = 'lazy';
+                    holder.appendChild(f);
+                    holder.hidden = false;
+                    break;
+
+                case 'move-axis':
+                    fd.set('axisId', id); fd.set('dir', btn.getAttribute('data-dir'));
+                    post('MoveAxis', fd, btn); break;
+
+                case 'remove-axis':
+                    if (!window.confirm('حذف المحور «' + btn.getAttribute('data-name') + '» مع كل فيديوهاته؟')) break;
+                    fd.set('axisId', id);
+                    post('RemoveAxis', fd, btn); break;
+
+                case 'move-video':
+                    fd.set('videoId', id); fd.set('dir', btn.getAttribute('data-dir'));
+                    post('MoveVideo', fd, btn); break;
+
+                case 'remove-video':
+                    if (!window.confirm('حذف الفيديو «' + btn.getAttribute('data-name') + '»؟')) break;
+                    fd.set('videoId', id);
+                    post('RemoveVideo', fd, btn); break;
+
+                case 'mark-ready':
+                    fd.set('id', id);
+                    post('MarkReady', fd, btn); break;
+
+                case 'archive':
+                    if (!window.confirm('أرشفة هذه الخطة؟ لن يمكن تعديلها بعد ذلك.')) break;
+                    fd.set('id', id);
+                    post('Archive', fd, btn, { onSuccess: function () { setTimeout(function () { window.location.reload(); }, 500); } });
+                    break;
+
+                case 'duplicate':
+                    fd.set('id', id);
+                    post('Duplicate', fd, btn, {
+                        onSuccess: function (res) {
+                            if (res.data && res.data.url) window.location.href = res.data.url;
+                            else window.location.reload();
+                        }
+                    });
+                    break;
+            }
+        });
+    })();
+    </script>
+}
