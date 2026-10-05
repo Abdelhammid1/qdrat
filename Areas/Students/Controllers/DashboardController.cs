@@ -8,7 +8,10 @@ using QdratNew.Data;
 using QdratNew.Entities;
 using QdratNew.Services.Interfaces;
 using QdratNew.Services.Interfaces.Exams;
+using QdratNew.Enums;
+using QdratNew.Services.RemedialTracks;
 using QdratNew.Services.StudentAnalysis;
+using QdratNew.ViewModels.RemedialTracks;
 using QdratNew.ViewModels.Students;
 
 namespace QdratNew.Areas.Students.Controllers
@@ -20,6 +23,8 @@ namespace QdratNew.Areas.Students.Controllers
         private readonly IStudentRankingService _studentRankingService;
         private readonly IStudentPerformanceAnalysisService _service;
         private readonly IStudentCourseDashboardService _courseDashboardService;
+        private readonly IRemedialTrackProgressService _remedialProgress;
+        private readonly IRemedialTrackFeatureService _remedialFeature;
 
         public DashboardController(
             IDbContextFactory<ApplicationDbContext> contextFactory,
@@ -27,13 +32,17 @@ namespace QdratNew.Areas.Students.Controllers
             IStudentDashboardService dashboardService,
             IStudentRankingService studentRankingService,
             IStudentPerformanceAnalysisService service,
-            IStudentCourseDashboardService courseDashboardService
+            IStudentCourseDashboardService courseDashboardService,
+            IRemedialTrackProgressService remedialProgress,
+            IRemedialTrackFeatureService remedialFeature
         ) : base(contextFactory, userManager)
         {
             _dashboardService = dashboardService;
             _studentRankingService = studentRankingService;
             _service = service;
             _courseDashboardService = courseDashboardService;
+            _remedialProgress = remedialProgress;
+            _remedialFeature = remedialFeature;
         }
 
         [HttpGet]
@@ -64,7 +73,31 @@ namespace QdratNew.Areas.Students.Controllers
                 };
             }
 
+            // =====================================================
+            // 🔹 تقدم الخطط العلاجية التي بدأها الطالب (قراءة فقط؛ لا يكسر الداشبورد عند الفشل أو التعطيل)
+            // =====================================================
+            vm.ActiveRemedialPlans = await LoadActiveRemedialPlansAsync(studentId);
+
             return View(vm);
+        }
+
+        private async Task<List<StudentRemedialTrackListItemVm>> LoadActiveRemedialPlansAsync(int studentId)
+        {
+            try
+            {
+                if (!await _remedialFeature.IsEnabledAsync(HttpContext.RequestAborted))
+                    return new List<StudentRemedialTrackListItemVm>();
+
+                var plans = await _remedialProgress.GetMyPlansAsync(studentId, HttpContext.RequestAborted);
+                return plans.Items
+                    .Where(i => i.Status == RemedialTrackEnrollmentStatus.InProgress)
+                    .Take(3)
+                    .ToList();
+            }
+            catch (Exception) when (!HttpContext.RequestAborted.IsCancellationRequested)
+            {
+                return new List<StudentRemedialTrackListItemVm>();
+            }
         }
 
 

@@ -6,67 +6,103 @@
     var pct = Model.ScorePercent.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
     var tone = Model.Tone;
     var cardCls = Model.IsPassed ? "is-pass" : "is-growth";
+    var ringPct = Math.Clamp((double)Model.ScorePercent, 0d, 100d);
+    var ringOffset = (326.73 * (1 - ringPct / 100.0)).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
 }
 @section Styles {
     <link href="~/css/student-rtk.css" rel="stylesheet" asp-append-version="true" />
+    <link href="~/css/student-rtk-result.css" rel="stylesheet" asp-append-version="true" />
 }
 
-<div class="rtk-page">
-    <div class="rtk-hero">
-        <h1>نتيجة @Model.ExamNumber.DisplayName()</h1>
-        <p>@Model.TrackTitle — @Model.AxisTitle</p>
-    </div>
+<div class="rtk-page rtk-result-page @cardCls">
+    <section class="rs-card rs-hero">
+        <div class="rs-hero-top">
+            <div class="rs-crumb">
+                <span class="rs-chip"><i class="fas fa-layer-group" aria-hidden="true"></i> @Model.AxisTitle</span>
+            </div>
+            <h1>نتيجة @Model.ExamNumber.DisplayName() — @Model.TrackTitle</h1>
+        </div>
 
-    <div class="rtk-card rtk-result @cardCls">
-        <div class="rtk-result-score" aria-label="النسبة">@pct<span>%</span></div>
-        <h2 class="rtk-result-title">@tone.Title</h2>
-        <p class="rtk-result-sub">@tone.Subtitle</p>
+        <div class="rs-score-wrap">
+            <div class="rs-ring" role="img" aria-label="النسبة @pct%">
+                <svg viewBox="0 0 120 120" aria-hidden="true">
+                    <circle class="rs-ring-bg" cx="60" cy="60" r="52"></circle>
+                    <circle class="rs-ring-fg" cx="60" cy="60" r="52" stroke-dasharray="326.73" stroke-dashoffset="@ringOffset"></circle>
+                </svg>
+                <div class="rs-ring-num">@pct<span>%</span></div>
+            </div>
+        </div>
 
-        <ul class="rtk-meta rtk-result-meta">
-            <li><i class="fas fa-circle-check" aria-hidden="true"></i> الإجابات الصحيحة: @Model.CorrectCount من @Model.TotalQuestions</li>
-            <li><i class="fas fa-bullseye" aria-hidden="true"></i> نسبة الاجتياز المطلوبة: @Model.PassPercent%</li>
-            @if (Model.TimedOut)
-            {
-                <li><i class="fas fa-hourglass-end" aria-hidden="true"></i> انتهى الوقت فصُحّحت الإجابات المحفوظة.</li>
-            }
+        <div class="rs-message">
+            <h2>@tone.Title</h2>
+            <p>@tone.Subtitle</p>
+        </div>
+
+        <ul class="rs-stats">
+            <li class="rs-stat">
+                <span class="rs-stat-ic"><i class="fas fa-circle-check" aria-hidden="true"></i></span>
+                <div><strong>@Model.CorrectCount من @Model.TotalQuestions</strong><small>الإجابات الصحيحة</small></div>
+            </li>
+            <li class="rs-stat">
+                <span class="rs-stat-ic"><i class="fas fa-bullseye" aria-hidden="true"></i></span>
+                <div><strong>@Model.PassPercent%</strong><small>نسبة الاجتياز المطلوبة</small></div>
+            </li>
         </ul>
-    </div>
-
-    <div class="rtk-card mt-3">
-        <h3>الخطوة التالية</h3>
-        @switch (Model.Next)
+        @if (Model.TimedOut)
         {
-            case RemedialTrackResultNext.NextAxis:
-                <p>أحسنت! فُتح لك المحور التالي: <strong>@Model.NextAxisTitle</strong>.</p>
-                <a class="rtk-btn" asp-action="Axis" asp-route-enrollmentId="@Model.EnrollmentId" asp-route-axisProgressId="@Model.NextAxisProgressId">
-                    <i class="fas fa-play" aria-hidden="true"></i> الانتقال إلى المحور التالي
-                </a>
-                break;
-
-            case RemedialTrackResultNext.FinalReport:
-                <p>أنهيت آخر محور في الخطة. أحسنت!</p>
-                <a class="rtk-btn" asp-action="Report" asp-route-enrollmentId="@Model.EnrollmentId">
-                    <i class="fas fa-flag-checkered" aria-hidden="true"></i> عرض تقريري النهائي
-                </a>
-                break;
-
-            case RemedialTrackResultNext.RewatchThenExam102:
-                <p>أعد مشاهدة فيديوهات هذا المحور من جديد، وبعد آخرها سيظهر لك الاختبار الثاني.</p>
-                <a class="rtk-btn" asp-action="Axis" asp-route-enrollmentId="@Model.EnrollmentId" asp-route-axisProgressId="@Model.AxisProgressId">
-                    <i class="fas fa-rotate-right" aria-hidden="true"></i> إعادة مشاهدة الفيديوهات
-                </a>
-                break;
-
-            case RemedialTrackResultNext.AwaitAdmin:
-                <p>هذا المحور يحتاج متابعة مع المعهد. ستتواصل معك الإدارة لفتح المحور التالي.</p>
-                <a class="rtk-btn rtk-btn-outline" asp-action="Open" asp-route-enrollmentId="@Model.EnrollmentId">العودة إلى الخطة</a>
-                <a class="rtk-btn rtk-btn-outline" asp-action="Report" asp-route-enrollmentId="@Model.EnrollmentId">تقريري</a>
-                break;
-
-            default:
-                <p>انتهت الخطة، وهذا المحور يحتاج متابعة مع المعهد. ستتواصل معك الإدارة.</p>
-                <a class="rtk-btn rtk-btn-outline" asp-action="Report" asp-route-enrollmentId="@Model.EnrollmentId">عرض تقريري النهائي</a>
-                break;
+            <div class="rs-note"><i class="fas fa-hourglass-end" aria-hidden="true"></i> انتهى الوقت فصُحّحت الإجابات المحفوظة.</div>
         }
-    </div>
+    </section>
+
+    <section class="rs-card rs-next" aria-label="الخطوة التالية">
+        <div class="rs-next-ic" aria-hidden="true"><i class="fas fa-route"></i></div>
+        <div class="rs-next-body">
+            <h3>الخطوة التالية</h3>
+            @switch (Model.Next)
+            {
+                case RemedialTrackResultNext.NextAxis:
+                    <p>أحسنت! فُتح لك المحور التالي: <strong>@Model.NextAxisTitle</strong>.</p>
+                    break;
+                case RemedialTrackResultNext.FinalReport:
+                    <p>أنهيت آخر محور في الخطة. أحسنت!</p>
+                    break;
+                case RemedialTrackResultNext.RewatchThenExam102:
+                    <p>أعد مشاهدة فيديوهات هذا المحور من جديد، وبعد آخرها سيظهر لك الاختبار الثاني.</p>
+                    break;
+                case RemedialTrackResultNext.AwaitAdmin:
+                    <p>هذا المحور يحتاج متابعة مع المعهد. ستتواصل معك الإدارة لفتح المحور التالي.</p>
+                    break;
+                default:
+                    <p>انتهت الخطة، وهذا المحور يحتاج متابعة مع المعهد. ستتواصل معك الإدارة.</p>
+                    break;
+            }
+        </div>
+        <div class="rs-next-actions">
+            @switch (Model.Next)
+            {
+                case RemedialTrackResultNext.NextAxis:
+                    <a class="rtk-btn" asp-action="Axis" asp-route-enrollmentId="@Model.EnrollmentId" asp-route-axisProgressId="@Model.NextAxisProgressId">
+                        <i class="fas fa-play" aria-hidden="true"></i> الانتقال إلى المحور التالي
+                    </a>
+                    break;
+                case RemedialTrackResultNext.FinalReport:
+                    <a class="rtk-btn" asp-action="Report" asp-route-enrollmentId="@Model.EnrollmentId">
+                        <i class="fas fa-flag-checkered" aria-hidden="true"></i> عرض تقريري النهائي
+                    </a>
+                    break;
+                case RemedialTrackResultNext.RewatchThenExam102:
+                    <a class="rtk-btn" asp-action="Axis" asp-route-enrollmentId="@Model.EnrollmentId" asp-route-axisProgressId="@Model.AxisProgressId">
+                        <i class="fas fa-rotate-right" aria-hidden="true"></i> إعادة مشاهدة الفيديوهات
+                    </a>
+                    break;
+                case RemedialTrackResultNext.AwaitAdmin:
+                    <a class="rtk-btn rtk-btn-outline" asp-action="Open" asp-route-enrollmentId="@Model.EnrollmentId">العودة إلى الخطة</a>
+                    <a class="rtk-btn rtk-btn-outline" asp-action="Report" asp-route-enrollmentId="@Model.EnrollmentId">تقريري</a>
+                    break;
+                default:
+                    <a class="rtk-btn rtk-btn-outline" asp-action="Report" asp-route-enrollmentId="@Model.EnrollmentId">عرض تقريري النهائي</a>
+                    break;
+            }
+        </div>
+    </section>
 </div>

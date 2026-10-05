@@ -42,6 +42,9 @@ namespace QdratNew.ViewModels.Students
 
         // 🔹 ترتيب الطالب
         public StudentRankViewModel StudentRank { get; set; }
+
+        // 🔹 الخطط العلاجية التي بدأها الطالب (قيد التنفيذ) لعرض شريط التقدم
+        public List<QdratNew.ViewModels.RemedialTracks.StudentRemedialTrackListItemVm> ActiveRemedialPlans { get; set; } = new();
         public double ExamCompletionRate { get; internal set; }
         public double HomeworkCompletionRate { get; internal set; }
         public int LateHomeworks { get; internal set; }

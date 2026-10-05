@@ -11,93 +11,154 @@
         RemedialTrackReportAxisOutcome.InProgress => "قيد التنفيذ",
         _ => "لم تصل إليه بعد"
     };
-    static string OutcomeClass(RemedialTrackReportAxisOutcome o) => o switch
+    static string OutcomePill(RemedialTrackReportAxisOutcome o) => o switch
     {
-        RemedialTrackReportAxisOutcome.Passed => "rtk-badge-ok",
-        RemedialTrackReportAxisOutcome.NeedsFollowUp or RemedialTrackReportAxisOutcome.MovedByAdmin => "rtk-badge-info",
-        RemedialTrackReportAxisOutcome.InProgress => "rtk-badge-progress",
-        _ => "rtk-badge-muted"
+        RemedialTrackReportAxisOutcome.Passed => "rp-pill-ok",
+        RemedialTrackReportAxisOutcome.NeedsFollowUp or RemedialTrackReportAxisOutcome.MovedByAdmin => "rp-pill-warm",
+        RemedialTrackReportAxisOutcome.InProgress => "rp-pill-progress",
+        _ => "rp-pill-muted"
     };
+    static string OutcomeIcon(RemedialTrackReportAxisOutcome o) => o switch
+    {
+        RemedialTrackReportAxisOutcome.Passed => "fa-circle-check",
+        RemedialTrackReportAxisOutcome.NeedsFollowUp or RemedialTrackReportAxisOutcome.MovedByAdmin => "fa-handshake-angle",
+        RemedialTrackReportAxisOutcome.InProgress => "fa-spinner",
+        _ => "fa-lock"
+    };
+    static string AxisCls(RemedialTrackReportAxisOutcome o) => o switch
+    {
+        RemedialTrackReportAxisOutcome.Passed => "is-passed",
+        RemedialTrackReportAxisOutcome.NeedsFollowUp => "is-followup",
+        RemedialTrackReportAxisOutcome.MovedByAdmin => "is-moved",
+        RemedialTrackReportAxisOutcome.InProgress => "is-progress",
+        _ => "is-locked"
+    };
+    static int Pct(int done, int total) => total <= 0 ? 0 : Math.Clamp((int)Math.Round(done * 100.0 / total), 0, 100);
     string Date(DateTime? utc) => utc.HasValue ? Tz.ConvertToSaudi(utc.Value).ToString("yyyy/MM/dd") : "—";
 }
 @{
     ViewData["Title"] = "تقريري — " + Model.TrackTitle;
+    const double ringLen = 226.19; // 2π × 36
+    var ringOffset = (ringLen * (1 - Model.PassedPercent / 100.0)).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
 }
 @section Styles {
     <link href="~/css/student-rtk.css" rel="stylesheet" asp-append-version="true" />
+    <link href="~/css/student-rtk-report.css" rel="stylesheet" asp-append-version="true" />
 }
 
-<div class="rtk-page">
-    <div class="rtk-hero">
-        <h1><i class="fas fa-flag-checkered"></i> تقريري في الخطة العلاجية</h1>
-        <p>@Model.TrackTitle — @Model.CurriculumTitle</p>
-    </div>
+<div class="rtk-page rtk-report-page">
+    <header class="rp-hero">
+        <a class="rp-back" asp-action="Open" asp-route-enrollmentId="@Model.EnrollmentId">
+            <i class="fas fa-arrow-right" aria-hidden="true"></i> العودة إلى الخطة
+        </a>
+        <div class="rp-hero-row">
+            <div class="rp-hero-text">
+                <span class="rp-eyebrow"><i class="fas fa-flag-checkered" aria-hidden="true"></i> تقريري في الخطة العلاجية</span>
+                <h1>@Model.TrackTitle</h1>
+                <p class="rp-hero-sub">@Model.CurriculumTitle</p>
+                @if (!Model.IsFinished)
+                {
+                    <p class="rp-pending"><i class="fas fa-circle-info" aria-hidden="true"></i> الخطة لم تنتهِ بعد؛ يتحدّث التقرير مع تقدّمك.</p>
+                }
+            </div>
+            <div class="rp-ring" role="img" aria-label="اجتزت @Model.PassedAxes من @Model.TotalAxes محور (@Model.PassedPercent%)">
+                <svg viewBox="0 0 80 80" aria-hidden="true">
+                    <circle class="rp-ring-bg" cx="40" cy="40" r="36"></circle>
+                    <circle class="rp-ring-fg" cx="40" cy="40" r="36" stroke-dasharray="226.19" stroke-dashoffset="@ringOffset"></circle>
+                </svg>
+                <div class="rp-ring-label"><strong>@Model.PassedPercent%</strong><small>إنجاز المحاور</small></div>
+            </div>
+        </div>
 
-    <div class="rtk-card mb-3">
-        <h2>الملخص</h2>
-        <ul class="rtk-meta">
-            <li><i class="fas fa-check"></i> محاور اجتزتها: <strong>@Model.PassedAxes</strong> من @Model.TotalAxes</li>
-            @if (Model.FollowUpAxes > 0)
-            {
-                <li><i class="fas fa-handshake-angle"></i> محاور تحتاج متابعة مع المعهد: <strong>@Model.FollowUpAxes</strong></li>
-            }
+        <ul class="rp-stats">
+            <li class="rp-stat">
+                <span class="rp-stat-ic"><i class="fas fa-check" aria-hidden="true"></i></span>
+                <div><strong>@Model.PassedAxes من @Model.TotalAxes</strong><small>محاور اجتزتها</small></div>
+            </li>
             @if (Model.AverageScorePercent.HasValue)
             {
-                <li><i class="fas fa-chart-line"></i> متوسط نتائجك: <strong>@Model.AverageScorePercent.Value.ToString("0.#")%</strong></li>
+                <li class="rp-stat">
+                    <span class="rp-stat-ic"><i class="fas fa-chart-line" aria-hidden="true"></i></span>
+                    <div><strong>@Model.AverageScorePercent.Value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%</strong><small>متوسط نتائجك</small></div>
+                </li>
+            }
+            @if (Model.FollowUpAxes > 0)
+            {
+                <li class="rp-stat">
+                    <span class="rp-stat-ic"><i class="fas fa-handshake-angle" aria-hidden="true"></i></span>
+                    <div><strong>@Model.FollowUpAxes</strong><small>محاور تحتاج متابعة مع المعهد</small></div>
+                </li>
             }
         </ul>
-        <div class="rtk-progress" role="progressbar" aria-valuenow="@Model.PassedPercent" aria-valuemin="0" aria-valuemax="100"><span style="width:@(Model.PassedPercent)%"></span></div>
-        @if (!Model.IsFinished)
-        {
-            <div class="small text-muted mt-2">الخطة لم تنتهِ بعد؛ يتحدّث التقرير مع تقدّمك.</div>
-        }
-    </div>
+    </header>
+
+    <h2 class="rp-section-title"><i class="fas fa-route" aria-hidden="true"></i> رحلتك عبر المحاور</h2>
 
     @if (Model.Axes.Count == 0)
     {
-        <div class="rtk-card rtk-empty"><i class="fas fa-layer-group"></i><p class="mb-0">لا توجد محاور في هذه الخطة.</p></div>
+        <div class="rp-card rp-empty"><i class="fas fa-layer-group" aria-hidden="true"></i><p class="mb-0">لا توجد محاور في هذه الخطة.</p></div>
     }
     else
     {
-        <ol class="rtk-axes" aria-label="المراحل">
+        <ol class="rp-timeline" aria-label="المراحل">
             @foreach (var a in Model.Axes)
             {
-                <li class="rtk-axis @(a.Outcome == RemedialTrackReportAxisOutcome.Passed ? "is-passed" : a.Outcome == RemedialTrackReportAxisOutcome.NotReached ? "is-locked" : "")">
-                    <span class="rtk-axis-num">@a.Order</span>
-                    <div class="rtk-axis-body">
-                        <strong>@a.Title</strong>
-                        <div class="mt-1"><span class="rtk-badge @OutcomeClass(a.Outcome)">@OutcomeText(a.Outcome)</span></div>
+                <li class="rp-axis @AxisCls(a.Outcome)">
+                    <span class="rp-node" aria-hidden="true">@a.Order</span>
+                    <div class="rp-card rp-axis-card">
+                        <div class="rp-axis-head">
+                            <h3>@a.Title</h3>
+                            <span class="rp-pill @OutcomePill(a.Outcome)"><i class="fas @OutcomeIcon(a.Outcome)" aria-hidden="true"></i> @OutcomeText(a.Outcome)</span>
+                        </div>
+
                         @if (a.Outcome == RemedialTrackReportAxisOutcome.MovedByAdmin)
                         {
-                            <div class="rtk-alert rtk-alert-info mt-2 mb-0" role="note">
+                            <div class="rp-note" role="note">
                                 <i class="fas fa-circle-info" aria-hidden="true"></i>
-                                انتقلت من هذا المحور إلى التالي بقرار الإدارة (@Date(a.AdminOpenedAtUtc)) دون اجتيازه؛ ننصحك بمراجعته مع معلمك.
+                                <span>انتقلت من هذا المحور إلى التالي بقرار الإدارة (@Date(a.AdminOpenedAtUtc)) دون اجتيازه؛ ننصحك بمراجعته مع معلمك.</span>
                             </div>
                         }
                         else if (a.Outcome == RemedialTrackReportAxisOutcome.NeedsFollowUp)
                         {
-                            <div class="rtk-alert rtk-alert-info mt-2 mb-0" role="note">
+                            <div class="rp-note" role="note">
                                 <i class="fas fa-circle-info" aria-hidden="true"></i>
-                                هذا المحور يحتاج متابعة مع المعهد، وستتواصل معك الإدارة.
+                                <span>هذا المحور يحتاج متابعة مع المعهد، وستتواصل معك الإدارة.</span>
                             </div>
                         }
+
                         @if (a.Outcome != RemedialTrackReportAxisOutcome.NotReached)
                         {
-                            <ul class="rtk-meta mt-2">
-                                <li><i class="fas fa-video"></i> الفيديوهات (الجولة الأولى): @a.VideosDoneRound1 من @a.VideoTotal</li>
+                            <div class="rp-details">
+                                <div class="rp-box">
+                                    <div class="rp-box-label"><span><i class="fas fa-video" aria-hidden="true"></i>الفيديوهات (الجولة الأولى)</span><span class="rp-box-val">@a.VideosDoneRound1 من @a.VideoTotal</span></div>
+                                    <div class="rp-bar" aria-hidden="true"><span style="width:@(Pct(a.VideosDoneRound1, a.VideoTotal))%"></span></div>
+                                </div>
                                 @if (a.HasRound2)
                                 {
-                                    <li><i class="fas fa-rotate-right"></i> الفيديوهات (إعادة المشاهدة): @a.VideosDoneRound2 من @a.VideoTotal</li>
+                                    <div class="rp-box">
+                                        <div class="rp-box-label"><span><i class="fas fa-rotate-right" aria-hidden="true"></i>الفيديوهات (إعادة المشاهدة)</span><span class="rp-box-val">@a.VideosDoneRound2 من @a.VideoTotal</span></div>
+                                        <div class="rp-bar" aria-hidden="true"><span style="width:@(Pct(a.VideosDoneRound2, a.VideoTotal))%"></span></div>
+                                    </div>
                                 }
-                                <li><i class="fas fa-pen"></i> الاختبار الأول:
-                                    @if (a.Exam101Percent.HasValue) { <text><strong>@a.Exam101Percent.Value.ToString("0.#")%</strong> — @Date(a.Exam101SubmittedAtUtc)</text> }
-                                    else { <text>لم يُجرَ بعد</text> }
-                                </li>
+                                <div class="rp-box">
+                                    <div class="rp-box-label"><span><i class="fas fa-pen" aria-hidden="true"></i>الاختبار الأول</span></div>
+                                    @if (a.Exam101Percent.HasValue)
+                                    {
+                                        <div class="rp-score"><strong>@a.Exam101Percent.Value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%</strong><small>@Date(a.Exam101SubmittedAtUtc)</small></div>
+                                    }
+                                    else
+                                    {
+                                        <div class="rp-todo">لم يُجرَ بعد</div>
+                                    }
+                                </div>
                                 @if (a.Exam102Percent.HasValue)
                                 {
-                                    <li><i class="fas fa-pen"></i> الاختبار الثاني: <strong>@a.Exam102Percent.Value.ToString("0.#")%</strong> — @Date(a.Exam102SubmittedAtUtc)</li>
+                                    <div class="rp-box">
+                                        <div class="rp-box-label"><span><i class="fas fa-pen" aria-hidden="true"></i>الاختبار الثاني</span></div>
+                                        <div class="rp-score"><strong>@a.Exam102Percent.Value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%</strong><small>@Date(a.Exam102SubmittedAtUtc)</small></div>
+                                    </div>
                                 }
-                            </ul>
+                            </div>
                         }
                     </div>
                 </li>
@@ -105,8 +166,8 @@
         </ol>
     }
 
-    <div class="mt-3 d-flex gap-3 flex-wrap">
-        <a asp-action="Open" asp-route-enrollmentId="@Model.EnrollmentId" class="rtk-btn rtk-btn-outline">العودة إلى الخطة</a>
-        <a asp-action="Index" class="small align-self-center">خطتي العلاجية</a>
+    <div class="rp-actions">
+        <a asp-action="Open" asp-route-enrollmentId="@Model.EnrollmentId" class="rtk-btn rtk-btn-outline"><i class="fas fa-arrow-right" aria-hidden="true"></i> العودة إلى الخطة</a>
+        <a asp-action="Index" class="rp-link">خطتي العلاجية</a>
     </div>
 </div>

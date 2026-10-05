@@ -1,30 +1,27 @@
-@using QdratNew.Enums
+﻿@using QdratNew.Enums
 @model QdratNew.ViewModels.RemedialTracks.StudentRemedialTrackSolveVm
 @{
     ViewData["Title"] = $"{Model.ExamNumber.DisplayName()} — {Model.AxisTitle}";
     var total = Model.Questions.Count;
     var answeredCount = Model.AnsweredCount;
     var pct = total > 0 ? (int)Math.Round((double)answeredCount / total * 100) : 0;
+    Layout = "~/Views/Shared/_QuestionStudentLayout.cshtml";
 }
 @section Styles {
     <link href="~/css/student-rtk.css" rel="stylesheet" asp-append-version="true" />
+    <link href="~/css/student-rtk-solve.css" rel="stylesheet" asp-append-version="true" />
 }
 
 @await Html.PartialAsync("_ExamBackGuard")
 
-<div class="rtk-page rtk-exam">
+<div class="rtk-page rtk-exam rtk-solve-focus">
+    @* شاشة اختبار مركّزة: لا قائمة ولا ترويسة — السؤال والخيارات وأزرار التنقل والوقت فقط *@
     <div class="rtk-exam-bar" id="rtkExamBar">
-        <div class="rtk-exam-title">
-            <strong>@Model.ExamNumber.DisplayName()</strong>
-            <small>@Model.AxisTitle</small>
-        </div>
-        <div class="rtk-exam-meta">
-            <span class="rtk-exam-progress" id="rtkAnswered" aria-live="polite">أجبت عن <b id="rtkAnsweredCount">@answeredCount</b> من @total</span>
-            <span class="rtk-exam-timer" id="rtkTimer" role="timer" aria-label="الوقت المتبقي">--:--</span>
-        </div>
+        <span class="rtk-exam-timer" id="rtkTimer" role="timer" aria-label="الوقت المتبقي">--:--</span>
+        <span class="rtk-save-state" id="rtkSaveState" role="status" aria-live="polite"></span>
+        <span class="visually-hidden" aria-live="polite">أجبت عن <b id="rtkAnsweredCount">@answeredCount</b> من @total</span>
+        <button type="button" class="rtk-fs-btn" id="rtkFsBtn" aria-label="ملء الشاشة" title="ملء الشاشة"><i class="fas fa-expand" aria-hidden="true"></i></button>
     </div>
-
-    <div class="rtk-save-state" id="rtkSaveState" role="status" aria-live="polite"></div>
 
     @if (total == 0)
     {
@@ -174,6 +171,29 @@
 @section Scripts {
     @if (total > 0)
     {
+        <script>
+            (function () {
+                var b = document.getElementById('rtkFsBtn');
+                if (!b) return;
+                var root = document.documentElement;
+                if (!root.requestFullscreen) { b.hidden = true; return; }
+                // أول نقرة داخل الاختبار (على السؤال/الخيارات) تُدخل ملء الشاشة مرة واحدة؛ بعدها يتحكم الطالب بالزر
+                var form = document.getElementById('rtkExamForm');
+                if (form) {
+                    form.addEventListener('click', function auto() {
+                        form.removeEventListener('click', auto);
+                        if (!document.fullscreenElement) root.requestFullscreen().catch(function () { });
+                    });
+                }
+                b.addEventListener('click', function () {
+                    if (document.fullscreenElement) { document.exitFullscreen(); } else { root.requestFullscreen().catch(function () { }); }
+                });
+                document.addEventListener('fullscreenchange', function () {
+                    var i = b.querySelector('i');
+                    if (i) i.className = 'fas ' + (document.fullscreenElement ? 'fa-compress' : 'fa-expand');
+                });
+            })();
+        </script>
         @await Html.PartialAsync("_ExamOptionSelectionScript")
         <script src="~/js/remedial-track-exam.js" asp-append-version="true"></script>
     }
