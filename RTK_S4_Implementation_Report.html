@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>تقرير تنفيذ RTK-S4</title>
+<style>
+:root{--bg:#f7f8fa;--surface:#fff;--ink:#161b26;--muted:#4c5566;--line:#dde1e7;--brand:#2f59c0;--ok:#2fa86a;--warn:#c88a14}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#10131a;--surface:#171c27;--ink:#eef1f6;--muted:#b3bccb;--line:#2a3140;--brand:#9db8f5}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Cairo","Segoe UI",Tahoma,sans-serif;line-height:1.7}
+.wrap{max-width:960px;margin:0 auto;padding:24px 16px}
+h1{font-size:1.5rem;margin:0 0 .3em}h2{font-size:1.15rem;margin:0 0 .6em;color:var(--brand)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin-bottom:16px;overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.92rem;min-width:480px}
+th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);vertical-align:top}
+code{font-family:ui-monospace,Consolas,monospace;font-size:.85em;direction:ltr;unicode-bidi:embed}
+.ok{color:var(--ok);font-weight:700}.warn{color:var(--warn);font-weight:700}
+ul{margin:.3em 0;padding-inline-start:1.3em}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>RTK-S4 — منطقة الطالب في الخطة العلاجية</h1>
+<p style="color:var(--muted)">الدورة: Epic RTK · Sprint 4 · 13 نقطة · الحالة: <span class="ok">مكتمل</span></p>
+
+<div class="card">
+<h2>القصص المنفّذة</h2>
+<table>
+<tr><th>القصة</th><th>ما تم</th></tr>
+<tr><td>S4.1</td><td>بند «الخطة العلاجية» في قائمة الطالب (يظهر فقط لمن لديه تسجيل نشط منشور، مع تخزين مؤقت 60 ثانية) + صفحة «خطتي العلاجية»: اسم الخطة، تاريخ الإنشاء، وقت النشر، المنهج، النمط، التقدم. الأوامر المستقبلية والملغاة لا تظهر.</td></tr>
+<tr><td>S4.2</td><td>بوابة الرقم المرجعي للحضوري: مقارنة بزمن ثابت، قبول الأرقام الهندية والفارسية، قفل 15 دقيقة بعد 5 محاولات خاطئة، حفظ التحقق في قاعدة البيانات (<code>VerifiedCodeVersion</code>) وإعادة الطلب بعد تجديد الرقم، سياسة Rate Limit باسم <code>rtk-code</code>.</td></tr>
+<tr><td>S4.3</td><td>صفحة الخطة (المحاور مرتبة: الحالي مفتوح، السابق مجتاز/لم يجتز، اللاحق مغلق) وصفحة المحور (فيديوهات تسلسلية، إنشاء صفوف التقدم كسولًا دفعة واحدة).</td></tr>
+<tr><td>S4.4</td><td>مشغّل YouTube/Vimeo/منصة أخرى + نبضة كل 15 ثانية + احتساب زمن المشاهدة بساعة الخادم (سقف 20 ثانية للنبضة) + قاعدة الإتمام + فتح التالي من رد الخادم فقط + نقل المحور إلى <code>AwaitingExam101</code> عند آخر فيديو. سياسة <code>rtk-ping</code>.</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h2>الملفات الرئيسية</h2>
+<ul>
+<li><code>Areas/Students/Controllers/RemedialTrackController.cs</code> (Index / Open / VerifyCode / Axis / VideoPing)</li>
+<li><code>Services/RemedialTracks/RemedialTrackAccessService.cs</code> و<code>RemedialTrackProgressService.cs</code> وواجهتاهما</li>
+<li><code>ViewModels/RemedialTracks/RemedialTrackStudentViewModels.cs</code></li>
+<li><code>Areas/Students/Views/RemedialTrack/</code> (Index, Open, Axis, CodeGate, Unavailable)</li>
+<li><code>wwwroot/js/remedial-track-player.js</code> و<code>wwwroot/css/student-rtk.css</code></li>
+<li><code>ViewComponents/StudentRemedialTrackNavViewComponent.cs</code> + <code>Views/Shared/Components/StudentRemedialTrackNav/Default.cshtml</code></li>
+<li><code>Views/Shared/_StudentMenuPartial.cshtml</code> (إضافة بند القائمة فقط)</li>
+<li><code>Program.cs</code> (سياستا Rate Limit + تعديلان موضحان أدناه)</li>
+<li><code>QdratNew.Tests/RemedialTrackStudentAreaTests.cs</code> (41 اختبارًا)</li>
+</ul>
+</div>
+
+<div class="card">
+<h2>تعديلات خارج نص القصص (للمراجعة)</h2>
+<ul>
+<li><b>نقل <code>UseRateLimiter</code></b> في <code>Program.cs</code> إلى ما بعد المصادقة، حتى يُقسَّم الحد على المستخدم لا على عنوان IP (الحضوري خلف عنوان واحد). سياسة <code>public-forms</code> مفتاحها IP فلا تتأثر.</li>
+<li><b>إصلاح عيب من S3:</b> <code>INotificationService</code> لم يكن له تسجيل، فتعذّر إنشاء خدمة نشر الخطة. سُجّل مقابل <code>AdvancedNotificationService</code> (نفس الدوال) بإضافة الواجهة لتعريف الصنف وسطر تسجيل واحد.</li>
+</ul>
+</div>
+
+<div class="card">
+<h2>الاختبارات</h2>
+<table>
+<tr><th>الأمر</th><th>النتيجة</th></tr>
+<tr><td><code>dotnet build QdratNew.csproj</code></td><td class="ok">نجح — 0 أخطاء (ويشمل ترجمة ملفات Razor)</td></tr>
+<tr><td>اختبارات RTK (<code>FullyQualifiedName~RemedialTrack</code>)</td><td class="ok">215 نجح / 0 فشل</td></tr>
+<tr><td>الاختبارات كاملة</td><td>394 نجح، 1 فشل: اختبار المتصفح <code>TranslationGuardBrowserTests</code> نجح عند تشغيله منفردًا (يُرجَّح أنه متقلّب عند التشغيل الكامل)</td></tr>
+</table>
+<p>الاختبارات تعمل على InMemory، فلا تغطي <code>ExecuteUpdate</code> والفهارس المُصفّاة وRowVersion؛ تُختبر على SQL Server حقيقي في RTK-S7.3.</p>
+</div>
+
+<div class="card">
+<h2>مخاطر متبقية</h2>
+<ul>
+<li class="warn">مدة الفيديو لـ YouTube/Vimeo إن لم يُدخلها الأدمن تؤخذ من المتصفح؛ طالب خبيث قد يرسل مدة قصيرة. الحل: جعل المدة إلزامية عند بناء الخطة.</li>
+<li>لم يُجرَّب المشغّل فعليًا على YouTube/Vimeo في متصفح.</li>
+<li>زر بدء الاختبار غير موجود بعد؛ تظهر رسالة فقط (يُنفَّذ في RTK-S5).</li>
+</ul>
+</div>
+</div>
+</body>
+</html>

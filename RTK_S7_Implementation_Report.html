@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>تقرير تنفيذ RTK-S7</title>
+<style>
+:root{--bg:#f7f8fa;--surface:#fff;--ink:#161b26;--muted:#4c5566;--line:#dde1e7;--brand:#2f59c0;--ok:#2fa86a;--warn:#c88a14}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#10131a;--surface:#171c27;--ink:#eef1f6;--muted:#b3bccb;--line:#2a3140;--brand:#9db8f5}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Cairo","Segoe UI",Tahoma,sans-serif;line-height:1.7}
+.wrap{max-width:960px;margin:0 auto;padding:24px 16px}
+h1{font-size:1.5rem;margin:0 0 .3em}h2{font-size:1.15rem;margin:0 0 .6em;color:var(--brand)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin-bottom:16px;overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.92rem;min-width:480px}
+th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);vertical-align:top}
+code{font-family:ui-monospace,Consolas,monospace;font-size:.85em;direction:ltr;unicode-bidi:embed}
+pre{direction:ltr;text-align:left;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;overflow-x:auto;font-size:.82rem;margin:.4em 0}
+.ok{color:var(--ok);font-weight:700}.warn{color:var(--warn);font-weight:700}
+ul{margin:.3em 0;padding-inline-start:1.3em}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>RTK-S7 — التقوية: أمان، تكامل، SQL Server حقيقي، حمل، سكربت النشر</h1>
+<p style="color:var(--muted)">Epic RTK · Sprint 7 · 13 نقطة · Milestone M3 (جاهز للإنتاج) · الحالة: <span class="ok">مكتمل</span> (التنفيذ محلي بلا commit بانتظار الموافقة)</p>
+
+<div class="card">
+<h2>القصص المنفّذة</h2>
+<table>
+<tr><th>القصة</th><th>ما تم</th></tr>
+<tr><td>RTK-S7.1 (3)</td><td>حارس أمني آلي بلا قاعدة بيانات (<code>RemedialTrackSecurityGuardTests</code>) لكل Endpoints الطالب والأدمن: Antiforgery على كل POST، لا <code>IgnoreAntiforgeryToken</code>/<code>AllowAnonymous</code>، فعل HTTP صريح، صلاحية <code>RemedialTrack*</code> خاصة بكل كنترولر، لا POST بصلاحية Read، الطالب لا يمرّر <code>studentId</code>، سياسات Rate Limit الثلاث مطبَّقة، لا Entity مربوطة مباشرة، لا <code>Html.Raw</code> في Views الخطة، لا <code>CorrectAnswer/AccessCode</code> في Views الطالب، تقرير ولي الأمر بلا رقم مرجعي، والسجلات لا تحوي الرقم/الإجابات. + مراجعة إنتاج (أدناه).</td></tr>
+<tr><td>RTK-S7.2 (5)</td><td>تكامل HTTP على التطبيق الحقيقي + قاعدة الاختبار (<code>RemedialTrackIntegrationTests</code>، 13 اختبارًا): IDOR (طالب ب ↔ تسجيل/محور/تقرير/محاولة/فيديو طالب أ = 404 ولا كتابة)، 401/403 للمجهول والطالب والموظف بلا صلاحية (GET وPOST)، 400 بلا Antiforgery، 429 فعلي لـ <code>rtk-code</code> (الطلب 11) و<code>rtk-ping</code> (الطلب 21)، الرحلة الكاملة (بوابة ← نبضة ← 409 لفيديو مقفل ← اختبار ← حفظ ← تسليم مزدوج Idempotent ← نتيجة ← فتح المحور التالي) مع فحص عدم تسريب <code>Explanation/VideoUrl/الرقم المرجعي</code> في HTML وJSON، خصوصية تقرير ولي الأمر/الدفعة، XSS (ملاحظة <code>&lt;script&gt;</code> تُعرض مُرمَّزة)، ونطاق الدفعات على SQL Server الحقيقي. + E2E Playwright (<code>RemedialTrackBrowserTests</code>) على <b>375px</b> RTL: بوابة الرقم ← المحور ← الحل بحفظ تلقائي ← التسليم ← النتيجة، بلا تمرير أفقي وزر ≥ 44px.</td></tr>
+<tr><td>RTK-S7.3 (3)</td><td>اختبارات SQL Server حقيقية (<code>RemedialTrackSqlServerTests</code>، 7 اختبارات): <code>UX_RemedialTrackPublications_ActiveCode</code> (نشران نشطان بنفس الرقم ← استثناء 2601/2627؛ بعد Cancel يُسمح؛ أونلاين بلا رقم لا يتعارض)، فريد <code>(PublicationId, StudentId)</code> و<code>(AxisProgressId, ExamNumber)</code> و<code>(AxisProgressId, VideoId, Round)</code> و<code>(AttemptId, QuestionId)</code>، <code>ExecuteUpdateAsync</code> للنبضة تحت <code>CompatibilityLevel(120)</code>، 12 نبضة متزامنة بلا استثناء ولا ازدواج رصيد، <code>RowVersion</code> على <code>AxisProgress</code> و<code>Enrollment</code>، و6 تسليمات متزامنة ← انتقال واحد وحدث نجاح واحد. + اختبار الحمل (<code>RemedialTrackLoadTests</code>، اختياري <code>RTK_LOAD=1</code>).</td></tr>
+<tr><td>RTK-S7.4 (2)</td><td>مفتاح التعطيل <code>RemedialTrack.Enabled</code> (الافتراضي true): <code>IRemedialTrackFeatureService</code> (كاش 30ث) + <code>RemedialTrackEnabledFilter</code> على كنترولر الطالب (404 + صفحة صيانة، أو JSON <code>disabled</code> لنداءات fetch) + إخفاء بند القائمة؛ الأدمن والبيانات لا تتأثر. سكربت <code>RTK_FeatureFlag.sql</code> (Idempotent) + بذر في <code>SystemSettingsSeeder</code>. قسم «نشر Epic RTK» في <code>DEPLOY.md</code> (Backup، السكربتان، التحقق، CSP/iframe، نشر تجريبي، التراجع). <code>ADR-RTK-01</code> في <code>QdratNew_AI_Context.md</code>.</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h2>الملفات الرئيسية</h2>
+<table>
+<tr><th>الملف</th><th>التغيير</th></tr>
+<tr><td><code>Services/RemedialTracks/IRemedialTrackFeatureService.cs</code> · <code>RemedialTrackFeatureService.cs</code></td><td>جديد — قراءة المفتاح عبر <code>ISystemSettingService.GetAsync</code> (بلا تحذير عند الغياب) مع كاش 30ث؛ الغياب/غير الصالح = مفعّل.</td></tr>
+<tr><td><code>Filters/RemedialTrackEnabledFilter.cs</code> · <code>Areas/Students/Views/RemedialTrack/Maintenance.cshtml</code></td><td>جديد — Action filter + صفحة الصيانة.</td></tr>
+<tr><td><code>Areas/Students/Controllers/RemedialTrackController.cs</code></td><td>إضافة سطر <code>[ServiceFilter(typeof(RemedialTrackEnabledFilter))]</code> فقط.</td></tr>
+<tr><td><code>ViewComponents/StudentRemedialTrackNavViewComponent.cs</code></td><td>إضافة حقن الخدمة وسطر إخفاء البند عند التعطيل.</td></tr>
+<tr><td><code>Program.cs</code> · <code>Data/Seeders/SystemSettingsSeeder.cs</code></td><td>إضافة تسجيل DI (3 أسطر) وصف إعداد واحد.</td></tr>
+<tr><td><code>Migrations/Scripts/RTK_RemedialTracks.sql</code></td><td><b>إصلاح عيب اكتُشف بالتجربة:</b> إضافة <code>SET QUOTED_IDENTIFIER ON; SET ANSI_NULLS ON;</code> في أوله (راجع الملاحظات).</td></tr>
+<tr><td><code>Migrations/Scripts/RTK_FeatureFlag.sql</code></td><td>جديد — إدراج صف المفتاح (Idempotent).</td></tr>
+<tr><td><code>DEPLOY.md</code> · <code>QdratNew_AI_Context.md</code> · <code>RTK_RemedialTrack_Tracker.html</code></td><td>قسم النشر، ADR، وتعليم S7.1–S7.4 منجزة.</td></tr>
+<tr><td><code>QdratNew.Tests/RemedialTrackSecurityGuardTests.cs</code></td><td>جديد — 27 اختبارًا (الحارس + المفتاح + الفلتر).</td></tr>
+<tr><td><code>QdratNew.Tests/Integration/RemedialTrack{RealDb,SqlServer,Integration,Browser,Load}*.cs</code></td><td>جديدة — زرع/تنظيف بعلامة <code>RTKS7</code>، SQL Server، HTTP، E2E، حمل.</td></tr>
+</table>
+<p style="color:var(--muted);font-size:.9rem">لا تغيير في أي ملف <code>Remedial*</code> القديم. لا Migration جديدة (الإضافة صف إعداد فقط).</p>
+</div>
+
+<div class="card">
+<h2>الاختبارات — الأوامر والنتائج الفعلية</h2>
+<table>
+<tr><th>الأمر</th><th>النتيجة</th></tr>
+<tr><td><code>dotnet test QdratNew.Tests --filter RemedialTrackSecurityGuardTests</code></td><td><span class="ok">27 نجح</span></td></tr>
+<tr><td><code>… RemedialTrackSqlServerTests</code> (<code>QDRAT_TEST_SQL</code> → <code>QdratNewDB_IntegrationTests</code>، SQL Server 2014)</td><td><span class="ok">7 نجح</span></td></tr>
+<tr><td><code>… RemedialTrackIntegrationTests</code></td><td><span class="ok">13 نجح</span> (بعد تصحيح افتراضين في الاختبارات نفسها: ترميز Razor للعربية، وSaveNote يحتاج مستخدمًا حقيقيًا)</td></tr>
+<tr><td><code>… RemedialTrackBrowserTests</code> (Playwright/Chromium، 375px)</td><td><span class="ok">1 نجح</span> (بعد تصحيح محدّد الخيار: النص يمرّ على smart-text فتتحوّل أرقامه)</td></tr>
+<tr><td><code>dotnet test QdratNew.Tests</code> (الحزمة كاملة بمتغير SQL)</td><td><span class="ok">564 نجح · 0 فشل · 1 متخطّى</span> (المتخطّى = الحمل الاختياري)</td></tr>
+<tr><td>السكربت اليدوي على نسخة مُجرَّدة من جداول RTK (استُعيدت من قاعدة الاختبار ثم أُسقطت الجداول والـ history)</td><td><span class="ok">التشغيل 1: 10 جداول + 10 فهارس فريدة + الفهرس المُصفّى + المفتاح؛ التشغيل 2: بلا تغيير</span> — كلاهما بـ <code>sqlcmd -b</code> بالإعداد الافتراضي. نُسخة الاختبار حُذفت بعدها.</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h2>تقرير الحمل (RTK-S7.3)</h2>
+<p>500 طالبًا افتراضيًا × نبضة كل 15ث × 5 دقائق (315ث فعليًا مع توزيع البدايات)، حسابات اصطناعية على قاعدة الاختبار المعزولة.</p>
+<pre>requests=9997  rps≈31.7  status: 200×9997  errors=0
+latency (client, in-process): avg 13.0ms  p50 10.1ms  p95 25.0ms  p99 35.0ms  max 234ms
+SQL SELECT  n=19994  avg 0.6ms  p95 1.1ms  p99 1.4ms  max 20.9ms
+SQL UPDATE  n=9997   avg 1.8ms  p95 5.3ms  p99 20.7ms max 34.0ms</pre>
+<table>
+<tr><th>الهدف</th><th>الفعلي</th></tr>
+<tr><td>p95 &lt; 300ms</td><td><span class="ok">25ms</span></td></tr>
+<tr><td>0 أخطاء 5xx</td><td><span class="ok">0 (كل الاستجابات 200)</span></td></tr>
+<tr><td>لا استعلام &gt; 50ms</td><td><span class="ok">أقصى استعلام 34ms (UPDATE)، وp99 لكل الأنواع ≤ 21ms</span></td></tr>
+</table>
+<p style="color:var(--muted);font-size:.9rem"><b>حدود المنهجية (للأمانة):</b> k6 غير متاح فاستُخدم التطبيق الحقيقي داخل العملية (TestServer + مصادقة بالترويسات) مع SQL Server محلي حقيقي؛ المولّد والخادم يتشاركان المعالج ولا شبكة بينهما، فأزمنة العميل تحفّظية للخادم وتخلو من زمن الشبكة. أزمنة SQL مقيسة على الخادم عبر Interceptor للأوامر. لم تُقَس بيئة Azure SQL نفسها، فلا توصية بحجم Azure SQL مبنية على قياس؛ المؤشّر الوحيد: ~32 طلب/ث ≈ 3 أوامر لكل نبضة (~95 أمرًا/ث) بمتوسط أقل من 2ms على قاعدة محلية، ويُنصح بتكرار الاختبار نفسه (<code>RTK_LOAD=1</code>) على بيئة staging بحجم Azure المستهدف قبل يوم ذروة فعلي.</p>
+</div>
+
+<div class="card">
+<h2>قائمة الأمان 11.1 — الدليل لكل بند</h2>
+<table>
+<tr><th>البند</th><th>الحالة</th><th>الدليل</th></tr>
+<tr><td>IDOR</td><td class="ok">✓</td><td><code>Idor_StudentB…</code> و<code>Idor_AttemptOfAnotherStudent…</code>: كل Action طالب ← 404 ولا أثر كتابة؛ 403 لأدمن بلا صلاحية (GET+POST)؛ نطاق الدفعات على SQL حقيقي. لم تُختبر عبر HTTP حالة «موظف بصلاحية وبلا دفعة» (مغطّاة على مستوى الخدمة في S6 وعلى SQL الحقيقي هنا).</td></tr>
+<tr><td>Antiforgery</td><td class="ok">✓</td><td>الحارس (كل POST) + <code>Posts_WithoutAntiforgeryToken…</code> ← 400 فعليًا؛ لا <code>IgnoreAntiforgeryToken</code>.</td></tr>
+<tr><td>Overposting</td><td class="ok">✓</td><td>حارس «لا Entity مربوطة»؛ كل الأكشنات تربط ViewModel/Input مخصّصًا.</td></tr>
+<tr><td>XSS</td><td class="ok">✓</td><td>لا <code>Html.Raw</code> في Views الخطة (حارس)؛ اختبار ملاحظة <code>&lt;script&gt;</code> تُعرض مُرمَّزة؛ روابط الـ embed تُبنى من <code>ExternalId</code> المُتحقَّق. <i>(ملاحظة: الجزئية المشتركة <code>_ExamQuestionContent</code> القديمة تستعمل <code>Html.Raw(ToSafe(...))</code> لمحتوى الأسئلة — خارج نطاق RTK ولم تُمَس.)</i></td></tr>
+<tr><td>تسريب الإجابات</td><td class="ok">✓</td><td>HTML (المحور/الحل/النتيجة) وJSON (SaveAnswer) بلا <code>Explanation</code>/<code>VideoUrl</code>/<code>correctAnswer</code>/الرقم المرجعي؛ E2E يؤكد في الصفحة الحقيقية.</td></tr>
+<tr><td>Rate limiting</td><td class="ok">✓</td><td>429 فعلي: <code>rtk-code</code> عند الطلب 11، <code>rtk-ping</code> عند الطلب 21؛ الحمل (4 نبضات/د للطالب) لا يقترب من حد 20/د؛ <code>rtk-exam</code> مؤكَّد بالحارس.</td></tr>
+<tr><td>Enumeration</td><td class="ok">✓</td><td>رقم خاطئ ← 200 برسالة عامة ثابتة ولا يتسرب الرقم الصحيح؛ غير المالك ← 404 موحّد.</td></tr>
+<tr><td>التزامن</td><td class="ok">✓</td><td>RowVersion مُثبت على SQL حقيقي؛ 12 نبضة متزامنة وبدء/تسليم متزامن ← حالة واحدة وحدث واحد.</td></tr>
+<tr><td>الخصوصية</td><td class="ok">✓</td><td>تقرير ولي الأمر/الدفعة بلا رقم مرجعي ولا طالب آخر (HTML فعلي)؛ حارس السجلات.</td></tr>
+<tr><td>CSP/iframe</td><td class="warn">يدوي</td><td>لا CSP/X-Frame-Options في كود التطبيق؛ فحص Nginx/Azure مُدرج في <code>DEPLOY.md</code> (لا يمكن فحص الخادم الحيّ من هنا).</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h2>مراجعة الإنتاج المعادة للأجزاء المضافة</h2>
+<table>
+<tr><th>#</th><th>الخطورة</th><th>الحالة</th></tr>
+<tr><td>R1 — Working tree غير محفوظ</td><td>High</td><td class="ok">مُغلق (S6 وQRT-S8 محفوظان في git قبل هذا الـ Sprint)</td></tr>
+<tr><td>R2 — سكربت الإنتاج اليدوي</td><td>High</td><td class="ok">مُغلق: جُرِّب من الصفر مرتين. <b>اكتُشف عيب حقيقي</b> — فشل <code>CREATE INDEX</code> (Msg 1934) تحت <code>sqlcmd</code> الافتراضي لأن الفهرس المُصفّى يحتاج <code>QUOTED_IDENTIFIER ON</code>؛ أُصلح بإضافة <code>SET</code> في أول السكربت (يعمل الآن في SSMS وsqlcmd).</td></tr>
+<tr><td>R3/R4 — تحقق الرقم بالـ Session / Random</td><td>Medium</td><td class="ok">مُغلقان في S4 (DB + CSPRNG + قفل)، مؤكَّدان بـ HTTP وSQL.</td></tr>
+<tr><td>R5 — Rate limiter</td><td>Medium</td><td class="ok">مُغلق (429 فعلي لثلاث سياسات).</td></tr>
+<tr><td>R6 — <code>Contains(list)</code> وCompatibilityLevel 120</td><td>Medium</td><td class="ok">مُغلق: الوحيد داخل استعلام EF هو نطاق دفعات الموظف في قائمة أوامر النشر (قائمة صغيرة) — جُرِّب على SQL Server 2014 الحقيقي بلا OPENJSON؛ البقية مجموعات في الذاكرة.</td></tr>
+<tr><td>R7 — حمل النبضات على Azure SQL</td><td>Medium</td><td class="ok">مُغلق محليًا بالأرقام أعلاه؛ <span class="warn">يُكرَّر على staging بحجم Azure</span> (لم يُقَس Azure).</td></tr>
+<tr><td>R9 — InMemory لا يفرض الفهارس المُصفّاة</td><td>Low</td><td class="ok">مُغلق (S7.3).</td></tr>
+<tr><td>جديد — مسار النبضة: SELECT×2 + UPDATE×1 (الخطة: 1+1)</td><td>Low</td><td>الاستعلام الإضافي = فحص «فيديو أسبق غير مكتمل». متوسطه 0.6ms ولا أثر مقيس؛ تُرك كما هو لتفادي تغيير سلوك. قابل للدمج لاحقًا.</td></tr>
+<tr><td>جديد — <code>IDbContextFactory</code> مسجَّل Scoped بـ <code>PooledDbContextFactory</code> جديد لكل طلب (<code>Program.cs</code> قديم)</td><td>Low</td><td>ملاحظة عامة على المنصة (التجميع لا يُعاد استخدامه بين الطلبات) — خارج نطاق RTK ولم يُعدَّل.</td></tr>
+</table>
+<p>الدرجة: <b class="ok">جاهز</b> — 0 Critical / 0 High، بشرط البنود اليدوية: فحص CSP في Nginx/Azure، ونشر تجريبي على دفعة اختبار، وتكرار الحمل على staging.</p>
+</div>
+
+<div class="card">
+<h2>قرارات وملاحظات</h2>
+<ul>
+<li>الاختبارات الجديدة تتخطّى ذاتيًا إن غاب <code>QDRAT_TEST_SQL</code>؛ كل ما تزرعه يحمل <code>RTKS7</code> ويُحذف قبل التشغيل وبعده، وتُرفض أي قاعدة لا يحوي اسمها «Test».</li>
+<li>مجموعة xUnit واحدة متسلسلة (<code>RTK shared SQL test database</code>) لأن SQL/HTTP/E2E/الحمل تكتب في القاعدة نفسها؛ منفذ E2E = 5297 (لا يتعارض مع 5298/5299).</li>
+<li>إتمام الفيديو لا يُختبر عبر مشغّل يوتيوب (شبكة خارجية)؛ تُستدعى <code>VideoPing</code> مباشرة والإتمام يُهيَّأ في القاعدة، كما نصّت الخطة.</li>
+<li>مفتاح التعطيل يسري خلال 30 ثانية؛ يمكن تقصيرها بإبطال المفتاح <code>rtk-feature-enabled</code> من الكاش.</li>
+</ul>
+</div>
+
+<div class="card">
+<h2>مخاطر متبقية / مطلوب بعد السحب</h2>
+<ul>
+<li>تشغيل <code>RTK_RemedialTracks.sql</code> ثم <code>RTK_FeatureFlag.sql</code> يدويًا على الإنتاج بعد Backup (القسم الجديد في <code>DEPLOY.md</code>).</li>
+<li>فحص CSP/iframe على الخادم الحيّ، ونشر تجريبي بطالب اختبار.</li>
+<li>الحمل على بيئة بحجم Azure المستهدف قبل ذروة فعلية.</li>
+<li>الـ commit مؤجَّل بانتظار موافقة المستخدم (إيقاع الحفظ: بعد كل Sprint بعرض المسودة).</li>
+</ul>
+</div>
+</div>
+</body>
+</html>

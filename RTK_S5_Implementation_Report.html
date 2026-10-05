@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>تقرير تنفيذ RTK-S5</title>
+<style>
+:root{--bg:#f7f8fa;--surface:#fff;--ink:#161b26;--muted:#4c5566;--line:#dde1e7;--brand:#2f59c0;--ok:#2fa86a;--warn:#c88a14}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#10131a;--surface:#171c27;--ink:#eef1f6;--muted:#b3bccb;--line:#2a3140;--brand:#9db8f5}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Cairo","Segoe UI",Tahoma,sans-serif;line-height:1.7}
+.wrap{max-width:960px;margin:0 auto;padding:24px 16px}
+h1{font-size:1.5rem;margin:0 0 .3em}h2{font-size:1.15rem;margin:0 0 .6em;color:var(--brand)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin-bottom:16px;overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.92rem;min-width:480px}
+th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);vertical-align:top}
+code{font-family:ui-monospace,Consolas,monospace;font-size:.85em;direction:ltr;unicode-bidi:embed}
+.ok{color:var(--ok);font-weight:700}.warn{color:var(--warn);font-weight:700}
+ul{margin:.3em 0;padding-inline-start:1.3em}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>RTK-S5 — اختبارا 101/102 ومحرك الانتقال بين الحالات</h1>
+<p style="color:var(--muted)">Epic RTK · Sprint 5 · 13 نقطة · Milestone M1 (الدورة الكاملة للطالب) · الحالة: <span class="ok">مكتمل</span></p>
+
+<div class="card">
+<h2>القصص المنفّذة</h2>
+<table>
+<tr><th>القصة</th><th>ما تم</th></tr>
+<tr><td>S5.1</td><td>انتقالات آلة الحالة في <code>RemedialTrackProgressService</code>: <code>OnAllVideosCompletedAsync</code>، <code>OnExamSubmittedAsync</code> (اجتياز ← فتح المحور التالي؛ دون الحد في 101 ← جولة 2 بصفوف فيديو جديدة؛ دون الحد في 102 ← حجب + حدث «لم يجتز»)، <code>AdminOpenNextAsync</code> (سبب إلزامي، جاهزة بلا واجهة لـ S6). كلها داخل Transaction + RowVersion مع إعادة محاولة واحدة، وكلها Idempotent، وتحسم حالة التسجيل (اكتمال / اكتمال مع تعثّر).</td></tr>
+<tr><td>S5.2</td><td><code>RemedialTrackExamService</code>: بدء الاختبار بأسئلة مجمّدة (SaveChanges واحد)، منع الاختبار المكرر/الثالث، واجهة حل بمؤقّت من ساعة الخادم وحفظ تلقائي لكل اختيار، التحقق أن الإجابة ضمن خيارات السؤال، وتصفير الإجابة الصحيحة والشرح والفيديو قبل الإرسال للمتصفح (D15). اختبار قيد التنفيذ يُكمل بعد تجديد الرقم المرجعي (D7).</td></tr>
+<tr><td>S5.3</td><td>التسليم (سماحية 30 ثانية، وبعدها Expired ويُصحَّح بما أُجيب) والتصحيح بقاعدة <code>ExamsController</code> نفسها (<code>RemedialTrackScoring.IsCorrect</code>)، صفحة النتيجة بلا كشف الإجابات وبنبرة محايدة عبر <code>ResultToneHelper</code>، والمسار التالي حسب الحالة. إصلاح ذاتي إن انقطعت العملية بين التصحيح والانتقال.</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h2>الملفات الرئيسية</h2>
+<ul>
+<li><code>Services/RemedialTracks/RemedialTrackExamService.cs</code> و<code>IRemedialTrackExamService.cs</code></li>
+<li><code>Services/RemedialTracks/RemedialTrackProgressService.cs</code> و<code>IRemedialTrackProgressService.cs</code> (الانتقالات + بيانات المحاولات لصفحة المحور)</li>
+<li><code>Services/RemedialTracks/RemedialTrackScoring.cs</code> (دوال التصحيح النقية)</li>
+<li><code>Areas/Students/Controllers/RemedialTrackController.cs</code> (StartExam / Solve / SaveAnswer / Submit / Result)</li>
+<li><code>Areas/Students/Views/RemedialTrack/Solve.cshtml</code> و<code>Result.cshtml</code> و<code>Axis.cshtml</code> (زر بدء/متابعة الاختبار + نتائج المحاولات)</li>
+<li><code>ViewModels/RemedialTracks/RemedialTrackExamViewModels.cs</code> و<code>RemedialTrackStudentViewModels.cs</code> (إضافات فقط)</li>
+<li><code>wwwroot/js/remedial-track-exam.js</code> و<code>wwwroot/css/student-rtk.css</code></li>
+<li><code>Program.cs</code> (سياسة Rate Limit باسم <code>rtk-exam</code>: 120 طلب/دقيقة لكل مستخدم)</li>
+<li><code>QdratNew.Tests/RemedialTrackExamTests.cs</code></li>
+</ul>
+</div>
+
+<div class="card">
+<h2>الاختبارات</h2>
+<table>
+<tr><th>الأمر</th><th>النتيجة</th></tr>
+<tr><td><code>dotnet build QdratNew.csproj</code></td><td class="ok">نجح — 0 أخطاء (ويشمل ترجمة ملفات Razor)</td></tr>
+<tr><td>اختبارات RTK (<code>FullyQualifiedName~RemedialTrack</code>)</td><td class="ok">295 نجح / 0 فشل</td></tr>
+<tr><td>الاختبارات كاملة</td><td class="ok">422 نجح / 0 فشل / 9 مُتخطّاة (كانت مُتخطّاة أصلًا)</td></tr>
+</table>
+<p>المغطّى: السيناريوهات (أ) 101 ناجح، (ب) 101 دون الحد ← إعادة ← 102 ناجح، (ج) الرسوب في الاختبارين ← حجب، (د) آخر محور في كل حالة؛ التسليم المزدوج، حدود الوقت والسماحية، IDOR على المحاولات، منع بدء الاختبار قبل اكتمال الفيديوهات، وتصفير الإجابة الصحيحة في نموذج الحل.</p>
+<p>الاختبارات تعمل على InMemory، فلا تغطي <code>ExecuteUpdate</code> والفهارس المُصفّاة وRowVersion؛ تُختبر على SQL Server حقيقي في RTK-S7.3.</p>
+</div>
+
+<div class="card">
+<h2>مخاطر متبقية</h2>
+<ul>
+<li class="warn">لم تُجرَّب الواجهات في متصفح (RTL و375px والمؤقّت والحفظ التلقائي).</li>
+<li>لا يوجد اختبار على HTML الصفحة المُصيَّر؛ الاختبار على النموذج الذي يصل للـ View بعد التصفير. الإجابة الصحيحة تظهر طبيعيًا ضمن الخيارات.</li>
+<li>حدث <code>AxisNotPassed</code> بصيغة «لم يجتز الطالب…» مخصّص للأدمن؛ يجب في S6 ألا يظهر حرفيًا في خط الطالب الزمني (قاعدة: بلا لغة رسوب).</li>
+<li>رابط «التقرير النهائي» في صفحة النتيجة يذهب مؤقتًا إلى صفحة الخطة حتى يُنفَّذ تقرير الطالب في S6.</li>
+<li>حقل <code>SelectedAnswer</code> حدّه 1000 حرف؛ خيار أطول من ذلك سيفشل حفظه (حالة نادرة، تُراجع في S7.1).</li>
+</ul>
+</div>
+</div>
+</body>
+</html>
