@@ -224,6 +224,7 @@ namespace QdratNew.Tests
         {
             var f = await NewAsync();
 
+            Assert.True(await f.Access.AcceptTermsAsync(f.StudentA, f.EnrollmentA));
             var r = await f.Access.EvaluateAsync(f.StudentA, f.EnrollmentA);
             Assert.True(r.IsAllowed);
 
@@ -234,6 +235,30 @@ namespace QdratNew.Tests
             var e = await db.RemedialTrackEnrollments.SingleAsync(x => x.Id == f.EnrollmentA);
             Assert.Equal(RemedialTrackEnrollmentStatus.InProgress, e.Status);
             Assert.Equal(T0, e.StartedAtUtc);   // أول وصول فقط
+        }
+
+        [Fact]
+        public async Task Evaluate_Online_NeedsTerms_UntilAccepted_AndNotStarted()
+        {
+            var f = await NewAsync();
+
+            Assert.Equal(RemedialTrackAccessOutcome.NeedsTerms, (await f.Access.EvaluateAsync(f.StudentA, f.EnrollmentA)).Outcome);
+            await using (var db = f.Factory.CreateDbContext())
+                Assert.Null((await db.RemedialTrackEnrollments.SingleAsync(x => x.Id == f.EnrollmentA)).StartedAtUtc);
+
+            Assert.True(await f.Access.AcceptTermsAsync(f.StudentA, f.EnrollmentA));
+            Assert.True(await f.Access.AcceptTermsAsync(f.StudentA, f.EnrollmentA));   // idempotent
+            Assert.True((await f.Access.EvaluateAsync(f.StudentA, f.EnrollmentA)).IsAllowed);
+
+            await using var db2 = f.Factory.CreateDbContext();
+            Assert.Equal(1, await db2.RemedialTrackEvents.CountAsync(e => e.Type == RemedialTrackEventType.TermsAccepted));
+        }
+
+        [Fact]
+        public async Task AcceptTerms_OtherStudentsEnrollment_ReturnsFalse()
+        {
+            var f = await NewAsync();
+            Assert.False(await f.Access.AcceptTermsAsync(f.StudentB, f.EnrollmentA));
         }
 
         [Fact]
@@ -263,6 +288,8 @@ namespace QdratNew.Tests
             var v = await f.Access.VerifyCodeAsync(f.StudentA, f.EnrollmentA, "123456");
 
             Assert.True(v.IsVerified);
+            Assert.Equal(RemedialTrackAccessOutcome.NeedsTerms, (await f.Access.EvaluateAsync(f.StudentA, f.EnrollmentA)).Outcome);
+            Assert.True(await f.Access.AcceptTermsAsync(f.StudentA, f.EnrollmentA));
             Assert.True((await f.Access.EvaluateAsync(f.StudentA, f.EnrollmentA)).IsAllowed);
             await using var db = f.Factory.CreateDbContext();
             Assert.Equal(1, (await db.RemedialTrackEnrollments.SingleAsync(x => x.Id == f.EnrollmentA)).VerifiedCodeVersion);
@@ -328,6 +355,7 @@ namespace QdratNew.Tests
         {
             var f = await NewAsync(RemedialTrackDeliveryMode.InPerson);
             Assert.True((await f.Access.VerifyCodeAsync(f.StudentA, f.EnrollmentA, "123456")).IsVerified);
+            Assert.True(await f.Access.AcceptTermsAsync(f.StudentA, f.EnrollmentA));
 
             await using (var db = f.Factory.CreateDbContext())
             {

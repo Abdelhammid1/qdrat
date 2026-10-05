@@ -118,6 +118,34 @@ namespace QdratNew.Areas.Students.Controllers
             }
         }
 
+        // ───────────── إقرار شروط الخطة ─────────────
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AcceptTerms(StudentRemedialTrackAcceptTermsInput input, CancellationToken ct)
+        {
+            var studentId = await _identity.GetCurrentStudentIdAsync(User);
+            if (studentId == 0) return Challenge();
+
+            if (!input.Accepted)
+            {
+                var gate = await _access.EvaluateAsync(studentId, input.EnrollmentId, ct);
+                if (gate.Outcome != RemedialTrackAccessOutcome.NeedsTerms)
+                    return RedirectToAction(nameof(Open), new { enrollmentId = input.EnrollmentId });
+
+                return View("Terms", new StudentRemedialTrackTermsVm
+                {
+                    EnrollmentId = input.EnrollmentId,
+                    TrackTitle = gate.TrackTitle ?? string.Empty,
+                    ErrorMessage = "يجب الموافقة على الشروط والأحكام قبل بدء الخطة."
+                });
+            }
+
+            var ok = await _access.AcceptTermsAsync(studentId, input.EnrollmentId, ct);
+            if (!ok) return NotFound();
+            return RedirectToAction(nameof(Open), new { enrollmentId = input.EnrollmentId });
+        }
+
         // ───────────── RTK-S4.3: صفحة المحور ─────────────
 
         [HttpGet]
@@ -299,6 +327,12 @@ namespace QdratNew.Areas.Students.Controllers
                     return NotFound();
                 case RemedialTrackAccessOutcome.Cancelled:
                     return View("Unavailable");
+                case RemedialTrackAccessOutcome.NeedsTerms:
+                    return View("Terms", new StudentRemedialTrackTermsVm
+                    {
+                        EnrollmentId = enrollmentId,
+                        TrackTitle = gate.TrackTitle ?? string.Empty
+                    });
                 default: // NeedsCode | CodeLocked
                     return View("CodeGate", new StudentRemedialTrackCodeGateVm
                     {

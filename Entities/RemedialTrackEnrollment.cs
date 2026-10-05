@@ -20,6 +20,8 @@ namespace QdratNew.Entities
         public int FailedCodeAttempts { get; set; }          // D8
         public DateTime? CodeLockedUntilUtc { get; set; }
 
+        public DateTime? TermsAcceptedAtUtc { get; set; }    // إقرار شروط الخطة (مرة لكل تسجيل)
+
         [MaxLength(2000)] public string? AdminReportNote { get; set; }   // ملاحظة تقرير ولي الأمر
 
         public DateTime CreatedAtUtc { get; set; }

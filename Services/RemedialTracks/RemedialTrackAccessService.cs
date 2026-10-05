@@ -77,6 +77,7 @@ namespace QdratNew.Services.RemedialTracks
                         e.StudentId, e.Status, e.Publication!.Status, e.Publication.PublishAtUtc, e.Publication.Mode,
                         e.Publication.CodeVersion, e.VerifiedCodeVersion, e.CodeLockedUntilUtc),
                     e.StartedAtUtc,
+                    e.TermsAcceptedAtUtc,
                     Title = e.Publication.Track!.Title
                 })
                 .FirstOrDefaultAsync(ct);
@@ -90,10 +91,59 @@ namespace QdratNew.Services.RemedialTracks
                 return new RemedialTrackAccessResult(outcome, until, row.Title);
             }
 
+            // الإقرار مطلوب لكل تسجيل لم يوافق بعد (حتى من بدأ الخطة قبل إضافة الإقرار) لتوثيق الموافقة
+            if (row.TermsAcceptedAtUtc is null)
+                return new RemedialTrackAccessResult(RemedialTrackAccessOutcome.NeedsTerms, null, row.Title);
+
             if (row.StartedAtUtc is null)
                 await MarkStartedAsync(db, enrollmentId, now, ct);
 
             return new RemedialTrackAccessResult(RemedialTrackAccessOutcome.Allowed, null, row.Title);
+        }
+
+        // ───────────────────────── AcceptTerms ─────────────────────────
+
+        public async Task<bool> AcceptTermsAsync(int studentId, int enrollmentId, CancellationToken ct = default)
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync(ct);
+            var now = _time.GetUtcNow().UtcDateTime;
+
+            var row = await db.RemedialTrackEnrollments.AsNoTracking()
+                .Where(e => e.Id == enrollmentId && e.StudentId == studentId)
+                .Select(e => new { e.Status, PubStatus = e.Publication!.Status, e.Publication.PublishAtUtc, e.TermsAcceptedAtUtc })
+                .FirstOrDefaultAsync(ct);
+
+            if (row is null
+                || row.PubStatus != RemedialTrackPublicationStatus.Active
+                || row.Status == RemedialTrackEnrollmentStatus.Cancelled
+                || row.PublishAtUtc > now)
+                return false;
+
+            if (row.TermsAcceptedAtUtc.HasValue) return true;   // مُقَرّ سابقًا — idempotent
+
+            if (db.Database.IsRelational())
+            {
+                var updated = await db.RemedialTrackEnrollments
+                    .Where(e => e.Id == enrollmentId && e.TermsAcceptedAtUtc == null)
+                    .ExecuteUpdateAsync(s => s.SetProperty(e => e.TermsAcceptedAtUtc, (DateTime?)now), ct);
+                if (updated == 0) return true;                   // سبقه طلب آخر
+            }
+            else
+            {
+                var e = await db.RemedialTrackEnrollments.FirstAsync(x => x.Id == enrollmentId, ct);
+                e.TermsAcceptedAtUtc = now;
+                await db.SaveChangesAsync(ct);
+            }
+
+            db.RemedialTrackEvents.Add(new RemedialTrackEvent
+            {
+                EnrollmentId = enrollmentId,
+                Type = RemedialTrackEventType.TermsAccepted,
+                Message = "أقرّ الطالب بشروط وآلية الخطة العلاجية.",
+                CreatedAtUtc = now
+            });
+            await db.SaveChangesAsync(ct);
+            return true;
         }
 
         // أول وصول مسموح: StartedAtUtc + InProgress (تحديث ذرّي — أول من يصل يفوز)

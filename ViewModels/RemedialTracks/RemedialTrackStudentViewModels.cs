@@ -32,6 +32,20 @@ namespace QdratNew.ViewModels.RemedialTracks
         public string? ErrorMessage { get; set; }
     }
 
+    /// <summary>نموذج صفحة إقرار شروط الخطة.</summary>
+    public sealed class StudentRemedialTrackTermsVm
+    {
+        public int EnrollmentId { get; set; }
+        public string TrackTitle { get; set; } = string.Empty;
+        public string? ErrorMessage { get; set; }
+    }
+
+    public sealed class StudentRemedialTrackAcceptTermsInput
+    {
+        public int EnrollmentId { get; set; }
+        public bool Accepted { get; set; }
+    }
+
     public sealed class StudentRemedialTrackVerifyCodeInput
     {
         public int EnrollmentId { get; set; }

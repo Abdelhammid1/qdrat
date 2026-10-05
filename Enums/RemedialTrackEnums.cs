@@ -93,6 +93,7 @@ namespace QdratNew.Enums
         AdminOpenedNext     = 11,
         TrackCompleted      = 12,
         EnrollmentCancelled = 13,
-        ReportNoteSaved     = 14
+        ReportNoteSaved     = 14,
+        TermsAccepted       = 15
     }
 }

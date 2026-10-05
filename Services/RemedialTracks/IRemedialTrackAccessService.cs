@@ -9,7 +9,8 @@ namespace QdratNew.Services.RemedialTracks
         NotYetPublished,
         Cancelled,
         NeedsCode,
-        CodeLocked
+        CodeLocked,
+        NeedsTerms      // لم يقرّ الطالب بشروط الخطة بعد (يُفحص في EvaluateAsync فقط)
     }
 
     /// <summary>لقطة خفيفة تكفي لقرار البوابة (تُستعمل أيضًا داخل استعلام نبضة الفيديو دون استعلام إضافي).</summary>
@@ -56,6 +57,9 @@ namespace QdratNew.Services.RemedialTracks
 
         /// <summary>التحقق من الرقم المرجعي (حضوري). يخزّن النتيجة في قاعدة البيانات لا في Session.</summary>
         Task<RemedialTrackVerifyResult> VerifyCodeAsync(int studentId, int enrollmentId, string? code, CancellationToken ct = default);
+
+        /// <summary>تسجيل إقرار الطالب بشروط الخطة (مرة واحدة لكل تسجيل). يعيد false إن لم يكن التسجيل للطالب أو غير متاح.</summary>
+        Task<bool> AcceptTermsAsync(int studentId, int enrollmentId, CancellationToken ct = default);
 
         /// <summary>هل لدى الطالب تسجيل نشط ظاهر له (للقائمة الجانبية)؟</summary>
         Task<bool> HasVisibleEnrollmentAsync(int studentId, CancellationToken ct = default);
