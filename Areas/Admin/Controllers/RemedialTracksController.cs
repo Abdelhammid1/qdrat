@@ -136,6 +136,13 @@ namespace QdratNew.Areas.Admin.Controllers
                 ? JsonResult(await _builder.SaveAxisExamsAsync(input, ct))
                 : ValidationFail();
 
+        [HttpPost, ValidateAntiForgeryToken]
+        [AdminPermission("RemedialTracks", "Edit")]
+        public async Task<IActionResult> SaveSchedule([FromForm] SaveRemedialScheduleInput input, CancellationToken ct)
+            => ModelState.IsValid
+                ? JsonResult(await _builder.SaveScheduleAsync(input, ct))
+                : ValidationFail();
+
         // ---------------- الفيديوهات ----------------
 
         [HttpPost, ValidateAntiForgeryToken]

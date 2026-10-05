@@ -63,6 +63,19 @@ namespace QdratNew.ViewModels.RemedialTracks
         [Range(5, 180, ErrorMessage = "مدة الاختبار بين 5 و180 دقيقة")] public int ExamDurationMinutes { get; set; } = 30;
     }
 
+    /// <summary>توزيع المحاور على الأيام: يوم واحد لكل محور (يُحفظ كله دفعة واحدة).</summary>
+    public sealed class SaveRemedialScheduleInput
+    {
+        [Range(1, int.MaxValue, ErrorMessage = "الخطة غير صالحة")] public int TrackId { get; set; }
+        public List<RemedialAxisDayInput> Items { get; set; } = new();
+    }
+
+    public sealed class RemedialAxisDayInput
+    {
+        [Range(1, int.MaxValue, ErrorMessage = "المحور غير صالح")] public int AxisId { get; set; }
+        [Range(1, 60, ErrorMessage = "رقم اليوم بين 1 و60")] public int Day { get; set; } = 1;
+    }
+
     public sealed class AddRemedialVideoInput
     {
         [Range(1, int.MaxValue, ErrorMessage = "المحور غير صالح")] public int AxisId { get; set; }
@@ -195,6 +208,7 @@ namespace QdratNew.ViewModels.RemedialTracks
         public int Exam102ModelId { get; set; }
         public string Exam102Title { get; set; } = string.Empty;
         public int ExamDurationMinutes { get; set; }
+        public int ReleaseDay { get; set; } = 1;
         public List<RemedialTrackVideoVm> Videos { get; set; } = new();
     }
 

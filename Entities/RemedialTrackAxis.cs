@@ -19,6 +19,7 @@ namespace QdratNew.Entities
         public int Exam102ModelId { get; set; }
         public ProfessionalModel? Exam102Model { get; set; }
         public int ExamDurationMinutes { get; set; } = 30; // 5..180
+        public int ReleaseDay { get; set; } = 1;           // يوم ظهور المحور للطالب (1 = يوم النشر)؛ يُحسب منه وقت الفتح
 
         public ICollection<RemedialTrackVideo> Videos { get; set; } = new List<RemedialTrackVideo>();
     }

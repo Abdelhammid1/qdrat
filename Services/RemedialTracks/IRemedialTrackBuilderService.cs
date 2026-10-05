@@ -33,6 +33,8 @@ namespace QdratNew.Services.RemedialTracks
         Task<RemedialTrackResult> MoveAxisAsync(int axisId, int direction, CancellationToken ct = default);
         Task<RemedialTrackResult> RemoveAxisAsync(int axisId, CancellationToken ct = default);
         Task<RemedialTrackResult> SaveAxisExamsAsync(SaveRemedialAxisExamsInput input, CancellationToken ct = default);
+        /// <summary>توزيع المحاور على أيام الخطة (قبل أول نشر فقط).</summary>
+        Task<RemedialTrackResult> SaveScheduleAsync(SaveRemedialScheduleInput input, CancellationToken ct = default);
 
         Task<RemedialTrackResult> AddVideoAsync(AddRemedialVideoInput input, CancellationToken ct = default);
         Task<RemedialTrackResult> EditVideoAsync(EditRemedialVideoInput input, CancellationToken ct = default);

@@ -120,6 +120,8 @@ namespace QdratNew.Services.RemedialTracks
 
         public async Task<StudentRemedialTrackPlanVm?> GetPlanAsync(int studentId, int enrollmentId, CancellationToken ct = default)
         {
+            await ReleaseDueAxesAsync(studentId, enrollmentId, ct);   // فتح المحور الذي حان يومه (إن أنهى السابق)
+
             await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
             var head = await db.RemedialTrackEnrollments.AsNoTracking()
@@ -128,7 +130,8 @@ namespace QdratNew.Services.RemedialTracks
                 {
                     e.Id,
                     e.Status,
-                    e.Publication!.Mode,
+                    e.Publication!.PublishAtUtc,
+                    e.Publication.Mode,
                     TrackTitle = e.Publication.Track!.Title,
                     Description = e.Publication.Track.Description,
                     Curriculum = e.Publication.Track.Curriculum!.Title
@@ -148,9 +151,13 @@ namespace QdratNew.Services.RemedialTracks
                     Round = a.Round,
                     VideoCount = a.Axis.Videos.Count(v => v.IsActive),
                     Exam101Percent = a.Exam101Percent,
-                    Exam102Percent = a.Exam102Percent
+                    Exam102Percent = a.Exam102Percent,
+                    DayNumber = a.Axis.ReleaseDay
                 })
                 .ToListAsync(ct);
+
+            foreach (var ax in axes.Where(x => x.IsLocked))
+                ax.AvailableAtLocal = _tz.ConvertToSaudi(RemedialTrackSchedule.ReleaseAtUtc(head.PublishAtUtc, ax.DayNumber));
 
             return new StudentRemedialTrackPlanVm
             {
@@ -168,6 +175,8 @@ namespace QdratNew.Services.RemedialTracks
 
         public async Task<StudentRemedialTrackAxisVm?> GetAxisAsync(int studentId, int enrollmentId, int axisProgressId, CancellationToken ct = default)
         {
+            await ReleaseDueAxesAsync(studentId, enrollmentId, ct);
+
             await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
             var ap = await db.RemedialTrackAxisProgresses.AsNoTracking()
@@ -199,11 +208,15 @@ namespace QdratNew.Services.RemedialTracks
             var canWatch = (ap.Status == RemedialTrackAxisStatus.Videos && ap.Round == 1)
                            || (ap.Status == RemedialTrackAxisStatus.Rewatch && ap.Round == 2);
 
+            // محور انتهى (اجتاز / لم يجتز): لا فيديوهات ولا روابط؛ إعادة الفتح ممنوعة بعد الانتقال
+            var videosClosed = ap.Status is RemedialTrackAxisStatus.Passed
+                or RemedialTrackAxisStatus.FailedBlocked or RemedialTrackAxisStatus.FailedOpenedByAdmin;
+
             if (canWatch)
                 await EnsureVideoProgressRowsAsync(db, ap.Id, ap.AxisId, ap.Round, ct);
 
             var rows = await db.RemedialTrackVideoProgresses.AsNoTracking()
-                .Where(v => v.AxisProgressId == ap.Id && v.Round == ap.Round && v.Video!.IsActive)
+                .Where(v => !videosClosed && v.AxisProgressId == ap.Id && v.Round == ap.Round && v.Video!.IsActive)
                 .OrderBy(v => v.VideoOrder)
                 .Select(v => new
                 {
@@ -229,9 +242,10 @@ namespace QdratNew.Services.RemedialTracks
                     Order = r.VideoOrder,
                     Title = r.Title,
                     Provider = r.Provider,
-                    ExternalId = r.ExternalId,
-                    Url = r.Url,
-                    EmbedUrl = RemedialTrackVideoUrlParser.BuildEmbedUrl(r.Provider, r.ExternalId),
+                    // لا يغادر الخادمَ معرّف/رابط فيديو خارج الجولة الحالية (انتظار اختبار): لا إعادة مشاهدة
+                    ExternalId = canWatch ? r.ExternalId : null,
+                    Url = canWatch ? r.Url : string.Empty,
+                    EmbedUrl = canWatch ? RemedialTrackVideoUrlParser.BuildEmbedUrl(r.Provider, r.ExternalId) : null,
                     DurationSeconds = r.Duration,
                     IsCompleted = r.IsCompleted,
                     IsUnlocked = previousDone,
@@ -274,6 +288,7 @@ namespace QdratNew.Services.RemedialTracks
                 Status = ap.Status,
                 Round = ap.Round,
                 CanWatch = canWatch,
+                VideosClosed = videosClosed,
                 WatermarkText = studentName,
                 WatermarkIdText = nationalId,
                 AllVideosDone = videos.Count > 0 && videos.All(v => v.IsCompleted),
@@ -696,7 +711,7 @@ namespace QdratNew.Services.RemedialTracks
                     AddEvent(db, info.EnrollmentId, info.AxisId, RemedialTrackEventType.ExamPassed,
                         $"اجتاز الطالب {examName} للمحور «{info.Title}» بنسبة {score}%.", now);
                     if (t.UnlockNextAxis)
-                        await OpenNextAxisAsync(db, info.EnrollmentId, ap.Order, now, ct);
+                        await OpenNextAxisAsync(db, info.EnrollmentId, ap.Order, now, respectSchedule: true, ct);
                 }
                 else
                 {
@@ -771,7 +786,8 @@ namespace QdratNew.Services.RemedialTracks
                     CreatedAtUtc = now
                 });
 
-                await OpenNextAxisAsync(db, info.EnrollmentId, ap.Order, now, ct);
+                // نقل الإدارة قرار صريح: يفتح التالي فورًا بصرف النظر عن يومه في الجدول
+                await OpenNextAxisAsync(db, info.EnrollmentId, ap.Order, now, respectSchedule: false, ct);
                 await db.SaveChangesAsync(ct);
                 await FinalizeEnrollmentAsync(db, info.EnrollmentId, now, ct);
 
@@ -779,8 +795,44 @@ namespace QdratNew.Services.RemedialTracks
             }, ct);
         }
 
+        // يفتح المحور الذي حان يومه إن أنهى الطالب السابق (اجتاز/نقلته الإدارة). فحص قراءة خفيف أولًا؛ الكتابة فقط عند وجود محور مستحق.
+        private async Task ReleaseDueAxesAsync(int studentId, int enrollmentId, CancellationToken ct)
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync(ct);
+            var now = _time.GetUtcNow().UtcDateTime;
+
+            var publishAt = await db.RemedialTrackEnrollments.AsNoTracking()
+                .Where(e => e.Id == enrollmentId && e.StudentId == studentId
+                            && e.Status != RemedialTrackEnrollmentStatus.Cancelled
+                            && e.Publication!.Status == RemedialTrackPublicationStatus.Active)
+                .Select(e => (DateTime?)e.Publication!.PublishAtUtc)
+                .FirstOrDefaultAsync(ct);
+            if (publishAt is null || publishAt.Value > now) return;
+
+            var rows = (await db.RemedialTrackAxisProgresses.AsNoTracking()
+                    .Where(a => a.EnrollmentId == enrollmentId)
+                    .OrderBy(a => a.Order)
+                    .Select(a => new { a.Id, a.Order, a.Status, Day = a.Axis!.ReleaseDay })
+                    .ToListAsync(ct))
+                .Select(a => new RemedialTrackSchedule.AxisRow(a.Id, a.Order, a.Status, a.Day))
+                .ToList();
+
+            var due = RemedialTrackSchedule.FindDue(rows, publishAt.Value, now);
+            if (due is null) return;
+
+            var prevOrder = rows.Where(r => r.Order < due.Value.Order).Max(r => r.Order);
+            await InTransactionAsync(async tdb =>
+            {
+                if (await OpenNextAxisAsync(tdb, enrollmentId, prevOrder, now, respectSchedule: true, ct))
+                    await tdb.SaveChangesAsync(ct);
+                return true;
+            }, ct);
+        }
+
         // يفتح المحور التالي (Locked → Videos/جولة 1) ويحدّث CurrentAxisId؛ لا يحفظ (المستدعي يحفظ). يعيد true إن فُتح محور.
-        private static async Task<bool> OpenNextAxisAsync(ApplicationDbContext db, int enrollmentId, int currentOrder, DateTime now, CancellationToken ct)
+        // respectSchedule: عند true لا يُفتح قبل موعد يومه (يبقى Locked ويُفتح كسولًا عند حلول الموعد).
+        private static async Task<bool> OpenNextAxisAsync(
+            ApplicationDbContext db, int enrollmentId, int currentOrder, DateTime now, bool respectSchedule, CancellationToken ct)
         {
             var next = await db.RemedialTrackAxisProgresses
                 .Where(a => a.EnrollmentId == enrollmentId && a.Order > currentOrder)
@@ -788,6 +840,19 @@ namespace QdratNew.Services.RemedialTracks
                 .FirstOrDefaultAsync(ct);
             if (next is null) return false;
             if (next.Status != RemedialTrackAxisStatus.Locked) return false;   // مفتوح سابقًا
+
+            if (respectSchedule)
+            {
+                var publishAt = await db.RemedialTrackEnrollments.AsNoTracking()
+                    .Where(e => e.Id == enrollmentId)
+                    .Select(e => e.Publication!.PublishAtUtc)
+                    .FirstAsync(ct);
+                var day = await db.RemedialTrackAxes.AsNoTracking()
+                    .Where(x => x.Id == next.AxisId)
+                    .Select(x => x.ReleaseDay)
+                    .FirstAsync(ct);
+                if (RemedialTrackSchedule.ReleaseAtUtc(publishAt, day) > now) return false;
+            }
 
             next.Status = RemedialTrackAxisStatus.Videos;
             next.Round = 1;

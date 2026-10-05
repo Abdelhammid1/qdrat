@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using QdratNew.Data;
 using QdratNew.Entities;
 using QdratNew.Enums;
@@ -144,6 +144,76 @@ namespace QdratNew.Tests
             var f = new Fixture();
             await f.SeedAsync();
             return f;
+        }
+
+        // ---------------- جدول الأيام ----------------
+
+        [Fact]
+        public async Task Schedule_NewAxisInheritsLastDay_SaveValidatesAndPersists()
+        {
+            var f = await NewAsync();
+            var t = await f.CreateTrackAsync();
+            var a1 = await f.AddAxisAsync(t, 0);
+            var a2 = await f.AddAxisAsync(t, 1);
+            var a3 = await f.AddAxisAsync(t, 2);
+
+            // يوم فارغ (1، 3) مرفوض
+            var gap = await f.Sut.SaveScheduleAsync(new SaveRemedialScheduleInput
+            {
+                TrackId = t,
+                Items = { new() { AxisId = a1, Day = 1 }, new() { AxisId = a2, Day = 3 }, new() { AxisId = a3, Day = 3 } }
+            });
+            Assert.False(gap.Success);
+
+            // محور ناقص مرفوض
+            var missing = await f.Sut.SaveScheduleAsync(new SaveRemedialScheduleInput
+            {
+                TrackId = t,
+                Items = { new() { AxisId = a1, Day = 1 }, new() { AxisId = a2, Day = 2 } }
+            });
+            Assert.False(missing.Success);
+
+            var ok = await f.Sut.SaveScheduleAsync(new SaveRemedialScheduleInput
+            {
+                TrackId = t,
+                Items = { new() { AxisId = a1, Day = 1 }, new() { AxisId = a2, Day = 2 }, new() { AxisId = a3, Day = 2 } }
+            });
+            Assert.True(ok.Success, ok.Message);
+
+            await using var db = f.Factory.CreateDbContext();
+            var days = await db.RemedialTrackAxes.Where(a => a.TrackId == t).OrderBy(a => a.Order).Select(a => a.ReleaseDay).ToListAsync();
+            Assert.Equal(new[] { 1, 2, 2 }, days);
+        }
+
+        [Fact]
+        public async Task Schedule_RemoveAxis_CompactsDays_AndLockedStructureRejectsSave()
+        {
+            var f = await NewAsync();
+            var t = await f.CreateTrackAsync();
+            var a1 = await f.AddAxisAsync(t, 0);
+            var a2 = await f.AddAxisAsync(t, 1);
+            var a3 = await f.AddAxisAsync(t, 2);
+            Assert.True((await f.Sut.SaveScheduleAsync(new SaveRemedialScheduleInput
+            {
+                TrackId = t,
+                Items = { new() { AxisId = a1, Day = 1 }, new() { AxisId = a2, Day = 2 }, new() { AxisId = a3, Day = 3 } }
+            })).Success);
+
+            Assert.True((await f.Sut.RemoveAxisAsync(a2)).Success);   // اليوم 2 يصبح فارغًا → يُضغط
+
+            await using (var db = f.Factory.CreateDbContext())
+            {
+                var days = await db.RemedialTrackAxes.Where(a => a.TrackId == t).OrderBy(a => a.Order).Select(a => a.ReleaseDay).ToListAsync();
+                Assert.Equal(new[] { 1, 2 }, days);
+            }
+
+            await f.LockAsync(t);
+            var locked = await f.Sut.SaveScheduleAsync(new SaveRemedialScheduleInput
+            {
+                TrackId = t,
+                Items = { new() { AxisId = a1, Day = 1 }, new() { AxisId = a3, Day = 1 } }
+            });
+            Assert.False(locked.Success);
         }
 
         // ---------------- الإنشاء والترويسة ----------------
