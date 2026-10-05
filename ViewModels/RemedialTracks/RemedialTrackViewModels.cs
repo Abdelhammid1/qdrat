@@ -124,11 +124,26 @@ namespace QdratNew.ViewModels.RemedialTracks
         public int VideosCount { get; set; }
         public string? CreatedByName { get; set; }
         public DateTime CreatedAtUtc { get; set; }
+
+        /// <summary>عدد الطلاب المسجَّلين في الخطة (عبر كل أوامر النشر، بلا الملغاة).</summary>
+        public int EnrolledCount { get; set; }
+        /// <summary>عدد من بدأوا فعلًا من المسجَّلين.</summary>
+        public int StartedCount { get; set; }
+    }
+
+    public sealed class RemedialTrackCurriculumTabVm
+    {
+        public int Id { get; set; }
+        public string Text { get; set; } = string.Empty;
+        public int Count { get; set; }
     }
 
     public sealed class RemedialTrackIndexVm
     {
         public const int PageSize = 20;
+
+        /// <summary>تابات المناهج التي لها خطط (يُحسب في الخادم).</summary>
+        public List<RemedialTrackCurriculumTabVm> CurriculumTabs { get; set; } = new();
 
         public List<RemedialTrackListItemVm> Items { get; set; } = new();
         public List<RemedialTrackSelectOption> Curricula { get; set; } = new();

@@ -50,16 +50,10 @@
                     <label for="fSearch">بحث بالاسم أو الكود</label>
                     <input id="fSearch" name="search" value="@Model.Search" maxlength="100" autocomplete="off" />
                 </div>
-                <div class="rtk-field">
-                    <label for="fCurriculum">المنهج</label>
-                    <select id="fCurriculum" name="curriculumId">
-                        <option value="">كل المناهج</option>
-                        @foreach (var c in Model.Curricula)
-                        {
-                            <option value="@c.Id" selected="@(Model.CurriculumId == c.Id)">@c.Text</option>
-                        }
-                    </select>
-                </div>
+                @if (Model.CurriculumId.HasValue)
+                {
+                    <input type="hidden" name="curriculumId" value="@Model.CurriculumId" />
+                }
                 <div class="rtk-field">
                     <label for="fStatus">الحالة</label>
                     <select id="fStatus" name="status">
@@ -77,6 +71,22 @@
     </section>
 
     <section class="rtk-panel" aria-label="قائمة الخطط">
+        @if (Model.CurriculumTabs.Count > 0)
+        {
+            var allCount = Model.CurriculumTabs.Sum(x => x.Count);
+            <nav class="rtk-tabs" aria-label="المناهج">
+                <a class="rtk-tab @(Model.CurriculumId is null ? "is-active" : "")" asp-area="Admin" asp-controller="RemedialTracks" asp-action="Index"
+                   asp-route-search="@Model.Search" asp-route-status="@(Model.Status.HasValue ? (int?)Model.Status.Value : null)"
+                   aria-current="@(Model.CurriculumId is null ? "page" : null)">الكل <span class="rtk-tab__n">@allCount</span></a>
+                @foreach (var c in Model.CurriculumTabs)
+                {
+                    var active = Model.CurriculumId == c.Id;
+                    <a class="rtk-tab @(active ? "is-active" : "")" asp-area="Admin" asp-controller="RemedialTracks" asp-action="Index"
+                       asp-route-curriculumId="@c.Id" asp-route-search="@Model.Search" asp-route-status="@(Model.Status.HasValue ? (int?)Model.Status.Value : null)"
+                       aria-current="@(active ? "page" : null)">@c.Text <span class="rtk-tab__n">@c.Count</span></a>
+                }
+            </nav>
+        }
         @if (Model.Items.Count == 0)
         {
             <div class="rtk-empty">
@@ -99,6 +109,7 @@
                             <th>المنهج</th>
                             <th>المحاور</th>
                             <th>الفيديوهات</th>
+                            <th>بدأوا الخطة</th>
                             <th>الحالة</th>
                             <th>أُنشئت</th>
                             <th><span class="visually-hidden">فتح</span></th>
@@ -113,6 +124,20 @@
                                 <td>@t.CurriculumTitle</td>
                                 <td>@t.AxesCount</td>
                                 <td>@t.VideosCount</td>
+                                <td>
+                                    @if (t.EnrolledCount == 0)
+                                    {
+                                        <span class="rtk-hint">لم تُنشر بعد</span>
+                                    }
+                                    else
+                                    {
+                                        var pct = (int)Math.Round(t.StartedCount * 100.0 / t.EnrolledCount);
+                                        <div class="rtk-started" title="بدأ @t.StartedCount من @t.EnrolledCount طالب">
+                                            <strong>@t.StartedCount</strong> من <strong>@t.EnrolledCount</strong>
+                                            <div class="rtk-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@pct"><i style="width:@pct%"></i></div>
+                                        </div>
+                                    }
+                                </td>
                                 <td>
                                     <span class="rtk-badge @StatusClass(t.Status)">@StatusLabel(t.Status)</span>
                                     @if (t.IsStructureLocked)

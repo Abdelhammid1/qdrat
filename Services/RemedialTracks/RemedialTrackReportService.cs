@@ -224,7 +224,18 @@ namespace QdratNew.Services.RemedialTracks
                         EnrollmentId = ap.EnrollmentId,
                         StudentName = ap.Enrollment.Student!.FullName,
                         AxisTitle = ap.Axis!.TitleOverride ?? ap.Axis.Section!.Title,
-                        Status = ap.Status
+                        Status = ap.Status,
+                        AxisProgressId = ap.Id,
+                        AxisOrder = ap.Order,
+                        Round = ap.Round,
+                        Exam101Percent = ap.Exam101Percent,
+                        Exam102Percent = ap.Exam102Percent,
+                        AttemptsCount = ap.Attempts.Count(t => t.Status != RemedialTrackAttemptStatus.InProgress),
+                        FailedAtUtc = ap.FailedAtUtc,
+                        AdminOpenedByName = ap.AdminOpenedByName,
+                        AdminOpenReason = ap.AdminOpenReason,
+                        AdminOpenedAtUtc = ap.AdminOpenedAtUtc,
+                        CanUnlockNext = ap.Status == RemedialTrackAxisStatus.FailedBlocked && ap.Order < lastOrder
                     })
                 .Take(RemedialTrackDashboardVm.MaxNotPassedListed + 1)
                 .ToListAsync(ct);

@@ -8,6 +8,15 @@
         RemedialTrackPublicationStatus.Cancelled => "ملغى",
         _ => "مغلق"
     };
+    static string StatusKey(RemedialTrackEnrollmentStatus s) => s switch
+    {
+        RemedialTrackEnrollmentStatus.NotStarted => "idle",
+        RemedialTrackEnrollmentStatus.InProgress => "info",
+        RemedialTrackEnrollmentStatus.Completed => "ok",
+        RemedialTrackEnrollmentStatus.CompletedWithFailures => "warn",
+        _ => "off"
+    };
+    static string Pct(double? v) => v.HasValue ? v.Value.ToString("0.#") + "%" : "—";
     static string EnrollmentLabel(RemedialTrackEnrollmentStatus s) => s switch
     {
         RemedialTrackEnrollmentStatus.NotStarted => "لم تبدأ",
@@ -29,16 +38,16 @@
 
 <div class="rtk-page container-fluid mt-4" dir="rtl" id="rtkPubDetails" data-id="@Model.Id">
 
-    <header class="rtk-hero">
+    <header class="rtk-hero rtk-hero--pro">
         <div class="rtk-hero__top">
-            <div>
-                <div class="rtk-hero__label"><i class="fas fa-paper-plane ms-1"></i> <span class="rtk-code" style="color:#fff">@Model.TrackCode</span></div>
+            <div class="rtk-hero__main">
+                <div class="rtk-hero__label"><i class="fas fa-paper-plane ms-1"></i> أمر نشر · <span class="rtk-code" style="color:#fff">@Model.TrackCode</span></div>
                 <h1>@Model.TrackTitle</h1>
-                <p>@Model.CurriculumTitle · @Model.BatchName</p>
+                <p><i class="fas fa-book-open ms-1"></i>@Model.CurriculumTitle <span class="rtk-hero__sep">•</span> <i class="fas fa-users ms-1"></i>@Model.BatchName</p>
                 <div class="mt-2 d-flex gap-2 flex-wrap">
-                    <span class="rtk-badge hero-badge">@StatusLabel(Model.Status)</span>
-                    <span class="rtk-badge hero-badge">@(Model.IsInPerson ? "حضوري" : "أونلاين")</span>
-                    <span class="rtk-badge hero-badge">@(Model.Scope == RemedialTrackPublicationScope.WholeBatch ? "الدفعة كاملة" : "طلاب محددون")</span>
+                    <span class="rtk-badge hero-badge"><i class="fas fa-circle-dot ms-1"></i>@StatusLabel(Model.Status)</span>
+                    <span class="rtk-badge hero-badge"><i class="fas @(Model.IsInPerson ? "fa-chalkboard-user" : "fa-laptop") ms-1"></i>@(Model.IsInPerson ? "حضوري" : "أونلاين")</span>
+                    <span class="rtk-badge hero-badge"><i class="fas fa-bullseye ms-1"></i>@(Model.Scope == RemedialTrackPublicationScope.WholeBatch ? "الدفعة كاملة" : "طلاب محددون")</span>
                 </div>
             </div>
             <div class="rtk-hero__actions">
@@ -53,6 +62,16 @@
                 }
             </div>
         </div>
+        <dl class="rtk-meta">
+            <div class="rtk-meta__item"><i class="fas fa-clock"></i><div><dt>وقت النشر</dt><dd>@Tz.ConvertToSaudi(Model.PublishAtUtc).ToString("yyyy-MM-dd HH:mm")</dd></div></div>
+            <div class="rtk-meta__item"><i class="fas fa-calendar-plus"></i><div><dt>أُنشئ بتاريخ</dt><dd>@Tz.ConvertToSaudi(Model.CreatedAtUtc).ToString("yyyy-MM-dd HH:mm")</dd></div></div>
+            <div class="rtk-meta__item"><i class="fas fa-user-pen"></i><div><dt>أنشأه</dt><dd>@(Model.CreatedByName ?? "—")</dd></div></div>
+            <div class="rtk-meta__item"><i class="fas fa-user-graduate"></i><div><dt>عدد الطلاب</dt><dd>@Model.TotalStudents</dd></div></div>
+        </dl>
+        @if (!string.IsNullOrWhiteSpace(Model.AdminNote))
+        {
+            <div class="rtk-hero__note"><i class="fas fa-note-sticky ms-1"></i> @Model.AdminNote</div>
+        }
     </header>
 
     @if (Model.Status == RemedialTrackPublicationStatus.Cancelled)
@@ -62,20 +81,6 @@
             @if (!string.IsNullOrWhiteSpace(Model.CancelReason)) { <text>— السبب: @Model.CancelReason</text> }
         </div>
     }
-
-    <section class="rtk-panel">
-        <h2>ملخص الأمر</h2>
-        <dl class="rtk-dl">
-            <div><dt>وقت النشر</dt><dd>@Tz.ConvertToSaudi(Model.PublishAtUtc).ToString("yyyy-MM-dd HH:mm")</dd></div>
-            <div><dt>أُنشئ بتاريخ</dt><dd>@Tz.ConvertToSaudi(Model.CreatedAtUtc).ToString("yyyy-MM-dd HH:mm")</dd></div>
-            <div><dt>أنشأه</dt><dd>@(Model.CreatedByName ?? "—")</dd></div>
-            <div><dt>عدد الطلاب</dt><dd>@Model.TotalStudents</dd></div>
-            @if (!string.IsNullOrWhiteSpace(Model.AdminNote))
-            {
-                <div class="rtk-dl__wide"><dt>ملاحظة</dt><dd>@Model.AdminNote</dd></div>
-            }
-        </dl>
-    </section>
 
     @if (Model.IsInPerson && Model.CanManageCode)
     {
@@ -115,13 +120,18 @@
 
         <section class="rtk-panel" aria-label="مؤشرات المتابعة">
             <h2>متابعة الطلاب</h2>
+            @{
+                var f = dash.Filter;
+                var noFilter = f.Status is null && !f.BlockedOnly && string.IsNullOrEmpty(f.Q);
+            }
+            <p class="rtk-hint mb-2">اضغط على أي بطاقة لعرض أسماء الطلاب في هذه الحالة بالجدول أدناه.</p>
             <div class="rtk-kpis">
-                <div class="rtk-kpi"><span>@k.Total</span>إجمالي الطلاب</div>
-                <div class="rtk-kpi"><span>@k.NotStarted</span>لم يبدأ</div>
-                <div class="rtk-kpi"><span>@k.InProgress</span>قيد التنفيذ</div>
-                <div class="rtk-kpi"><span>@k.Completed</span>مكتمل</div>
-                <div class="rtk-kpi"><span>@k.CompletedWithFailures</span>مكتمل مع تعثّر</div>
-                <div class="rtk-kpi @(k.BlockedAwaitingAdmin > 0 ? "rtk-kpi--alert" : "")"><span>@k.BlockedAwaitingAdmin</span>محجوب بانتظار الإدارة</div>
+                <a class="rtk-kpi rtk-kpi--total @(noFilter ? "is-active" : "")" asp-action="Details" asp-route-id="@Model.Id" asp-fragment="rtkStudents"><i class="fas fa-users"></i><span>@k.Total</span>إجمالي الطلاب</a>
+                <a class="rtk-kpi rtk-kpi--idle @(f.Status == RemedialTrackEnrollmentStatus.NotStarted && !f.BlockedOnly ? "is-active" : "")" asp-action="Details" asp-route-id="@Model.Id" asp-route-status="@((int)RemedialTrackEnrollmentStatus.NotStarted)" asp-fragment="rtkStudents"><i class="fas fa-hourglass-start"></i><span>@k.NotStarted</span>لم يبدأ</a>
+                <a class="rtk-kpi rtk-kpi--info @(f.Status == RemedialTrackEnrollmentStatus.InProgress && !f.BlockedOnly ? "is-active" : "")" asp-action="Details" asp-route-id="@Model.Id" asp-route-status="@((int)RemedialTrackEnrollmentStatus.InProgress)" asp-fragment="rtkStudents"><i class="fas fa-spinner"></i><span>@k.InProgress</span>قيد التنفيذ</a>
+                <a class="rtk-kpi rtk-kpi--ok @(f.Status == RemedialTrackEnrollmentStatus.Completed && !f.BlockedOnly ? "is-active" : "")" asp-action="Details" asp-route-id="@Model.Id" asp-route-status="@((int)RemedialTrackEnrollmentStatus.Completed)" asp-fragment="rtkStudents"><i class="fas fa-circle-check"></i><span>@k.Completed</span>مكتمل</a>
+                <a class="rtk-kpi rtk-kpi--warn @(f.Status == RemedialTrackEnrollmentStatus.CompletedWithFailures && !f.BlockedOnly ? "is-active" : "")" asp-action="Details" asp-route-id="@Model.Id" asp-route-status="@((int)RemedialTrackEnrollmentStatus.CompletedWithFailures)" asp-fragment="rtkStudents"><i class="fas fa-triangle-exclamation"></i><span>@k.CompletedWithFailures</span>مكتمل مع تعثّر</a>
+                <a class="rtk-kpi rtk-kpi--danger @(k.BlockedAwaitingAdmin > 0 ? "rtk-kpi--alert" : "") @(f.BlockedOnly ? "is-active" : "")" asp-action="Details" asp-route-id="@Model.Id" asp-route-blockedOnly="true" asp-fragment="rtkStudents"><i class="fas fa-lock"></i><span>@k.BlockedAwaitingAdmin</span>محجوب بانتظار الإدارة</a>
             </div>
         </section>
 
@@ -136,8 +146,13 @@
             </section>
         }
 
-        <section class="rtk-panel" aria-label="جدول الطلاب">
-            <h2>الطلاب</h2>
+        <section class="rtk-panel" aria-label="جدول الطلاب" id="rtkStudents">
+            <h2>الطلاب <span class="rtk-count">@dash.Total</span>
+                @if (dash.Filter.Status.HasValue || dash.Filter.BlockedOnly || !string.IsNullOrEmpty(dash.Filter.Q))
+                {
+                    <span class="rtk-chip-filter"><i class="fas fa-filter"></i> تصفية مفعّلة</span>
+                }
+            </h2>
             <form method="get" class="rtk-filters">
                 <div class="rtk-field">
                     <label for="rtkFilterQ">بحث بالاسم</label>
@@ -171,14 +186,14 @@
             else
             {
                 <div class="rtk-table-wrap">
-                    <table class="rtk-table">
+                    <table class="rtk-table rtk-table--zebra">
                         <thead><tr><th>الطالب</th><th>الحالة</th><th>المحور الحالي</th><th>آخر نتيجة</th><th>آخر نشاط</th><th>إجراءات</th></tr></thead>
                         <tbody>
                             @foreach (var s in dash.Students)
                             {
-                                <tr>
-                                    <td>@s.StudentName</td>
-                                    <td>@EnrollmentLabel(s.Status)@if (s.IsBlocked) { <text> </text><span class="rtk-badge rtk-badge--lock">محجوب</span> }</td>
+                                <tr class="rtk-row rtk-row--@StatusKey(s.Status) @(s.IsBlocked ? "rtk-row--blocked" : "")">
+                                    <td class="rtk-name">@s.StudentName</td>
+                                    <td><span class="rtk-pill rtk-pill--@StatusKey(s.Status)">@EnrollmentLabel(s.Status)</span>@if (s.IsBlocked) { <text> </text><span class="rtk-badge rtk-badge--lock"><i class="fas fa-lock"></i> محجوب</span> }</td>
                                     <td>@(s.CurrentAxisTitle is null ? "—" : $"{s.CurrentAxisOrder}. {s.CurrentAxisTitle} (الجولة {s.CurrentRound})")</td>
                                     <td>@(s.LastScorePercent.HasValue && s.LastExamNumber.HasValue ? $"{s.LastScorePercent.Value:0.#}% ({s.LastExamNumber.Value.DisplayName()})" : "—")</td>
                                     <td>@(s.LastActivityUtc.HasValue ? Tz.ConvertToSaudi(s.LastActivityUtc.Value).ToString("yyyy-MM-dd HH:mm") : "—")</td>
@@ -219,24 +234,78 @@
             }
         </section>
 
-        <section class="rtk-panel" aria-label="من لم يجتز">
-            <h2>من لم يجتز محورًا</h2>
+        <section class="rtk-panel rtk-np" id="rtkNotPassed" aria-label="من لم يجتز">
+            <div class="rtk-np__head">
+                <h2>من لم يجتز محورًا — قرار الإدارة <span class="rtk-count">@dash.NotPassed.Count</span></h2>
+                @if (dash.NotPassed.Count > 0)
+                {
+                    <button type="button" class="rtk-btn rtk-btn--outline rtk-noprint" data-rtk-act="print-np"><i class="fas fa-print"></i> طباعة الجدول</button>
+                }
+            </div>
+            <div class="rtk-print-only rtk-np__printhead">
+                <strong>@Model.TrackTitle</strong> — @Model.CurriculumTitle · @Model.BatchName<br />
+                <span>الطلاب الذين لم يجتازوا الخطة العلاجية — طُبع في @Tz.ConvertToSaudi(DateTime.UtcNow).ToString("yyyy-MM-dd HH:mm")</span>
+            </div>
             @if (dash.NotPassed.Count == 0)
             {
                 <div class="rtk-empty"><i class="fas fa-circle-check"></i> لا يوجد طلاب لم يجتازوا أي محور.</div>
             }
             else
             {
-                <ul class="rtk-notpassed">
-                    @foreach (var n in dash.NotPassed)
-                    {
-                        <li>
-                            يُسجَّل أن الطالب <strong>@n.StudentName</strong> لم يجتز الخطة العلاجية للمحور «@n.AxisTitle»
-                            @if (n.Status == RemedialTrackAxisStatus.FailedOpenedByAdmin) { <span class="rtk-badge">نُقل بقرار الإدارة</span> }
-                            else { <span class="rtk-badge rtk-badge--lock">بانتظار الإدارة</span> }
-                        </li>
-                    }
-                </ul>
+                <div class="rtk-table-wrap">
+                    <table class="rtk-table rtk-table--zebra rtk-table--np">
+                        <thead><tr>
+                            <th>#</th><th>الطالب</th><th>المحور</th><th>الجولة</th><th>الاختبار الأول</th><th>الاختبار الثاني</th>
+                            <th>المحاولات</th><th>وقت التعثّر</th><th>ما تم في الجلسة</th><th class="rtk-noprint">إجراء</th>
+                        </tr></thead>
+                        <tbody>
+                            @{ var rowNo = 0; }
+                            @foreach (var n in dash.NotPassed)
+                            {
+                                rowNo++;
+                                <tr class="rtk-row @(n.Status == RemedialTrackAxisStatus.FailedBlocked ? "rtk-row--blocked" : "rtk-row--moved")">
+                                    <td>@rowNo</td>
+                                    <td class="rtk-name">@n.StudentName</td>
+                                    <td>@n.AxisOrder. @n.AxisTitle</td>
+                                    <td>@n.Round</td>
+                                    <td>@Pct(n.Exam101Percent)</td>
+                                    <td>@Pct(n.Exam102Percent)</td>
+                                    <td>@n.AttemptsCount</td>
+                                    <td>@(n.FailedAtUtc.HasValue ? Tz.ConvertToSaudi(n.FailedAtUtc.Value).ToString("yyyy-MM-dd HH:mm") : "—")</td>
+                                    <td class="rtk-np__details">
+                                        @if (n.Status == RemedialTrackAxisStatus.FailedOpenedByAdmin)
+                                        {
+                                            <span class="rtk-badge">نُقل بقرار الإدارة</span>
+                                            <div class="rtk-hint">
+                                                @(n.AdminOpenedByName ?? "—")@(n.AdminOpenedAtUtc.HasValue ? " · " + Tz.ConvertToSaudi(n.AdminOpenedAtUtc.Value).ToString("yyyy-MM-dd HH:mm") : "")
+                                                @if (!string.IsNullOrWhiteSpace(n.AdminOpenReason)) { <text><br />السبب: @n.AdminOpenReason</text> }
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <span class="rtk-badge rtk-badge--lock">بانتظار الإدارة</span>
+                                            <div class="rtk-hint">لم يجتز الاختبارين ولم يُفتح له المحور التالي بعد.</div>
+                                        }
+                                    </td>
+                                    <td class="rtk-noprint">
+                                        <div class="d-flex gap-1 flex-wrap">
+                                            @if (dash.CanUnlock && n.CanUnlockNext && Model.IsActive)
+                                            {
+                                                <button type="button" class="rtk-btn rtk-btn--sm" data-rtk-act="unlock-open"
+                                                        data-enrollment="@n.EnrollmentId" data-axis="@n.AxisProgressId"
+                                                        data-student="@n.StudentName" data-title="@n.AxisTitle"><i class="fas fa-lock-open"></i> تمرير للمحور التالي</button>
+                                            }
+                                            @if (dash.CanReadReports)
+                                            {
+                                                <a class="rtk-btn rtk-btn--sm rtk-btn--outline" asp-area="Admin" asp-controller="RemedialTrackReports" asp-action="Student" asp-route-enrollmentId="@n.EnrollmentId" target="_blank" rel="noopener">التقرير</a>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
                 @if (dash.NotPassedTruncated)
                 {
                     <div class="rtk-hint mt-2">عُرض أول @QdratNew.ViewModels.RemedialTracks.RemedialTrackDashboardVm.MaxNotPassedListed صفًّا فقط.</div>
@@ -406,6 +475,10 @@
                     if (v && res.data) v.textContent = res.data;
                     setTimeout(function () { window.location.reload(); }, 900);
                 });
+            } else if (act === 'print-np') {
+                root.classList.add('rtk-printing-np');
+                window.addEventListener('afterprint', function () { root.classList.remove('rtk-printing-np'); }, { once: true });
+                window.print();
             } else if (act === 'unlock-open') {
                 var box = document.getElementById('rtkUnlockBox');
                 if (!box) return;

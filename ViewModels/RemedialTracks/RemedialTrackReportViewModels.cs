@@ -169,6 +169,20 @@ namespace QdratNew.ViewModels.RemedialTracks
         public string StudentName { get; set; } = string.Empty;
         public string AxisTitle { get; set; } = string.Empty;
         public RemedialTrackAxisStatus Status { get; set; }
+
+        // تفاصيل الجلسة (للجدول المخصّص للطباعة والمتابعة)
+        public int AxisProgressId { get; set; }
+        public int AxisOrder { get; set; }
+        public int Round { get; set; }
+        public double? Exam101Percent { get; set; }
+        public double? Exam102Percent { get; set; }
+        public int AttemptsCount { get; set; }
+        public DateTime? FailedAtUtc { get; set; }
+        public string? AdminOpenedByName { get; set; }
+        public string? AdminOpenReason { get; set; }
+        public DateTime? AdminOpenedAtUtc { get; set; }
+        /// <summary>محجوب ويمكن للإدارة فتح المحور التالي له (FailedBlocked قبل آخر محور).</summary>
+        public bool CanUnlockNext { get; set; }
     }
 
     public sealed class RemedialTrackDashboardVm

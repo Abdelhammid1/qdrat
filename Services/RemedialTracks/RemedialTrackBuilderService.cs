@@ -72,12 +72,21 @@ namespace QdratNew.Services.RemedialTracks
                     AxesCount = t.Axes.Count,
                     VideosCount = t.Axes.SelectMany(a => a.Videos).Count(),
                     CreatedByName = t.CreatedByName,
-                    CreatedAtUtc = t.CreatedAtUtc
+                    CreatedAtUtc = t.CreatedAtUtc,
+                    EnrolledCount = db.RemedialTrackEnrollments.Count(e => e.TrackId == t.Id && e.Status != RemedialTrackEnrollmentStatus.Cancelled),
+                    StartedCount = db.RemedialTrackEnrollments.Count(e => e.TrackId == t.Id && e.Status != RemedialTrackEnrollmentStatus.Cancelled && e.StartedAtUtc != null)
                 })
+                .ToListAsync(ct);
+
+            var tabs = await db.RemedialTracks.AsNoTracking()
+                .GroupBy(t => new { t.CurriculumId, t.Curriculum!.Title })
+                .Select(g => new RemedialTrackCurriculumTabVm { Id = g.Key.CurriculumId, Text = g.Key.Title, Count = g.Count() })
+                .OrderBy(x => x.Text)
                 .ToListAsync(ct);
 
             return new RemedialTrackIndexVm
             {
+                CurriculumTabs = tabs,
                 Items = items,
                 Curricula = await LoadCurriculaAsync(db, ct),
                 Search = search,
