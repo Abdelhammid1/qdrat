@@ -103,6 +103,27 @@ namespace QdratNew.Services.RemedialTracks
         // ---------- الإنشاء داخل المعاملة ----------
 
         /// <summary>
+        /// يبني ويسلسل لقطة التقرير (RTK-S12.1: يُعاد استخدامه عند الإرسال اليدوي لصف Pending لم تُبنَ لقطته).
+        /// أي فشل (بناء أو حجم &gt; 64KB) ← Json=null بلا استثناء، والقرار لمن يستدعي.
+        /// </summary>
+        public static async Task<(string? Json, string? AxisTitle)> TryBuildSnapshotJsonAsync(
+            ApplicationDbContext db, int enrollmentId, int? focusAxisOrder, DateTime now, ILogger logger, CancellationToken ct)
+        {
+            try
+            {
+                var vm = await RemedialTrackReportBuilder.BuildAsync(db, enrollmentId, null, null, includeNote: false, now, ct);
+                if (vm is null) return (null, null);
+                var snap = ToSnapshot(vm, focusAxisOrder);
+                return (Serialize(snap), snap.FocusAxisTitle);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex, "RTK: تعذّر بناء لقطة تقرير ولي الأمر (تسجيل {EnrollmentId})", enrollmentId);
+                return (null, null);
+            }
+        }
+
+        /// <summary>
         /// ينشئ تقريرًا واحدًا لـ (تسجيل، محور، نوع) إن لم يوجد (Idempotent) ويحفظه؛ ثم يرسل إشعار ولي الأمر عند التفعيل التلقائي.
         /// المتطلب: حالة المحور/التسجيل محفوظة قبل الاستدعاء (اللقطة تُقرأ من القاعدة).
         /// </summary>
@@ -128,22 +149,7 @@ namespace QdratNew.Services.RemedialTracks
             if (ctx is null) return;
 
             // بناء اللقطة: فشله لا يُفشل تسليم الاختبار — يبقى الصف Pending لإعادة المحاولة من طابور الأدمن
-            string? json = null;
-            string? axisTitle = null;
-            try
-            {
-                var vm = await RemedialTrackReportBuilder.BuildAsync(db, enrollmentId, null, null, includeNote: false, now, ct);
-                if (vm is not null)
-                {
-                    var snap = ToSnapshot(vm, focusAxisOrder);
-                    axisTitle = snap.FocusAxisTitle;
-                    json = Serialize(snap);
-                }
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                logger.LogWarning(ex, "RTK: تعذّر بناء لقطة تقرير ولي الأمر (تسجيل {EnrollmentId}، نوع {Kind})", enrollmentId, kind);
-            }
+            var (json, axisTitle) = await TryBuildSnapshotJsonAsync(db, enrollmentId, focusAxisOrder, now, logger, ct);
 
             var hasParent = ctx.ParentId.HasValue && !string.IsNullOrEmpty(ctx.ParentUserId);
             var status = !hasParent

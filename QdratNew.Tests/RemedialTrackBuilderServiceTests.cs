@@ -579,7 +579,7 @@ namespace QdratNew.Tests
             var r = await f.Sut.MarkReadyAsync(id);
 
             Assert.False(r.Success);
-            Assert.Contains((IReadOnlyList<string>)r.Data!, s => s.Contains("101"));
+            Assert.Contains((IReadOnlyList<string>)r.Data!, s => s.Contains("الاختبار الأول"));
         }
 
         [Fact]

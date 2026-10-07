@@ -212,5 +212,6 @@
         // RemedialTrackReports — التقارير
         public const string RemedialTrackReports_Read = "RemedialTrackReports:Read";
         public const string RemedialTrackReports_Edit = "RemedialTrackReports:Edit";                       // ملاحظة تقرير ولي الأمر
+        public const string RemedialTrackReports_Send = "RemedialTrackReports:Send";                       // RTK-S12.1: إرسال/إعادة/إيقاف تقارير أولياء الأمور
     }
 }

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>تقرير تنفيذ RTK-S12</title>
+<style>
+:root{--bg:#f7f8fa;--surface:#fff;--ink:#161b26;--muted:#4c5566;--line:#dde1e7;--brand:#2f59c0;--ok:#2fa86a;--warn:#c88a14}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#10131a;--surface:#171c27;--ink:#eef1f6;--muted:#b3bccb;--line:#2a3140;--brand:#9db8f5}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Cairo","Segoe UI",Tahoma,sans-serif;line-height:1.7}
+.wrap{max-width:960px;margin:0 auto;padding:24px 16px}
+h1{font-size:1.5rem;margin:0 0 .3em}h2{font-size:1.15rem;margin:0 0 .6em;color:var(--brand)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin-bottom:16px;overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.92rem;min-width:480px}
+th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);vertical-align:top}
+code{font-family:ui-monospace,Consolas,monospace;font-size:.85em;direction:ltr;unicode-bidi:embed}
+.ok{color:var(--ok);font-weight:700}.warn{color:var(--warn);font-weight:700}
+ul,ol{margin:.3em 0;padding-inline-start:1.3em}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>RTK-S12 — طابور الأدمن + مراجعة أمان + اختبارات + توثيق ونشر</h1>
+<p style="color:var(--muted)">Epic RTK · Sprint 12 · 11 نقطة · المحطة M6 · الحالة: <span class="ok">مكتمل</span> (2026-10-07) — تقرير مرحلي يغلق حزمة v2 (S8–S12)</p>
+
+<div class="card">
+<h2>القصص المنفّذة</h2>
+<table>
+<tr><th>القصة</th><th>ما تم</th></tr>
+<tr><td>RTK-S12.1 (3)</td><td><ul>
+<li><code>IRemedialTrackParentReportAdminService</code> / <code>RemedialTrackParentReportAdminService</code>: طابور مرقّم (20/صفحة) بفلاتر الحالة والأمر والدفعة وعدّادات الحالات، و<code>SendAsync</code> (Pending/Suppressed، وNoParent بعد ربط ولي أمر؛ يعيد بناء اللقطة إن كانت فارغة)، <code>ResendAsync</code> (حارس دقيقة + <code>RowVersion</code>)، <code>SuppressAsync</code> (Idempotent)، <code>ToggleAutoSendAsync</code>.</li>
+<li>كل إجراء يفرض <code>scope.Allows</code> (خارج النطاق/محذوف/غير موجود ← 404) ويكتب سجل نشاط بوسم <code>[RTK pub:id]</code>.</li>
+<li>الأكشنات: <code>ParentReports</code> (GET) و<code>SendParentReport</code>/<code>ResendParentReport</code>/<code>SuppressParentReport</code> في <code>RemedialTrackReportsController</code> بصلاحية <code>RemedialTrackReports:Send</code> الجديدة (الأماكن الثلاثة)، و<code>ToggleAutoSend</code> في <code>RemedialTrackPublicationsController</code> بصلاحية <code>ManageReview</code> (نُقل إلى متحكّم الأوامر ليطابق الحارس الآلي لبادئة الصلاحيات).</li>
+<li>واجهة <code>ParentReports.cshtml</code> (RTL، فلاتر، تنبيه NoParent، حالات الفراغ، تأكيد قبل كل إجراء، منع الربط المكرر) + رابط «طابور تقارير أولياء الأمور» من لوحة أمر النشر.</li>
+<li>إعادة استخدام <code>RemedialTrackParentReportWriter.TryBuildSnapshotJsonAsync</code> (استُخرج من <code>AddAsync</code> بلا تغيير سلوك).</li></ul></td></tr>
+<tr><td>RTK-S12.2 (3)</td><td><code>RTK_V2_Security_Review.md</code>: لا Critical/High؛ Medium: غياب رؤوس الأمان على مستوى المنصة (لم يُعدَّل)، وعدّادات Rate Limit محلية لكل نسخة؛ 4 Low و4 ملاحظات بالأدلة.</td></tr>
+<tr><td>RTK-S12.3 (3)</td><td><ul>
+<li>وحدات: <code>RemedialTrackParentReportAdminTests</code> (12 اختبارًا).</li>
+<li>SQL Server حقيقي (<code>RemedialTrackSqlServerV2Tests</code>، 8): الفهرس المُصفّى بعد الحذف الناعم، الفهرس الفريد مع <code>NULL</code>، تزامن إنشاء/إقرار/إعادة إرسال/إرسال يدوي، عدد استعلامات التقرير، والطابور تحت <code>CompatibilityLevel 120</code>.</li>
+<li>تكامل HTTP (<code>RemedialTrackV2IntegrationTests</code>، 9): 403 وAntiforgery لـ7 نقاط نهاية، IDOR بين أولياء الأمور (404)، إخفاء الموقوف/غير المُرسل، ترميز HTML، إقرار مرة واحدة.</li>
+<li>Playwright 375×812 (<code>RemedialTrackV2BrowserTests</code>، 3): ملء الشاشة البديل مع حجب <code>requestFullscreen</code>، وضع المراجعة بلا نبضات ولا كتابة تقدّم ويُغلق فورًا عند الإيقاف/الانتهاء، صفحة ولي الأمر RTL وبلا تمرير أفقي وطباعتها.</li>
+<li>سكربتات SQL (<code>RTK_TermsAccepted</code> ← <code>RTK_PublicationSoftDelete</code> ← <code>RTK_VideoReview</code> ← <code>RTK_ParentReports</code>) شُغّلت <b>مرتين</b> على قاعدة الاختبار المعزولة بلا خطأ.</li></ul></td></tr>
+<tr><td>RTK-S12.4 (2)</td><td><code>ADR-RTK-02</code> في <code>QdratNew_AI_Context.md</code> مع مؤشر للملفين، وهذا التقرير، وترتيب السكربتات أدناه. <code>AGENTS.md</code> لا يذكر حالة RTK فلم يُعدَّل.</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h2>إصلاحات اختبارات قديمة اكتُشفت أثناء التشغيل (لا تغيير في سلوك الإنتاج)</h2>
+<ul>
+<li><code>MarkReady_FailsWhenModelBecameInvalid_AfterAssignment</code> و<code>FullPath_Fail101And102_BlocksAxis_...</code> (الفشلان المزمنان منذ S8): التوقّعات تخالف نص الرسائل الحالي («الاختبار الأول»، «الأول: 25%»)؛ حُدّث نص التأكيد فقط.</li>
+<li>اختبارات التكامل/E2E القديمة كانت متعطّلة بعد S8: المُجهِّز لا يضع <code>TermsAcceptedAtUtc</code> (فتظهر صفحة الشروط)، ومحدّد <code>.rtk-result-title</code> تغيّر بعد إعادة تصميم صفحة النتيجة (<code>.rs-message h2</code>)، وSweetAlert يُحمَّل من CDN فصارت نافذة التأكيد اختيارية. عُدِّلت المُجهِّز والاختبار فقط.</li>
+</ul>
+</div>
+
+<div class="card">
+<h2>التحقق (أوامر ونتائج فعلية)</h2>
+<ul>
+<li><code>dotnet build -c Release</code>: <span class="ok">ناجح، 0 أخطاء</span>، ولا تحذيرات في ملفات RTK.</li>
+<li>اختبارات RTK مع <code>QDRAT_TEST_SQL</code> (قاعدة <code>QdratNewDB_IntegrationTests</code> المعزولة): <b>507 ناجحًا من 508</b>، المتخطّى 1 = اختبار الحمل الاختياري (<code>RTK_LOAD=1</code>).</li>
+<li>الحزمة كاملة بلا متغير SQL: <b>655 ناجحًا، 0 فشل، 51 متخطّى</b> (المتطلّبة لقاعدة حقيقية).</li>
+<li>تثبيت Chromium لـPlaywright أُجري على الجهاز (<code>playwright.ps1 install chromium</code>) لأنه غير مثبّت.</li>
+</ul>
+</div>
+
+<div class="card">
+<h2>ترتيب نشر سكربتات SQL (Idempotent، إضافات فقط) والتراجع</h2>
+<ol>
+<li><code>RTK_TermsAccepted.sql</code></li>
+<li><code>RTK_PublicationSoftDelete.sql</code> — تراجع: <code>RTK_PublicationSoftDelete_Rollback.sql</code> (يتوقف إن وُجد محذوف)</li>
+<li><code>RTK_VideoReview.sql</code> — تراجع: <code>RTK_VideoReview_Rollback.sql</code></li>
+<li><code>RTK_ParentReports.sql</code> — تراجع: <code>RTK_ParentReports_Rollback.sql</code></li>
+</ol>
+<p>التشغيل بـ<code>sqlcmd -I</code> (أو SSMS) لأن الفهارس المُصفّاة تتطلب <code>QUOTED_IDENTIFIER ON</code>. السكربتات تُطبَّق <b>قبل</b> نشر الكود (العمود غير الموجود يكسر الاستعلامات). لم يُطبَّق أي سكربت على قاعدة الإنتاج.</p>
+</div>
+
+<div class="card">
+<h2>الافتراضات المطلوب تأكيدها</h2>
+<ul>
+<li>(أ) الإرسال التلقائي مفعّل افتراضيًا لكل أمر نشر جديد (مفتاح في نموذج الإنشاء).</li>
+<li>(ب) وضع المراجعة لا يُعفي من الرقم المرجعي في الأوامر الحضورية (لم يُغيَّر).</li>
+<li>(ج) لا إعادة إقرار بالشروط لمن أقرّ سابقًا بعد تعديل نصها.</li>
+<li><b>معنى «الأدمن العام»:</b> مفترض = دور <code>SuperAdmin</code> (مع <code>Owner</code> و<code>Developer</code> كما في المعالج). <span class="warn">بانتظار تأكيدك.</span></li>
+</ul>
+</div>
+
+<div class="card">
+<h2>ملاحظات ومخاطر متبقية</h2>
+<ul>
+<li>القسم <code>QuestionReviewTasks</code> (Epic QRT) غير مدرج في <code>GetControllersCatalog</code> رغم وجوده في كتالوج الإجراءات — لم يُعدَّل (خارج النطاق).</li>
+<li>لا رؤوس أمان في الكود (F1) وعدّادات المعدّل محلية لكل نسخة (F2) — انظر <code>RTK_V2_Security_Review.md</code>.</li>
+<li><span class="warn">لم يُتحقق:</span> ملء الشاشة على iPhone Safari وAndroid Chrome الحقيقيين مع YouTube/Vimeo؛ تشغيل فيديو حقيقي في وضع المراجعة؛ اختبار الحمل؛ تطبيق السكربتات على الإنتاج.</li>
+<li>خادم E2E يُشغَّل من <code>bin/Debug</code> — ابنِ Debug قبل تشغيل اختبارات المتصفح.</li>
+<li>مقترح فقط: مفتاح صلاحية مخصّص لـ<code>ToggleAutoSend</code>، وإشعار للطالب عند فتح/إغلاق المراجعة.</li>
+</ul>
+</div>
+</div>
+</body>
+</html>

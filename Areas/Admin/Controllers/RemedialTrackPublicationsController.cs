@@ -23,6 +23,7 @@ namespace QdratNew.Areas.Admin.Controllers
     {
         private readonly IRemedialTrackPublicationService _publications;
         private readonly IRemedialTrackReportService _reports;
+        private readonly IRemedialTrackParentReportAdminService _parentAdmin;
         private readonly IEmployeeBatchAccessService _batchAccess;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IAuthorizationService _authorization;
@@ -31,6 +32,7 @@ namespace QdratNew.Areas.Admin.Controllers
         public RemedialTrackPublicationsController(
             IRemedialTrackPublicationService publications,
             IRemedialTrackReportService reports,
+            IRemedialTrackParentReportAdminService parentAdmin,
             IEmployeeBatchAccessService batchAccess,
             UserManager<ApplicationUser> userManager,
             IAuthorizationService authorization,
@@ -39,6 +41,7 @@ namespace QdratNew.Areas.Admin.Controllers
             _tz = tz;
             _publications = publications;
             _reports = reports;
+            _parentAdmin = parentAdmin;
             _batchAccess = batchAccess;
             _userManager = userManager;
             _authorization = authorization;
@@ -222,6 +225,21 @@ namespace QdratNew.Areas.Admin.Controllers
                 new RemedialTrackReviewInput(input.EnrollmentIds, input.ApplyToAll, input.Enabled, untilUtc),
                 actor, await ScopeAsync(), ct);
             return Json(new { success = r.Success, message = r.Message, data = r.Data, warnings = r.Warnings });
+        }
+
+        // ---------------- RTK-S12.1: مفتاح الإرسال التلقائي لتقارير أولياء الأمور ----------------
+
+        [HttpPost, ValidateAntiForgeryToken]
+        [AdminPermission("RemedialTrackPublications", "ManageReview")]
+        public async Task<IActionResult> ToggleAutoSend([FromForm] ToggleRemedialTrackAutoSendInput input, CancellationToken ct)
+        {
+            var actor = await ActorAsync();
+            if (actor is null)
+                return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
+
+            var r = await _parentAdmin.ToggleAutoSendAsync(input.PublicationId, input.Enabled, actor, await ScopeAsync(), ct);
+            if (!r.Found) return NotFound();   // خارج نطاق الدفعات ≡ غير موجود (لا تسريب)
+            return Json(new { success = r.Success, message = r.Message });
         }
 
         // ---------------- RTK-S6.3: فتح المحور التالي ----------------

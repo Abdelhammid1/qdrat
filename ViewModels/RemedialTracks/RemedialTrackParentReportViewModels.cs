@@ -101,3 +101,81 @@ namespace QdratNew.ViewModels.RemedialTracks
     /// <summary>نتيجة إجراء ولي الأمر (إقرار): Success=false ← غير موجود/غير مملوك (يُترجم إلى 404).</summary>
     public sealed record RemedialTrackParentAckResult(bool Found, bool AlreadyAcknowledged, DateTime? AcknowledgedAtUtc);
 }
+
+namespace QdratNew.ViewModels.RemedialTracks
+{
+    // ============ RTK-S12.1: طابور تقارير أولياء الأمور للأدمن ============
+
+    public sealed class RemedialTrackParentReportQueueFilter
+    {
+        public RemedialTrackParentReportStatus? Status { get; set; }
+        public int? PublicationId { get; set; }
+        public int? BatchId { get; set; }
+        public int Page { get; set; } = 1;
+    }
+
+    public sealed class RemedialTrackParentReportQueueItemVm
+    {
+        public int Id { get; set; }
+        public int EnrollmentId { get; set; }
+        public int PublicationId { get; set; }
+        public RemedialTrackParentReportKind Kind { get; set; }
+        public RemedialTrackParentReportStatus Status { get; set; }
+        public string StudentName { get; set; } = string.Empty;
+        public string? ParentName { get; set; }
+        public string TrackTitle { get; set; } = string.Empty;
+        public string BatchName { get; set; } = string.Empty;
+        public string? FocusAxisTitle { get; set; }
+        public bool HasSnapshot { get; set; }
+        public DateTime CreatedAtUtc { get; set; }
+        public DateTime? SentAtUtc { get; set; }
+        public DateTime? AcknowledgedAtUtc { get; set; }
+    }
+
+    public sealed class RemedialTrackParentReportQueueLookup
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+    }
+
+    public sealed class RemedialTrackParentReportQueueVm
+    {
+        public const int PageSize = 20;
+
+        public IReadOnlyList<RemedialTrackParentReportQueueItemVm> Items { get; set; } = Array.Empty<RemedialTrackParentReportQueueItemVm>();
+        public RemedialTrackParentReportQueueFilter Filter { get; set; } = new();
+        public int Page { get; set; } = 1;
+        public int Total { get; set; }
+        public int TotalPages => Total <= 0 ? 1 : (int)Math.Ceiling(Total / (double)PageSize);
+
+        /// <summary>عدد التقارير لكل حالة ضمن الأمر/الدفعة المختارة (بمعزل عن فلتر الحالة).</summary>
+        public IReadOnlyDictionary<RemedialTrackParentReportStatus, int> StatusCounts { get; set; }
+            = new Dictionary<RemedialTrackParentReportStatus, int>();
+
+        public IReadOnlyList<RemedialTrackParentReportQueueLookup> Publications { get; set; } = Array.Empty<RemedialTrackParentReportQueueLookup>();
+        public IReadOnlyList<RemedialTrackParentReportQueueLookup> Batches { get; set; } = Array.Empty<RemedialTrackParentReportQueueLookup>();
+
+        public bool CanSend { get; set; }
+        public bool CanToggleAutoSend { get; set; }
+    }
+
+    /// <summary>نتيجة إجراء أدمن على تقرير ولي الأمر: Found=false ← غير موجود/خارج نطاق الدفعات (يُترجم إلى 404).</summary>
+    public sealed record RemedialTrackParentReportActionResult(bool Found, bool Success, string Message)
+    {
+        public static RemedialTrackParentReportActionResult NotFound { get; } = new(false, false, "غير موجود.");
+        public static RemedialTrackParentReportActionResult Ok(string message) => new(true, true, message);
+        public static RemedialTrackParentReportActionResult Fail(string message) => new(true, false, message);
+    }
+
+    /// <summary>نموذج POST (لا Overposting: المعرّف فقط).</summary>
+    public sealed class RemedialTrackParentReportActionInput
+    {
+        public int Id { get; set; }
+    }
+
+    public sealed class ToggleRemedialTrackAutoSendInput
+    {
+        public int PublicationId { get; set; }
+        public bool Enabled { get; set; }
+    }
+}

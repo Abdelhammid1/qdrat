@@ -1,0 +1,255 @@
+@using QdratNew.Enums
+@using QdratNew.ViewModels.RemedialTracks
+@model QdratNew.ViewModels.RemedialTracks.RemedialTrackParentReportQueueVm
+@inject QdratNew.Services.Interfaces.ITimeZoneService Tz
+@functions {
+    static string StatusLabel(RemedialTrackParentReportStatus s) => s switch
+    {
+        RemedialTrackParentReportStatus.Pending => "بانتظار الإرسال",
+        RemedialTrackParentReportStatus.Sent => "أُرسل",
+        RemedialTrackParentReportStatus.NoParent => "لا يوجد ولي أمر مرتبط",
+        _ => "موقوف"
+    };
+    static string StatusClass(RemedialTrackParentReportStatus s) => s switch
+    {
+        RemedialTrackParentReportStatus.Sent => "rtk-badge--ready",
+        RemedialTrackParentReportStatus.Pending => "rtk-badge--draft",
+        RemedialTrackParentReportStatus.NoParent => "rtk-badge--lock",
+        _ => "rtk-badge--archived"
+    };
+    static string KindLabel(RemedialTrackParentReportKind k) => k == RemedialTrackParentReportKind.Final ? "ختامي" : "عدم اجتياز محور";
+    string Date(DateTime? utc) => utc.HasValue ? Tz.ConvertToSaudi(utc.Value).ToString("yyyy-MM-dd HH:mm") : "—";
+}
+@{
+    ViewData["Title"] = "تقارير أولياء الأمور — الخطة العلاجية";
+    var f = Model.Filter;
+    var allStatuses = new[] { RemedialTrackParentReportStatus.Pending, RemedialTrackParentReportStatus.NoParent, RemedialTrackParentReportStatus.Sent, RemedialTrackParentReportStatus.Suppressed };
+    int Count(RemedialTrackParentReportStatus s) => Model.StatusCounts.TryGetValue(s, out var n) ? n : 0;
+    var selectedPub = f.PublicationId.HasValue ? Model.Publications.FirstOrDefault(p => p.Id == f.PublicationId.Value) : null;
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/admin-rtk.css" asp-append-version="true" />
+}
+
+@Html.AntiForgeryToken()
+
+<div class="rtk-page container-fluid mt-4" dir="rtl">
+
+    <header class="rtk-hero">
+        <div class="rtk-hero__top">
+            <div>
+                <div class="rtk-hero__label"><i class="fas fa-envelope-open-text ms-1"></i> الخطة العلاجية العاجلة</div>
+                <h1>تقارير أولياء الأمور</h1>
+                <p>تُنشأ التقارير تلقائيًا عند عدم اجتياز محور أو انتهاء الخطة. من هنا تتابع الإرسال، وتُرسل يدويًا ما لم يُرسَل، وتُوقف أي تقرير.</p>
+            </div>
+            <div class="rtk-hero__actions">
+                <a class="rtk-btn rtk-btn--light" asp-area="Admin" asp-controller="RemedialTrackPublications" asp-action="Index">
+                    <i class="fas fa-arrow-right"></i> أوامر النشر
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <form method="get" class="rtk-panel d-flex gap-2 flex-wrap align-items-end" aria-label="فلاتر الطابور">
+        <div class="rtk-field mb-0">
+            <label for="fStatus">الحالة</label>
+            <select id="fStatus" name="status">
+                <option value="">الكل</option>
+                @foreach (var s in allStatuses)
+                {
+                    <option value="@((int)s)" selected="@(f.Status == s)">@StatusLabel(s) (@Count(s))</option>
+                }
+            </select>
+        </div>
+        <div class="rtk-field mb-0">
+            <label for="fPub">أمر النشر</label>
+            <select id="fPub" name="publicationId">
+                <option value="">كل الأوامر</option>
+                @foreach (var p in Model.Publications)
+                {
+                    <option value="@p.Id" selected="@(f.PublicationId == p.Id)">@p.Name</option>
+                }
+            </select>
+        </div>
+        <div class="rtk-field mb-0">
+            <label for="fBatch">الدفعة</label>
+            <select id="fBatch" name="batchId">
+                <option value="">كل الدفعات</option>
+                @foreach (var b in Model.Batches)
+                {
+                    <option value="@b.Id" selected="@(f.BatchId == b.Id)">@b.Name</option>
+                }
+            </select>
+        </div>
+        <button type="submit" class="rtk-btn"><i class="fas fa-filter"></i> تطبيق</button>
+        <a class="rtk-btn rtk-btn--outline" asp-action="ParentReports">مسح الفلاتر</a>
+    </form>
+
+    @if (selectedPub is not null && Model.CanToggleAutoSend)
+    {
+        <section class="rtk-panel" id="rtkAutoSend" aria-label="الإرسال التلقائي" data-pub="@selectedPub.Id">
+            <div class="d-flex gap-2 flex-wrap align-items-center justify-content-between">
+                <div><strong>الإرسال التلقائي لهذا الأمر:</strong> @selectedPub.Name
+                    <div class="rtk-hint">يسري التغيير على التقارير القادمة فقط؛ لا يغيّر ما أُنشئ سابقًا.</div></div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="rtk-btn" data-act="auto-on"><i class="fas fa-play"></i> تشغيل</button>
+                    <button type="button" class="rtk-btn rtk-btn--outline" data-act="auto-off"><i class="fas fa-pause"></i> إيقاف</button>
+                </div>
+            </div>
+        </section>
+    }
+
+    <section class="rtk-panel" id="rtkParentQueue" aria-label="طابور تقارير أولياء الأمور"
+             data-send="@Url.Action("SendParentReport", "RemedialTrackReports", new { area = "Admin" })"
+             data-resend="@Url.Action("ResendParentReport", "RemedialTrackReports", new { area = "Admin" })"
+             data-suppress="@Url.Action("SuppressParentReport", "RemedialTrackReports", new { area = "Admin" })"
+             data-toggle="@Url.Action("ToggleAutoSend", "RemedialTrackPublications", new { area = "Admin" })">
+        <h2>التقارير <span class="rtk-count">@Model.Total</span></h2>
+        @if (Model.Items.Count == 0)
+        {
+            <div class="rtk-empty"><i class="fas fa-envelope-open-text"></i> لا توجد تقارير مطابقة. تظهر التقارير هنا عند رسوب طالب في محور أو انتهاء خطته.</div>
+        }
+        else
+        {
+            <div class="rtk-table-wrap">
+                <table class="rtk-table rtk-table--zebra">
+                    <thead>
+                        <tr><th>الطالب</th><th>ولي الأمر</th><th>الخطة / المحور</th><th>النوع</th><th>الحالة</th><th>أُنشئ</th><th>إجراءات</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in Model.Items)
+                        {
+                            <tr>
+                                <td>@r.StudentName<div class="rtk-hint">@r.BatchName</div></td>
+                                <td>@(r.ParentName ?? "—")</td>
+                                <td>@r.TrackTitle@if (!string.IsNullOrEmpty(r.FocusAxisTitle)) { <div class="rtk-hint">المحور: @r.FocusAxisTitle</div> }</td>
+                                <td>@KindLabel(r.Kind)</td>
+                                <td>
+                                    <span class="rtk-badge @StatusClass(r.Status)">@StatusLabel(r.Status)</span>
+                                    @if (r.Status == RemedialTrackParentReportStatus.NoParent)
+                                    {
+                                        <div class="rtk-hint">⚠ لا يُرسَل إشعار. اربط الطالب بولي أمر ثم اضغط «إرسال».</div>
+                                    }
+                                    @if (r.Status == RemedialTrackParentReportStatus.Pending && !r.HasSnapshot)
+                                    {
+                                        <div class="rtk-hint">⚠ لم تُبنَ لقطة التقرير؛ سيُعاد بناؤها عند الإرسال.</div>
+                                    }
+                                    @if (r.Status == RemedialTrackParentReportStatus.Sent)
+                                    {
+                                        <div class="rtk-hint">أُرسل: @Date(r.SentAtUtc)<br />@(r.AcknowledgedAtUtc.HasValue ? "أقرّ بالاطلاع: " + Date(r.AcknowledgedAtUtc) : "لم يُقرّ بعد")</div>
+                                    }
+                                </td>
+                                <td>@Date(r.CreatedAtUtc)</td>
+                                <td>
+                                    <div class="d-flex gap-1 flex-wrap">
+                                        <a class="rtk-btn rtk-btn--outline rtk-btn--sm" asp-action="Student" asp-route-enrollmentId="@r.EnrollmentId" target="_blank" rel="noopener"><i class="fas fa-print"></i> التقرير</a>
+                                        @if (Model.CanSend)
+                                        {
+                                            @if (r.Status is RemedialTrackParentReportStatus.Pending or RemedialTrackParentReportStatus.Suppressed or RemedialTrackParentReportStatus.NoParent)
+                                            {
+                                                <button type="button" class="rtk-btn rtk-btn--sm" data-act="send" data-id="@r.Id"><i class="fas fa-paper-plane"></i> إرسال</button>
+                                            }
+                                            @if (r.Status == RemedialTrackParentReportStatus.Sent)
+                                            {
+                                                <button type="button" class="rtk-btn rtk-btn--outline rtk-btn--sm" data-act="resend" data-id="@r.Id"><i class="fas fa-rotate"></i> إعادة إرسال</button>
+                                            }
+                                            @if (r.Status is RemedialTrackParentReportStatus.Pending or RemedialTrackParentReportStatus.Sent)
+                                            {
+                                                <button type="button" class="rtk-btn rtk-btn--danger rtk-btn--sm" data-act="suppress" data-id="@r.Id"><i class="fas fa-ban"></i> إيقاف</button>
+                                            }
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @if (Model.TotalPages > 1)
+            {
+                <nav class="rtk-pager" aria-label="الصفحات">
+                    @for (var i = 1; i <= Model.TotalPages; i++)
+                    {
+                        if (i == Model.Page)
+                        {
+                            <span class="is-current" aria-current="page">@i</span>
+                        }
+                        else
+                        {
+                            <a asp-action="ParentReports" asp-route-page="@i" asp-route-status="@(f.Status.HasValue ? ((int)f.Status.Value).ToString() : null)"
+                               asp-route-publicationId="@f.PublicationId" asp-route-batchId="@f.BatchId">@i</a>
+                        }
+                    }
+                </nav>
+            }
+        }
+    </section>
+
+    <div class="rtk-toast" id="rtkToast" role="status" aria-live="polite"></div>
+</div>
+
+@section Scripts {
+    <script>
+    (function () {
+        'use strict';
+        var root = document.getElementById('rtkParentQueue');
+        if (!root || root.dataset.bound === '1') return;   // منع تكرار الربط
+        root.dataset.bound = '1';
+
+        var token = (document.querySelector('input[name="__RequestVerificationToken"]') || {}).value || '';
+        var toast = document.getElementById('rtkToast');
+        var busy = false;
+
+        function esc(t) { var d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; }
+        function showToast(msg, ok) {
+            toast.innerHTML = '<div class="rtk-alert ' + (ok ? 'rtk-alert--ok' : 'rtk-alert--error') + '">' + esc(msg) + '</div>';
+            clearTimeout(showToast._t);
+            showToast._t = setTimeout(function () { toast.innerHTML = ''; }, ok ? 3000 : 7000);
+        }
+
+        function post(url, fields, btn, reload) {
+            if (busy) return;
+            busy = true; btn.disabled = true; btn.classList.add('is-busy');
+            var fd = new FormData();
+            Object.keys(fields).forEach(function (k) { fd.set(k, fields[k]); });
+            fd.set('__RequestVerificationToken', token);
+            fetch(url, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                .then(function (res) {
+                    showToast(res.message || (res.success ? 'تم.' : 'تعذّر تنفيذ العملية.'), !!res.success);
+                    if (res.success && reload) setTimeout(function () { window.location.reload(); }, 900);
+                })
+                .catch(function () { showToast('تعذّر الاتصال بالخادم أو لا تملك صلاحية على هذا التقرير. أعد المحاولة.', false); })
+                .finally(function () { busy = false; btn.disabled = false; btn.classList.remove('is-busy'); });
+        }
+
+        var texts = {
+            send: 'سيُرسَل التقرير ويصل ولي الأمر إشعار. هل تريد المتابعة؟',
+            resend: 'سيُعاد إرسال إشعار هذا التقرير لولي الأمر. هل تريد المتابعة؟',
+            suppress: 'سيختفي التقرير عن ولي الأمر ويبقى محفوظًا هنا. هل تريد المتابعة؟'
+        };
+
+        root.addEventListener('click', function (e) {
+            var btn = e.target.closest('[data-act]');
+            if (!btn || !root.contains(btn)) return;
+            var act = btn.getAttribute('data-act');
+            if (!texts[act] || !window.confirm(texts[act])) return;
+            post(root.getAttribute('data-' + act), { id: btn.getAttribute('data-id') }, btn, true);
+        });
+
+        var auto = document.getElementById('rtkAutoSend');
+        if (auto && auto.dataset.bound !== '1') {
+            auto.dataset.bound = '1';
+            auto.addEventListener('click', function (e) {
+                var btn = e.target.closest('[data-act]');
+                if (!btn) return;
+                var on = btn.getAttribute('data-act') === 'auto-on';
+                if (!window.confirm(on ? 'تشغيل الإرسال التلقائي للتقارير القادمة؟' : 'إيقاف الإرسال التلقائي؟ ستنتظر التقارير القادمة في الطابور للإرسال اليدوي.')) return;
+                post(root.getAttribute('data-toggle'), { publicationId: auto.getAttribute('data-pub'), enabled: on ? 'true' : 'false' }, btn, false);
+            });
+        }
+    })();
+    </script>
+}

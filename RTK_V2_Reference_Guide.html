@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>دليل RTK v2 الاسترشادي</title>
+<style>
+:root{--bg:#f7f8fa;--surface:#fff;--ink:#161b26;--muted:#4c5566;--line:#dde1e7;--brand:#2f59c0;--ok:#2fa86a;--warn:#c88a14;--code:#eef0f3}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#10131a;--surface:#171c27;--ink:#eef1f6;--muted:#b3bccb;--line:#2a3140;--brand:#9db8f5;--code:#222a38}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Cairo","Segoe UI",Tahoma,sans-serif;line-height:1.75}
+.wrap{max-width:1000px;margin:0 auto;padding:24px 16px}
+h1{font-size:1.6rem;margin:0 0 .3em}h2{font-size:1.25rem;margin:0 0 .6em;color:var(--brand)}h3{font-size:1.02rem;margin:1em 0 .3em}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin-bottom:16px;overflow-x:auto}
+nav.toc{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+nav.toc a{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:4px 12px;text-decoration:none;color:var(--brand);font-size:.9rem}
+table{width:100%;border-collapse:collapse;font-size:.9rem;min-width:520px}
+th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);vertical-align:top}
+code{font-family:ui-monospace,Consolas,monospace;font-size:.84em;direction:ltr;unicode-bidi:embed;background:var(--code);padding:1px 5px;border-radius:4px}
+ul,ol{margin:.3em 0;padding-inline-start:1.3em}
+.ok{color:var(--ok);font-weight:700}.warn{color:var(--warn);font-weight:700}
+.sub{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>الخطة العلاجية العاجلة — حزمة RTK v2 (S8 – S12)</h1>
+<p class="sub">ملف استرشادي يوثّق كل ما نُفِّذ في الـ Sprints الخمسة (63 نقطة) · آخر تحديث 2026-10-07 · القرارات D19–D28 · مرجع التنفيذ: <code>RTK_V2_Changes_Execution_Prompt_v1.md</code></p>
+
+<nav class="toc">
+<a href="#overview">نظرة عامة</a><a href="#s8">S8</a><a href="#s9">S9</a><a href="#s10">S10</a><a href="#s11">S11</a><a href="#s12">S12</a>
+<a href="#perm">الصلاحيات</a><a href="#sql">سكربتات SQL</a><a href="#tests">الاختبارات</a><a href="#files">خريطة الملفات</a><a href="#open">المفتوح والمخاطر</a>
+</nav>
+
+<section id="overview" class="card">
+<h2>نظرة عامة</h2>
+<table>
+<tr><th>Sprint</th><th>المحتوى</th><th>نقاط</th></tr>
+<tr><td>S8</td><td>فتح المحور التالي فورًا، نص الشروط، ملء الشاشة، صلاحيات البروفايل، سكربت الترحيل الناقص</td><td>13</td></tr>
+<tr><td>S9</td><td>الحذف الناعم، التعديل بعد النشر، سجل التعديلات</td><td>13</td></tr>
+<tr><td>S10</td><td>وضع مراجعة الفيديوهات (قراءة فقط)</td><td>13</td></tr>
+<tr><td>S11</td><td>تقارير ولي الأمر: إثراء، لقطة تلقائية، صفحة ولي الأمر، نصوص المسؤولية</td><td>13</td></tr>
+<tr><td>S12</td><td>طابور الأدمن، مراجعة أمان، اختبارات شاملة، توثيق</td><td>11</td></tr>
+</table>
+<h3>آلة الحالة (طالب × محور) بعد v2</h3>
+<ul>
+<li>مشاهدة الفيديوهات (جولة 1) ← اختبار 101 ← اجتياز ← <b>المحور التالي يُفتح فورًا</b>.</li>
+<li>رسوب 101 ← إعادة الفيديوهات (جولة 2) ← اختبار 102 ← اجتياز ← التالي فورًا.</li>
+<li>رسوب 102 ← <code>FailedBlocked</code> (حجب) + تقرير تلقائي لولي الأمر ← الأدمن يفتح التالي بسبب إلزامي (10–300 حرف).</li>
+<li>بعد الاجتياز/النقل لا فيديو ولا روابط وتبقى التقارير، إلا في وضع المراجعة المفعّل من الأدمن.</li>
+</ul>
+</section>
+
+<section id="s8" class="card">
+<h2>S8 — المسار الجديد + الشروط + ملء الشاشة + الصلاحيات (D19، D22، D27)</h2>
+<table>
+<tr><th>القصة</th><th>ما تم</th></tr>
+<tr><td>S8.1</td><td>الاجتياز يفتح التالي في نفس الطلب (<code>OpenNextAxisAsync</code> بلا <code>respectSchedule</code>). <code>OpenPendingAxesAsync</code> يعالج التسجيلات القديمة العالقة عند فتح الخطة/المحور. حُذفت الجدولة اليومية (<code>RemedialTrackSchedule</code>، <code>SaveSchedule</code>، واجهة «جدول الأيام»). عمود <code>ReleaseDay</code> باقٍ ومُهمَل (لا ترحيل هدّام). فتح الإدارة للمحور (<code>AdminOpenNextAsync</code>) كما كان.</td></tr>
+<tr><td>S8.2</td><td><code>Terms.cshtml</code> مطابق للمسار الجديد (لا «لكل يوم» ولا «أسبوعان»).</td></tr>
+<tr><td>S8.3</td><td>ملء الشاشة: Fullscreen API (+WebKit) ثم بديل CSS <code>rtk-pseudo-fs</code> عند تعذّره (iPhone/WebView)؛ يخرج بالزر وEscape؛ العلامة المائية داخل الحاوية فتبقى ظاهرة. الملفات: <code>remedial-track-player.js</code>، <code>student-rtk.css</code>.</td></tr>
+<tr><td>S8.4</td><td>الأقسام الثلاثة (<code>RemedialTracks</code>، <code>RemedialTrackPublications</code>، <code>RemedialTrackReports</code>) في <code>GetControllersCatalog</code> فتظهر في مصفوفة البروفايل.</td></tr>
+<tr><td>S8.5</td><td><code>Migrations/Scripts/RTK_TermsAccepted.sql</code> (يغلق ثغرة نشر).</td></tr>
+</table>
+</section>
+
+<section id="s9" class="card">
+<h2>S9 — الحذف الناعم + التعديل بعد النشر + السجل (D25، D26)</h2>
+<table>
+<tr><th>القصة</th><th>ما تم</th></tr>
+<tr><td>S9.1</td><td>حقول <code>IsDeleted</code> وبيانات الحذف على <code>RemedialTrackPublication</code>. <code>DeleteAsync</code> (سبب 5–300، نطاق الدفعة، Idempotent، لا يمس التسجيلات) و<code>RestoreAsync</code> (يولّد رقمًا جديدًا عند تعارض الرقم). الفهرس <code>UX_RemedialTrackPublications_ActiveCode</code> يستثني المحذوف. المحذوف يُعامَل كغير موجود في بوابة الوصول والقائمة والخطة والمحور والنبضات والاختبار والتقارير ولوحة المتابعة. تبويبا «النشطة/المحذوفة».</td></tr>
+<tr><td>S9.2</td><td>تعديل نموذجي الاختبار (<code>SaveAxisExamsAsync</code>) والفيديو (<code>EditVideoAsync</code>) بعد النشر مع تسجيل المنفّذ والقيم قبل/بعد، وتحذير بعدد الطلاب المنتظرين. مشاهدات الطلاب السابقة لا تُمس. بنية الخطة (إضافة/حذف/ترتيب) تبقى مقفلة.</td></tr>
+<tr><td>S9.3</td><td>بطاقة «آخر التعديلات» (≤ 20 صفًا) في <code>Details.cshtml</code> بربط الوسوم <code>[RTK pub:id]</code> و<code>[RTK track:id]</code> بلا أعمدة جديدة.</td></tr>
+</table>
+</section>
+
+<section id="s10" class="card">
+<h2>S10 — وضع مراجعة الفيديوهات (D24)</h2>
+<table>
+<tr><th>القصة</th><th>ما تم</th></tr>
+<tr><td>S10.1</td><td>أعمدة <code>VideoReview*</code> على <code>RemedialTrackEnrollments</code> + <code>IsVideoReviewOpen</code>.</td></tr>
+<tr><td>S10.2</td><td><code>SetVideoReviewAsync</code>: فرد/محدّدون/الكل، معرّف غريب يرفض الطلب كله، حد 500، انتهاء مستقبلي ≤ 90 يومًا، تحديث مجمَّع بلا حلقة. الخادم يحسب الإتاحة لحظة الطلب؛ <code>Locked</code> لا يُراجَع؛ النبضات مرفوضة.</td></tr>
+<tr><td>S10.3</td><td>واجهة الأدمن في <code>Details.cshtml</code>: عمود المراجعة، تحديد متعدد، فتح/إغلاق للمحدّدين أو للجميع، تاريخ انتهاء بتوقيت السعودية. Action <code>SetVideoReview</code> بصلاحية <code>ManageReview</code>.</td></tr>
+<tr><td>S10.4</td><td>شريط «وضع المراجعة» في <code>Axis.cshtml</code> وحارس JS (<code>data-review="1"</code>: لا نبضات ولا مؤقّت ولا إتمام). لا سياسة <code>rtk-review</code> منفصلة لأن العرض هو نفسه <code>GetAxis</code>.</td></tr>
+</table>
+</section>
+
+<section id="s11" class="card">
+<h2>S11 — تقارير ولي الأمر (D23، D28)</h2>
+<table>
+<tr><th>القصة</th><th>ما تم</th></tr>
+<tr><td>S11.1</td><td><code>RemedialTrackReportBuilder</code>: دقائق المشاهدة لكل جولة (مقيّدة بمدة الفيديو)، المحاولات، <code>PathKind</code>، حد الاجتياز، والتوصية من <code>RemedialTrackRecommendations</code> (دالة نقية). عدد الاستعلامات ثابت.</td></tr>
+<tr><td>S11.2</td><td>كيان <code>RemedialTrackParentReport</code> (لقطة JSON ≤ 64KB) + <code>AutoSendParentReports</code> على أمر النشر. يُنشأ داخل معاملة <code>OnExamSubmittedAsync</code> (عدم الاجتياز) و<code>FinalizeEnrollmentAsync</code> (ختامي) مع إشعار فوري (<code>SentAt</code> UTC صريح). فهرس فريد <code>(EnrollmentId, AxisProgressId, Kind)</code>. بلا ولي أمر ← <code>NoParent</code> بلا إشعار. فشل بناء اللقطة لا يُفشل التسليم.</td></tr>
+<tr><td>S11.3</td><td><code>Areas/Parents/.../RemedialTrackReportsController</code>: قائمة/تفاصيل/إقرار بالاطلاع. الملكية من الخادم (غير المملوك/غير المُرسل/الموقوف/المحذوف ← 404). سياسة <code>rtk-parent-report</code> (60/دقيقة).</td></tr>
+<tr><td>S11.4</td><td><code>RemedialTrackParentCopy</code>: نصوص مسؤولية ولي الأمر. عند فتح الإدارة للمحور التالي يصل إشعار نصي (قرار: بلا تقرير تابع).</td></tr>
+</table>
+</section>
+
+<section id="s12" class="card">
+<h2>S12 — طابور الأدمن + أمان + اختبارات + توثيق</h2>
+<table>
+<tr><th>القصة</th><th>ما تم</th></tr>
+<tr><td>S12.1</td><td><code>RemedialTrackParentReportAdminService</code>: طابور مرقّم (20/صفحة) بفلاتر الحالة والأمر والدفعة؛ إرسال (يعيد بناء اللقطة الفارغة، ويقبل NoParent بعد الربط)، إعادة إرسال (حارس دقيقة + <code>RowVersion</code>)، إيقاف (Idempotent)، ومفتاح <code>ToggleAutoSend</code>. كل إجراء بنطاق دفعة (404 خارجه) وسجل نشاط. الواجهة: <code>ParentReports.cshtml</code>.</td></tr>
+<tr><td>S12.2</td><td><code>RTK_V2_Security_Review.md</code>: لا Critical/High. Medium: لا رؤوس أمان في كود المنصة، وعدّادات المعدّل محلية لكل نسخة.</td></tr>
+<tr><td>S12.3</td><td>اختبارات وحدات وSQL Server حقيقي وتكامل HTTP وPlaywright (انظر قسم الاختبارات).</td></tr>
+<tr><td>S12.4</td><td><code>ADR-RTK-02</code> في <code>QdratNew_AI_Context.md</code> وتقرير <code>RTK_S12_Implementation_Report.html</code> وهذا الدليل.</td></tr>
+</table>
+</section>
+
+<section id="perm" class="card">
+<h2>الصلاحيات (D27)</h2>
+<table>
+<tr><th>المفتاح</th><th>الغرض</th><th>الأكشن</th></tr>
+<tr><td><code>RemedialTrackPublications:Delete</code></td><td>حذف ناعم</td><td><code>Delete</code></td></tr>
+<tr><td><code>RemedialTrackPublications:Restore</code></td><td>استرجاع</td><td><code>Restore</code></td></tr>
+<tr><td><code>RemedialTrackPublications:ManageReview</code></td><td>وضع المراجعة + مفتاح الإرسال التلقائي</td><td><code>SetVideoReview</code>، <code>ToggleAutoSend</code></td></tr>
+<tr><td><code>RemedialTrackReports:Send</code></td><td>إدارة تقارير أولياء الأمور</td><td><code>SendParentReport</code>، <code>ResendParentReport</code>، <code>SuppressParentReport</code></td></tr>
+</table>
+<p>كل مفتاح يُسجَّل في ثلاثة أماكن: <code>Security/AdminPermissionPolicies.cs</code>، <code>Security/Permissions/AdminControllerActionCatalog.cs</code>، <code>Program.cs</code>. الاستثناء <code>SuperAdmin</code>/<code>Owner</code>/<code>Developer</code> قائم في معالج التفويض (معنى «الأدمن العام» مفترض = <code>SuperAdmin</code>، بانتظار التأكيد).</p>
+</section>
+
+<section id="sql" class="card">
+<h2>سكربتات SQL (Idempotent، إضافات فقط)</h2>
+<ol>
+<li><code>RTK_TermsAccepted.sql</code></li>
+<li><code>RTK_PublicationSoftDelete.sql</code> — تراجع: <code>RTK_PublicationSoftDelete_Rollback.sql</code></li>
+<li><code>RTK_VideoReview.sql</code> — تراجع: <code>RTK_VideoReview_Rollback.sql</code></li>
+<li><code>RTK_ParentReports.sql</code> — تراجع: <code>RTK_ParentReports_Rollback.sql</code></li>
+</ol>
+<p>الموقع: <code>Migrations/Scripts/</code>. شغّلها بـ<code>sqlcmd -I</code> أو SSMS (الفهارس المُصفّاة تتطلب <code>QUOTED_IDENTIFIER ON</code>) <b>قبل</b> نشر الكود. شُغّلت مرتين على قاعدة الاختبار بلا خطأ؛ <span class="warn">لم تُطبَّق على الإنتاج بعد.</span></p>
+</section>
+
+<section id="tests" class="card">
+<h2>الاختبارات</h2>
+<table>
+<tr><th>الطبقة</th><th>الملف</th><th>يغطي</th></tr>
+<tr><td>وحدات/InMemory</td><td><code>RemedialTrack*Tests.cs</code> (+ <code>RemedialTrackParentReportAdminTests</code>)</td><td>آلة الحالة، البناء، النشر، الاختبار، المراجعة، التقارير، الصلاحيات، الحارس الأمني الآلي</td></tr>
+<tr><td>SQL Server حقيقي</td><td><code>Integration/RemedialTrackSqlServerV2Tests.cs</code></td><td>الفهارس، التزامن الحقيقي، عدد الاستعلامات، التوافق 120</td></tr>
+<tr><td>تكامل HTTP</td><td><code>Integration/RemedialTrackV2IntegrationTests.cs</code></td><td>403/400/404، IDOR، ترميز HTML، الإقرار</td></tr>
+<tr><td>Playwright</td><td><code>Integration/RemedialTrackV2BrowserTests.cs</code></td><td>ملء الشاشة البديل، المراجعة، صفحة ولي الأمر (375px)</td></tr>
+</table>
+<h3>التشغيل</h3>
+<ul>
+<li>بدون SQL: <code>dotnet test QdratNew.Tests -c Release</code> (اختبارات SQL/E2E تُتخطّى).</li>
+<li>مع SQL: اضبط <code>QDRAT_TEST_SQL</code> على قاعدة اسمها يحوي «Test» (مثل <code>QdratNewDB_IntegrationTests</code>) — لا تُوجَّه أبدًا للإنتاج.</li>
+<li>المتصفح: ثبّت Chromium مرة واحدة (<code>playwright.ps1 install chromium</code>)، وابنِ المشروع الرئيسي Debug لأن الخادم الفرعي يُشغَّل من <code>bin/Debug</code>.</li>
+<li>الحمل اختياري: <code>RTK_LOAD=1</code>.</li>
+</ul>
+<p><b>النتيجة المسجَّلة:</b> RTK مع SQL: 507 ناجحًا من 508 (1 متخطّى = الحمل). الحزمة كاملة بلا SQL: 655 ناجحًا، 0 فشل، 51 متخطّى.</p>
+</section>
+
+<section id="files" class="card">
+<h2>خريطة الملفات الرئيسية</h2>
+<table>
+<tr><th>المجال</th><th>الملفات</th></tr>
+<tr><td>التقدّم والاختبار</td><td><code>Services/RemedialTracks/RemedialTrackProgressService.cs</code>، <code>RemedialTrackExamService.cs</code>، <code>RemedialTrackStateMachine.cs</code></td></tr>
+<tr><td>النشر والحذف والمراجعة</td><td><code>RemedialTrackPublicationService.cs</code>، <code>RemedialTrackAccessService.cs</code></td></tr>
+<tr><td>البناء والتعديل بعد النشر</td><td><code>RemedialTrackBuilderService.cs</code></td></tr>
+<tr><td>التقارير</td><td><code>RemedialTrackReportBuilder.cs</code>، <code>RemedialTrackReportService.cs</code>، <code>RemedialTrackRecommendations.cs</code></td></tr>
+<tr><td>تقارير ولي الأمر</td><td><code>RemedialTrackParentReportWriter.cs</code>، <code>RemedialTrackParentReportService.cs</code>، <code>RemedialTrackParentReportAdminService.cs</code>، <code>RemedialTrackParentCopy.cs</code>، <code>Entities/RemedialTrackParentReport.cs</code></td></tr>
+<tr><td>متحكّمات</td><td><code>Areas/Admin/Controllers/RemedialTrack{s,Publications,Reports}Controller.cs</code>، <code>Areas/Parents/Controllers/RemedialTrackReportsController.cs</code></td></tr>
+<tr><td>واجهات</td><td><code>Areas/Admin/Views/RemedialTrackPublications/*</code>، <code>Areas/Admin/Views/RemedialTrackReports/*</code>، <code>Areas/Parents/Views/RemedialTrackReports/*</code>، <code>Areas/Students/Views/RemedialTrack/*</code></td></tr>
+<tr><td>JS/CSS</td><td><code>wwwroot/js/remedial-track-player.js</code>، <code>remedial-track-exam.js</code>، <code>wwwroot/css/student-rtk.css</code></td></tr>
+<tr><td>وثائق</td><td><code>RTK_V2_Changes_Execution_Prompt_v1.md</code>، <code>RTK_V2_Changes_Tracker.html</code>، <code>RTK_V2_Security_Review.md</code>، <code>RTK_S9_…/RTK_S12_Implementation_Report.html</code>، <code>QdratNew_AI_Context.md</code> (ADR-RTK-02)</td></tr>
+</table>
+</section>
+
+<section id="open" class="card">
+<h2>المفتوح والمخاطر</h2>
+<ul>
+<li><span class="warn">لم يُتحقق:</span> ملء الشاشة على iPhone Safari وAndroid Chrome الحقيقيين مع YouTube/Vimeo؛ تشغيل فيديو حقيقي في وضع المراجعة؛ اختبار الحمل؛ تطبيق السكربتات على الإنتاج.</li>
+<li>لا رؤوس أمان في كود المنصة (قد تكون على الحافة)، وعدّادات Rate Limit محلية لكل نسخة.</li>
+<li>القسم <code>QuestionReviewTasks</code> غير مدرج في <code>GetControllersCatalog</code> (خارج النطاق).</li>
+<li>الافتراضات بانتظار التأكيد: (أ) الإرسال التلقائي مفعّل افتراضيًا، (ب) المراجعة لا تُعفي من الرقم المرجعي، (ج) لا إعادة إقرار بالشروط، و«الأدمن العام» = <code>SuperAdmin</code>.</li>
+<li>مقترحات مؤجّلة: مفتاح صلاحية مخصّص لـ<code>ToggleAutoSend</code>، وإشعار للطالب عند فتح/إغلاق المراجعة.</li>
+</ul>
+</section>
+</div>
+</body>
+</html>

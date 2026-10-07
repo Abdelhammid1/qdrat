@@ -62,6 +62,50 @@ namespace QdratNew.Tests.Integration
 
         public static string NewAccessCode() => RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
 
+        /// <summary>RTK-S12.3: ينشئ ولي أمر بحساب حقيقي (للإشعار والدخول) ويربطه بالطالب.</summary>
+        public static async Task<(int ParentId, string UserId)> LinkParentAsync(int studentId, int idx, bool withLogin = false)
+        {
+            await using var db = CreateDb();
+            var userName = $"rtks7-p{idx:D3}";
+            var nid = $"RS7P{idx:D6}";
+            var user = new ApplicationUser
+            {
+                Id = Guid.NewGuid().ToString(), UserName = userName, NormalizedUserName = userName.ToUpperInvariant(),
+                Email = $"{userName}@test.local", NormalizedEmail = $"{userName}@test.local".ToUpperInvariant(),
+                EmailConfirmed = true, NationalID = nid, FullName = $"ولي أمر {Marker} {idx}",
+                SecurityStamp = Guid.NewGuid().ToString("N"), ConcurrencyStamp = Guid.NewGuid().ToString("N"), IsActive = true
+            };
+            if (withLogin)
+            {
+                user.PasswordHash = new PasswordHasher<ApplicationUser>().HashPassword(user, Password);
+                var roleId = await db.Roles.Where(r => r.Name == "Parent").Select(r => r.Id).FirstOrDefaultAsync()
+                    ?? throw new InvalidOperationException("دور 'Parent' غير موجود في قاعدة الاختبار.");
+                db.UserRoles.Add(new IdentityUserRole<string> { UserId = user.Id, RoleId = roleId });
+            }
+            db.Users.Add(user);
+            var parent = new Parent { NationalID = nid, FullName = user.FullName!, Email = user.Email!, PhoneNumber = "0500000000", UserId = user.Id };
+            db.Parents.Add(parent);
+            await db.SaveChangesAsync();
+            await db.Students.Where(s => s.StudentID == studentId).ExecuteUpdateAsync(s => s.SetProperty(x => x.ParentId, parent.ParentID));
+            return (parent.ParentID, user.Id);
+        }
+
+        /// <summary>محاولة 102 مُسلَّمة راسبة، جاهزة لـ OnExamSubmittedAsync (تُنتج تقرير «عدم اجتياز»).</summary>
+        public static async Task<int> AddFailedAttempt102Async(RtkSeed seed, RtkSeedStudent s)
+        {
+            await using var db = CreateDb();
+            var att = new RemedialTrackExamAttempt
+            {
+                AxisProgressId = s.AxisProgressIds[0], ExamNumber = RemedialTrackExamNumber.Exam102, ModelId = seed.Model102Id,
+                Status = RemedialTrackAttemptStatus.Submitted, StartedAtUtc = DateTime.UtcNow.AddMinutes(-12),
+                ExpiresAtUtc = DateTime.UtcNow.AddMinutes(18), SubmittedAtUtc = DateTime.UtcNow,
+                TotalQuestions = 10, CorrectCount = 3, ScorePercent = 30, IsPassed = false
+            };
+            db.RemedialTrackExamAttempts.Add(att);
+            await db.SaveChangesAsync();
+            return att.Id;
+        }
+
         public static async Task<RtkSeed> SeedAsync(
             int students,
             bool inPerson = false,
@@ -230,7 +274,8 @@ namespace QdratNew.Tests.Integration
                     {
                         PublicationId = pub.Id, TrackId = track.Id, StudentId = stus[k].StudentID,
                         CreatedAtUtc = DateTime.UtcNow.AddDays(-2), Status = RemedialTrackEnrollmentStatus.InProgress,
-                        CurrentAxisId = axisEntities[0].Id, StartedAtUtc = DateTime.UtcNow.AddHours(-1)
+                        CurrentAxisId = axisEntities[0].Id, StartedAtUtc = DateTime.UtcNow.AddHours(-1),
+                        TermsAcceptedAtUtc = DateTime.UtcNow.AddHours(-1)   // RTK v2: إقرار الشروط شرط قبل البدء (وإلا تُعرض صفحة الشروط)
                     };
                     foreach (var a in axisEntities)
                         e.AxisProgresses.Add(new RemedialTrackAxisProgress
@@ -298,6 +343,7 @@ namespace QdratNew.Tests.Integration
                 $"DELETE FROM RemedialTrackExamAttemptQuestions WHERE AttemptId IN {atts}",
                 $"DELETE FROM RemedialTrackExamAttempts WHERE AxisProgressId IN {aps}",
                 $"DELETE FROM RemedialTrackVideoProgresses WHERE AxisProgressId IN {aps}",
+                $"DELETE FROM RemedialTrackParentReports WHERE EnrollmentId IN {enr}",
                 $"DELETE FROM RemedialTrackEvents WHERE EnrollmentId IN {enr}",
                 $"DELETE FROM RemedialTrackAxisProgresses WHERE EnrollmentId IN {enr}",
                 $"DELETE FROM RemedialTrackEnrollments WHERE TrackId IN {tracks}",
@@ -313,6 +359,7 @@ namespace QdratNew.Tests.Integration
                 $"DELETE FROM StudentBatchEnrollments WHERE StudentID IN {stu}",
                 $"DELETE FROM Notifications WHERE UserId IN {users}",
                 "DELETE FROM Students WHERE NationalID LIKE 'RS7%'",
+                "DELETE FROM Parents WHERE NationalID LIKE 'RS7%'",
                 $"DELETE FROM AspNetUserRoles WHERE UserId IN {users}",
                 "DELETE FROM AspNetUsers WHERE UserName LIKE 'rtks7-%'",
                 "DELETE FROM Batches WHERE Name LIKE 'RTKS7 %'",

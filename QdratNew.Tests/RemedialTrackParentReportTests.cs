@@ -14,7 +14,7 @@ namespace QdratNew.Tests
     /// RTK-S11: إثراء التقرير، لقطة ولي الأمر والإنشاء التلقائي، صفحة ولي الأمر (ملكية/إقرار)، والنصوص.
     /// InMemory: الفهرس الفريد وRowVersion والتزامن الحقيقي لا تُفرض هنا — تُغطّى على SQL Server الحقيقي في RTK-S12.3.
     /// </summary>
-    public class RemedialTrackParentReportTests
+    public partial class RemedialTrackParentReportTests
     {
         private static readonly DateTime T0 = new(2026, 10, 7, 12, 0, 0, DateTimeKind.Utc);
 

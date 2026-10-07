@@ -151,9 +151,11 @@ namespace QdratNew.Tests.Integration
 
             // ---------- التسليم والنتيجة ----------
             await page.ClickAsync("#rtkSubmitBtn");
-            await page.ClickAsync(".swal2-confirm");   // تأكيد الإنهاء
+            // تأكيد الإنهاء: SweetAlert يُحمَّل من CDN؛ إن تعذّر تحميله يُسلَّم مباشرة (المسار الاحتياطي في remedial-track-exam.js)
+            try { await page.ClickAsync(".swal2-confirm", new PageClickOptions { Timeout = 6000 }); }
+            catch (TimeoutException) { /* لا نافذة تأكيد */ }
             await page.WaitForURLAsync(url => url.Contains("/RemedialTrack/Result"), new PageWaitForURLOptions { Timeout = 20000 });
-            await Assertions.Expect(page.Locator(".rtk-result-title")).ToBeVisibleAsync(new() { Timeout = 15000 });
+            await Assertions.Expect(page.Locator(".rs-message h2")).ToBeVisibleAsync(new() { Timeout = 15000 });
             await AssertNoHorizontalScrollAsync(page, "صفحة النتيجة");
 
             var resultHtml = await page.ContentAsync();

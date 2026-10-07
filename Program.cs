@@ -292,7 +292,8 @@ builder.Services.AddAuthorization(options =>
         AdminPermissionPolicies.RemedialTrackPublications_Restore,
         AdminPermissionPolicies.RemedialTrackPublications_ManageReview,
         AdminPermissionPolicies.RemedialTrackReports_Read,
-        AdminPermissionPolicies.RemedialTrackReports_Edit
+        AdminPermissionPolicies.RemedialTrackReports_Edit,
+        AdminPermissionPolicies.RemedialTrackReports_Send
     })
     {
         var policyName = rtkPolicy;
@@ -1044,6 +1045,9 @@ builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackExamSe
                            QdratNew.Services.RemedialTracks.RemedialTrackExamService>();
 builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackReportService,
                            QdratNew.Services.RemedialTracks.RemedialTrackReportService>();
+// RTK-S12.1: طابور تقارير أولياء الأمور للأدمن
+builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackParentReportAdminService,
+                           QdratNew.Services.RemedialTracks.RemedialTrackParentReportAdminService>();
 // RTK-S11.3: صفحة ولي الأمر (تقارير الخطة العلاجية)
 builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackParentReportService,
                            QdratNew.Services.RemedialTracks.RemedialTrackParentReportService>();

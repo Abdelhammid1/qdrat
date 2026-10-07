@@ -54,7 +54,8 @@
                 "RemedialTrackReports" => new[]
                 {
                     new AdminActionDescriptor { Key = "Read", DisplayNameAr = "عرض تقارير الخطة العلاجية" },
-                    new AdminActionDescriptor { Key = "Edit", DisplayNameAr = "تحرير ملاحظة تقرير ولي الأمر" }
+                    new AdminActionDescriptor { Key = "Edit", DisplayNameAr = "تحرير ملاحظة تقرير ولي الأمر" },
+                    new AdminActionDescriptor { Key = "Send", DisplayNameAr = "إدارة تقارير أولياء الأمور (إرسال / إعادة إرسال / إيقاف)" }
                 },
 
                 "Curriculums" => new[]

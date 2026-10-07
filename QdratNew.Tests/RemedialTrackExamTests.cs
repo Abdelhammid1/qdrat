@@ -742,8 +742,8 @@ namespace QdratNew.Tests
             await using var db = f.Factory.CreateDbContext();
             var msg = (await db.RemedialTrackEvents.SingleAsync(e => e.Type == RemedialTrackEventType.AxisNotPassed && e.EnrollmentId == f.Enrollment)).Message;
             Assert.Contains("لم يجتز الطالب الخطة العلاجية للمحور «محور 1»", msg);
-            Assert.Contains("101: 25%", msg);
-            Assert.Contains("102: 50%", msg);
+            Assert.Contains("الأول: 25%", msg);
+            Assert.Contains("الثاني: 50%", msg);
 
             // لا اختبار ثالث، ولا بدء اختبار في المحور التالي المغلق
             Assert.Equal(RemedialTrackExamStartStatus.Conflict, (await f.Exams.StartExamAsync(Fx.Student, f.Enrollment, f.Ap[0])).Status);
