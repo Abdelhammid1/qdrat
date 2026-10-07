@@ -405,125 +405,12 @@ namespace QdratNew.Services.RemedialTracks
         }
 
         // ======================================================================
-        // البناء المشترك لتقرير تسجيل واحد — 4 استعلامات (ترويسة، محاور، تقدّم فيديو مجمّع، محاولات)
+        // البناء المشترك لتقرير تسجيل واحد — في RemedialTrackReportBuilder (4 استعلامات ثابتة)
         // ======================================================================
 
-        private async Task<RemedialTrackEnrollmentReportVm?> BuildReportAsync(
+        private Task<RemedialTrackEnrollmentReportVm?> BuildReportAsync(
             ApplicationDbContext db, int enrollmentId, int? ownerStudentId, RemedialTrackBatchScope? scope, bool includeNote, CancellationToken ct)
-        {
-            var headQuery = db.RemedialTrackEnrollments.AsNoTracking().Where(e => e.Id == enrollmentId);
-            if (ownerStudentId.HasValue)
-            {
-                var owner = ownerStudentId.Value;
-                headQuery = headQuery.Where(e => e.StudentId == owner);
-            }
-
-            var head = await headQuery
-                .Where(e => !e.Publication!.IsDeleted)   // RTK v2/D26: أمر محذوف ← لا تقرير (طالب/ولي أمر/أدمن)
-                .Select(e => new
-                {
-                    e.Id,
-                    StudentName = e.Student!.FullName,
-                    BatchId = e.Publication!.BatchId,
-                    BatchName = e.Publication.Batch!.Name,
-                    TrackTitle = e.Publication.Track!.Title,
-                    CurriculumTitle = e.Publication.Track.Curriculum!.Title,
-                    PassPercent = e.Publication.Track.PassPercent,
-                    e.Publication.Mode,
-                    e.Publication.PublishAtUtc,
-                    e.Status,
-                    e.StartedAtUtc,
-                    e.CompletedAtUtc,
-                    e.AdminReportNote
-                })
-                .FirstOrDefaultAsync(ct);
-            if (head is null) return null;
-            if (scope is not null && !scope.Allows(head.BatchId)) return null;
-
-            var axes = await db.RemedialTrackAxisProgresses.AsNoTracking()
-                .Where(a => a.EnrollmentId == enrollmentId)
-                .OrderBy(a => a.Order)
-                .Select(a => new
-                {
-                    a.Id,
-                    a.Order,
-                    Title = a.Axis!.TitleOverride ?? a.Axis.Section!.Title,
-                    a.Status,
-                    a.Round,
-                    a.Exam101Percent,
-                    a.Exam102Percent,
-                    a.PassedAtUtc,
-                    a.AdminOpenedAtUtc,
-                    VideoTotal = db.RemedialTrackVideos.Count(v => v.AxisId == a.AxisId && v.IsActive)
-                })
-                .ToListAsync(ct);
-
-            var videoDone = await db.RemedialTrackVideoProgresses.AsNoTracking()
-                .Where(v => v.AxisProgress!.EnrollmentId == enrollmentId && v.IsCompleted)
-                .GroupBy(v => new { v.AxisProgressId, v.Round })
-                .Select(g => new { g.Key.AxisProgressId, g.Key.Round, Count = g.Count() })
-                .ToListAsync(ct);
-
-            var attempts = await db.RemedialTrackExamAttempts.AsNoTracking()
-                .Where(t => t.AxisProgress!.EnrollmentId == enrollmentId && t.Status != RemedialTrackAttemptStatus.InProgress)
-                .Select(t => new { t.AxisProgressId, t.ExamNumber, SubmittedAtUtc = t.SubmittedAtUtc ?? t.ExpiresAtUtc })
-                .ToListAsync(ct);
-
-            var rows = axes.Select(a =>
-            {
-                int Done(int round) => videoDone.Where(v => v.AxisProgressId == a.Id && v.Round == round).Sum(v => v.Count);
-                DateTime? SubmittedAt(RemedialTrackExamNumber n) => attempts
-                    .Where(t => t.AxisProgressId == a.Id && t.ExamNumber == n)
-                    .Select(t => (DateTime?)t.SubmittedAtUtc).FirstOrDefault();
-
-                var round2 = Done(2);
-                return new RemedialTrackReportAxisVm
-                {
-                    Order = a.Order,
-                    Title = a.Title,
-                    Status = a.Status,
-                    Outcome = OutcomeOf(a.Status),
-                    Round = a.Round,
-                    VideoTotal = a.VideoTotal,
-                    VideosDoneRound1 = Done(1),
-                    VideosDoneRound2 = round2,
-                    HasRound2 = a.Round >= 2 || round2 > 0,
-                    Exam101Percent = a.Exam101Percent,
-                    Exam101SubmittedAtUtc = SubmittedAt(RemedialTrackExamNumber.Exam101),
-                    Exam102Percent = a.Exam102Percent,
-                    Exam102SubmittedAtUtc = SubmittedAt(RemedialTrackExamNumber.Exam102),
-                    PassedAtUtc = a.PassedAtUtc,
-                    AdminOpenedAtUtc = a.AdminOpenedAtUtc
-                };
-            }).ToList();
-
-            return new RemedialTrackEnrollmentReportVm
-            {
-                EnrollmentId = head.Id,
-                StudentName = head.StudentName,
-                BatchName = head.BatchName,
-                TrackTitle = head.TrackTitle,
-                CurriculumTitle = head.CurriculumTitle,
-                Mode = head.Mode,
-                PublishAtUtc = head.PublishAtUtc,
-                Status = head.Status,
-                StartedAtUtc = head.StartedAtUtc,
-                CompletedAtUtc = head.CompletedAtUtc,
-                PassPercent = head.PassPercent,
-                IssuedAtUtc = Now,
-                AdminNote = includeNote ? head.AdminReportNote : null,
-                Axes = rows
-            };
-        }
-
-        private static RemedialTrackReportAxisOutcome OutcomeOf(RemedialTrackAxisStatus status) => status switch
-        {
-            RemedialTrackAxisStatus.Passed => RemedialTrackReportAxisOutcome.Passed,
-            RemedialTrackAxisStatus.FailedBlocked => RemedialTrackReportAxisOutcome.NeedsFollowUp,
-            RemedialTrackAxisStatus.FailedOpenedByAdmin => RemedialTrackReportAxisOutcome.MovedByAdmin,
-            RemedialTrackAxisStatus.Locked => RemedialTrackReportAxisOutcome.NotReached,
-            _ => RemedialTrackReportAxisOutcome.InProgress
-        };
+            => RemedialTrackReportBuilder.BuildAsync(db, enrollmentId, ownerStudentId, scope, includeNote, Now, ct);
 
         private static string Truncate(string? value, int max)
             => string.IsNullOrEmpty(value) ? string.Empty : (value.Length <= max ? value : value[..max]);

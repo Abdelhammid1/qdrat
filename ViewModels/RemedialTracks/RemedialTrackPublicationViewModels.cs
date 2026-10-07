@@ -23,6 +23,9 @@ namespace QdratNew.ViewModels.RemedialTracks
         [StringLength(500, ErrorMessage = "الملاحظة أطول من 500 حرف")]
         public string? AdminNote { get; set; }
 
+        /// <summary>RTK-S11 (D23): إرسال تقارير أولياء الأمور تلقائيًا عند عدم الاجتياز/الختام (الافتراضي مفعّل).</summary>
+        public bool AutoSendParentReports { get; set; } = true;
+
         /// <summary>تُستخدم فقط مع Scope = SelectedStudents.</summary>
         public List<int>? StudentIds { get; set; }
     }
@@ -173,6 +176,7 @@ namespace QdratNew.ViewModels.RemedialTracks
         public DateTime CreatedAtUtc { get; set; }
         public string? CreatedByName { get; set; }
         public string? AdminNote { get; set; }
+        public bool AutoSendParentReports { get; set; }
         public int TotalStudents { get; set; }
         public DateTime? CancelledAtUtc { get; set; }
         public string? CancelReason { get; set; }

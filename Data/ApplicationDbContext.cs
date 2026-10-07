@@ -117,6 +117,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<RemedialTrackExamAttempt> RemedialTrackExamAttempts { get; set; }
     public DbSet<RemedialTrackExamAttemptQuestion> RemedialTrackExamAttemptQuestions { get; set; }
     public DbSet<RemedialTrackEvent> RemedialTrackEvents { get; set; }
+    public DbSet<RemedialTrackParentReport> RemedialTrackParentReports { get; set; }
     public DbSet<HomeworkSet> HomeworkSets { get; set; }
     public DbSet<HomeworkArchiveAccess> HomeworkArchiveAccesses { get; set; }
     public DbSet<AttendanceBatchArchiveAccess> AttendanceBatchArchiveAccesses { get; set; }
@@ -1659,6 +1660,20 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             e.ToTable("RemedialTrackEvents");
             e.HasIndex(x => new { x.EnrollmentId, x.CreatedAtUtc });
             e.HasOne(x => x.Enrollment).WithMany(en => en.Events).HasForeignKey(x => x.EnrollmentId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // RTK-S11 (D23/D28): لقطات تقارير ولي الأمر
+        modelBuilder.Entity<RemedialTrackParentReport>(e =>
+        {
+            e.ToTable("RemedialTrackParentReports");
+            // يمنع التكرار عند إعادة تسليم/تزامن (SQL Server يعامل NULL كقيمة واحدة ← تقرير ختامي واحد لكل تسجيل)
+            e.HasIndex(x => new { x.EnrollmentId, x.AxisProgressId, x.Kind }).IsUnique().HasFilter(null)
+             .HasDatabaseName("UX_RemedialTrackParentReports_Enrollment_Axis_Kind");
+            // طابور الأدمن
+            e.HasIndex(x => new { x.Status, x.CreatedAtUtc }).HasDatabaseName("IX_RemedialTrackParentReports_Status_CreatedAt");
+            // صفحة ولي الأمر: تقارير ولي أمر بعينه حسب الحالة والأحدث
+            e.HasIndex(x => new { x.ParentId, x.Status, x.CreatedAtUtc }).HasDatabaseName("IX_RemedialTrackParentReports_Parent_Status_CreatedAt");
+            e.HasOne(x => x.Enrollment).WithMany().HasForeignKey(x => x.EnrollmentId).OnDelete(DeleteBehavior.Cascade);
         });
 
     }

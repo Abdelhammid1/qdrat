@@ -96,4 +96,30 @@ namespace QdratNew.Enums
         ReportNoteSaved     = 14,
         TermsAccepted       = 15
     }
+
+    // ===== RTK-S11 (D23/D28): تقارير ولي الأمر =====
+
+    public enum RemedialTrackParentReportKind
+    {
+        [Display(Name = "عدم اجتياز محور")] AxisNotPassed = 1,
+        [Display(Name = "تقرير ختامي")]     Final         = 2
+    }
+
+    public enum RemedialTrackParentReportStatus
+    {
+        [Display(Name = "بانتظار الإرسال")]        Pending    = 0,
+        [Display(Name = "أُرسل")]                  Sent       = 1,
+        [Display(Name = "لا يوجد ولي أمر مرتبط")]  NoParent   = 2,
+        [Display(Name = "موقوف")]                  Suppressed = 3
+    }
+
+    /// <summary>مسار الطالب داخل المحور (للتقرير والتوصية).</summary>
+    public enum RemedialTrackPathKind
+    {
+        NotStarted         = 0,
+        InProgress         = 1,
+        PassedFirstExam    = 2,
+        PassedAfterRewatch = 3,
+        FailedBoth         = 4
+    }
 }

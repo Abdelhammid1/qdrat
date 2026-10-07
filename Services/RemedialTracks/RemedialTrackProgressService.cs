@@ -745,6 +745,11 @@ namespace QdratNew.Services.RemedialTracks
 
                 await db.SaveChangesAsync(ct);
 
+                // RTK-S11.2: تقرير ولي الأمر عند عدم الاجتياز في الاختبارين (نفس المعاملة؛ فشل اللقطة لا يُفشل التسليم)
+                if (t.RecordNotPassed)
+                    await RemedialTrackParentReportWriter.AddAsync(
+                        db, info.EnrollmentId, ap.Id, ap.Order, RemedialTrackParentReportKind.AxisNotPassed, now, _logger, ct);
+
                 if (att.IsPassed || t.RecordNotPassed)
                     await FinalizeEnrollmentAsync(db, info.EnrollmentId, now, ct);
 
@@ -799,6 +804,10 @@ namespace QdratNew.Services.RemedialTracks
                 // نقل الإدارة قرار صريح: يفتح التالي فورًا
                 await OpenNextAxisAsync(db, info.EnrollmentId, ap.Order, now, ct);
                 await db.SaveChangesAsync(ct);
+
+                // RTK-S11.4: إشعار نصي لولي الأمر بقرار الإدارة (لا تقرير تابع في هذا الإصدار)
+                await RemedialTrackParentReportWriter.AddAdminOpenedNoticeAsync(db, info.EnrollmentId, ap.Id, info.Title, now, ct);
+
                 await FinalizeEnrollmentAsync(db, info.EnrollmentId, now, ct);
 
                 return new RemedialTrackTransitionResult(true, ap.Status, ap.Round);
@@ -872,7 +881,7 @@ namespace QdratNew.Services.RemedialTracks
         }
 
         // بعد حفظ حالات المحاور: حالة التسجيل (اكتمال/اكتمال مع تعثّر) + CompletedAtUtc + حدث TrackCompleted
-        private static async Task FinalizeEnrollmentAsync(ApplicationDbContext db, int enrollmentId, DateTime now, CancellationToken ct)
+        private async Task FinalizeEnrollmentAsync(ApplicationDbContext db, int enrollmentId, DateTime now, CancellationToken ct)
         {
             var enrollment = await db.RemedialTrackEnrollments.FirstAsync(e => e.Id == enrollmentId, ct);
             if (enrollment.Status == RemedialTrackEnrollmentStatus.Cancelled) return;
@@ -884,9 +893,11 @@ namespace QdratNew.Services.RemedialTracks
                 .ToListAsync(ct);
 
             var resolved = RemedialTrackStateMachine.ResolveEnrollmentStatus(statuses);
+            var completedNow = false;
             if (resolved is RemedialTrackEnrollmentStatus.Completed or RemedialTrackEnrollmentStatus.CompletedWithFailures)
             {
                 if (enrollment.Status == resolved) return;
+                completedNow = true;
                 enrollment.Status = resolved;
                 enrollment.CompletedAtUtc ??= now;
                 AddEvent(db, enrollmentId, null, RemedialTrackEventType.TrackCompleted,
@@ -899,6 +910,11 @@ namespace QdratNew.Services.RemedialTracks
                 enrollment.Status = RemedialTrackEnrollmentStatus.InProgress;
             }
             await db.SaveChangesAsync(ct);
+
+            // RTK-S11.2: التقرير الختامي عند اكتمال الخطة (مرة واحدة؛ الفهرس الفريد حارس التزامن)
+            if (completedNow)
+                await RemedialTrackParentReportWriter.AddAsync(
+                    db, enrollmentId, null, null, RemedialTrackParentReportKind.Final, now, _logger, ct);
         }
 
         // الجولة 2: صفوف تقدّم لكل الفيديوهات الفعّالة دفعة واحدة (AddRange؛ يحفظها SaveChanges المستدعي). فيديوهات الجولة 1 تبقى للسجل.

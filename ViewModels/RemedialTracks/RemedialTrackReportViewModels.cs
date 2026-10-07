@@ -38,6 +38,37 @@ namespace QdratNew.ViewModels.RemedialTracks
 
         /// <summary>أفضل/آخر نسبة اختبار للمحور (102 إن وُجد وإلا 101).</summary>
         public double? FinalPercent => Exam102Percent ?? Exam101Percent;
+
+        // ===== RTK-S11.1: إثراء التقرير =====
+
+        /// <summary>دقائق المشاهدة الفعلية (مجموع WatchedSeconds ÷ 60) للجولة 1/2، مقيّدة بمدة فيديوهات المحور.</summary>
+        public int WatchedMinutesRound1 { get; set; }
+        public int WatchedMinutesRound2 { get; set; }
+        public int WatchedMinutes => WatchedMinutesRound1 + WatchedMinutesRound2;
+
+        /// <summary>مدة فيديوهات المحور الفعّالة بالدقائق (0 = غير معروفة).</summary>
+        public int VideoMinutes { get; set; }
+
+        /// <summary>كل المحاولات المُسلَّمة للمحور (الأقدم أولًا).</summary>
+        public IReadOnlyList<RemedialTrackReportAttemptVm> Attempts { get; set; } = Array.Empty<RemedialTrackReportAttemptVm>();
+
+        public RemedialTrackPathKind PathKind { get; set; }
+
+        /// <summary>توصية تربوية من دالة نقية (فارغة إن لا يلزم).</summary>
+        public string Recommendation { get; set; } = string.Empty;
+    }
+
+    /// <summary>محاولة اختبار مُسلَّمة داخل التقرير (بلا معرّفات داخلية).</summary>
+    public sealed class RemedialTrackReportAttemptVm
+    {
+        public RemedialTrackExamNumber ExamNumber { get; set; }
+        public DateTime SubmittedAtUtc { get; set; }
+        public int CorrectCount { get; set; }
+        public int TotalQuestions { get; set; }
+        public double ScorePercent { get; set; }
+        public bool IsPassed { get; set; }
+        /// <summary>المدة المستغرقة بالدقائق (من البدء حتى التسليم/الانتهاء).</summary>
+        public int DurationMinutes { get; set; }
     }
 
     public sealed class RemedialTrackEnrollmentReportVm

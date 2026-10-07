@@ -1044,6 +1044,9 @@ builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackExamSe
                            QdratNew.Services.RemedialTracks.RemedialTrackExamService>();
 builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackReportService,
                            QdratNew.Services.RemedialTracks.RemedialTrackReportService>();
+// RTK-S11.3: صفحة ولي الأمر (تقارير الخطة العلاجية)
+builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackParentReportService,
+                           QdratNew.Services.RemedialTracks.RemedialTrackParentReportService>();
 // RTK-S7.4: مفتاح تعطيل الميزة (SystemSettings: RemedialTrack.Enabled)
 builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackFeatureService,
                            QdratNew.Services.RemedialTracks.RemedialTrackFeatureService>();
@@ -1145,6 +1148,15 @@ builder.Services.AddRateLimiter(o =>
         _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
         {
             PermitLimit = 120,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        }));
+    // RTK-S11.3: قراءة تقارير ولي الأمر والإقرار — 60 طلب / دقيقة لكل مستخدم (العدّاد محلي لكل نسخة)
+    o.AddPolicy("rtk-parent-report", ctx => System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+        ctx.User?.Identity?.Name ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "anon",
+        _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 60,
             Window = TimeSpan.FromMinutes(1),
             QueueLimit = 0
         }));

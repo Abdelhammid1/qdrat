@@ -38,6 +38,9 @@ namespace QdratNew.Entities
         [MaxLength(200)] public string? DeletedByName { get; set; }
         [MaxLength(300)] public string? DeleteReason { get; set; }
 
+        // RTK v2 / D23: إرسال تقارير أولياء الأمور تلقائيًا (افتراضيًا مفعّل لكل أمر نشر)
+        public bool AutoSendParentReports { get; set; } = true;
+
         [Timestamp] public byte[] RowVersion { get; set; } = Array.Empty<byte>();
         public ICollection<RemedialTrackEnrollment> Enrollments { get; set; } = new List<RemedialTrackEnrollment>();
     }
