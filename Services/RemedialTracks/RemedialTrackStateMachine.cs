@@ -40,6 +40,10 @@ namespace QdratNew.Services.RemedialTracks
                 ? new(RemedialTrackAxisStatus.FailedOpenedByAdmin, 2, false, false, true)
                 : throw new InvalidOperationException("فتح المحور التالي مسموح فقط لمحور رسب فيه الطالب في الاختبارين.");
 
+        /// <summary>RTK v2/D24: هل وضع مراجعة الفيديوهات سارٍ لحظة الطلب؟ (حساب الخادم لا JS).</summary>
+        public static bool IsVideoReviewOpen(bool enabled, DateTime? untilUtc, DateTime nowUtc)
+            => enabled && (untilUtc is null || untilUtc.Value > nowUtc);
+
         // حالة التسجيل بعد تغيّر محور
         public static RemedialTrackEnrollmentStatus ResolveEnrollmentStatus(
             IReadOnlyList<RemedialTrackAxisStatus> axesInOrder)

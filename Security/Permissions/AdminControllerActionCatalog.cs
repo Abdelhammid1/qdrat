@@ -47,7 +47,8 @@
                     new AdminActionDescriptor { Key = "Cancel", DisplayNameAr = "إلغاء أمر نشر" },
                     new AdminActionDescriptor { Key = "Unlock", DisplayNameAr = "فتح المحور التالي لطالب" },
                     new AdminActionDescriptor { Key = "Delete", DisplayNameAr = "حذف أمر نشر (حذف ناعم)" },
-                    new AdminActionDescriptor { Key = "Restore", DisplayNameAr = "استرجاع أمر نشر محذوف" }
+                    new AdminActionDescriptor { Key = "Restore", DisplayNameAr = "استرجاع أمر نشر محذوف" },
+                    new AdminActionDescriptor { Key = "ManageReview", DisplayNameAr = "إدارة وضع مراجعة الفيديوهات للطلاب" }
                 },
 
                 "RemedialTrackReports" => new[]

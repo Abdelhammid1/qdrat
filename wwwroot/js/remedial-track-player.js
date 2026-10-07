@@ -6,7 +6,9 @@
     'use strict';
 
     var root = document.getElementById('rtkRoot');
-    if (!root || root.dataset.canWatch !== '1') return;
+    // RTK v2/D24: وضع المراجعة (data-review="1") مشغّل للقراءة فقط — لا نبضات ولا إتمام ولا تقدّم؛ والخادم يرفض النبضات أيضًا
+    var REVIEW = !!root && root.dataset.review === '1';
+    if (!root || (root.dataset.canWatch !== '1' && !REVIEW)) return;
     if (root.dataset.rtkBound === '1') return;   // لا ربط مزدوج
     root.dataset.rtkBound = '1';
 
@@ -92,7 +94,7 @@
     }
 
     function ping(state) {
-        if (!current) return;
+        if (REVIEW || !current) return;
         if (inFlight) {
             // نبضة دورية أثناء الانتظار تُهمل؛ الحالات المهمة تُؤجَّل، و«ended» لا يستبدله أي حدث لاحق
             if (state !== 'playing' && queued !== 'ended') queued = state;
@@ -270,7 +272,7 @@
 
     function startTimer() {
         stopTimer();
-        if (!current) return;
+        if (REVIEW || !current) return;
         current.timer = setInterval(function () { ping('playing'); }, PING_MS);
     }
     function stopTimer() {
@@ -283,7 +285,7 @@
         setIcon(document.getElementById('rtkBtnPlay'), current.playing ? 'fa-pause' : 'fa-play');
         ping(state);
         if (state === 'playing') startTimer(); else stopTimer();
-        if (state === 'ended') watchEnded(current);
+        if (state === 'ended' && !REVIEW) watchEnded(current);
     }
 
     // مراقب الإتمام: إن لم يصل ردّ الخادم على «ended» (انقطاع/ازدحام) أعد الإرسال ثم اعرض رابط تحديث
@@ -325,13 +327,13 @@
 
     // autoplay: true عند الانتقال التلقائي من فيديو منتهٍ (بعد تفاعل الطالب مع الصفحة فيسمح المتصفح بالتشغيل)
     function select(li, autoplay) {
-        if (li.dataset.unlocked !== '1' || li.dataset.completed === '1') return;
+        if (li.dataset.unlocked !== '1' || (li.dataset.completed === '1' && !REVIEW)) return;
         destroyCurrent();
         var provider = li.dataset.provider;
         current = {
             li: li, id: parseInt(li.dataset.vpId, 10), provider: provider,
             player: null, playing: false, timer: null,
-            maxPos: 0, dur: 0, dragging: false,   // maxPos: أبعد نقطة وصل إليها الطالب بالتشغيل الفعلي
+            maxPos: REVIEW ? Number.MAX_SAFE_INTEGER : 0, dur: 0, dragging: false,   // maxPos: أبعد نقطة وصل إليها الطالب بالتشغيل الفعلي (المراجعة: تنقّل حر)
             requiredSeconds: parseInt(li.dataset.required || '0', 10),
             autoplay: !!autoplay
         };
@@ -425,7 +427,9 @@
         if (manualBtn) manualBtn.disabled = true;
         c.readTimes = function () { return [0, parseInt(li.dataset.duration || '0', 10)]; };
         c.playing = document.visibilityState === 'visible';
-        setState('افتح الفيديو وشاهده كاملًا؛ يُفعَّل زر «أنهيت المشاهدة» بعد انقضاء الزمن المطلوب.');
+        setState(REVIEW
+            ? 'افتح الفيديو للمراجعة (لا يُحتسب).'
+            : 'افتح الفيديو وشاهده كاملًا؛ يُفعَّل زر «أنهيت المشاهدة» بعد انقضاء الزمن المطلوب.');
         ping('playing');
         startTimer();
     }
@@ -575,7 +579,7 @@
     });
 
     window.addEventListener('pagehide', function () {
-        if (!current || !current.playing) return;
+        if (REVIEW || !current || !current.playing) return;
         try {
             var body = JSON.stringify({ enrollmentId: enrollmentId, videoProgressId: current.id, state: 'paused', position: 0, duration: 0 });
             fetch(pingUrl, {
@@ -587,6 +591,10 @@
     });
 
     // أول فيديو متاح وغير مكتمل
+    if (REVIEW) {
+        setState('وضع المراجعة: اضغط «مراجعة» بجوار أي فيديو للمشاهدة (لا يُحتسب).');
+        return;
+    }
     var first = listEl.querySelector('li[data-unlocked="1"][data-completed="0"]');
     if (first) {
         if (titleEl) titleEl.textContent = first.dataset.title || '';

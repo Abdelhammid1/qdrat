@@ -40,6 +40,23 @@ namespace QdratNew.ViewModels.RemedialTracks
         public bool Allows(int batchId) => PermittedBatchIds is null || PermittedBatchIds.Contains(batchId);
     }
 
+    /// <summary>RTK-S10.2: مدخل وضع مراجعة الفيديوهات. EnrollmentIds فارغ + ApplyToAll = كل تسجيلات الأمر.</summary>
+    public sealed record RemedialTrackReviewInput(
+        IReadOnlyList<int>? EnrollmentIds,
+        bool ApplyToAll,
+        bool Enabled,
+        DateTime? UntilUtc);
+
+    /// <summary>RTK-S10.3: نموذج POST من واجهة الأدمن (لا Overposting: الأمر والمعرّفات والنية فقط). الانتهاء بتوقيت السعودية.</summary>
+    public sealed class SetRemedialTrackVideoReviewInput
+    {
+        public int PublicationId { get; set; }
+        public List<int>? EnrollmentIds { get; set; }
+        public bool ApplyToAll { get; set; }
+        public bool Enabled { get; set; }
+        public DateTime? UntilLocal { get; set; }
+    }
+
     /// <summary>بيانات نتيجة نجاح النشر (تُرجَع في RemedialTrackResult.Data).</summary>
     public sealed record RemedialTrackPublicationCreated(int PublicationId, int Enrolled, int Skipped);
 

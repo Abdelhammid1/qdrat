@@ -22,6 +22,13 @@ namespace QdratNew.Entities
 
         public DateTime? TermsAcceptedAtUtc { get; set; }    // إقرار شروط الخطة (مرة لكل تسجيل)
 
+        /// <summary>وضع مراجعة الفيديوهات (RTK v2/D24): يفتح فيديوهات المحاور المنتهية للقراءة فقط.</summary>
+        public bool VideoReviewEnabled { get; set; }
+        public DateTime? VideoReviewUntilUtc { get; set; }          // null = مفتوح حتى يغلقه الأدمن
+        public DateTime? VideoReviewChangedAtUtc { get; set; }
+        [MaxLength(450)] public string? VideoReviewChangedByUserId { get; set; }
+        [MaxLength(200)] public string? VideoReviewChangedByName { get; set; }
+
         [MaxLength(2000)] public string? AdminReportNote { get; set; }   // ملاحظة تقرير ولي الأمر
 
         public DateTime CreatedAtUtc { get; set; }

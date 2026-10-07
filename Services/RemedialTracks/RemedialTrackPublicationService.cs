@@ -736,6 +736,126 @@ namespace QdratNew.Services.RemedialTracks
         }
 
         // ======================================================================
+        // RTK v2 / D24: وضع مراجعة الفيديوهات (للقراءة فقط — لا يمس تقدّمًا ولا درجات)
+        // ======================================================================
+
+        public const int MaxReviewEnrollmentIds = 500;
+        public const int MaxReviewDays = 90;
+
+        public async Task<RemedialTrackResult> SetVideoReviewAsync(
+            int publicationId, RemedialTrackReviewInput input, RemedialTrackActor actor, RemedialTrackBatchScope scope, CancellationToken ct = default)
+        {
+            var now = Now;
+
+            List<int>? ids = null;
+            if (!input.ApplyToAll)
+            {
+                ids = (input.EnrollmentIds ?? Array.Empty<int>()).Distinct().ToList();
+                if (ids.Count == 0)
+                    return RemedialTrackResult.Fail("⚠️ اختر طالبًا واحدًا على الأقل أو طبّق على الجميع.");
+                if (ids.Count > MaxReviewEnrollmentIds)
+                    return RemedialTrackResult.Fail($"⚠️ الحد الأقصى {MaxReviewEnrollmentIds} طالب للطلب الواحد.");
+            }
+
+            // الانتهاء يخص التشغيل فقط؛ الإيقاف يصفّره
+            DateTime? untilUtc = null;
+            if (input.Enabled && input.UntilUtc is { } requested)
+            {
+                if (requested <= now)
+                    return RemedialTrackResult.Fail("⚠️ تاريخ انتهاء المراجعة يجب أن يكون في المستقبل.");
+                if (requested > now.AddDays(MaxReviewDays))
+                    return RemedialTrackResult.Fail($"⚠️ أقصى مدة للمراجعة {MaxReviewDays} يومًا.");
+                untilUtc = requested;
+            }
+
+            var batchId = 0;
+            var affected = 0;
+            RemedialTrackResult result;
+            try
+            {
+                result = await WriteCoreAsync(async (db, token) =>
+                {
+                    var pub = await db.RemedialTrackPublications.AsNoTracking()
+                        .Where(p => p.Id == publicationId)
+                        .Select(p => new { p.BatchId, p.IsDeleted, p.Status })
+                        .FirstOrDefaultAsync(token);
+                    if (pub is null || !scope.Allows(pub.BatchId))
+                        return RemedialTrackResult.Fail("⚠️ أمر النشر غير موجود.");
+                    if (pub.IsDeleted || pub.Status != RemedialTrackPublicationStatus.Active)
+                        return RemedialTrackResult.Fail("⚠️ أمر النشر غير نشط (ملغى أو محذوف).");
+                    batchId = pub.BatchId;
+
+                    // تسجيلات الأمر غير الملغاة (الملغاة لا يصلها الطالب أصلًا)
+                    var target = db.RemedialTrackEnrollments
+                        .Where(e => e.PublicationId == publicationId && e.Status != RemedialTrackEnrollmentStatus.Cancelled);
+
+                    if (ids is not null)
+                    {
+                        // قائمة ≤ 500 — CompatibilityLevel(120) يولّد IN بثوابت لا OPENJSON
+                        target = target.Where(e => ids.Contains(e.Id));
+                        var owned = await target.CountAsync(token);
+                        if (owned != ids.Count)
+                            return RemedialTrackResult.Fail("🚫 بعض التسجيلات المحدّدة لا تتبع هذا الأمر أو ملغاة؛ لم يُنفَّذ شيء.");
+                    }
+
+                    var enabled = input.Enabled;
+                    var userId = Truncate(actor.UserId, 450);
+                    var userName = Truncate(actor.Name, 200);
+
+                    if (db.Database.IsRelational())
+                    {
+                        // تحديث مجمَّع بلا RowVersion: لا يتعارض مع نبضات الطالب الجارية على نفس التسجيل
+                        affected = await target.ExecuteUpdateAsync(s => s
+                            .SetProperty(e => e.VideoReviewEnabled, enabled)
+                            .SetProperty(e => e.VideoReviewUntilUtc, untilUtc)
+                            .SetProperty(e => e.VideoReviewChangedAtUtc, now)
+                            .SetProperty(e => e.VideoReviewChangedByUserId, userId)
+                            .SetProperty(e => e.VideoReviewChangedByName, userName), token);
+                    }
+                    else
+                    {
+                        // InMemory (الاختبارات) لا يدعم ExecuteUpdate
+                        var rows = await target.ToListAsync(token);
+                        foreach (var e in rows)
+                        {
+                            e.VideoReviewEnabled = enabled;
+                            e.VideoReviewUntilUtc = untilUtc;
+                            e.VideoReviewChangedAtUtc = now;
+                            e.VideoReviewChangedByUserId = userId;
+                            e.VideoReviewChangedByName = userName;
+                        }
+                        await db.SaveChangesAsync(token);
+                        affected = rows.Count;
+                    }
+
+                    if (affected == 0)
+                        return RemedialTrackResult.Fail("ℹ️ لا توجد تسجيلات نشطة لتطبيق المراجعة عليها.");
+
+                    return RemedialTrackResult.Ok(enabled
+                        ? $"✅ فُتح وضع المراجعة لـ {affected} طالبًا (للمشاهدة فقط ولا تتأثر الدرجات)."
+                        : $"✅ أُغلق وضع المراجعة لـ {affected} طالبًا.", affected);
+                }, ct);
+            }
+            catch (DbUpdateException ex)
+            {
+                _logger.LogError(ex, "RTK video-review update failed (publication {PublicationId})", publicationId);
+                return RemedialTrackResult.Fail("⚠️ تعذّر حفظ وضع المراجعة. أعد المحاولة.");
+            }
+
+            if (result.Success)
+            {
+                var untilText = untilUtc is null
+                    ? "بلا انتهاء (حتى يغلقه الأدمن)"
+                    : "حتى " + _tz.ConvertToSaudi(untilUtc.Value).ToString("yyyy/MM/dd HH:mm", CultureInfo.InvariantCulture);
+                await LogActivityAsync("RemedialTrackVideoReviewChanged",
+                    $"[RTK pub:{publicationId}] وضع مراجعة الفيديوهات: {(input.Enabled ? "تشغيل" : "إيقاف")} لـ {affected} تسجيلًا ({(input.ApplyToAll ? "الكل" : "محدّدون")})"
+                    + (input.Enabled ? $" — {untilText}" : string.Empty),
+                    actor, batchId);
+            }
+            return result;
+        }
+
+        // ======================================================================
         // مساعدات
         // ======================================================================
 

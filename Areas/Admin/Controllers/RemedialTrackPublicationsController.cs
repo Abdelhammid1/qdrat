@@ -7,6 +7,7 @@ using QdratNew.Enums;
 using QdratNew.Security;
 using QdratNew.Security.AdminPermissions;
 using QdratNew.Services.Admin;
+using QdratNew.Services.Interfaces;
 using QdratNew.Services.RemedialTracks;
 using QdratNew.ViewModels.RemedialTracks;
 
@@ -25,14 +26,17 @@ namespace QdratNew.Areas.Admin.Controllers
         private readonly IEmployeeBatchAccessService _batchAccess;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IAuthorizationService _authorization;
+        private readonly ITimeZoneService _tz;
 
         public RemedialTrackPublicationsController(
             IRemedialTrackPublicationService publications,
             IRemedialTrackReportService reports,
             IEmployeeBatchAccessService batchAccess,
             UserManager<ApplicationUser> userManager,
-            IAuthorizationService authorization)
+            IAuthorizationService authorization,
+            ITimeZoneService tz)
         {
+            _tz = tz;
             _publications = publications;
             _reports = reports;
             _batchAccess = batchAccess;
@@ -143,6 +147,7 @@ namespace QdratNew.Areas.Admin.Controllers
             {
                 vm.Dashboard.CanUnlock = await CanAsync(AdminPermissionPolicies.RemedialTrackPublications_Unlock);
                 vm.Dashboard.CanReadReports = await CanAsync(AdminPermissionPolicies.RemedialTrackReports_Read);
+                vm.Dashboard.CanManageReview = await CanAsync(AdminPermissionPolicies.RemedialTrackPublications_ManageReview);
             }
             return View(vm);
         }
@@ -194,6 +199,28 @@ namespace QdratNew.Areas.Admin.Controllers
                 return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
 
             var r = await _publications.RestoreAsync(id, actor, await ScopeAsync(), ct);
+            return Json(new { success = r.Success, message = r.Message, data = r.Data, warnings = r.Warnings });
+        }
+
+        // ---------------- RTK v2 / D24: وضع مراجعة الفيديوهات (للقراءة فقط) ----------------
+
+        [HttpPost, ValidateAntiForgeryToken]
+        [AdminPermission("RemedialTrackPublications", "ManageReview")]
+        public async Task<IActionResult> SetVideoReview([FromForm] SetRemedialTrackVideoReviewInput input, CancellationToken ct)
+        {
+            var actor = await ActorAsync();
+            if (actor is null)
+                return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
+
+            // الانتهاء يصل بتوقيت السعودية ويُحوَّل إلى UTC هنا؛ التحقق من المستقبل/90 يومًا داخل الخدمة
+            DateTime? untilUtc = input.Enabled && input.UntilLocal.HasValue
+                ? _tz.ConvertToUtc(DateTime.SpecifyKind(input.UntilLocal.Value, DateTimeKind.Unspecified))
+                : null;
+
+            var r = await _publications.SetVideoReviewAsync(
+                input.PublicationId,
+                new RemedialTrackReviewInput(input.EnrollmentIds, input.ApplyToAll, input.Enabled, untilUtc),
+                actor, await ScopeAsync(), ct);
             return Json(new { success = r.Success, message = r.Message, data = r.Data, warnings = r.Warnings });
         }
 

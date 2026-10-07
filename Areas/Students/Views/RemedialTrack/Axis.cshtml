@@ -8,7 +8,9 @@
     var percent = totalVideos == 0 ? 0 : (int)Math.Round(doneVideos * 100.0 / totalVideos);
     const double ringLen = 251.33;
     var ringOffset = (ringLen * (1 - percent / 100.0)).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
-    var showPlayer = !Model.VideosClosed && hasVideos && Model.CanWatch;
+    // RTK v2/D24: وضع المراجعة يعرض المشغّل للقراءة فقط (بلا نبضات ولا تقدّم) — حارس JS عبر data-review
+    var canPlay = Model.CanWatch || Model.IsReviewMode;
+    var showPlayer = !Model.VideosClosed && hasVideos && canPlay;
 }
 @section Styles {
     <link href="~/css/student-rtk.css" rel="stylesheet" asp-append-version="true" />
@@ -32,7 +34,7 @@
                 <h1>@Model.AxisTitle</h1>
                 <p class="ax-hero-track">@Model.TrackTitle</p>
             </div>
-            @if (hasVideos && !Model.VideosClosed)
+            @if (hasVideos && !Model.VideosClosed && !Model.IsReviewMode)
             {
                 <div class="ax-ring" role="img" aria-label="أنهيت @doneVideos من @totalVideos فيديو" id="axRing">
                     <svg viewBox="0 0 100 100" aria-hidden="true">
@@ -59,6 +61,20 @@
             break;
     }
 
+    @if (Model.IsReviewMode)
+    {
+        <div class="ax-banner ax-banner-info" role="status" id="rtkReviewBanner">
+            <i class="fas fa-eye" aria-hidden="true"></i>
+            <div>
+                <strong>وضع المراجعة:</strong> للمشاهدة فقط ولا يُحتسب (لا يؤثر على تقدّمك أو درجاتك).
+                @if (Model.ReviewUntilLocal.HasValue)
+                {
+                    <span>تنتهي الإتاحة بتاريخ @Model.ReviewUntilLocal.Value.ToString("yyyy/MM/dd HH:mm", System.Globalization.CultureInfo.InvariantCulture) (توقيت السعودية).</span>
+                }
+            </div>
+        </div>
+    }
+
     @if (TempData["RtkMessage"] is string rtkMessage)
     {
         <div class="ax-banner ax-banner-info" role="alert"><i class="fas fa-circle-info" aria-hidden="true"></i><div>@rtkMessage</div></div>
@@ -78,12 +94,13 @@
              class="ax-layout @(showPlayer ? "has-player" : "")"
              data-enrollment-id="@Model.EnrollmentId"
              data-can-watch="@(Model.CanWatch ? "1" : "0")"
+             data-review="@(Model.IsReviewMode ? "1" : "0")"
              data-open-url="@Url.Action("Open", "RemedialTrack", new { area = "Students", enrollmentId = Model.EnrollmentId })"
              data-ping-url="@Url.Action("VideoPing", "RemedialTrack", new { area = "Students" })">
 
             @Html.AntiForgeryToken()
 
-            @if (Model.CanWatch)
+            @if (canPlay)
             {
                 <section class="ax-card ax-player-card" aria-label="مشغّل الفيديو">
                     <div class="ax-now">
@@ -108,7 +125,10 @@
                     <div id="rtkOtherBox" hidden>
                         <p class="small mb-2">هذا الفيديو على منصة خارجية. افتحه في نافذة جديدة وأبقِ هذه الصفحة مفتوحة أثناء المشاهدة.</p>
                         <a id="rtkOtherLink" class="rtk-btn rtk-btn-outline mb-2" target="_blank" rel="noopener noreferrer"><i class="fas fa-up-right-from-square" aria-hidden="true"></i> فتح الفيديو</a>
-                        <button type="button" id="rtkManualDone" class="rtk-btn" disabled><i class="fas fa-check" aria-hidden="true"></i> أنهيت المشاهدة</button>
+                        @if (!Model.IsReviewMode)
+                        {
+                            <button type="button" id="rtkManualDone" class="rtk-btn" disabled><i class="fas fa-check" aria-hidden="true"></i> أنهيت المشاهدة</button>
+                        }
                     </div>
                     <div class="rtk-player-state" id="rtkState" role="status" aria-live="polite"></div>
                 </section>
@@ -118,18 +138,24 @@
                 <div class="ax-card ax-side-card">
                     <div class="ax-side-head">
                         <h2>فيديوهات المحور</h2>
-                        <span id="axCount">@doneVideos / @totalVideos</span>
+                        @if (!Model.IsReviewMode)
+                        {
+                            <span id="axCount">@doneVideos / @totalVideos</span>
+                        }
                     </div>
-                    <div class="ax-bar" aria-hidden="true"><span id="axBarFill" style="width:@percent%"></span></div>
+                    @if (!Model.IsReviewMode)
+                    {
+                        <div class="ax-bar" aria-hidden="true"><span id="axBarFill" style="width:@percent%"></span></div>
+                    }
                     <ol class="rtk-videos" id="rtkVideoList">
                         @* لا نطبع معرّف/رابط الفيديو في HTML إلا للمتاح حاليًا والتالي مباشرة (يُفتح من JS بعد الإتمام) *@
                         @{ var revealedNextLocked = false; }
                         @foreach (var v in Model.Videos)
                         {
-                            var active = Model.CanWatch && v.IsUnlocked && !v.IsCompleted;
+                            var active = !Model.IsReviewMode && Model.CanWatch && v.IsUnlocked && !v.IsCompleted;
                             var exposeSource = v.IsUnlocked;
                             if (!v.IsUnlocked && !revealedNextLocked) { exposeSource = true; revealedNextLocked = true; }
-                            <li class="rtk-video-item @(v.IsCompleted ? "is-done" : "") @(Model.CanWatch && !v.IsUnlocked ? "is-locked" : "")"
+                            <li class="rtk-video-item @(v.IsCompleted && !Model.IsReviewMode ? "is-done" : "") @(Model.CanWatch && !v.IsUnlocked ? "is-locked" : "")"
                                 data-vp-id="@v.VideoProgressId"
                                 data-order="@v.Order"
                                 data-title="@v.Title"
@@ -141,9 +167,13 @@
                                 data-required="@v.RequiredSeconds"
                                 data-completed="@(v.IsCompleted ? "1" : "0")"
                                 data-unlocked="@(v.IsUnlocked ? "1" : "0")">
-                                <i class="rtk-video-icon fas @(v.IsCompleted ? "fa-circle-check" : (Model.CanWatch && !v.IsUnlocked) ? "fa-lock" : "fa-circle-play")" aria-hidden="true"></i>
+                                <i class="rtk-video-icon fas @(v.IsCompleted && !Model.IsReviewMode ? "fa-circle-check" : (Model.CanWatch && !v.IsUnlocked) ? "fa-lock" : "fa-circle-play")" aria-hidden="true"></i>
                                 <span class="rtk-video-title">@v.Order. @v.Title</span>
-                                @if (Model.CanWatch && v.IsUnlocked && !v.IsCompleted)
+                                @if (Model.IsReviewMode)
+                                {
+                                    <button type="button" class="rtk-btn rtk-btn-outline rtk-select-video">مراجعة</button>
+                                }
+                                else if (Model.CanWatch && v.IsUnlocked && !v.IsCompleted)
                                 {
                                     <button type="button" class="rtk-btn rtk-btn-outline rtk-select-video">@(active ? "تشغيل" : "مشاهدة")</button>
                                 }
@@ -203,7 +233,7 @@
 </div>
 
 @section Scripts {
-    @if (Model.CanWatch && hasVideos)
+    @if (canPlay && hasVideos)
     {
         <script src="~/js/remedial-track-player.js" asp-append-version="true"></script>
     }

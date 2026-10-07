@@ -189,11 +189,15 @@ namespace QdratNew.Services.RemedialTracks
                     AxisTitle = a.Axis!.TitleOverride ?? a.Axis.Section!.Title,
                     TrackTitle = a.Enrollment!.Publication!.Track!.Title,
                     MinWatch = a.Enrollment.Publication.Track.MinWatchPercent,
-                    ExamMinutes = a.Axis.ExamDurationMinutes
+                    ExamMinutes = a.Axis.ExamDurationMinutes,
+                    ReviewEnabled = a.Enrollment.VideoReviewEnabled,
+                    ReviewUntilUtc = a.Enrollment.VideoReviewUntilUtc,
+                    EnrollmentActive = a.Enrollment.Status != RemedialTrackEnrollmentStatus.Cancelled
+                                       && a.Enrollment.Publication.Status == RemedialTrackPublicationStatus.Active
                 })
                 .FirstOrDefaultAsync(ct);
 
-            if (ap is null || ap.Status == RemedialTrackAxisStatus.Locked) return null;
+            if (ap is null || ap.Status == RemedialTrackAxisStatus.Locked) return null;   // Locked لا يُراجع أبدًا (D24)
 
             // العلامة المائية: استعلام صغير منفصل حتى لا يتأثر الاستعلام الرئيسي
             var who = await db.Students.AsNoTracking()
@@ -210,11 +214,15 @@ namespace QdratNew.Services.RemedialTracks
             var videosClosed = ap.Status is RemedialTrackAxisStatus.Passed
                 or RemedialTrackAxisStatus.FailedBlocked or RemedialTrackAxisStatus.FailedOpenedByAdmin;
 
+            // RTK v2/D24: وضع المراجعة — للقراءة فقط، حساب الخادم لحظة الطلب (لا JS)، لمحور منتهٍ فقط (Locked أُخرج أعلاه)
+            var reviewMode = videosClosed && ap.EnrollmentActive
+                             && RemedialTrackStateMachine.IsVideoReviewOpen(ap.ReviewEnabled, ap.ReviewUntilUtc, _time.GetUtcNow().UtcDateTime);
+
             if (canWatch)
-                await EnsureVideoProgressRowsAsync(db, ap.Id, ap.AxisId, ap.Round, ct);
+                await EnsureVideoProgressRowsAsync(db, ap.Id, ap.AxisId, ap.Round, ct);   // لا كتابة في مسار المراجعة
 
             var rows = await db.RemedialTrackVideoProgresses.AsNoTracking()
-                .Where(v => !videosClosed && v.AxisProgressId == ap.Id && v.Round == ap.Round && v.Video!.IsActive)
+                .Where(v => (!videosClosed || reviewMode) && v.AxisProgressId == ap.Id && v.Round == ap.Round && v.Video!.IsActive)
                 .OrderBy(v => v.VideoOrder)
                 .Select(v => new
                 {
@@ -241,12 +249,13 @@ namespace QdratNew.Services.RemedialTracks
                     Title = r.Title,
                     Provider = r.Provider,
                     // لا يغادر الخادمَ معرّف/رابط فيديو خارج الجولة الحالية (انتظار اختبار): لا إعادة مشاهدة
-                    ExternalId = canWatch ? r.ExternalId : null,
-                    Url = canWatch ? r.Url : string.Empty,
-                    EmbedUrl = canWatch ? RemedialTrackVideoUrlParser.BuildEmbedUrl(r.Provider, r.ExternalId) : null,
+                    // (ما عدا وضع المراجعة D24: الأدمن فتحها صراحةً للقراءة فقط)
+                    ExternalId = canWatch || reviewMode ? r.ExternalId : null,
+                    Url = canWatch || reviewMode ? r.Url : string.Empty,
+                    EmbedUrl = canWatch || reviewMode ? RemedialTrackVideoUrlParser.BuildEmbedUrl(r.Provider, r.ExternalId) : null,
                     DurationSeconds = r.Duration,
                     IsCompleted = r.IsCompleted,
-                    IsUnlocked = previousDone,
+                    IsUnlocked = previousDone || reviewMode,
                     WatchedSeconds = (int)Math.Floor(r.WatchedSeconds),
                     RequiredSeconds = r.Duration.HasValue
                         ? (int)Math.Ceiling(r.Duration.Value * ap.MinWatch / 100.0)
@@ -286,7 +295,9 @@ namespace QdratNew.Services.RemedialTracks
                 Status = ap.Status,
                 Round = ap.Round,
                 CanWatch = canWatch,
-                VideosClosed = videosClosed,
+                VideosClosed = videosClosed && !reviewMode,
+                IsReviewMode = reviewMode,
+                ReviewUntilLocal = reviewMode && ap.ReviewUntilUtc.HasValue ? _tz.ConvertToSaudi(ap.ReviewUntilUtc.Value) : null,
                 WatermarkText = studentName,
                 WatermarkIdText = nationalId,
                 AllVideosDone = videos.Count > 0 && videos.All(v => v.IsCompleted),

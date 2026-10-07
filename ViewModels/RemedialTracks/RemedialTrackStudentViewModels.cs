@@ -110,6 +110,8 @@ namespace QdratNew.ViewModels.RemedialTracks
         public int Round { get; set; }
         public bool CanWatch { get; set; }        // Videos/Rewatch فقط
         public bool VideosClosed { get; set; }    // انتهى المحور (اجتاز/انتقل للتالي): لا تُعرض الفيديوهات ولا روابطها
+        public bool IsReviewMode { get; set; }    // RTK v2/D24: وضع مراجعة (للقراءة فقط): الروابط مسلَّمة بلا نبضات ولا تقدّم
+        public DateTime? ReviewUntilLocal { get; set; }   // بتوقيت السعودية؛ null = مفتوحة حتى يغلقها الأدمن
         public bool AllVideosDone { get; set; }
         public bool ExamReady { get; set; }       // AwaitingExam101/102
         public RemedialTrackExamNumber? PendingExam { get; set; }

@@ -160,6 +160,7 @@
     @if (Model.Dashboard is { } dash)
     {
         var k = dash.Kpis;
+        var canReview = dash.CanManageReview && Model.IsActive;   // RTK v2/D24: وضع مراجعة الفيديوهات
         var chartData = new
         {
             status = new[] { k.NotStarted, k.InProgress, k.Completed, k.CompletedWithFailures, k.Cancelled },
@@ -235,16 +236,37 @@
             {
                 <div class="rtk-table-wrap">
                     <table class="rtk-table rtk-table--zebra">
-                        <thead><tr><th>الطالب</th><th>الحالة</th><th>المحور الحالي</th><th>آخر نتيجة</th><th>آخر نشاط</th><th>إجراءات</th></tr></thead>
+                        <thead><tr>
+                            @if (canReview)
+                            {
+                                <th class="rtk-noprint"><label class="rtk-chk"><input type="checkbox" id="rtkReviewSelectAll" aria-label="تحديد كل طلاب الصفحة" /></label></th>
+                            }
+                            <th>الطالب</th><th>الحالة</th><th>المحور الحالي</th><th>آخر نتيجة</th><th>آخر نشاط</th><th>مراجعة الفيديوهات</th><th>إجراءات</th>
+                        </tr></thead>
                         <tbody>
                             @foreach (var s in dash.Students)
                             {
+                                var reviewOpen = QdratNew.Services.RemedialTracks.RemedialTrackStateMachine.IsVideoReviewOpen(s.VideoReviewEnabled, s.VideoReviewUntilUtc, DateTime.UtcNow);
                                 <tr class="rtk-row rtk-row--@StatusKey(s.Status) @(s.IsBlocked ? "rtk-row--blocked" : "")">
+                                    @if (canReview)
+                                    {
+                                        <td class="rtk-noprint"><label class="rtk-chk"><input type="checkbox" class="rtk-review-cb" value="@s.EnrollmentId" aria-label="تحديد @s.StudentName" /></label></td>
+                                    }
                                     <td class="rtk-name">@s.StudentName</td>
                                     <td><span class="rtk-pill rtk-pill--@StatusKey(s.Status)">@EnrollmentLabel(s.Status)</span>@if (s.IsBlocked) { <text> </text><span class="rtk-badge rtk-badge--lock"><i class="fas fa-lock"></i> محجوب</span> }</td>
                                     <td>@(s.CurrentAxisTitle is null ? "—" : $"{s.CurrentAxisOrder}. {s.CurrentAxisTitle} (الجولة {s.CurrentRound})")</td>
                                     <td>@(s.LastScorePercent.HasValue && s.LastExamNumber.HasValue ? $"{s.LastScorePercent.Value:0.#}% ({s.LastExamNumber.Value.DisplayName()})" : "—")</td>
                                     <td>@(s.LastActivityUtc.HasValue ? Tz.ConvertToSaudi(s.LastActivityUtc.Value).ToString("yyyy-MM-dd HH:mm") : "—")</td>
+                                    <td>
+                                        @if (reviewOpen)
+                                        {
+                                            <span class="rtk-badge rtk-badge--ok"><i class="fas fa-eye"></i> مفتوحة @(s.VideoReviewUntilUtc.HasValue ? "حتى " + Tz.ConvertToSaudi(s.VideoReviewUntilUtc.Value).ToString("yyyy-MM-dd HH:mm") : "بلا انتهاء")</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="rtk-badge"><i class="fas fa-eye-slash"></i> مغلقة</span>
+                                        }
+                                    </td>
                                     <td>
                                         <div class="d-flex gap-1 flex-wrap">
                                             @if (dash.CanReadReports)
@@ -360,6 +382,25 @@
                 }
             }
         </section>
+
+        @if (canReview)
+        {
+            <section class="rtk-panel" id="rtkReviewBox" aria-label="وضع مراجعة الفيديوهات">
+                <h2><i class="fas fa-eye"></i> وضع مراجعة الفيديوهات</h2>
+                <p class="rtk-hint">يتيح فيديوهات المحاور المنتهية (المُجتازة أو المنقول منها) للمشاهدة فقط قبل اختبار معمل القياس، ولا يتغيّر أي تقدّم أو درجة. المحور المغلق لم يُفتح بعد لا يدخل في المراجعة.</p>
+                <div class="rtk-field">
+                    <label for="rtkReviewUntil">تاريخ انتهاء المراجعة (اختياري — بتوقيت السعودية، حتى 90 يومًا؛ فارغ = مفتوحة حتى تُغلقها)</label>
+                    <input type="datetime-local" id="rtkReviewUntil" />
+                </div>
+                <p class="rtk-hint" id="rtkReviewSel" role="status" aria-live="polite">لم يُحدَّد أي طالب في هذه الصفحة.</p>
+                <div class="rtk-form-actions">
+                    <button type="button" class="rtk-btn" data-rtk-act="review-sel-open" disabled><i class="fas fa-eye"></i> فتح المراجعة للمحدّدين</button>
+                    <button type="button" class="rtk-btn rtk-btn--outline" data-rtk-act="review-sel-close" disabled><i class="fas fa-eye-slash"></i> إغلاقها للمحدّدين</button>
+                    <button type="button" class="rtk-btn" data-rtk-act="review-all-open"><i class="fas fa-eye"></i> فتح للجميع</button>
+                    <button type="button" class="rtk-btn rtk-btn--outline" data-rtk-act="review-all-close"><i class="fas fa-eye-slash"></i> إغلاق للجميع</button>
+                </div>
+            </section>
+        }
 
         @if (dash.CanUnlock && Model.IsActive)
         {
@@ -499,7 +540,8 @@
             cancel: '@Url.Action("Cancel", "RemedialTrackPublications", new { area = "Admin" })',
             del: '@Url.Action("Delete", "RemedialTrackPublications", new { area = "Admin" })',
             restore: '@Url.Action("Restore", "RemedialTrackPublications", new { area = "Admin" })',
-            unlock: '@Url.Action("Unlock", "RemedialTrackPublications", new { area = "Admin" })'
+            unlock: '@Url.Action("Unlock", "RemedialTrackPublications", new { area = "Admin" })',
+            review: '@Url.Action("SetVideoReview", "RemedialTrackPublications", new { area = "Admin" })'
         };
         var unlockTarget = null;
         var toast = document.getElementById('rtkToast');
@@ -528,11 +570,58 @@
                 .finally(function () { busy = false; btn.disabled = false; btn.classList.remove('is-busy'); });
         }
 
+        // ── RTK-S10.3: وضع مراجعة الفيديوهات (تحديد متعدد على صفحة الجدول الحالية) ──
+        function reviewChecks() { return [].slice.call(root.querySelectorAll('.rtk-review-cb')); }
+        function selectedReviewIds() { return reviewChecks().filter(function (c) { return c.checked; }).map(function (c) { return c.value; }); }
+        function refreshReviewSelection() {
+            var n = selectedReviewIds().length;
+            var info = document.getElementById('rtkReviewSel');
+            if (info) info.textContent = n === 0 ? 'لم يُحدَّد أي طالب في هذه الصفحة.' : 'المحدّدون في هذه الصفحة: ' + n;
+            ['review-sel-open', 'review-sel-close'].forEach(function (a) {
+                var b = root.querySelector('[data-rtk-act="' + a + '"]'); if (b) b.disabled = n === 0;
+            });
+            var all = document.getElementById('rtkReviewSelectAll'), cbs = reviewChecks();
+            if (all) all.checked = cbs.length > 0 && n === cbs.length;
+        }
+        root.addEventListener('change', function (e) {
+            if (e.target && e.target.id === 'rtkReviewSelectAll') {
+                reviewChecks().forEach(function (c) { c.checked = e.target.checked; });
+                refreshReviewSelection();
+            } else if (e.target && e.target.classList && e.target.classList.contains('rtk-review-cb')) {
+                refreshReviewSelection();
+            }
+        });
+
+        function submitReview(btn, enabled, applyToAll) {
+            var ids = applyToAll ? [] : selectedReviewIds();
+            if (!applyToAll && ids.length === 0) { showToast('⚠️ حدّد طالبًا واحدًا على الأقل.', false); return; }
+            var untilEl = document.getElementById('rtkReviewUntil');
+            var until = enabled && untilEl ? untilEl.value : '';
+            var scopeText = applyToAll ? 'جميع طلاب هذا الأمر' : ids.length + ' طالبًا';
+            var msg = (enabled ? 'سيُتاح لـ ' + scopeText + ' مراجعة فيديوهات المحاور المنتهية للمشاهدة فقط، ولا تتأثر الدرجات ولا التقدّم.'
+                               : 'سيُغلق وضع المراجعة عن ' + scopeText + '.')
+                + (enabled && until ? '\nتنتهي الإتاحة: ' + until.replace('T', ' ') + ' (توقيت السعودية).' : '')
+                + '\nهل تريد المتابعة؟';
+            if (!window.confirm(msg)) return;
+            var fd = new FormData();
+            fd.set('publicationId', id);
+            fd.set('enabled', enabled ? 'true' : 'false');
+            fd.set('applyToAll', applyToAll ? 'true' : 'false');
+            if (until) fd.set('untilLocal', until);
+            ids.forEach(function (v) { fd.append('enrollmentIds', v); });
+            post(urls.review, fd, btn, function () { setTimeout(function () { window.location.reload(); }, 900); });
+        }
+
         root.addEventListener('click', function (e) {
             var btn = e.target.closest('[data-rtk-act]');
             if (!btn || !root.contains(btn)) return;
             var act = btn.getAttribute('data-rtk-act');
             var cancelBox = document.getElementById('rtkCancelBox');
+
+            if (act === 'review-sel-open') { submitReview(btn, true, false); return; }
+            if (act === 'review-sel-close') { submitReview(btn, false, false); return; }
+            if (act === 'review-all-open') { submitReview(btn, true, true); return; }
+            if (act === 'review-all-close') { submitReview(btn, false, true); return; }
 
             if (act === 'regen') {
                 if (!window.confirm('سيُطلب من الطلاب إدخال الرقم الجديد عند فتح محور أو فيديو أو بدء اختبار. هل تريد تجديد الرقم؟')) return;

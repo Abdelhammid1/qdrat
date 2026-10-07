@@ -32,5 +32,12 @@ namespace QdratNew.Services.RemedialTracks
 
         /// <summary>RTK v2/D26: استرجاع أمر محذوف ناعمًا. قد يُولَّد رقم مرجعي جديد عند تعارضه مع أمر نشط.</summary>
         Task<RemedialTrackResult> RestoreAsync(int id, RemedialTrackActor actor, RemedialTrackBatchScope scope, CancellationToken ct = default);
+
+        /// <summary>
+        /// RTK v2/D24: تشغيل/إيقاف وضع مراجعة الفيديوهات (للقراءة فقط) لفرد أو محدّدين أو كل تسجيلات الأمر.
+        /// أي معرّف لا ينتمي للأمر (أو تسجيل ملغى) يُرفض الطلب كله. حد أقصى 500 معرّف، والانتهاء في المستقبل بحد 90 يومًا.
+        /// عند النجاح: Data = عدد التسجيلات المحدَّثة (int).
+        /// </summary>
+        Task<RemedialTrackResult> SetVideoReviewAsync(int publicationId, RemedialTrackReviewInput input, RemedialTrackActor actor, RemedialTrackBatchScope scope, CancellationToken ct = default);
     }
 }

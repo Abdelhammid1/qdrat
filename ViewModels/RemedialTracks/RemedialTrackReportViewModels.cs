@@ -157,6 +157,10 @@ namespace QdratNew.ViewModels.RemedialTracks
         public double? LastScorePercent { get; set; }
         public DateTime? LastActivityUtc { get; set; }
 
+        // RTK v2/D24: حالة وضع مراجعة الفيديوهات (الصلاحية الفعلية = IsVideoReviewOpen لحظة العرض)
+        public bool VideoReviewEnabled { get; set; }
+        public DateTime? VideoReviewUntilUtc { get; set; }
+
         /// <summary>يُملأ فقط للمحجوبين الذين لهم محور تالٍ — يفعّل زر «فتح المحور التالي».</summary>
         public int? BlockedAxisProgressId { get; set; }
         public string? BlockedAxisTitle { get; set; }
@@ -203,6 +207,7 @@ namespace QdratNew.ViewModels.RemedialTracks
         // صلاحيات العرض (تُحدَّد في الكنترولر)
         public bool CanUnlock { get; set; }
         public bool CanReadReports { get; set; }
+        public bool CanManageReview { get; set; }     // RTK v2/D24
     }
 
     // ============ RTK-S6: مدخلات POST (ViewModels مخصّصة — لا Overposting) ============

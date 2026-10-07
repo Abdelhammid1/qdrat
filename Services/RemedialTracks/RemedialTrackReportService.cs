@@ -269,6 +269,8 @@ namespace QdratNew.Services.RemedialTracks
                     StudentId = e.StudentId,
                     StudentName = e.Student!.FullName,
                     Status = e.Status,
+                    VideoReviewEnabled = e.VideoReviewEnabled,
+                    VideoReviewUntilUtc = e.VideoReviewUntilUtc,
                     CurrentAxisTitle = e.AxisProgresses
                         .Where(a => a.AxisId == e.CurrentAxisId)
                         .Select(a => a.Axis!.TitleOverride ?? a.Axis.Section!.Title).FirstOrDefault(),
