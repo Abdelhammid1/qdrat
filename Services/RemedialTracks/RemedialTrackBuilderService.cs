@@ -1,8 +1,10 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using QdratNew.Data;
 using QdratNew.Entities;
 using QdratNew.Enums;
+using QdratNew.Services.Interfaces;
 using QdratNew.ViewModels.RemedialTracks;
 
 namespace QdratNew.Services.RemedialTracks
@@ -22,15 +24,34 @@ namespace QdratNew.Services.RemedialTracks
         private readonly IDbContextFactory<ApplicationDbContext> _dbFactory;
         private readonly TimeProvider _time;
         private readonly IRemedialTrackCodeGenerator _codes;
+        private readonly IAdminActivityLogger _activity;
+        private readonly ILogger<RemedialTrackBuilderService>? _logger;
 
         public RemedialTrackBuilderService(
             IDbContextFactory<ApplicationDbContext> dbFactory,
             TimeProvider time,
-            IRemedialTrackCodeGenerator codes)
+            IRemedialTrackCodeGenerator codes,
+            IAdminActivityLogger activity,
+            ILogger<RemedialTrackBuilderService>? logger = null)
         {
             _dbFactory = dbFactory;
             _time = time;
             _codes = codes;
+            _activity = activity;
+            _logger = logger;
+        }
+
+        // RTK v2/D25: سجل نشاط الأدمن بعد نجاح الـ Transaction — فشله لا يُبطل التعديل
+        private async Task LogActivityAsync(string actionType, string description, RemedialTrackActor actor)
+        {
+            try
+            {
+                await _activity.LogAsync(actionType, description, actor.UserId, actor.Name);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "RTK: فشل تسجيل نشاط الأدمن ({Action})", actionType);
+            }
         }
 
         private DateTime Now => _time.GetUtcNow().UtcDateTime;
@@ -374,14 +395,19 @@ namespace QdratNew.Services.RemedialTracks
                 return RemedialTrackResult.Ok("✅ تم حذف المحور.");
             }, ct);
 
-        public Task<RemedialTrackResult> SaveAxisExamsAsync(SaveRemedialAxisExamsInput input, CancellationToken ct = default)
-            => WriteAsync(async (db, c) =>
+        public async Task<RemedialTrackResult> SaveAxisExamsAsync(SaveRemedialAxisExamsInput input, RemedialTrackActor actor, CancellationToken ct = default)
+        {
+            string? logText = null;
+            string? logAction = null;
+
+            var result = await WriteAsync(async (db, c) =>
             {
+                logText = null;
                 var axis = await db.RemedialTrackAxes.FirstOrDefaultAsync(a => a.Id == input.AxisId, c);
                 if (axis is null) return RemedialTrackResult.Fail("⚠️ المحور غير موجود.");
 
                 var track = await db.RemedialTracks.FirstOrDefaultAsync(t => t.Id == axis.TrackId, c);
-                var blocked = Guard(track, requireUnlocked: true);
+                var blocked = Guard(track, requireUnlocked: false);   // RTK v2/D25: تعديل النموذجين مسموح بعد النشر
                 if (blocked is not null) return blocked;
 
                 var (errors, warnings) = await ValidateExamModelsAsync(
@@ -389,14 +415,39 @@ namespace QdratNew.Services.RemedialTracks
                 if (errors.Count > 0)
                     return RemedialTrackResult.Fail("⚠️ " + string.Join(" • ", errors), errors);
 
+                var before = $"101={axis.Exam101ModelId}, 102={axis.Exam102ModelId}, مدة={axis.ExamDurationMinutes}";
+                var published = track.IsStructureLocked;
+
                 axis.Exam101ModelId = input.Exam101ModelId;
                 axis.Exam102ModelId = input.Exam102ModelId;
                 axis.ExamDurationMinutes = input.ExamDurationMinutes;
-                MarkStructureChanged(track);
+                if (!published) MarkStructureChanged(track);   // قبل النشر فقط تعود الخطة Draft
+                else track.UpdatedAtUtc = Now;                 // بعد النشر تبقى Ready
 
                 await db.SaveChangesAsync(c);
-                return RemedialTrackResult.Ok("✅ تم حفظ نموذجي الاختبار.", null, warnings);
+
+                var warnList = warnings is null ? new List<string>() : new List<string>(warnings);
+                if (published)
+                {
+                    // استعلام Count واحد: الطلاب المنتظرون لاختبار هذا المحور (المحاولات الجارية أسئلتها مجمّدة فلا تتأثر)
+                    var waiting = await db.RemedialTrackAxisProgresses.AsNoTracking()
+                        .CountAsync(a => a.AxisId == axis.Id
+                                         && (a.Status == RemedialTrackAxisStatus.AwaitingExam101 || a.Status == RemedialTrackAxisStatus.AwaitingExam102)
+                                         && a.Enrollment!.Status != RemedialTrackEnrollmentStatus.Cancelled, c);
+                    if (waiting > 0)
+                        warnList.Add($"⚠️ {waiting} طالبًا ينتظرون اختبار هذا المحور وسيؤدّون النموذج الجديد؛ المحاولات الجارية لا تتأثر.");
+
+                    logAction = "RemedialTrackAxisExamsEdited";
+                    logText = $"[RTK track:{track.Id}] تعديل نموذجي اختبار المحور {axis.Id} في الخطة {track.Id} بعد النشر: [{before}] ← [101={axis.Exam101ModelId}, 102={axis.Exam102ModelId}, مدة={axis.ExamDurationMinutes}]";
+                }
+
+                return RemedialTrackResult.Ok("✅ تم حفظ نموذجي الاختبار.", null, warnList.Count == 0 ? null : warnList);
             }, ct);
+
+            if (result.Success && logText is not null && logAction is not null)
+                await LogActivityAsync(logAction, logText, actor);
+            return result;
+        }
 
         // ======================================================================
         // الفيديوهات
@@ -445,9 +496,13 @@ namespace QdratNew.Services.RemedialTracks
                 return RemedialTrackResult.Ok("✅ تمت إضافة الفيديو.", video.Id);
             }, ct);
 
-        public Task<RemedialTrackResult> EditVideoAsync(EditRemedialVideoInput input, CancellationToken ct = default)
-            => WriteAsync(async (db, c) =>
+        public async Task<RemedialTrackResult> EditVideoAsync(EditRemedialVideoInput input, RemedialTrackActor actor, CancellationToken ct = default)
+        {
+            string? logText = null;
+
+            var result = await WriteAsync(async (db, c) =>
             {
+                logText = null;
                 var video = await db.RemedialTrackVideos.FirstOrDefaultAsync(v => v.Id == input.VideoId, c);
                 if (video is null) return RemedialTrackResult.Fail("⚠️ الفيديو غير موجود.");
 
@@ -465,6 +520,9 @@ namespace QdratNew.Services.RemedialTracks
                 var parsed = ParseVideo(input.Url, input.DurationSeconds, out var error);
                 if (error is not null) return RemedialTrackResult.Fail(error);
 
+                var before = $"عنوان=«{video.Title}», رابط={video.Url}, مدة={video.DurationSeconds?.ToString() ?? "—"}, منصة={video.Provider}";
+
+                // D25: لا يُمس RemedialTrackVideoProgress — مشاهدات الطلاب السابقة تبقى كما هي
                 video.Title = title;
                 video.Url = parsed.NormalizedUrl!;
                 video.Provider = parsed.Provider;
@@ -472,8 +530,16 @@ namespace QdratNew.Services.RemedialTracks
                 video.DurationSeconds = input.DurationSeconds;
 
                 await db.SaveChangesAsync(c);
+
+                logText = $"[RTK track:{track!.Id}] تعديل الفيديو {video.Id} في الخطة {track.Id}{(track.IsStructureLocked ? " بعد النشر" : string.Empty)}: [{before}] ← [عنوان=«{video.Title}», رابط={video.Url}, مدة={video.DurationSeconds?.ToString() ?? "—"}, منصة={video.Provider}]";
+
                 return RemedialTrackResult.Ok("✅ تم تعديل الفيديو.");
             }, ct);
+
+            if (result.Success && logText is not null)
+                await LogActivityAsync("RemedialTrackVideoEdited", logText, actor);
+            return result;
+        }
 
         public Task<RemedialTrackResult> MoveVideoAsync(int videoId, int direction, CancellationToken ct = default)
             => WriteAsync(async (db, c) =>
@@ -562,7 +628,7 @@ namespace QdratNew.Services.RemedialTracks
                 if (blocked is not null) return blocked;
 
                 if (await db.RemedialTrackPublications.AnyAsync(
-                        p => p.TrackId == trackId && p.Status == RemedialTrackPublicationStatus.Active, c))
+                        p => p.TrackId == trackId && p.Status == RemedialTrackPublicationStatus.Active && !p.IsDeleted, c))
                     return RemedialTrackResult.Fail("⚠️ توجد أوامر نشر نشطة لهذه الخطة. ألغها أولًا ثم أرشف الخطة.");
 
                 track!.Status = RemedialTrackStatus.Archived;

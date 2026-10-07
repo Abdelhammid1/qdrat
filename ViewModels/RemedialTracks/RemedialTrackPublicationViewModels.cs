@@ -84,6 +84,11 @@ namespace QdratNew.ViewModels.RemedialTracks
         public int TotalStudents { get; set; }
         public RemedialTrackPublicationStatus Status { get; set; }
         public DateTime CreatedAtUtc { get; set; }
+
+        // RTK v2 / D26: بيانات الحذف الناعم (تظهر في تبويب «المحذوفة»)
+        public DateTime? DeletedAtUtc { get; set; }
+        public string? DeletedByName { get; set; }
+        public string? DeleteReason { get; set; }
     }
 
     public sealed class RemedialTrackPublicationIndexVm
@@ -95,8 +100,13 @@ namespace QdratNew.ViewModels.RemedialTracks
         public int Total { get; set; }
         public int TotalPages => Total <= 0 ? 1 : (int)Math.Ceiling(Total / (double)PageSize);
 
+        /// <summary>RTK v2 / D26: true = تبويب «المحذوفة».</summary>
+        public bool ShowingDeleted { get; set; }
+
         // صلاحيات العرض (تُحدَّد في الكنترولر)
         public bool CanPublish { get; set; }
+        public bool CanDelete { get; set; }
+        public bool CanRestore { get; set; }
     }
 
     // ============ التفاصيل ============
@@ -114,9 +124,23 @@ namespace QdratNew.ViewModels.RemedialTracks
         public int Count { get; set; }
     }
 
+    /// <summary>RTK-S9.3: سطر في بطاقة «آخر التعديلات» (من سجل نشاط الأدمن).</summary>
+    public sealed class RemedialTrackRecentChangeVm
+    {
+        public string ActionType { get; set; } = string.Empty;
+        public string ActionLabel { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string AdminName { get; set; } = string.Empty;
+        public DateTime Timestamp { get; set; }
+    }
+
     public sealed class RemedialTrackPublicationDetailsVm
     {
         public const int MaxStudentsListed = 200;
+        public const int MaxRecentChanges = 20;
+
+        /// <summary>RTK-S9.3: آخر ≤ 20 إجراءً على أمر النشر أو خطته (إنشاء/إلغاء/حذف/استرجاع/تعديل فيديو/تعديل نماذج/فتح محور).</summary>
+        public List<RemedialTrackRecentChangeVm> RecentChanges { get; set; } = new();
 
         public int Id { get; set; }
         public int TrackId { get; set; }
@@ -136,6 +160,12 @@ namespace QdratNew.ViewModels.RemedialTracks
         public DateTime? CancelledAtUtc { get; set; }
         public string? CancelReason { get; set; }
 
+        // RTK v2 / D26
+        public bool IsDeleted { get; set; }
+        public DateTime? DeletedAtUtc { get; set; }
+        public string? DeletedByName { get; set; }
+        public string? DeleteReason { get; set; }
+
         /// <summary>الرقم المرجعي: يُملأ فقط إن كان المستخدم يملك ManageCode وكان الأمر حضوريًا.</summary>
         public string? AccessCode { get; set; }
         public int CodeVersion { get; set; }
@@ -151,8 +181,10 @@ namespace QdratNew.ViewModels.RemedialTracks
         // صلاحيات العرض (تُحدَّد في الكنترولر)
         public bool CanManageCode { get; set; }
         public bool CanCancel { get; set; }
+        public bool CanDelete { get; set; }
+        public bool CanRestore { get; set; }
 
-        public bool IsActive => Status == RemedialTrackPublicationStatus.Active;
+        public bool IsActive => Status == RemedialTrackPublicationStatus.Active && !IsDeleted;
         public bool IsInPerson => Mode == RemedialTrackDeliveryMode.InPerson;
     }
 }

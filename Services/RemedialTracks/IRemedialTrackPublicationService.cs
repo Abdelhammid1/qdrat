@@ -8,7 +8,8 @@ namespace QdratNew.Services.RemedialTracks
     /// </summary>
     public interface IRemedialTrackPublicationService
     {
-        Task<RemedialTrackPublicationIndexVm> GetIndexAsync(int page, RemedialTrackBatchScope scope, CancellationToken ct = default);
+        /// <param name="deleted">RTK v2/D26: false = الأوامر النشطة/الملغاة، true = تبويب «المحذوفة».</param>
+        Task<RemedialTrackPublicationIndexVm> GetIndexAsync(int page, RemedialTrackBatchScope scope, CancellationToken ct = default, bool deleted = false);
 
         Task<RemedialTrackPublishFormVm> GetPublishFormAsync(int? trackId, RemedialTrackBatchScope scope, CancellationToken ct = default);
 
@@ -25,5 +26,11 @@ namespace QdratNew.Services.RemedialTracks
         Task<RemedialTrackResult> RegenerateCodeAsync(int id, RemedialTrackActor actor, RemedialTrackBatchScope scope, CancellationToken ct = default);
 
         Task<RemedialTrackResult> CancelAsync(int id, string? reason, RemedialTrackActor actor, RemedialTrackBatchScope scope, CancellationToken ct = default);
+
+        /// <summary>RTK v2/D26: حذف ناعم (يخفي الأمر عن الطلاب والقائمة؛ لا يمس التسجيلات ولا التقدّم). السبب 5–300 حرف.</summary>
+        Task<RemedialTrackResult> DeleteAsync(int id, string? reason, RemedialTrackActor actor, RemedialTrackBatchScope scope, CancellationToken ct = default);
+
+        /// <summary>RTK v2/D26: استرجاع أمر محذوف ناعمًا. قد يُولَّد رقم مرجعي جديد عند تعارضه مع أمر نشط.</summary>
+        Task<RemedialTrackResult> RestoreAsync(int id, RemedialTrackActor actor, RemedialTrackBatchScope scope, CancellationToken ct = default);
     }
 }

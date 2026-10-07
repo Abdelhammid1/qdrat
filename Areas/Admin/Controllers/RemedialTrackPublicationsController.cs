@@ -44,10 +44,12 @@ namespace QdratNew.Areas.Admin.Controllers
 
         [HttpGet]
         [AdminPermission("RemedialTrackPublications", "Read")]
-        public async Task<IActionResult> Index(int page = 1, CancellationToken ct = default)
+        public async Task<IActionResult> Index(int page = 1, bool deleted = false, CancellationToken ct = default)
         {
-            var vm = await _publications.GetIndexAsync(page, await ScopeAsync(), ct);
+            var vm = await _publications.GetIndexAsync(page, await ScopeAsync(), ct, deleted);
             vm.CanPublish = await CanAsync(AdminPermissionPolicies.RemedialTrackPublications_Publish);
+            vm.CanDelete = await CanAsync(AdminPermissionPolicies.RemedialTrackPublications_Delete);
+            vm.CanRestore = await CanAsync(AdminPermissionPolicies.RemedialTrackPublications_Restore);
             return View(vm);
         }
 
@@ -125,6 +127,8 @@ namespace QdratNew.Areas.Admin.Controllers
 
             vm.CanManageCode = canManageCode;
             vm.CanCancel = await CanAsync(AdminPermissionPolicies.RemedialTrackPublications_Cancel);
+            vm.CanDelete = await CanAsync(AdminPermissionPolicies.RemedialTrackPublications_Delete);
+            vm.CanRestore = await CanAsync(AdminPermissionPolicies.RemedialTrackPublications_Restore);
 
             // RTK-S6.2: لوحة المتابعة
             var filter = new RemedialTrackDashboardFilter
@@ -164,6 +168,32 @@ namespace QdratNew.Areas.Admin.Controllers
                 return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
 
             var r = await _publications.CancelAsync(id, reason, actor, await ScopeAsync(), ct);
+            return Json(new { success = r.Success, message = r.Message, data = r.Data, warnings = r.Warnings });
+        }
+
+        // ---------------- RTK v2 / D26: الحذف الناعم والاسترجاع ----------------
+
+        [HttpPost, ValidateAntiForgeryToken]
+        [AdminPermission("RemedialTrackPublications", "Delete")]
+        public async Task<IActionResult> Delete([FromForm] int id, [FromForm] string? reason, CancellationToken ct)
+        {
+            var actor = await ActorAsync();
+            if (actor is null)
+                return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
+
+            var r = await _publications.DeleteAsync(id, reason, actor, await ScopeAsync(), ct);
+            return Json(new { success = r.Success, message = r.Message, data = r.Data, warnings = r.Warnings });
+        }
+
+        [HttpPost, ValidateAntiForgeryToken]
+        [AdminPermission("RemedialTrackPublications", "Restore")]
+        public async Task<IActionResult> Restore([FromForm] int id, CancellationToken ct)
+        {
+            var actor = await ActorAsync();
+            if (actor is null)
+                return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
+
+            var r = await _publications.RestoreAsync(id, actor, await ScopeAsync(), ct);
             return Json(new { success = r.Success, message = r.Message, data = r.Data, warnings = r.Warnings });
         }
 

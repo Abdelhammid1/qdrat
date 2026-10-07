@@ -1,7 +1,9 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using QdratNew.Data;
 using QdratNew.Entities;
+using Moq;
 using QdratNew.Enums;
+using QdratNew.Services.Interfaces;
 using QdratNew.Services.RemedialTracks;
 using QdratNew.ViewModels.RemedialTracks;
 using Xunit;
@@ -22,6 +24,7 @@ namespace QdratNew.Tests
         {
             public TestDbContextFactory Factory { get; }
             public RemedialTrackBuilderService Sut { get; }
+            public Mock<IAdminActivityLogger> Activity { get; } = new();
             public int CurriculumId { get; private set; }
             public int OtherCurriculumId { get; private set; }
             public int[] SectionIds { get; private set; } = Array.Empty<int>();
@@ -37,7 +40,7 @@ namespace QdratNew.Tests
             public Fixture()
             {
                 Factory = new TestDbContextFactory(Guid.NewGuid().ToString());
-                Sut = new RemedialTrackBuilderService(Factory, new FixedTime(), new RemedialTrackCodeGenerator(Factory, new FixedTime()));
+                Sut = new RemedialTrackBuilderService(Factory, new FixedTime(), new RemedialTrackCodeGenerator(Factory, new FixedTime()), Activity.Object);
             }
 
             public async Task SeedAsync()
@@ -324,14 +327,99 @@ namespace QdratNew.Tests
             Assert.False((await f.Sut.AddAxisAsync(new AddRemedialAxisInput { TrackId = id, SectionId = f.SectionIds[2], Exam101ModelId = f.GoodModelA, Exam102ModelId = f.GoodModelB, ExamDurationMinutes = 30 })).Success);
             Assert.False((await f.Sut.MoveAxisAsync(a2, -1)).Success);
             Assert.False((await f.Sut.RemoveAxisAsync(a2)).Success);
-            Assert.False((await f.Sut.SaveAxisExamsAsync(new SaveRemedialAxisExamsInput { AxisId = a1, Exam101ModelId = f.GoodModelB, Exam102ModelId = f.GoodModelA, ExamDurationMinutes = 20 })).Success);
             Assert.False((await f.Sut.AddVideoAsync(new AddRemedialVideoInput { AxisId = a1, Title = "x", Url = "https://youtu.be/dQw4w9WgXcQ" })).Success);
             Assert.False((await f.Sut.MoveVideoAsync(v1, 1)).Success);
             Assert.False((await f.Sut.RemoveVideoAsync(v1)).Success);
 
             // تصحيح الفيديو مسموح بعد القفل
-            var edit = await f.Sut.EditVideoAsync(new EditRemedialVideoInput { VideoId = v1, Title = "مصحّح", Url = "https://youtu.be/aaaaaaaaaaa" });
+            var edit = await f.Sut.EditVideoAsync(new EditRemedialVideoInput { VideoId = v1, Title = "مصحّح", Url = "https://youtu.be/aaaaaaaaaaa" }, Actor);
             Assert.True(edit.Success, edit.Message);
+        }
+
+        // ---------------- RTK-S9.2: التعديل بعد النشر (D25) ----------------
+
+        [Fact]
+        public async Task SaveAxisExams_AfterLock_Succeeds_KeepsReady_AndLogsBeforeAfter()
+        {
+            var f = await NewAsync();
+            var id = await f.CreateTrackAsync();
+            var a1 = await f.AddAxisAsync(id, 0);
+            await f.LockAsync(id);
+            await using (var seed = f.Factory.CreateDbContext())
+            {
+                var t = await seed.RemedialTracks.FirstAsync(x => x.Id == id);
+                t.Status = RemedialTrackStatus.Ready;
+                await seed.SaveChangesAsync();
+            }
+
+            var r = await f.Sut.SaveAxisExamsAsync(new SaveRemedialAxisExamsInput { AxisId = a1, Exam101ModelId = f.GoodModelB, Exam102ModelId = f.GoodModelA, ExamDurationMinutes = 20 }, Actor);
+
+            Assert.True(r.Success, r.Message);
+            await using var db = f.Factory.CreateDbContext();
+            var axis = await db.RemedialTrackAxes.AsNoTracking().FirstAsync(a => a.Id == a1);
+            Assert.Equal(f.GoodModelB, axis.Exam101ModelId);
+            Assert.Equal(20, axis.ExamDurationMinutes);
+            Assert.Equal(RemedialTrackStatus.Ready, (await db.RemedialTracks.AsNoTracking().FirstAsync(t => t.Id == id)).Status);   // لا تعود Draft بعد النشر
+            f.Activity.Verify(x => x.LogAsync("RemedialTrackAxisExamsEdited",
+                It.Is<string>(d => d.Contains($"[RTK track:{id}]") && d.Contains("←")), "admin-1", "مدير", null, null, null), Times.Once);
+        }
+
+        [Fact]
+        public async Task SaveAxisExams_AfterLock_WarnsWithWaitingStudentsCount()
+        {
+            var f = await NewAsync();
+            var id = await f.CreateTrackAsync();
+            var a1 = await f.AddAxisAsync(id, 0);
+            await f.LockAsync(id);
+            await using (var seed = f.Factory.CreateDbContext())
+            {
+                var pub = new RemedialTrackPublication { TrackId = id, BatchId = 1, CreatedByUserId = "u", Status = RemedialTrackPublicationStatus.Active };
+                var e1 = new RemedialTrackEnrollment { TrackId = id, StudentId = 1, Publication = pub, Status = RemedialTrackEnrollmentStatus.InProgress };
+                var e2 = new RemedialTrackEnrollment { TrackId = id, StudentId = 2, Publication = pub, Status = RemedialTrackEnrollmentStatus.InProgress };
+                var e3 = new RemedialTrackEnrollment { TrackId = id, StudentId = 3, Publication = pub, Status = RemedialTrackEnrollmentStatus.Cancelled };
+                e1.AxisProgresses.Add(new RemedialTrackAxisProgress { AxisId = a1, Order = 1, Status = RemedialTrackAxisStatus.AwaitingExam101 });
+                e2.AxisProgresses.Add(new RemedialTrackAxisProgress { AxisId = a1, Order = 1, Status = RemedialTrackAxisStatus.AwaitingExam102 });
+                e3.AxisProgresses.Add(new RemedialTrackAxisProgress { AxisId = a1, Order = 1, Status = RemedialTrackAxisStatus.AwaitingExam101 });
+                seed.RemedialTrackEnrollments.AddRange(e1, e2, e3);
+                await seed.SaveChangesAsync();
+            }
+
+            var r = await f.Sut.SaveAxisExamsAsync(new SaveRemedialAxisExamsInput { AxisId = a1, Exam101ModelId = f.GoodModelB, Exam102ModelId = f.GoodModelA, ExamDurationMinutes = 20 }, Actor);
+
+            Assert.True(r.Success, r.Message);
+            Assert.NotNull(r.Warnings);
+            Assert.Contains(r.Warnings!, w => w.Contains("2 طالبًا"));   // الملغى لا يُحسب
+        }
+
+        [Fact]
+        public async Task EditVideo_AfterLock_LogsActor_AndKeepsStudentProgress()
+        {
+            var f = await NewAsync();
+            var id = await f.CreateTrackAsync();
+            var a1 = await f.AddAxisAsync(id, 0);
+            var v1 = await f.AddVideoAsync(a1, "v1");
+            await f.LockAsync(id);
+
+            var r = await f.Sut.EditVideoAsync(new EditRemedialVideoInput { VideoId = v1, Title = "جديد", Url = "https://youtu.be/aaaaaaaaaaa" }, Actor);
+
+            Assert.True(r.Success, r.Message);
+            f.Activity.Verify(x => x.LogAsync("RemedialTrackVideoEdited",
+                It.Is<string>(d => d.Contains($"[RTK track:{id}]") && d.Contains("بعد النشر") && d.Contains("جديد")), "admin-1", "مدير", null, null, null), Times.Once);
+        }
+
+        [Fact]
+        public async Task EditVideo_ActivityLoggerFailure_DoesNotFailTheEdit()
+        {
+            var f = await NewAsync();
+            var id = await f.CreateTrackAsync();
+            var a1 = await f.AddAxisAsync(id, 0);
+            var v1 = await f.AddVideoAsync(a1, "v1");
+            f.Activity.Setup(x => x.LogAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<int?>()))
+                .ThrowsAsync(new InvalidOperationException("log down"));
+
+            var r = await f.Sut.EditVideoAsync(new EditRemedialVideoInput { VideoId = v1, Title = "جديد", Url = "https://youtu.be/aaaaaaaaaaa" }, Actor);
+
+            Assert.True(r.Success, r.Message);
         }
 
         // ---------------- النماذج ----------------
@@ -344,7 +432,7 @@ namespace QdratNew.Tests
             var axis = await f.AddAxisAsync(id, 0);
 
             async Task<RemedialTrackResult> Save(int m101, int m102, int minutes = 30)
-                => await f.Sut.SaveAxisExamsAsync(new SaveRemedialAxisExamsInput { AxisId = axis, Exam101ModelId = m101, Exam102ModelId = m102, ExamDurationMinutes = minutes });
+                => await f.Sut.SaveAxisExamsAsync(new SaveRemedialAxisExamsInput { AxisId = axis, Exam101ModelId = m101, Exam102ModelId = m102, ExamDurationMinutes = minutes }, Actor);
 
             Assert.False((await Save(f.GoodModelA, f.GoodModelA)).Success);          // نفس النموذج
             Assert.False((await Save(f.GoodModelA, f.BadAnswerModel)).Success);      // سؤال بلا إجابة
@@ -366,7 +454,7 @@ namespace QdratNew.Tests
             var r = await f.Sut.SaveAxisExamsAsync(new SaveRemedialAxisExamsInput
             {
                 AxisId = axis, Exam101ModelId = f.GoodModelA, Exam102ModelId = f.OtherCurriculumModel, ExamDurationMinutes = 25
-            });
+            }, Actor);
 
             Assert.True(r.Success, r.Message);
             Assert.NotNull(r.Warnings);

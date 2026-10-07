@@ -1601,7 +1601,10 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             e.HasIndex(x => x.AccessCode)
              .HasDatabaseName("UX_RemedialTrackPublications_ActiveCode")
              .IsUnique()
-             .HasFilter("[AccessCode] IS NOT NULL AND [Status] = 1");
+             .HasFilter("[AccessCode] IS NOT NULL AND [Status] = 1 AND [IsDeleted] = 0");
+
+            // RTK v2 / D26: قائمة الأدمن (نشطة/محذوفة) مرتبة بتاريخ الإنشاء
+            e.HasIndex(x => new { x.IsDeleted, x.CreatedAtUtc }).HasDatabaseName("IX_RemedialTrackPublications_IsDeleted_CreatedAt");
 
             e.HasOne(x => x.Track).WithMany().HasForeignKey(x => x.TrackId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Batch).WithMany().HasForeignKey(x => x.BatchId).OnDelete(DeleteBehavior.Restrict);

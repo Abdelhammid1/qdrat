@@ -205,6 +205,8 @@
         public const string RemedialTrackPublications_ManageCode = "RemedialTrackPublications:ManageCode"; // عرض/تجديد الرقم المرجعي
         public const string RemedialTrackPublications_Cancel = "RemedialTrackPublications:Cancel";
         public const string RemedialTrackPublications_Unlock = "RemedialTrackPublications:Unlock";         // فتح المحور التالي
+        public const string RemedialTrackPublications_Delete = "RemedialTrackPublications:Delete";         // RTK v2/D26: حذف ناعم
+        public const string RemedialTrackPublications_Restore = "RemedialTrackPublications:Restore";       // RTK v2/D26: استرجاع المحذوف
 
         // RemedialTrackReports — التقارير
         public const string RemedialTrackReports_Read = "RemedialTrackReports:Read";

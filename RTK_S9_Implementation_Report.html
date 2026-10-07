@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>تقرير تنفيذ RTK-S9</title>
+<style>
+:root{--bg:#f7f8fa;--surface:#fff;--ink:#161b26;--muted:#4c5566;--line:#dde1e7;--brand:#2f59c0;--ok:#2fa86a;--warn:#c88a14}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#10131a;--surface:#171c27;--ink:#eef1f6;--muted:#b3bccb;--line:#2a3140;--brand:#9db8f5}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Cairo","Segoe UI",Tahoma,sans-serif;line-height:1.7}
+.wrap{max-width:960px;margin:0 auto;padding:24px 16px}
+h1{font-size:1.5rem;margin:0 0 .3em}h2{font-size:1.15rem;margin:0 0 .6em;color:var(--brand)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin-bottom:16px;overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.92rem;min-width:480px}
+th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);vertical-align:top}
+code{font-family:ui-monospace,Consolas,monospace;font-size:.85em;direction:ltr;unicode-bidi:embed}
+.ok{color:var(--ok);font-weight:700}.warn{color:var(--warn);font-weight:700}
+ul{margin:.3em 0;padding-inline-start:1.3em}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>RTK-S9 — الحذف الناعم + التعديل بعد النشر + سجل التعديلات</h1>
+<p style="color:var(--muted)">Epic RTK · Sprint 9 · 13 نقطة · الحالة: <span class="ok">مكتمل</span> (2026-10-07)</p>
+
+<div class="card">
+<h2>القصص المنفّذة</h2>
+<table>
+<tr><th>القصة</th><th>ما تم</th></tr>
+<tr><td>RTK-S9.1 (5)</td><td>
+<ul>
+<li>كيان <code>RemedialTrackPublication</code>: <code>IsDeleted</code> و<code>DeletedAtUtc</code> و<code>DeletedByUserId</code> و<code>DeletedByName</code> و<code>DeleteReason</code>.</li>
+<li>الفهرس <code>UX_RemedialTrackPublications_ActiveCode</code> يستثني المحذوف (<code>[IsDeleted] = 0</code>) + فهرس <code>IX_RemedialTrackPublications_IsDeleted_CreatedAt</code>.</li>
+<li>ترحيل <code>20261007092203_RTK_PublicationSoftDelete</code> + <code>Migrations/Scripts/RTK_PublicationSoftDelete.sql</code> (Idempotent، إضافات فقط) + <code>RTK_PublicationSoftDelete_Rollback.sql</code> (يتوقف إن وُجد محذوف).</li>
+<li><code>DeleteAsync</code> (سبب 5–300، نطاق الدفعة، Idempotent، لا يمس التسجيلات/التقدّم) و<code>RestoreAsync</code> (يولّد رقمًا جديدًا ويزيد <code>CodeVersion</code> عند تعارض الرقم مع أمر نشط، مع إعادة المحاولة عند 2601/2627).</li>
+<li><code>GetIndexAsync(..., deleted)</code>؛ تبويبا «النشطة/المحذوفة» في <code>Index.cshtml</code> وأزرار حذف/استرجاع في <code>Details.cshtml</code>.</li>
+<li>إخفاء المحذوف: <code>RemedialTrackAccessSnapshot.PublicationDeleted</code> (يعيد <code>Cancelled</code>)، <code>VerifyCode</code>/<code>AcceptTerms</code>/<code>HasVisibleEnrollment</code>، <code>GetMyPlans</code>/<code>GetPlan</code>/<code>GetAxis</code>/<code>OpenPendingAxes</code>، الاختبار والنبضات، <code>BuildReport</code> (طالب/ولي أمر)، <code>GetBatchReport</code>، <code>GetDashboard</code>، <code>UnlockNextAxis</code>، <code>SaveReportNote</code>، والأرشفة لا تعدّه نشطًا.</li>
+<li>صلاحيتا <code>RemedialTrackPublications:Delete</code> و<code>:Restore</code> في <code>AdminPermissionPolicies</code> و<code>AdminControllerActionCatalog</code> و<code>Program.cs</code>.</li>
+</ul></td></tr>
+<tr><td>RTK-S9.2 (5)</td><td>
+<ul>
+<li><code>SaveAxisExamsAsync(input, actor)</code> مسموح بعد النشر؛ الخطة تبقى «جاهزة»؛ تحذير بعدد الطلاب المنتظرين (<code>AwaitingExam101/102</code>، بلا الملغاة) باستعلام Count واحد.</li>
+<li><code>EditVideoAsync(input, actor)</code> يسجّل المنفّذ والقيم قبل/بعد؛ لا يمس <code>RemedialTrackVideoProgress</code>.</li>
+<li>السجل: <code>RemedialTrackAxisExamsEdited</code> و<code>RemedialTrackVideoEdited</code> بعد نجاح الـ Transaction، وفشله لا يُبطل التعديل.</li>
+<li><code>Builder.cshtml</code>: زرّا التعديل ظاهران بعد القفل + شريط «الخطة منشورة» + عرض التحذيرات في الإشعار. إضافة/حذف/ترتيب المحاور والفيديوهات تبقى مقفلة.</li>
+</ul></td></tr>
+<tr><td>RTK-S9.3 (3)</td><td>بطاقة «آخر التعديلات» (≤ 20 صفًا، استعلام واحد) في <code>Details.cshtml</code>. الربط بوسم في الوصف: <code>[RTK pub:{id}]</code> لإجراءات الأمر و<code>[RTK track:{id}]</code> لتعديلات الخطة (تشمل كل أوامرها)، بلا أعمدة جديدة. الوقت بتوقيت السعودية عبر <code>ITimeZoneService</code>. أُضيف الوسم لسجلات النشر والإلغاء وتجديد الرقم وفتح المحور.</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h2>التحقق</h2>
+<ul>
+<li>البناء: <span class="ok">ناجح</span>.</li>
+<li>اختبارات RTK الوحدوية: <b>364 ناجحًا من 366</b> (+13 اختبارًا جديدًا: حذف/استرجاع/تعارض الرقم/النطاق، إخفاء المحذوف من كل مسارات الطالب، تعديل ما بعد النشر والسجل والتحذير، آخر التعديلات).</li>
+<li>الفشلان <code>MarkReady_FailsWhenModelBecameInvalid_AfterAssignment</code> و<code>FullPath_Fail101And102_BlocksAxis_RecordsNotPassed_NoNextAxis</code> سابقان للتعديل (اختلاف نص الرسائل) وغير مرتبطين بـ S9.</li>
+<li>اختبارات الصلاحيات: 9 ناجحة.</li>
+<li><span class="warn">لم يُنفَّذ</span>: اختبارات التكامل وSQL Server الحقيقي وPlaywright، وتشغيل سكربت SQL على قاعدة فعلية.</li>
+</ul>
+</div>
+
+<div class="card">
+<h2>مخاطر وملاحظات للمراجعة</h2>
+<ul>
+<li>شغّل <code>RTK_PublicationSoftDelete.sql</code> مرتين على قاعدة تجريبية قبل الإنتاج (الفهرس المُصفّى يتطلب <code>QUOTED_IDENTIFIER ON</code>).</li>
+<li>استعلام «آخر التعديلات» يفلتر على <code>ActionType</code> والوصف بلا فهرس؛ قد يبطؤ مع كبر <code>AdminActivityLogs</code>.</li>
+<li><code>AdminActivityLog.Timestamp</code> بتوقيت الخادم (<code>DateTime.Now</code>)؛ العرض صحيح فقط إن كان الخادم UTC (Azure App Service).</li>
+<li>استرجاع أمر لخطة مؤرشفة غير ممنوع صراحةً.</li>
+<li>الحذف الناعم لا يُلغي التسجيلات؛ إشعارات سابقة تقود الطالب إلى «غير متاح».</li>
+</ul>
+</div>
+
+<div class="card">
+<h2>مطلوب بعد السحب</h2>
+<ul>
+<li><code>dotnet ef database update</code> أو تشغيل <code>Migrations/Scripts/RTK_PublicationSoftDelete.sql</code> في الإنتاج.</li>
+<li>منح الصلاحيتين الجديدتين (<code>Delete</code>/<code>Restore</code>) للبروفايلات المعنية؛ SuperAdmin/Owner/Developer مستثنون.</li>
+</ul>
+</div>
+</div>
+</body>
+</html>

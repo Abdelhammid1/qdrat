@@ -60,6 +60,18 @@
                         <i class="fas fa-ban"></i> إلغاء أمر النشر
                     </button>
                 }
+                @if (Model.CanDelete && !Model.IsDeleted)
+                {
+                    <button type="button" class="rtk-btn rtk-btn--light" data-rtk-act="delete-open">
+                        <i class="fas fa-trash-can"></i> حذف أمر النشر
+                    </button>
+                }
+                @if (Model.CanRestore && Model.IsDeleted)
+                {
+                    <button type="button" class="rtk-btn rtk-btn--light" data-rtk-act="restore">
+                        <i class="fas fa-rotate-left"></i> استرجاع أمر النشر
+                    </button>
+                }
             </div>
         </div>
         <dl class="rtk-meta">
@@ -73,6 +85,15 @@
             <div class="rtk-hero__note"><i class="fas fa-note-sticky ms-1"></i> @Model.AdminNote</div>
         }
     </header>
+
+    @if (Model.IsDeleted)
+    {
+        <div class="rtk-alert rtk-alert--warn" role="status">
+            أمر النشر محذوف (حذف ناعم) ومخفي عن الطلاب@(Model.DeletedAtUtc.HasValue ? " منذ " + Tz.ConvertToSaudi(Model.DeletedAtUtc.Value).ToString("yyyy-MM-dd HH:mm") : "")
+            @if (!string.IsNullOrWhiteSpace(Model.DeletedByName)) { <text>بواسطة @Model.DeletedByName</text> }
+            @if (!string.IsNullOrWhiteSpace(Model.DeleteReason)) { <text>— السبب: @Model.DeleteReason</text> }
+        </div>
+    }
 
     @if (Model.Status == RemedialTrackPublicationStatus.Cancelled)
     {
@@ -108,6 +129,33 @@
             }
         </section>
     }
+
+    <section class="rtk-panel" id="rtkRecentChanges" aria-label="آخر التعديلات">
+        <h2><i class="fas fa-clock-rotate-left ms-1"></i> آخر التعديلات <span class="rtk-count">@Model.RecentChanges.Count</span></h2>
+        @if (Model.RecentChanges.Count == 0)
+        {
+            <div class="rtk-empty"><i class="fas fa-clock-rotate-left"></i> لا توجد تعديلات مسجَّلة على هذا الأمر بعد.</div>
+        }
+        else
+        {
+            <div class="rtk-table-wrap">
+                <table class="rtk-table rtk-table--zebra">
+                    <thead><tr><th>الإجراء</th><th>التفاصيل</th><th>المنفّذ</th><th>الوقت</th></tr></thead>
+                    <tbody>
+                        @foreach (var c in Model.RecentChanges)
+                        {
+                            <tr>
+                                <td><span class="rtk-badge">@c.ActionLabel</span></td>
+                                <td>@c.Description</td>
+                                <td>@c.AdminName</td>
+                                <td>@Tz.ConvertToSaudi(c.Timestamp).ToString("yyyy-MM-dd HH:mm")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
 
     @if (Model.Dashboard is { } dash)
     {
@@ -383,6 +431,22 @@
         </section>
     }
 
+    @if (Model.CanDelete && !Model.IsDeleted)
+    {
+        <section class="rtk-panel" id="rtkDeleteBox" hidden>
+            <h2>حذف أمر النشر</h2>
+            <p class="rtk-hint">سيختفي الأمر عن الطلاب وتبقى بياناته ويمكن استرجاعه من تبويب «المحذوفة». هذا القرار يُسجَّل باسمك.</p>
+            <div class="rtk-field">
+                <label for="rtkDeleteReason">سبب الحذف (5–300 حرف)</label>
+                <textarea id="rtkDeleteReason" maxlength="300"></textarea>
+            </div>
+            <div class="rtk-form-actions">
+                <button type="button" class="rtk-btn rtk-btn--danger" data-rtk-act="delete-confirm"><i class="fas fa-trash-can"></i> تأكيد الحذف</button>
+                <button type="button" class="rtk-btn rtk-btn--outline" data-rtk-act="delete-close">تراجع</button>
+            </div>
+        </section>
+    }
+
     <div class="rtk-toast" id="rtkToast" role="status" aria-live="polite"></div>
 </div>
 
@@ -433,6 +497,8 @@
         var urls = {
             regen: '@Url.Action("RegenerateCode", "RemedialTrackPublications", new { area = "Admin" })',
             cancel: '@Url.Action("Cancel", "RemedialTrackPublications", new { area = "Admin" })',
+            del: '@Url.Action("Delete", "RemedialTrackPublications", new { area = "Admin" })',
+            restore: '@Url.Action("Restore", "RemedialTrackPublications", new { area = "Admin" })',
             unlock: '@Url.Action("Unlock", "RemedialTrackPublications", new { area = "Admin" })'
         };
         var unlockTarget = null;
@@ -500,6 +566,19 @@
                 if (cancelBox) { cancelBox.hidden = false; cancelBox.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
             } else if (act === 'cancel-close') {
                 if (cancelBox) cancelBox.hidden = true;
+            } else if (act === 'delete-open') {
+                var delBox = document.getElementById('rtkDeleteBox');
+                if (delBox) { delBox.hidden = false; delBox.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+            } else if (act === 'delete-close') {
+                var delBox2 = document.getElementById('rtkDeleteBox'); if (delBox2) delBox2.hidden = true;
+            } else if (act === 'delete-confirm') {
+                var delReason = document.getElementById('rtkDeleteReason').value.trim();
+                if (delReason.length < 5 || delReason.length > 300) { showToast('⚠️ سبب الحذف إلزامي (5–300 حرف).', false); return; }
+                var dfd = new FormData(); dfd.set('reason', delReason);
+                post(urls.del, dfd, btn, function () { setTimeout(function () { window.location.href = '@Url.Action("Index", "RemedialTrackPublications", new { area = "Admin" })'; }, 900); });
+            } else if (act === 'restore') {
+                if (!window.confirm('سيعود أمر النشر ظاهرًا للطلاب بتقدّمهم كما كان. هل تريد الاسترجاع؟')) return;
+                post(urls.restore, new FormData(), btn, function () { setTimeout(function () { window.location.reload(); }, 900); });
             } else if (act === 'cancel-confirm') {
                 var reason = document.getElementById('rtkCancelReason').value.trim();
                 if (reason.length < 5 || reason.length > 300) { showToast('⚠️ سبب الإلغاء إلزامي (5–300 حرف).', false); return; }

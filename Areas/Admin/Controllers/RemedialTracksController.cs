@@ -132,9 +132,16 @@ namespace QdratNew.Areas.Admin.Controllers
         [HttpPost, ValidateAntiForgeryToken]
         [AdminPermission("RemedialTracks", "Edit")]
         public async Task<IActionResult> SaveAxisExams([FromForm] SaveRemedialAxisExamsInput input, CancellationToken ct)
-            => ModelState.IsValid
-                ? JsonResult(await _builder.SaveAxisExamsAsync(input, ct))
-                : ValidationFail();
+        {
+            if (!ModelState.IsValid)
+                return ValidationFail();
+
+            var actor = await ActorAsync();
+            if (actor is null)
+                return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
+
+            return JsonResult(await _builder.SaveAxisExamsAsync(input, actor, ct));
+        }
 
         // ---------------- الفيديوهات ----------------
 
@@ -148,9 +155,16 @@ namespace QdratNew.Areas.Admin.Controllers
         [HttpPost, ValidateAntiForgeryToken]
         [AdminPermission("RemedialTracks", "Edit")]
         public async Task<IActionResult> EditVideo([FromForm] EditRemedialVideoInput input, CancellationToken ct)
-            => ModelState.IsValid
-                ? JsonResult(await _builder.EditVideoAsync(input, ct))
-                : ValidationFail();
+        {
+            if (!ModelState.IsValid)
+                return ValidationFail();
+
+            var actor = await ActorAsync();
+            if (actor is null)
+                return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
+
+            return JsonResult(await _builder.EditVideoAsync(input, actor, ct));
+        }
 
         [HttpPost, ValidateAntiForgeryToken]
         [AdminPermission("RemedialTracks", "Edit")]

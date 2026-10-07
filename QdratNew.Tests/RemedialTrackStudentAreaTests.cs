@@ -761,5 +761,52 @@ namespace QdratNew.Tests
             Assert.True(done.Body.Completed);
             Assert.True(done.Body.AllDone);
         }
+
+        // ═══════════ RTK-S9.1 (D26): الحذف الناعم يخفي الأمر عن كل مسارات الطالب ═══════════
+
+        [Fact]
+        public async Task SoftDeletedPublication_IsHiddenFromEveryStudentPath()
+        {
+            var f = await NewAsync();
+            var ids = await f.VideoProgressIdsAsync(f.Axis1ProgressA, f.StudentA, f.EnrollmentA);   // قبل الحذف: يعمل
+            Assert.NotEmpty(ids);
+            Assert.NotEmpty((await f.Progress.GetMyPlansAsync(f.StudentA)).Items);
+            Assert.True(await f.Access.HasVisibleEnrollmentAsync(f.StudentA));
+
+            await using (var db = f.Factory.CreateDbContext())
+            {
+                (await db.RemedialTrackPublications.SingleAsync(p => p.Id == f.PublicationId)).IsDeleted = true;
+                await db.SaveChangesAsync();
+            }
+
+            Assert.Equal(RemedialTrackAccessOutcome.Cancelled, (await f.Access.EvaluateAsync(f.StudentA, f.EnrollmentA)).Outcome);
+            Assert.Equal(RemedialTrackVerifyOutcome.Cancelled, (await f.Access.VerifyCodeAsync(f.StudentA, f.EnrollmentA, "123456")).Outcome);
+            Assert.False(await f.Access.AcceptTermsAsync(f.StudentA, f.EnrollmentA));
+            Assert.False(await f.Access.HasVisibleEnrollmentAsync(f.StudentA));
+            Assert.Empty((await f.Progress.GetMyPlansAsync(f.StudentA)).Items);
+            Assert.Null(await f.Progress.GetPlanAsync(f.StudentA, f.EnrollmentA));
+            Assert.Null(await f.Progress.GetAxisAsync(f.StudentA, f.EnrollmentA, f.Axis1ProgressA));
+
+            var ping = await f.PingAsync(ids[0], "playing");
+            Assert.False(ping.Body.Ok);
+        }
+
+        [Fact]
+        public async Task SoftDeletedPublication_DoesNotOpenPendingAxes()
+        {
+            var f = await NewAsync();
+            await using (var db = f.Factory.CreateDbContext())
+            {
+                // محور 1 مجتاز ومحور 2 مغلق (حالة جدولة قديمة) — يُفتح عادةً عند فتح صفحة الخطة
+                (await db.RemedialTrackAxisProgresses.SingleAsync(a => a.Id == f.Axis1ProgressA)).Status = RemedialTrackAxisStatus.Passed;
+                (await db.RemedialTrackPublications.SingleAsync(p => p.Id == f.PublicationId)).IsDeleted = true;
+                await db.SaveChangesAsync();
+            }
+
+            await f.Progress.GetPlanAsync(f.StudentA, f.EnrollmentA);
+
+            await using var check = f.Factory.CreateDbContext();
+            Assert.Equal(RemedialTrackAxisStatus.Locked, (await check.RemedialTrackAxisProgresses.AsNoTracking().SingleAsync(a => a.Id == f.Axis2ProgressA)).Status);
+        }
     }
 }

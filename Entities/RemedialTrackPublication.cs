@@ -31,6 +31,13 @@ namespace QdratNew.Entities
         public DateTime? CancelledAtUtc { get; set; }
         [MaxLength(300)] public string? CancelReason { get; set; }
 
+        // RTK v2 / D26: حذف ناعم — يخفي الأمر عن الطلاب والقائمة وتبقى كل البيانات
+        public bool IsDeleted { get; set; }
+        public DateTime? DeletedAtUtc { get; set; }
+        [MaxLength(450)] public string? DeletedByUserId { get; set; }
+        [MaxLength(200)] public string? DeletedByName { get; set; }
+        [MaxLength(300)] public string? DeleteReason { get; set; }
+
         [Timestamp] public byte[] RowVersion { get; set; } = Array.Empty<byte>();
         public ICollection<RemedialTrackEnrollment> Enrollments { get; set; } = new List<RemedialTrackEnrollment>();
     }

@@ -70,7 +70,8 @@ namespace QdratNew.Services.RemedialTracks
                         a.AxisProgress.Enrollment.Publication.Mode,
                         a.AxisProgress.Enrollment.Publication.CodeVersion,
                         a.AxisProgress.Enrollment.VerifiedCodeVersion,
-                        a.AxisProgress.Enrollment.CodeLockedUntilUtc)))
+                        a.AxisProgress.Enrollment.CodeLockedUntilUtc,
+                        a.AxisProgress.Enrollment.Publication.IsDeleted)))
                 .FirstOrDefaultAsync(ct);
 
         // D7: اختبار قيد التنفيذ يُكمل حتى لو جُدِّد الرقم المرجعي؛ الإلغاء/عدم النشر بعد يمنعان دائمًا.
@@ -111,7 +112,8 @@ namespace QdratNew.Services.RemedialTracks
                         a.Enrollment.Publication.Mode,
                         a.Enrollment.Publication.CodeVersion,
                         a.Enrollment.VerifiedCodeVersion,
-                        a.Enrollment.CodeLockedUntilUtc)
+                        a.Enrollment.CodeLockedUntilUtc,
+                        a.Enrollment.Publication.IsDeleted)
                 })
                 .FirstOrDefaultAsync(ct);
 

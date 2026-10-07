@@ -288,6 +288,8 @@ builder.Services.AddAuthorization(options =>
         AdminPermissionPolicies.RemedialTrackPublications_ManageCode,
         AdminPermissionPolicies.RemedialTrackPublications_Cancel,
         AdminPermissionPolicies.RemedialTrackPublications_Unlock,
+        AdminPermissionPolicies.RemedialTrackPublications_Delete,
+        AdminPermissionPolicies.RemedialTrackPublications_Restore,
         AdminPermissionPolicies.RemedialTrackReports_Read,
         AdminPermissionPolicies.RemedialTrackReports_Edit
     })

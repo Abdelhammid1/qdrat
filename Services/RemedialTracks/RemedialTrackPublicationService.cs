@@ -56,11 +56,11 @@ namespace QdratNew.Services.RemedialTracks
         // قراءة
         // ======================================================================
 
-        public async Task<RemedialTrackPublicationIndexVm> GetIndexAsync(int page, RemedialTrackBatchScope scope, CancellationToken ct = default)
+        public async Task<RemedialTrackPublicationIndexVm> GetIndexAsync(int page, RemedialTrackBatchScope scope, CancellationToken ct = default, bool deleted = false)
         {
             await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
-            var q = db.RemedialTrackPublications.AsNoTracking().AsQueryable();
+            var q = db.RemedialTrackPublications.AsNoTracking().Where(p => p.IsDeleted == deleted);   // RTK v2/D26
             if (scope.PermittedBatchIds is { } permitted)
             {
                 // قائمة صغيرة (دفعات الموظف) — CompatibilityLevel(120) يولّد IN بثوابت لا OPENJSON (نفس BatchesController).
@@ -88,11 +88,14 @@ namespace QdratNew.Services.RemedialTracks
                     PublishAtUtc = p.PublishAtUtc,
                     TotalStudents = p.TotalStudents,
                     Status = p.Status,
-                    CreatedAtUtc = p.CreatedAtUtc
+                    CreatedAtUtc = p.CreatedAtUtc,
+                    DeletedAtUtc = p.DeletedAtUtc,
+                    DeletedByName = p.DeletedByName,
+                    DeleteReason = p.DeleteReason
                 })
                 .ToListAsync(ct);
 
-            return new RemedialTrackPublicationIndexVm { Items = items, Page = current, Total = total };
+            return new RemedialTrackPublicationIndexVm { Items = items, Page = current, Total = total, ShowingDeleted = deleted };
         }
 
         public async Task<RemedialTrackPublishFormVm> GetPublishFormAsync(int? trackId, RemedialTrackBatchScope scope, CancellationToken ct = default)
@@ -180,6 +183,10 @@ namespace QdratNew.Services.RemedialTracks
                     TotalStudents = p.TotalStudents,
                     CancelledAtUtc = p.CancelledAtUtc,
                     CancelReason = p.CancelReason,
+                    IsDeleted = p.IsDeleted,
+                    DeletedAtUtc = p.DeletedAtUtc,
+                    DeletedByName = p.DeletedByName,
+                    DeleteReason = p.DeleteReason,
                     CodeVersion = p.CodeVersion,
                     CodeGeneratedAtUtc = p.CodeGeneratedAtUtc,
                     AccessCode = includeAccessCode && p.Mode == RemedialTrackDeliveryMode.InPerson ? p.AccessCode : null
@@ -211,8 +218,53 @@ namespace QdratNew.Services.RemedialTracks
 
             vm.StudentsTruncated = students.Count > RemedialTrackPublicationDetailsVm.MaxStudentsListed;
             vm.Students = students.Take(RemedialTrackPublicationDetailsVm.MaxStudentsListed).ToList();
+            vm.RecentChanges = await GetRecentChangesAsync(db, id, vm.TrackId, ct);
             return vm;
         }
+
+        /// <summary>
+        /// RTK-S9.3: AdminActivityLog لا يحمل حقلًا يربطه بالخطة/الأمر، فيُربط بوسم ثابت في الوصف:
+        /// [RTK pub:{id}] لإجراءات أمر النشر، و[RTK track:{id}] لتعديلات الخطة بعد النشر (تؤثّر على كل أوامرها).
+        /// استعلام واحد مرقّم (≤ 20) مقيَّد مسبقًا بـ ActionType يبدأ بـ RemedialTrack.
+        /// </summary>
+        private static async Task<List<RemedialTrackRecentChangeVm>> GetRecentChangesAsync(
+            ApplicationDbContext db, int publicationId, int trackId, CancellationToken ct)
+        {
+            var pubTag = $"[RTK pub:{publicationId}]";
+            var trackTag = $"[RTK track:{trackId}]";
+
+            var rows = await db.AdminActivityLogs.AsNoTracking()
+                .Where(l => l.ActionType.StartsWith("RemedialTrack")
+                            && (l.Description.Contains(pubTag) || l.Description.Contains(trackTag)))
+                .OrderByDescending(l => l.Timestamp).ThenByDescending(l => l.Id)
+                .Take(RemedialTrackPublicationDetailsVm.MaxRecentChanges)
+                .Select(l => new { l.ActionType, l.Description, l.AdminName, l.Timestamp })
+                .ToListAsync(ct);
+
+            return rows.Select(r => new RemedialTrackRecentChangeVm
+            {
+                ActionType = r.ActionType,
+                ActionLabel = RecentChangeLabel(r.ActionType),
+                Description = r.Description.Replace(pubTag, string.Empty).Replace(trackTag, string.Empty).Trim(),
+                AdminName = r.AdminName,
+                Timestamp = r.Timestamp
+            }).ToList();
+        }
+
+        private static string RecentChangeLabel(string actionType) => actionType switch
+        {
+            "RemedialTrack.Publish" => "نشر الخطة",
+            "RemedialTrack.Cancel" => "إلغاء أمر النشر",
+            "RemedialTrack.RegenerateCode" => "تجديد الرقم المرجعي",
+            "RemedialTrack.UnlockNext" => "فتح المحور التالي",
+            "RemedialTrackPublicationDeleted" => "حذف أمر النشر",
+            "RemedialTrackPublicationRestored" => "استرجاع أمر النشر",
+            "RemedialTrackVideoEdited" => "تعديل فيديو",
+            "RemedialTrackAxisExamsEdited" => "تعديل نموذجي الاختبار",
+            "RemedialTrackVideoReviewChanged" => "وضع مراجعة الفيديوهات",
+            "RemedialTrackParentReportSent" => "إرسال تقرير ولي الأمر",
+            _ => "إجراء"
+        };
 
         // ======================================================================
         // النشر
@@ -424,7 +476,7 @@ namespace QdratNew.Services.RemedialTracks
             await NotifyStudentsAsync(enrolledIds, trackTitle, publishAtUtc, input.Mode);
             await LogActivityAsync(
                 "RemedialTrack.Publish",
-                $"نشر الخطة العلاجية «{trackTitle}» (أمر نشر #{created.PublicationId}) — {created.Enrolled} طالب، {(inPerson ? "حضوري" : "أونلاين")}",
+                $"[RTK pub:{created.PublicationId}] نشر الخطة العلاجية «{trackTitle}» (أمر نشر #{created.PublicationId}) — {created.Enrolled} طالب، {(inPerson ? "حضوري" : "أونلاين")}",
                 actor, input.BatchId);
 
             return result;
@@ -448,7 +500,7 @@ namespace QdratNew.Services.RemedialTracks
                         return RemedialTrackResult.Fail("⚠️ أمر النشر غير موجود.");
                     if (pub.Mode != RemedialTrackDeliveryMode.InPerson)
                         return RemedialTrackResult.Fail("⚠️ الرقم المرجعي خاص بأوامر النشر الحضورية فقط.");
-                    if (pub.Status != RemedialTrackPublicationStatus.Active)
+                    if (pub.IsDeleted || pub.Status != RemedialTrackPublicationStatus.Active)
                         return RemedialTrackResult.Fail("⚠️ أمر النشر غير نشط.");
 
                     var code = await NewUniqueCodeAsync(db, token);
@@ -475,7 +527,7 @@ namespace QdratNew.Services.RemedialTracks
             }
 
             if (result.Success)
-                await LogActivityAsync("RemedialTrack.RegenerateCode", $"تجديد الرقم المرجعي لأمر النشر #{id}", actor, batchId);
+                await LogActivityAsync("RemedialTrack.RegenerateCode", $"[RTK pub:{id}] تجديد الرقم المرجعي لأمر النشر #{id}", actor, batchId);
             return result;
         }
 
@@ -495,7 +547,7 @@ namespace QdratNew.Services.RemedialTracks
                     var pub = await db.RemedialTrackPublications.FirstOrDefaultAsync(p => p.Id == id, token);
                     if (pub is null || !scope.Allows(pub.BatchId))
                         return RemedialTrackResult.Fail("⚠️ أمر النشر غير موجود.");
-                    if (pub.Status != RemedialTrackPublicationStatus.Active)
+                    if (pub.IsDeleted || pub.Status != RemedialTrackPublicationStatus.Active)
                         return RemedialTrackResult.Fail("⚠️ أمر النشر غير نشط أو ملغى سابقًا.");
 
                     var now = Now;
@@ -562,7 +614,124 @@ namespace QdratNew.Services.RemedialTracks
             }
 
             if (result.Success)
-                await LogActivityAsync("RemedialTrack.Cancel", $"إلغاء أمر النشر #{id} — السبب: {cleanReason}", actor, batchId);
+                await LogActivityAsync("RemedialTrack.Cancel", $"[RTK pub:{id}] إلغاء أمر النشر #{id} — السبب: {cleanReason}", actor, batchId);
+            return result;
+        }
+
+        // ======================================================================
+        // RTK v2 / D26: الحذف الناعم والاسترجاع
+        // ======================================================================
+
+        public async Task<RemedialTrackResult> DeleteAsync(
+            int id, string? reason, RemedialTrackActor actor, RemedialTrackBatchScope scope, CancellationToken ct = default)
+        {
+            var cleanReason = reason?.Trim();
+            if (string.IsNullOrEmpty(cleanReason) || cleanReason.Length < MinCancelReasonLength || cleanReason.Length > MaxCancelReasonLength)
+                return RemedialTrackResult.Fail($"⚠️ سبب الحذف إلزامي ({MinCancelReasonLength}–{MaxCancelReasonLength} حرفًا).");
+
+            var batchId = 0;
+            RemedialTrackResult result;
+            try
+            {
+                result = await WriteCoreAsync(async (db, token) =>
+                {
+                    var pub = await db.RemedialTrackPublications.FirstOrDefaultAsync(p => p.Id == id, token);
+                    if (pub is null || !scope.Allows(pub.BatchId))
+                        return RemedialTrackResult.Fail("⚠️ أمر النشر غير موجود.");
+                    if (pub.IsDeleted)
+                        return RemedialTrackResult.Fail("ℹ️ أمر النشر محذوف سابقًا.");
+
+                    // لا يُمس أي تسجيل ولا تقدّم — الإخفاء عبر IsDeleted فقط
+                    pub.IsDeleted = true;
+                    pub.DeletedAtUtc = Now;
+                    pub.DeletedByUserId = Truncate(actor.UserId, 450);
+                    pub.DeletedByName = Truncate(actor.Name, 200);
+                    pub.DeleteReason = cleanReason;
+                    batchId = pub.BatchId;
+
+                    await db.SaveChangesAsync(token);
+                    return RemedialTrackResult.Ok("✅ حُذف أمر النشر (حذفًا ناعمًا). اختفى عن الطلاب وتبقى بياناته ويمكن استرجاعه من تبويب «المحذوفة».");
+                }, ct);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return RemedialTrackResult.Fail("⚠️ عُدّل أمر النشر من مستخدم آخر. حدّث الصفحة وأعد المحاولة.");
+            }
+            catch (DbUpdateException ex)
+            {
+                _logger.LogError(ex, "RTK soft-delete failed (publication {PublicationId})", id);
+                return RemedialTrackResult.Fail("⚠️ تعذّر حذف أمر النشر. أعد المحاولة.");
+            }
+
+            if (result.Success)
+                await LogActivityAsync("RemedialTrackPublicationDeleted", $"[RTK pub:{id}] حذف ناعم لأمر النشر #{id} — السبب: {cleanReason}", actor, batchId);
+            return result;
+        }
+
+        public async Task<RemedialTrackResult> RestoreAsync(
+            int id, RemedialTrackActor actor, RemedialTrackBatchScope scope, CancellationToken ct = default)
+        {
+            var batchId = 0;
+            string? newCode = null;
+            RemedialTrackResult result;
+            try
+            {
+                // إعادة المحاولة عند خرق فهرس الرقم المرجعي (2601/2627) بتوليد رقم جديد — نفس آلية الإنشاء
+                result = await WriteWithCodeRetryAsync(true, async (db, token) =>
+                {
+                    newCode = null;
+                    var pub = await db.RemedialTrackPublications.FirstOrDefaultAsync(p => p.Id == id, token);
+                    if (pub is null || !scope.Allows(pub.BatchId))
+                        return RemedialTrackResult.Fail("⚠️ أمر النشر غير موجود.");
+                    if (!pub.IsDeleted)
+                        return RemedialTrackResult.Fail("ℹ️ أمر النشر غير محذوف.");
+
+                    // الأمر النشط الحضوري يحتفظ برقمه ما لم يستعمله أمر نشط آخر في غيابه
+                    if (pub.Status == RemedialTrackPublicationStatus.Active
+                        && pub.Mode == RemedialTrackDeliveryMode.InPerson
+                        && !string.IsNullOrEmpty(pub.AccessCode))
+                    {
+                        var code = pub.AccessCode;
+                        var taken = await db.RemedialTrackPublications.AsNoTracking()
+                            .AnyAsync(p => p.Id != pub.Id && p.AccessCode == code
+                                           && p.Status == RemedialTrackPublicationStatus.Active && !p.IsDeleted, token);
+                        if (taken)
+                        {
+                            newCode = await NewUniqueCodeAsync(db, token);
+                            if (newCode is null)
+                                return RemedialTrackResult.Fail("⚠️ تعذّر توليد رقم مرجعي فريد. أعد المحاولة.");
+                            pub.AccessCode = newCode;
+                            pub.CodeVersion++;               // يُعاد التحقق من الطلاب بالرقم الجديد
+                            pub.CodeGeneratedAtUtc = Now;
+                        }
+                    }
+
+                    pub.IsDeleted = false;
+                    pub.DeletedAtUtc = null;
+                    pub.DeletedByUserId = null;
+                    pub.DeletedByName = null;
+                    pub.DeleteReason = null;
+                    batchId = pub.BatchId;
+
+                    await db.SaveChangesAsync(token);
+                    return RemedialTrackResult.Ok(newCode is null
+                        ? "✅ أُعيد أمر النشر بتقدّم الطلاب كما كان."
+                        : "✅ أُعيد أمر النشر بتقدّم الطلاب كما كان، وتم توليد رقم مرجعي جديد لأن رقمه السابق استُعمل في أمر نشط آخر.");
+                }, ct);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return RemedialTrackResult.Fail("⚠️ عُدّل أمر النشر من مستخدم آخر. حدّث الصفحة وأعد المحاولة.");
+            }
+            catch (DbUpdateException ex)
+            {
+                _logger.LogError(ex, "RTK restore failed (publication {PublicationId})", id);
+                return RemedialTrackResult.Fail("⚠️ تعذّر استرجاع أمر النشر. أعد المحاولة.");
+            }
+
+            if (result.Success)
+                await LogActivityAsync("RemedialTrackPublicationRestored",
+                    $"[RTK pub:{id}] استرجاع أمر النشر #{id}{(newCode is null ? string.Empty : " مع رقم مرجعي جديد")}", actor, batchId);
             return result;
         }
 
@@ -576,7 +745,7 @@ namespace QdratNew.Services.RemedialTracks
             {
                 var code = _codes.NewAccessCode();
                 var taken = await db.RemedialTrackPublications.AsNoTracking()
-                    .AnyAsync(p => p.AccessCode == code && p.Status == RemedialTrackPublicationStatus.Active, ct);
+                    .AnyAsync(p => p.AccessCode == code && p.Status == RemedialTrackPublicationStatus.Active && !p.IsDeleted, ct);
                 if (!taken)
                     return code;
             }

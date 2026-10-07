@@ -537,6 +537,182 @@ namespace QdratNew.Tests
             Assert.Null(denied);
         }
 
+        // ---------------- RTK-S9.1: الحذف الناعم (D26) ----------------
+
+        private static readonly RemedialTrackBatchScope All = RemedialTrackBatchScope.Unrestricted;
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("   ")]
+        [InlineData("abcd")]
+        public async Task Delete_RequiresReasonOfAtLeastFiveChars(string? reason)
+        {
+            var f = await NewAsync();
+            var id = ((RemedialTrackPublicationCreated)(await f.PublishAsync(f.Input())).Data!).PublicationId;
+
+            Assert.False((await f.Sut.DeleteAsync(id, reason, Actor, All)).Success);
+            Assert.False((await f.Sut.DeleteAsync(id, new string('x', 301), Actor, All)).Success);
+            await using var db = f.Factory.CreateDbContext();
+            Assert.False((await db.RemedialTrackPublications.AsNoTracking().SingleAsync()).IsDeleted);
+        }
+
+        [Fact]
+        public async Task Delete_HidesFromIndex_KeepsEnrollmentsAndProgress_RecordsActor_AndLogs()
+        {
+            var f = await NewAsync();
+            var id = ((RemedialTrackPublicationCreated)(await f.PublishAsync(f.Input())).Data!).PublicationId;
+
+            var r = await f.Sut.DeleteAsync(id, "  أُرسل بالخطأ  ", Actor, All);
+
+            Assert.True(r.Success, r.Message);
+            Assert.Empty((await f.Sut.GetIndexAsync(1, All)).Items);
+            var deletedTab = await f.Sut.GetIndexAsync(1, All, default, deleted: true);
+            var item = Assert.Single(deletedTab.Items);
+            Assert.Equal("أُرسل بالخطأ", item.DeleteReason);
+            Assert.Equal("مدير", item.DeletedByName);
+
+            await using var db = f.Factory.CreateDbContext();
+            var pub = await db.RemedialTrackPublications.AsNoTracking().SingleAsync();
+            Assert.True(pub.IsDeleted);
+            Assert.Equal("admin-1", pub.DeletedByUserId);
+            Assert.Equal(FixedNow, pub.DeletedAtUtc);
+            Assert.Equal(RemedialTrackPublicationStatus.Active, pub.Status);                    // لا يمس الحالة
+            Assert.Equal(4, await db.RemedialTrackEnrollments.CountAsync(e => e.Status == RemedialTrackEnrollmentStatus.NotStarted));
+            Assert.Equal(12, await db.RemedialTrackAxisProgresses.CountAsync());
+            f.Activity.Verify(a => a.LogAsync("RemedialTrackPublicationDeleted",
+                It.Is<string>(d => d.Contains($"[RTK pub:{id}]")), "admin-1", "مدير", null, null, It.IsAny<int?>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task Delete_IsIdempotent_AndRespectsBatchScope()
+        {
+            var f = await NewAsync();
+            var id = ((RemedialTrackPublicationCreated)(await f.PublishAsync(f.Input())).Data!).PublicationId;
+
+            Assert.False((await f.Sut.DeleteAsync(id, "سبب كافٍ", Actor, new RemedialTrackBatchScope(new HashSet<int> { f.OtherBatchId }))).Success);
+            Assert.True((await f.Sut.DeleteAsync(id, "سبب كافٍ", Actor, All)).Success);
+            Assert.False((await f.Sut.DeleteAsync(id, "سبب كافٍ", Actor, All)).Success);   // محذوف أصلًا
+        }
+
+        [Fact]
+        public async Task Deleted_PublicationCannotBeCancelledOrCodeRegenerated()
+        {
+            var f = await NewAsync();
+            var id = ((RemedialTrackPublicationCreated)(await f.PublishAsync(f.Input(mode: RemedialTrackDeliveryMode.InPerson))).Data!).PublicationId;
+            await f.Sut.DeleteAsync(id, "سبب كافٍ", Actor, All);
+
+            Assert.False((await f.Sut.CancelAsync(id, "سبب كافٍ", Actor, All)).Success);
+            Assert.False((await f.Sut.RegenerateCodeAsync(id, Actor, All)).Success);
+        }
+
+        [Fact]
+        public async Task Restore_ReturnsPublication_WithSameStateAndCode_AndClearsDeleteFields()
+        {
+            var f = await NewAsync();
+            var id = ((RemedialTrackPublicationCreated)(await f.PublishAsync(f.Input(mode: RemedialTrackDeliveryMode.InPerson))).Data!).PublicationId;
+            string codeBefore;
+            await using (var db0 = f.Factory.CreateDbContext())
+                codeBefore = (await db0.RemedialTrackPublications.AsNoTracking().SingleAsync()).AccessCode!;
+            await f.Sut.DeleteAsync(id, "سبب كافٍ", Actor, All);
+
+            var r = await f.Sut.RestoreAsync(id, Actor, All);
+
+            Assert.True(r.Success, r.Message);
+            Assert.Single((await f.Sut.GetIndexAsync(1, All)).Items);
+            Assert.Empty((await f.Sut.GetIndexAsync(1, All, default, deleted: true)).Items);
+            await using var db = f.Factory.CreateDbContext();
+            var pub = await db.RemedialTrackPublications.AsNoTracking().SingleAsync();
+            Assert.False(pub.IsDeleted);
+            Assert.Null(pub.DeletedAtUtc);
+            Assert.Null(pub.DeleteReason);
+            Assert.Equal(codeBefore, pub.AccessCode);   // لا تعارض ← الرقم نفسه
+            Assert.Equal(1, pub.CodeVersion);
+            f.Activity.Verify(a => a.LogAsync("RemedialTrackPublicationRestored",
+                It.Is<string>(d => d.Contains($"[RTK pub:{id}]")), "admin-1", "مدير", null, null, It.IsAny<int?>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task Restore_WhenCodeNowUsedByAnotherActivePublication_GeneratesNewCode_AndBumpsVersion()
+        {
+            var f = await NewAsync();
+            var first = ((RemedialTrackPublicationCreated)(await f.PublishAsync(f.Input(RemedialTrackPublicationScope.SelectedStudents,
+                RemedialTrackDeliveryMode.InPerson, f.BatchStudents.Take(2)))).Data!).PublicationId;
+            await f.Sut.DeleteAsync(first, "سبب كافٍ", Actor, All);
+
+            // الرقم المحرَّر يستعمله أمر آخر نشط (محاكاة بإعطائه رقم الأمر المحذوف نفسه)
+            var second = ((RemedialTrackPublicationCreated)(await f.PublishAsync(f.Input(RemedialTrackPublicationScope.SelectedStudents,
+                RemedialTrackDeliveryMode.InPerson, f.BatchStudents.Skip(2)))).Data!).PublicationId;
+            string oldCode;
+            await using (var db1 = f.Factory.CreateDbContext())
+            {
+                oldCode = (await db1.RemedialTrackPublications.AsNoTracking().SingleAsync(p => p.Id == first)).AccessCode!;
+                (await db1.RemedialTrackPublications.SingleAsync(p => p.Id == second)).AccessCode = oldCode;
+                await db1.SaveChangesAsync();
+            }
+
+            var r = await f.Sut.RestoreAsync(first, Actor, All);
+
+            Assert.True(r.Success, r.Message);
+            await using var db = f.Factory.CreateDbContext();
+            var restored = await db.RemedialTrackPublications.AsNoTracking().SingleAsync(p => p.Id == first);
+            Assert.NotEqual(oldCode, restored.AccessCode);
+            Assert.Equal(2, restored.CodeVersion);
+            Assert.Equal(oldCode, (await db.RemedialTrackPublications.AsNoTracking().SingleAsync(p => p.Id == second)).AccessCode);
+        }
+
+        [Fact]
+        public async Task Restore_NotDeleted_OrOutOfScope_IsRejected()
+        {
+            var f = await NewAsync();
+            var id = ((RemedialTrackPublicationCreated)(await f.PublishAsync(f.Input())).Data!).PublicationId;
+
+            Assert.False((await f.Sut.RestoreAsync(id, Actor, All)).Success);   // غير محذوف
+            await f.Sut.DeleteAsync(id, "سبب كافٍ", Actor, All);
+            Assert.False((await f.Sut.RestoreAsync(id, Actor, new RemedialTrackBatchScope(new HashSet<int> { f.OtherBatchId }))).Success);
+        }
+
+        [Fact]
+        public async Task Details_ForDeletedPublication_ShowsDeleteInfo_AndNoLeakOfRecentChangesFromOthers()
+        {
+            var f = await NewAsync();
+            var id = ((RemedialTrackPublicationCreated)(await f.PublishAsync(f.Input())).Data!).PublicationId;
+            await f.Sut.DeleteAsync(id, "سبب كافٍ", Actor, All);
+
+            var vm = await f.Sut.GetDetailsAsync(id, false, All);
+
+            Assert.NotNull(vm);
+            Assert.True(vm!.IsDeleted);
+            Assert.Equal("سبب كافٍ", vm.DeleteReason);
+            Assert.False(vm.IsActive);
+        }
+
+        // ---------------- RTK-S9.3: آخر التعديلات ----------------
+
+        [Fact]
+        public async Task Details_RecentChanges_FilterByPublicationOrTrackTag_Only()
+        {
+            var f = await NewAsync();
+            var id = ((RemedialTrackPublicationCreated)(await f.PublishAsync(f.Input())).Data!).PublicationId;
+            await using (var db = f.Factory.CreateDbContext())
+            {
+                db.AdminActivityLogs.AddRange(
+                    new AdminActivityLog { AdminId = "a", AdminName = "مدير", ActionType = "RemedialTrackPublicationDeleted", Description = $"[RTK pub:{id}] حذف", Timestamp = FixedNow.AddMinutes(1) },
+                    new AdminActivityLog { AdminId = "a", AdminName = "مدير", ActionType = "RemedialTrackVideoEdited", Description = $"[RTK track:{f.TrackId}] تعديل فيديو", Timestamp = FixedNow.AddMinutes(2) },
+                    new AdminActivityLog { AdminId = "a", AdminName = "مدير", ActionType = "RemedialTrackPublicationDeleted", Description = $"[RTK pub:{id + 100}] أمر آخر", Timestamp = FixedNow.AddMinutes(3) },
+                    new AdminActivityLog { AdminId = "a", AdminName = "مدير", ActionType = "RemedialTrackVideoEdited", Description = $"[RTK track:{f.TrackId + 100}] خطة أخرى", Timestamp = FixedNow.AddMinutes(4) },
+                    new AdminActivityLog { AdminId = "a", AdminName = "مدير", ActionType = "OtherAction", Description = $"[RTK pub:{id}] ليس RTK", Timestamp = FixedNow.AddMinutes(5) });
+                await db.SaveChangesAsync();
+            }
+
+            var vm = await f.Sut.GetDetailsAsync(id, false, All);
+
+            Assert.Equal(2, vm!.RecentChanges.Count);
+            Assert.Equal("RemedialTrackVideoEdited", vm.RecentChanges[0].ActionType);       // الأحدث أولًا
+            Assert.Equal("تعديل فيديو", vm.RecentChanges[0].ActionLabel);
+            Assert.DoesNotContain("[RTK", vm.RecentChanges[0].Description);
+            Assert.Equal("حذف", vm.RecentChanges[1].Description);
+        }
+
         // ---------------- الإلغاء ----------------
 
         [Fact]

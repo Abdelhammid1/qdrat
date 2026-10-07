@@ -23,6 +23,8 @@
     <link rel="stylesheet" href="~/css/admin-rtk.css" asp-append-version="true" />
 }
 
+@Html.AntiForgeryToken()
+
 <div class="rtk-page container-fluid mt-4" dir="rtl">
 
     <header class="rtk-hero">
@@ -46,13 +48,20 @@
         </div>
     </header>
 
-    <section class="rtk-panel" aria-label="قائمة أوامر النشر">
+    <nav class="d-flex gap-2 flex-wrap mb-3" aria-label="تبويبات أوامر النشر">
+        <a class="rtk-btn @(Model.ShowingDeleted ? "rtk-btn--outline" : "")" asp-area="Admin" asp-controller="RemedialTrackPublications" asp-action="Index"
+           aria-current="@(Model.ShowingDeleted ? null : "page")"><i class="fas fa-paper-plane"></i> النشطة</a>
+        <a class="rtk-btn @(Model.ShowingDeleted ? "" : "rtk-btn--outline")" asp-area="Admin" asp-controller="RemedialTrackPublications" asp-action="Index" asp-route-deleted="true"
+           aria-current="@(Model.ShowingDeleted ? "page" : null)"><i class="fas fa-trash-can"></i> المحذوفة</a>
+    </nav>
+
+    <section class="rtk-panel" id="rtkPubList" aria-label="قائمة أوامر النشر">
         @if (Model.Items.Count == 0)
         {
             <div class="rtk-empty">
-                <i class="fas fa-paper-plane"></i>
-                لا توجد أوامر نشر بعد.
-                @if (Model.CanPublish)
+                <i class="fas @(Model.ShowingDeleted ? "fa-trash-can" : "fa-paper-plane")"></i>
+                @(Model.ShowingDeleted ? "لا توجد أوامر نشر محذوفة." : "لا توجد أوامر نشر بعد.")
+                @if (Model.CanPublish && !Model.ShowingDeleted)
                 {
                     <div class="mt-2"><a class="rtk-btn" asp-area="Admin" asp-controller="RemedialTrackPublications" asp-action="Create">نشر أول خطة</a></div>
                 }
@@ -85,11 +94,33 @@
                                 </td>
                                 <td>@Tz.ConvertToSaudi(p.PublishAtUtc).ToString("yyyy-MM-dd HH:mm")</td>
                                 <td>@p.TotalStudents</td>
-                                <td><span class="rtk-badge @StatusClass(p.Status)">@StatusLabel(p.Status)</span></td>
                                 <td>
-                                    <a class="rtk-btn rtk-btn--outline rtk-btn--sm" asp-area="Admin" asp-controller="RemedialTrackPublications" asp-action="Details" asp-route-id="@p.Id">
-                                        <i class="fas fa-eye"></i> التفاصيل
-                                    </a>
+                                    <span class="rtk-badge @StatusClass(p.Status)">@StatusLabel(p.Status)</span>
+                                    @if (Model.ShowingDeleted)
+                                    {
+                                        <div class="rtk-hint">
+                                            حُذف @(p.DeletedAtUtc.HasValue ? Tz.ConvertToSaudi(p.DeletedAtUtc.Value).ToString("yyyy-MM-dd HH:mm") : "")
+                                            @if (!string.IsNullOrWhiteSpace(p.DeletedByName)) { <text>بواسطة @p.DeletedByName</text> }
+                                            @if (!string.IsNullOrWhiteSpace(p.DeleteReason)) { <text><br />السبب: @p.DeleteReason</text> }
+                                        </div>
+                                    }
+                                </td>
+                                <td>
+                                    <div class="d-flex gap-1 flex-wrap">
+                                        <a class="rtk-btn rtk-btn--outline rtk-btn--sm" asp-area="Admin" asp-controller="RemedialTrackPublications" asp-action="Details" asp-route-id="@p.Id">
+                                            <i class="fas fa-eye"></i> التفاصيل
+                                        </a>
+                                        @if (!Model.ShowingDeleted && Model.CanDelete)
+                                        {
+                                            <button type="button" class="rtk-btn rtk-btn--danger rtk-btn--sm" data-rtk-act="delete-open"
+                                                    data-id="@p.Id" data-title="@p.TrackTitle"><i class="fas fa-trash-can"></i> حذف</button>
+                                        }
+                                        @if (Model.ShowingDeleted && Model.CanRestore)
+                                        {
+                                            <button type="button" class="rtk-btn rtk-btn--sm" data-rtk-act="restore"
+                                                    data-id="@p.Id"><i class="fas fa-rotate-left"></i> استرجاع</button>
+                                        }
+                                    </div>
                                 </td>
                             </tr>
                         }
@@ -108,11 +139,99 @@
                         }
                         else
                         {
-                            <a asp-area="Admin" asp-controller="RemedialTrackPublications" asp-action="Index" asp-route-page="@i">@i</a>
+                            <a asp-area="Admin" asp-controller="RemedialTrackPublications" asp-action="Index" asp-route-page="@i" asp-route-deleted="@(Model.ShowingDeleted ? "true" : null)">@i</a>
                         }
                     }
                 </nav>
             }
         }
     </section>
+
+    @if (Model.CanDelete && !Model.ShowingDeleted)
+    {
+        <section class="rtk-panel" id="rtkDeleteBox" hidden aria-label="حذف أمر نشر">
+            <h2>حذف أمر النشر</h2>
+            <p class="rtk-alert rtk-alert--warn" id="rtkDeleteWarn"></p>
+            <div class="rtk-field">
+                <label for="rtkDeleteReason">سبب الحذف (إلزامي، 5–300 حرف)</label>
+                <textarea id="rtkDeleteReason" maxlength="300"></textarea>
+            </div>
+            <div class="rtk-form-actions">
+                <button type="button" class="rtk-btn rtk-btn--danger" data-rtk-act="delete-confirm"><i class="fas fa-trash-can"></i> تأكيد الحذف</button>
+                <button type="button" class="rtk-btn rtk-btn--outline" data-rtk-act="delete-close">تراجع</button>
+            </div>
+        </section>
+    }
+
+    <div class="rtk-toast" id="rtkToast" role="status" aria-live="polite"></div>
 </div>
+
+@section Scripts {
+    <script>
+    (function () {
+        'use strict';
+        var root = document.getElementById('rtkPubList');
+        if (!root || root.dataset.bound === '1') return;   // منع تكرار الربط
+        root.dataset.bound = '1';
+
+        var tokenEl = document.querySelector('input[name="__RequestVerificationToken"]');
+        var token = tokenEl ? tokenEl.value : '';
+        var urls = {
+            del: '@Url.Action("Delete", "RemedialTrackPublications", new { area = "Admin" })',
+            restore: '@Url.Action("Restore", "RemedialTrackPublications", new { area = "Admin" })'
+        };
+        var toast = document.getElementById('rtkToast');
+        var box = document.getElementById('rtkDeleteBox');
+        var target = null;
+        var busy = false;
+
+        function esc(t) { var d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; }
+        function showToast(msg, ok) {
+            toast.innerHTML = '<div class="rtk-alert ' + (ok ? 'rtk-alert--ok' : 'rtk-alert--error') + '">' + esc(msg) + '</div>';
+            clearTimeout(showToast._t);
+            showToast._t = setTimeout(function () { toast.innerHTML = ''; }, ok ? 3000 : 7000);
+        }
+
+        function post(url, fd, btn) {
+            if (busy) return;
+            busy = true; btn.disabled = true; btn.classList.add('is-busy');
+            fd.set('__RequestVerificationToken', token);
+            fetch(url, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                .then(function (res) {
+                    if (!res.success) { showToast(res.message || 'تعذّر تنفيذ العملية.', false); return; }
+                    showToast(res.message || 'تم.', true);
+                    setTimeout(function () { window.location.reload(); }, 900);
+                })
+                .catch(function () { showToast('تعذّر الاتصال بالخادم. تحقق من الشبكة وأعد المحاولة.', false); })
+                .finally(function () { busy = false; btn.disabled = false; btn.classList.remove('is-busy'); });
+        }
+
+        document.addEventListener('click', function (e) {
+            var btn = e.target.closest('[data-rtk-act]');
+            if (!btn) return;
+            var act = btn.getAttribute('data-rtk-act');
+
+            if (act === 'delete-open' && box) {
+                target = btn.getAttribute('data-id');
+                document.getElementById('rtkDeleteWarn').textContent = 'سيختفي أمر النشر «' + btn.getAttribute('data-title') +
+                    '» عن الطلاب وتبقى بياناته ويمكن استرجاعه من تبويب «المحذوفة». هذا القرار يُسجَّل باسمك.';
+                document.getElementById('rtkDeleteReason').value = '';
+                box.hidden = false; box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else if (act === 'delete-close' && box) {
+                box.hidden = true; target = null;
+            } else if (act === 'delete-confirm') {
+                if (!target) return;
+                var reason = document.getElementById('rtkDeleteReason').value.trim();
+                if (reason.length < 5 || reason.length > 300) { showToast('⚠️ سبب الحذف إلزامي (5–300 حرف).', false); return; }
+                var fd = new FormData(); fd.set('id', target); fd.set('reason', reason);
+                post(urls.del, fd, btn);
+            } else if (act === 'restore') {
+                if (!window.confirm('سيعود أمر النشر ظاهرًا للطلاب بتقدّمهم كما كان. هل تريد الاسترجاع؟')) return;
+                var rfd = new FormData(); rfd.set('id', btn.getAttribute('data-id'));
+                post(urls.restore, rfd, btn);
+            }
+        });
+    })();
+    </script>
+}

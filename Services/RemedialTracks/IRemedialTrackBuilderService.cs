@@ -32,10 +32,12 @@ namespace QdratNew.Services.RemedialTracks
         /// <param name="direction">-1 للأعلى، +1 للأسفل.</param>
         Task<RemedialTrackResult> MoveAxisAsync(int axisId, int direction, CancellationToken ct = default);
         Task<RemedialTrackResult> RemoveAxisAsync(int axisId, CancellationToken ct = default);
-        Task<RemedialTrackResult> SaveAxisExamsAsync(SaveRemedialAxisExamsInput input, CancellationToken ct = default);
+        /// <summary>RTK v2/D25: مسموح بعد النشر (يُسجَّل المنفّذ والقيم قبل/بعد، ويُحذَّر بعدد الطلاب المنتظرين للاختبار).</summary>
+        Task<RemedialTrackResult> SaveAxisExamsAsync(SaveRemedialAxisExamsInput input, RemedialTrackActor actor, CancellationToken ct = default);
 
         Task<RemedialTrackResult> AddVideoAsync(AddRemedialVideoInput input, CancellationToken ct = default);
-        Task<RemedialTrackResult> EditVideoAsync(EditRemedialVideoInput input, CancellationToken ct = default);
+        /// <summary>مسموح بعد النشر؛ يُسجَّل المنفّذ والقيم قبل/بعد. لا يمس مشاهدات الطلاب السابقة (D25).</summary>
+        Task<RemedialTrackResult> EditVideoAsync(EditRemedialVideoInput input, RemedialTrackActor actor, CancellationToken ct = default);
         Task<RemedialTrackResult> MoveVideoAsync(int videoId, int direction, CancellationToken ct = default);
         Task<RemedialTrackResult> RemoveVideoAsync(int videoId, CancellationToken ct = default);
 

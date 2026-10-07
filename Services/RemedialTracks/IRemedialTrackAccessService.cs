@@ -22,7 +22,8 @@ namespace QdratNew.Services.RemedialTracks
         RemedialTrackDeliveryMode Mode,
         int CodeVersion,
         int? VerifiedCodeVersion,
-        DateTime? CodeLockedUntilUtc);
+        DateTime? CodeLockedUntilUtc,
+        bool PublicationDeleted = false);   // RTK v2/D26: أمر محذوف ناعمًا ← يُعامَل كغير متاح (Cancelled)
 
     public sealed record RemedialTrackAccessResult(
         RemedialTrackAccessOutcome Outcome,

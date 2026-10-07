@@ -31,7 +31,8 @@ namespace QdratNew.Services.RemedialTracks
         public static RemedialTrackAccessOutcome Decide(RemedialTrackAccessSnapshot s, int studentId, DateTime nowUtc)
         {
             if (s.StudentId != studentId) return RemedialTrackAccessOutcome.NotFound;                       // لا تكشف وجوده لغيره
-            if (s.PublicationStatus != RemedialTrackPublicationStatus.Active
+            if (s.PublicationDeleted
+                || s.PublicationStatus != RemedialTrackPublicationStatus.Active
                 || s.EnrollmentStatus == RemedialTrackEnrollmentStatus.Cancelled)
                 return RemedialTrackAccessOutcome.Cancelled;
             if (s.PublishAtUtc > nowUtc) return RemedialTrackAccessOutcome.NotYetPublished;
@@ -75,7 +76,7 @@ namespace QdratNew.Services.RemedialTracks
                 {
                     Snapshot = new RemedialTrackAccessSnapshot(
                         e.StudentId, e.Status, e.Publication!.Status, e.Publication.PublishAtUtc, e.Publication.Mode,
-                        e.Publication.CodeVersion, e.VerifiedCodeVersion, e.CodeLockedUntilUtc),
+                        e.Publication.CodeVersion, e.VerifiedCodeVersion, e.CodeLockedUntilUtc, e.Publication.IsDeleted),
                     e.StartedAtUtc,
                     e.TermsAcceptedAtUtc,
                     Title = e.Publication.Track!.Title
@@ -110,10 +111,11 @@ namespace QdratNew.Services.RemedialTracks
 
             var row = await db.RemedialTrackEnrollments.AsNoTracking()
                 .Where(e => e.Id == enrollmentId && e.StudentId == studentId)
-                .Select(e => new { e.Status, PubStatus = e.Publication!.Status, e.Publication.PublishAtUtc, e.TermsAcceptedAtUtc })
+                .Select(e => new { e.Status, PubStatus = e.Publication!.Status, e.Publication.IsDeleted, e.Publication.PublishAtUtc, e.TermsAcceptedAtUtc })
                 .FirstOrDefaultAsync(ct);
 
             if (row is null
+                || row.IsDeleted
                 || row.PubStatus != RemedialTrackPublicationStatus.Active
                 || row.Status == RemedialTrackEnrollmentStatus.Cancelled
                 || row.PublishAtUtc > now)
@@ -179,6 +181,7 @@ namespace QdratNew.Services.RemedialTracks
                 {
                     e.Status,
                     PubStatus = e.Publication!.Status,
+                    e.Publication.IsDeleted,
                     e.Publication.PublishAtUtc,
                     e.Publication.Mode,
                     e.Publication.AccessCode,
@@ -188,7 +191,7 @@ namespace QdratNew.Services.RemedialTracks
                 .FirstOrDefaultAsync(ct);
 
             if (row is null) return new RemedialTrackVerifyResult(RemedialTrackVerifyOutcome.NotFound);
-            if (row.PubStatus != RemedialTrackPublicationStatus.Active || row.Status == RemedialTrackEnrollmentStatus.Cancelled)
+            if (row.IsDeleted || row.PubStatus != RemedialTrackPublicationStatus.Active || row.Status == RemedialTrackEnrollmentStatus.Cancelled)
                 return new RemedialTrackVerifyResult(RemedialTrackVerifyOutcome.Cancelled);
             if (row.PublishAtUtc > now) return new RemedialTrackVerifyResult(RemedialTrackVerifyOutcome.NotYetPublished);
 
@@ -312,6 +315,7 @@ namespace QdratNew.Services.RemedialTracks
                 .AnyAsync(e => e.StudentId == studentId
                                && e.Status != RemedialTrackEnrollmentStatus.Cancelled
                                && e.Publication!.Status == RemedialTrackPublicationStatus.Active
+                               && !e.Publication.IsDeleted
                                && e.Publication.PublishAtUtc <= now, ct);
         }
     }

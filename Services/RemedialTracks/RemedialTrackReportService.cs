@@ -81,7 +81,7 @@ namespace QdratNew.Services.RemedialTracks
             await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
             var batchId = await db.RemedialTrackEnrollments.AsNoTracking()
-                .Where(e => e.Id == enrollmentId)
+                .Where(e => e.Id == enrollmentId && !e.Publication!.IsDeleted)   // RTK v2/D26
                 .Select(e => (int?)e.Publication!.BatchId)
                 .FirstOrDefaultAsync(ct);
             if (batchId is null || !scope.Allows(batchId.Value))
@@ -116,7 +116,7 @@ namespace QdratNew.Services.RemedialTracks
             await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
             var head = await db.RemedialTrackPublications.AsNoTracking()
-                .Where(p => p.Id == publicationId)
+                .Where(p => p.Id == publicationId && !p.IsDeleted)   // RTK v2/D26
                 .Select(p => new
                 {
                     p.BatchId,
@@ -178,7 +178,7 @@ namespace QdratNew.Services.RemedialTracks
 
             // 1) حالات التسجيل + الدفعة (BatchId ثابت لأمر النشر فتتطابق المجموعات مع الحالات) — يخدم KPIs وفحص النطاق معًا.
             var statusRows = await db.RemedialTrackEnrollments.AsNoTracking()
-                .Where(e => e.PublicationId == publicationId)
+                .Where(e => e.PublicationId == publicationId && !e.Publication!.IsDeleted)   // RTK v2/D26: المحذوف ← لا لوحة
                 .GroupBy(e => new { e.Status, BatchId = e.Publication!.BatchId })
                 .Select(g => new { g.Key.Status, g.Key.BatchId, Count = g.Count() })
                 .ToListAsync(ct);
@@ -347,10 +347,11 @@ namespace QdratNew.Services.RemedialTracks
                     a.Enrollment.StudentId,
                     a.Enrollment.PublicationId,
                     PublicationStatus = a.Enrollment.Publication!.Status,
+                    PublicationDeleted = a.Enrollment.Publication.IsDeleted,
                     BatchId = a.Enrollment.Publication.BatchId
                 })
                 .FirstOrDefaultAsync(ct);
-            if (info is null || !scope.Allows(info.BatchId))
+            if (info is null || info.PublicationDeleted || !scope.Allows(info.BatchId))
                 return RemedialTrackResult.Fail("🚫 التسجيل غير متاح لك.");
 
             if (info.PublicationStatus != RemedialTrackPublicationStatus.Active || info.EnrollmentStatus == RemedialTrackEnrollmentStatus.Cancelled)
@@ -390,7 +391,7 @@ namespace QdratNew.Services.RemedialTracks
             {
                 await _activity.LogAsync(
                     "RemedialTrack.UnlockNext",
-                    $"فتح المحور التالي (بعد «{info.AxisTitle}») للتسجيل {enrollmentId} في أمر النشر {info.PublicationId}. السبب: {cleanReason}",
+                    $"[RTK pub:{info.PublicationId}] فتح المحور التالي (بعد «{info.AxisTitle}») للتسجيل {enrollmentId} في أمر النشر {info.PublicationId}. السبب: {cleanReason}",
                     actor.UserId, actor.Name, studentId: info.StudentId, batchId: info.BatchId);
             }
             catch (Exception ex)
@@ -416,6 +417,7 @@ namespace QdratNew.Services.RemedialTracks
             }
 
             var head = await headQuery
+                .Where(e => !e.Publication!.IsDeleted)   // RTK v2/D26: أمر محذوف ← لا تقرير (طالب/ولي أمر/أدمن)
                 .Select(e => new
                 {
                     e.Id,

@@ -45,7 +45,9 @@
                     new AdminActionDescriptor { Key = "Publish", DisplayNameAr = "نشر خطة علاجية" },
                     new AdminActionDescriptor { Key = "ManageCode", DisplayNameAr = "عرض/تجديد الرقم المرجعي" },
                     new AdminActionDescriptor { Key = "Cancel", DisplayNameAr = "إلغاء أمر نشر" },
-                    new AdminActionDescriptor { Key = "Unlock", DisplayNameAr = "فتح المحور التالي لطالب" }
+                    new AdminActionDescriptor { Key = "Unlock", DisplayNameAr = "فتح المحور التالي لطالب" },
+                    new AdminActionDescriptor { Key = "Delete", DisplayNameAr = "حذف أمر نشر (حذف ناعم)" },
+                    new AdminActionDescriptor { Key = "Restore", DisplayNameAr = "استرجاع أمر نشر محذوف" }
                 },
 
                 "RemedialTrackReports" => new[]

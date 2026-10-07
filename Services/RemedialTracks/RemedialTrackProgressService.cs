@@ -82,6 +82,7 @@ namespace QdratNew.Services.RemedialTracks
                 .Where(e => e.StudentId == studentId
                             && e.Status != RemedialTrackEnrollmentStatus.Cancelled
                             && e.Publication!.Status == RemedialTrackPublicationStatus.Active
+                            && !e.Publication.IsDeleted
                             && e.Publication.PublishAtUtc <= now)
                 .OrderByDescending(e => e.Publication!.PublishAtUtc)
                 .Select(e => new
@@ -125,7 +126,7 @@ namespace QdratNew.Services.RemedialTracks
             await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
             var head = await db.RemedialTrackEnrollments.AsNoTracking()
-                .Where(e => e.Id == enrollmentId && e.StudentId == studentId)
+                .Where(e => e.Id == enrollmentId && e.StudentId == studentId && !e.Publication!.IsDeleted)
                 .Select(e => new
                 {
                     e.Id,
@@ -176,7 +177,8 @@ namespace QdratNew.Services.RemedialTracks
             await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
             var ap = await db.RemedialTrackAxisProgresses.AsNoTracking()
-                .Where(a => a.Id == axisProgressId && a.EnrollmentId == enrollmentId && a.Enrollment!.StudentId == studentId)
+                .Where(a => a.Id == axisProgressId && a.EnrollmentId == enrollmentId && a.Enrollment!.StudentId == studentId
+                            && !a.Enrollment.Publication!.IsDeleted)
                 .Select(a => new
                 {
                     a.Id,
@@ -385,7 +387,8 @@ namespace QdratNew.Services.RemedialTracks
                         v.AxisProgress.Enrollment.Publication.Mode,
                         v.AxisProgress.Enrollment.Publication.CodeVersion,
                         v.AxisProgress.Enrollment.VerifiedCodeVersion,
-                        v.AxisProgress.Enrollment.CodeLockedUntilUtc)
+                        v.AxisProgress.Enrollment.CodeLockedUntilUtc,
+                        v.AxisProgress.Enrollment.Publication.IsDeleted)
                 })
                 .FirstOrDefaultAsync(ct);
 
@@ -801,7 +804,7 @@ namespace QdratNew.Services.RemedialTracks
                 .AnyAsync(e => e.Id == enrollmentId && e.StudentId == studentId
                                && e.Status != RemedialTrackEnrollmentStatus.Cancelled
                                && e.Publication!.Status == RemedialTrackPublicationStatus.Active
-                               // يُضاف شرط !e.Publication.IsDeleted في RTK-S9.1
+                               && !e.Publication.IsDeleted
                                && e.Publication.PublishAtUtc <= now, ct);
             if (!active) return;
 
