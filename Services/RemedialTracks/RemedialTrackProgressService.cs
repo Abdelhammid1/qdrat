@@ -120,7 +120,7 @@ namespace QdratNew.Services.RemedialTracks
 
         public async Task<StudentRemedialTrackPlanVm?> GetPlanAsync(int studentId, int enrollmentId, CancellationToken ct = default)
         {
-            await ReleaseDueAxesAsync(studentId, enrollmentId, ct);   // فتح المحور الذي حان يومه (إن أنهى السابق)
+            await OpenPendingAxesAsync(studentId, enrollmentId, ct);   // v2: فتح المحور الذي أنهى الطالب سابقَه (يعالج جدولة الأيام القديمة)
 
             await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
@@ -151,13 +151,9 @@ namespace QdratNew.Services.RemedialTracks
                     Round = a.Round,
                     VideoCount = a.Axis.Videos.Count(v => v.IsActive),
                     Exam101Percent = a.Exam101Percent,
-                    Exam102Percent = a.Exam102Percent,
-                    DayNumber = a.Axis.ReleaseDay
+                    Exam102Percent = a.Exam102Percent
                 })
                 .ToListAsync(ct);
-
-            foreach (var ax in axes.Where(x => x.IsLocked))
-                ax.AvailableAtLocal = _tz.ConvertToSaudi(RemedialTrackSchedule.ReleaseAtUtc(head.PublishAtUtc, ax.DayNumber));
 
             return new StudentRemedialTrackPlanVm
             {
@@ -175,7 +171,7 @@ namespace QdratNew.Services.RemedialTracks
 
         public async Task<StudentRemedialTrackAxisVm?> GetAxisAsync(int studentId, int enrollmentId, int axisProgressId, CancellationToken ct = default)
         {
-            await ReleaseDueAxesAsync(studentId, enrollmentId, ct);
+            await OpenPendingAxesAsync(studentId, enrollmentId, ct);
 
             await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
@@ -711,7 +707,7 @@ namespace QdratNew.Services.RemedialTracks
                     AddEvent(db, info.EnrollmentId, info.AxisId, RemedialTrackEventType.ExamPassed,
                         $"اجتاز الطالب {examName} للمحور «{info.Title}» بنسبة {score}%.", now);
                     if (t.UnlockNextAxis)
-                        await OpenNextAxisAsync(db, info.EnrollmentId, ap.Order, now, respectSchedule: true, ct);
+                        await OpenNextAxisAsync(db, info.EnrollmentId, ap.Order, now, ct);   // v2: بلا جدولة (D19)
                 }
                 else
                 {
@@ -786,8 +782,8 @@ namespace QdratNew.Services.RemedialTracks
                     CreatedAtUtc = now
                 });
 
-                // نقل الإدارة قرار صريح: يفتح التالي فورًا بصرف النظر عن يومه في الجدول
-                await OpenNextAxisAsync(db, info.EnrollmentId, ap.Order, now, respectSchedule: false, ct);
+                // نقل الإدارة قرار صريح: يفتح التالي فورًا
+                await OpenNextAxisAsync(db, info.EnrollmentId, ap.Order, now, ct);
                 await db.SaveChangesAsync(ct);
                 await FinalizeEnrollmentAsync(db, info.EnrollmentId, now, ct);
 
@@ -795,44 +791,47 @@ namespace QdratNew.Services.RemedialTracks
             }, ct);
         }
 
-        // يفتح المحور الذي حان يومه إن أنهى الطالب السابق (اجتاز/نقلته الإدارة). فحص قراءة خفيف أولًا؛ الكتابة فقط عند وجود محور مستحق.
-        private async Task ReleaseDueAxesAsync(int studentId, int enrollmentId, CancellationToken ct)
+        // يفتح المحور المغلق الذي أنهى الطالب سابقَه (اجتاز/نقلته الإدارة) — يعالج ما بقي معلّقًا من جدولة الأيام (v2)
+        private async Task OpenPendingAxesAsync(int studentId, int enrollmentId, CancellationToken ct)
         {
             await using var db = await _dbFactory.CreateDbContextAsync(ct);
             var now = _time.GetUtcNow().UtcDateTime;
 
-            var publishAt = await db.RemedialTrackEnrollments.AsNoTracking()
-                .Where(e => e.Id == enrollmentId && e.StudentId == studentId
-                            && e.Status != RemedialTrackEnrollmentStatus.Cancelled
-                            && e.Publication!.Status == RemedialTrackPublicationStatus.Active)
-                .Select(e => (DateTime?)e.Publication!.PublishAtUtc)
-                .FirstOrDefaultAsync(ct);
-            if (publishAt is null || publishAt.Value > now) return;
+            var active = await db.RemedialTrackEnrollments.AsNoTracking()
+                .AnyAsync(e => e.Id == enrollmentId && e.StudentId == studentId
+                               && e.Status != RemedialTrackEnrollmentStatus.Cancelled
+                               && e.Publication!.Status == RemedialTrackPublicationStatus.Active
+                               // يُضاف شرط !e.Publication.IsDeleted في RTK-S9.1
+                               && e.Publication.PublishAtUtc <= now, ct);
+            if (!active) return;
 
-            var rows = (await db.RemedialTrackAxisProgresses.AsNoTracking()
-                    .Where(a => a.EnrollmentId == enrollmentId)
-                    .OrderBy(a => a.Order)
-                    .Select(a => new { a.Id, a.Order, a.Status, Day = a.Axis!.ReleaseDay })
-                    .ToListAsync(ct))
-                .Select(a => new RemedialTrackSchedule.AxisRow(a.Id, a.Order, a.Status, a.Day))
-                .ToList();
+            var rows = await db.RemedialTrackAxisProgresses.AsNoTracking()
+                .Where(a => a.EnrollmentId == enrollmentId)
+                .OrderBy(a => a.Order)
+                .Select(a => new { a.Order, a.Status })
+                .ToListAsync(ct);
 
-            var due = RemedialTrackSchedule.FindDue(rows, publishAt.Value, now);
-            if (due is null) return;
-
-            var prevOrder = rows.Where(r => r.Order < due.Value.Order).Max(r => r.Order);
-            await InTransactionAsync(async tdb =>
+            for (var i = 1; i < rows.Count; i++)
             {
-                if (await OpenNextAxisAsync(tdb, enrollmentId, prevOrder, now, respectSchedule: true, ct))
-                    await tdb.SaveChangesAsync(ct);
-                return true;
-            }, ct);
+                if (rows[i].Status != RemedialTrackAxisStatus.Locked) continue;
+
+                var prev = rows[i - 1].Status;
+                if (prev is not (RemedialTrackAxisStatus.Passed or RemedialTrackAxisStatus.FailedOpenedByAdmin)) return;
+
+                var prevOrder = rows[i - 1].Order;
+                await InTransactionAsync(async tdb =>
+                {
+                    if (await OpenNextAxisAsync(tdb, enrollmentId, prevOrder, now, ct))
+                        await tdb.SaveChangesAsync(ct);
+                    return true;
+                }, ct);
+                return;
+            }
         }
 
         // يفتح المحور التالي (Locked → Videos/جولة 1) ويحدّث CurrentAxisId؛ لا يحفظ (المستدعي يحفظ). يعيد true إن فُتح محور.
-        // respectSchedule: عند true لا يُفتح قبل موعد يومه (يبقى Locked ويُفتح كسولًا عند حلول الموعد).
         private static async Task<bool> OpenNextAxisAsync(
-            ApplicationDbContext db, int enrollmentId, int currentOrder, DateTime now, bool respectSchedule, CancellationToken ct)
+            ApplicationDbContext db, int enrollmentId, int currentOrder, DateTime now, CancellationToken ct)
         {
             var next = await db.RemedialTrackAxisProgresses
                 .Where(a => a.EnrollmentId == enrollmentId && a.Order > currentOrder)
@@ -840,19 +839,6 @@ namespace QdratNew.Services.RemedialTracks
                 .FirstOrDefaultAsync(ct);
             if (next is null) return false;
             if (next.Status != RemedialTrackAxisStatus.Locked) return false;   // مفتوح سابقًا
-
-            if (respectSchedule)
-            {
-                var publishAt = await db.RemedialTrackEnrollments.AsNoTracking()
-                    .Where(e => e.Id == enrollmentId)
-                    .Select(e => e.Publication!.PublishAtUtc)
-                    .FirstAsync(ct);
-                var day = await db.RemedialTrackAxes.AsNoTracking()
-                    .Where(x => x.Id == next.AxisId)
-                    .Select(x => x.ReleaseDay)
-                    .FirstAsync(ct);
-                if (RemedialTrackSchedule.ReleaseAtUtc(publishAt, day) > now) return false;
-            }
 
             next.Status = RemedialTrackAxisStatus.Videos;
             next.Round = 1;

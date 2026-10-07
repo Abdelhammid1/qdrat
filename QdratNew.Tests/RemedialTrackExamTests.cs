@@ -1135,5 +1135,37 @@ namespace QdratNew.Tests
             var during = (await f.Progress.GetAxisAsync(Fx.Student, f.Enrollment, f.Ap[0]))!;
             Assert.Equal(id, during.InProgressAttemptId);
         }
+
+        // ═══════════ RTK-S8.1: المسار الجديد (D19) ═══════════
+
+        [Fact]
+        public async Task GetPlan_OpensLockedAxis_WhosePreviousWasPassed_LegacyScheduleLeftover()
+        {
+            var f = await NewAsync();
+            await f.RunExamAsync(0, 4);                                   // اجتياز 101 ← يُفتح التالي
+            await using (var db = f.Factory.CreateDbContext())            // محاكاة محور بقي Locked بسبب الجدولة القديمة
+            {
+                var next = await db.RemedialTrackAxisProgresses.SingleAsync(a => a.Id == f.Ap[1]);
+                next.Status = RemedialTrackAxisStatus.Locked;
+                await db.SaveChangesAsync();
+            }
+
+            var plan = await f.Progress.GetPlanAsync(Fx.Student, f.Enrollment);
+
+            Assert.NotNull(plan);
+            Assert.Equal(RemedialTrackAxisStatus.Videos, (await f.GetApAsync(1)).Status);
+            Assert.Equal(RemedialTrackAxisStatus.Locked, (await f.GetApAsync(2)).Status);   // لا قفز لمحورين
+        }
+
+        [Fact]
+        public async Task GetPlan_DoesNotOpenAxis_WhenPreviousNotPassed()
+        {
+            var f = await NewAsync();
+            await f.RunExamAsync(0, 1);                                   // رسوب 101 ← جولة 2
+
+            await f.Progress.GetPlanAsync(Fx.Student, f.Enrollment);
+
+            Assert.Equal(RemedialTrackAxisStatus.Locked, (await f.GetApAsync(1)).Status);
+        }
     }
 }

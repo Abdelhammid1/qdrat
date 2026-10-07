@@ -148,8 +148,7 @@ namespace QdratNew.Services.RemedialTracks
                     Exam101Title = a.Exam101Model!.Title,
                     Exam102ModelId = a.Exam102ModelId,
                     Exam102Title = a.Exam102Model!.Title,
-                    ExamDurationMinutes = a.ExamDurationMinutes,
-                    ReleaseDay = a.ReleaseDay
+                    ExamDurationMinutes = a.ExamDurationMinutes
                 })
                 .ToListAsync(ct);
 
@@ -304,13 +303,6 @@ namespace QdratNew.Services.RemedialTracks
                     .Where(a => a.TrackId == track.Id)
                     .MaxAsync(a => (int?)a.Order, c) ?? 0;
 
-                // المحور الجديد يأخذ يوم آخر محور (قابل للتغيير من لوحة «جدول الأيام»)
-                var lastDay = await db.RemedialTrackAxes
-                    .Where(a => a.TrackId == track.Id)
-                    .OrderByDescending(a => a.Order)
-                    .Select(a => (int?)a.ReleaseDay)
-                    .FirstOrDefaultAsync(c) ?? 1;
-
                 var axis = new RemedialTrackAxis
                 {
                     TrackId = track.Id,
@@ -318,8 +310,7 @@ namespace QdratNew.Services.RemedialTracks
                     Order = maxOrder + 1,
                     Exam101ModelId = input.Exam101ModelId,
                     Exam102ModelId = input.Exam102ModelId,
-                    ExamDurationMinutes = input.ExamDurationMinutes,
-                    ReleaseDay = lastDay
+                    ExamDurationMinutes = input.ExamDurationMinutes
                 };
                 db.RemedialTrackAxes.Add(axis);
                 MarkStructureChanged(track);
@@ -351,12 +342,7 @@ namespace QdratNew.Services.RemedialTracks
                 if (target < 0 || target >= siblings.Count)
                     return RemedialTrackResult.Fail(direction < 0 ? "ℹ️ المحور في أعلى القائمة." : "ℹ️ المحور في أسفل القائمة.");
 
-                // الأيام تتبع الموضع لا المحور: نبدّلها مع الترتيب كي يبقى الجدول غير متناقص
-                var dayA = siblings[index].ReleaseDay;
-                var dayB = siblings[target].ReleaseDay;
                 await SwapOrdersAsync(db, siblings[index], siblings[target], a => a.Order, (a, o) => a.Order = o, c);
-                siblings[index].ReleaseDay = dayB;
-                siblings[target].ReleaseDay = dayA;
                 MarkStructureChanged(track!);
                 await db.SaveChangesAsync(c);
                 return RemedialTrackResult.Ok("✅ تم تغيير ترتيب المحور.");
@@ -385,46 +371,7 @@ namespace QdratNew.Services.RemedialTracks
                     .ToListAsync(c);
                 await ShiftOrdersDownAsync(db, following, a => a.Order, (a, o) => a.Order = o, c);
 
-                // لا تترك يومًا فارغًا بعد الحذف
-                var remaining = await db.RemedialTrackAxes
-                    .Where(a => a.TrackId == track!.Id)
-                    .OrderBy(a => a.Order)
-                    .ToListAsync(c);
-                var compact = RemedialTrackSchedule.Compact(remaining.Select(a => a.ReleaseDay).ToList());
-                for (var i = 0; i < remaining.Count; i++) remaining[i].ReleaseDay = compact[i];
-                await db.SaveChangesAsync(c);
-
                 return RemedialTrackResult.Ok("✅ تم حذف المحور.");
-            }, ct);
-
-        public Task<RemedialTrackResult> SaveScheduleAsync(SaveRemedialScheduleInput input, CancellationToken ct = default)
-            => WriteAsync(async (db, c) =>
-            {
-                var track = await db.RemedialTracks.FirstOrDefaultAsync(t => t.Id == input.TrackId, c);
-                var blocked = Guard(track, requireUnlocked: true);
-                if (blocked is not null) return blocked;
-
-                var axes = await db.RemedialTrackAxes
-                    .Where(a => a.TrackId == track!.Id)
-                    .OrderBy(a => a.Order)
-                    .ToListAsync(c);
-                if (axes.Count == 0)
-                    return RemedialTrackResult.Fail("⚠️ أضف محاور أولًا.");
-
-                var byAxis = input.Items.GroupBy(i => i.AxisId).ToDictionary(g => g.Key, g => g.Last().Day);
-                if (byAxis.Count != axes.Count || axes.Any(a => !byAxis.ContainsKey(a.Id)))
-                    return RemedialTrackResult.Fail("⚠️ يجب تحديد يوم لكل محور في الخطة.");
-
-                var days = axes.Select(a => byAxis[a.Id]).ToList();
-                var errors = RemedialTrackSchedule.Validate(days);
-                if (errors.Count > 0)
-                    return RemedialTrackResult.Fail("⚠️ " + string.Join(" • ", errors), errors);
-
-                for (var i = 0; i < axes.Count; i++) axes[i].ReleaseDay = days[i];
-                MarkStructureChanged(track!);
-
-                await db.SaveChangesAsync(c);
-                return RemedialTrackResult.Ok("✅ تم حفظ جدول الأيام.");
             }, ct);
 
         public Task<RemedialTrackResult> SaveAxisExamsAsync(SaveRemedialAxisExamsInput input, CancellationToken ct = default)
@@ -658,8 +605,7 @@ namespace QdratNew.Services.RemedialTracks
                         Order = a.Order,
                         Exam101ModelId = a.Exam101ModelId,
                         Exam102ModelId = a.Exam102ModelId,
-                        ExamDurationMinutes = a.ExamDurationMinutes,
-                        ReleaseDay = a.ReleaseDay
+                        ExamDurationMinutes = a.ExamDurationMinutes
                     };
                     foreach (var v in a.Videos.OrderBy(v => v.Order))
                     {
@@ -701,7 +647,6 @@ namespace QdratNew.Services.RemedialTracks
                     a.Exam101ModelId,
                     a.Exam102ModelId,
                     a.ExamDurationMinutes,
-                    a.ReleaseDay,
                     M101 = new ModelInfo { Id = a.Exam101Model!.Id, Title = a.Exam101Model.Title, IsArchived = a.Exam101Model.IsArchived, ModelType = a.Exam101Model.ModelType, CurriculumId = a.Exam101Model.CurriculumId },
                     M102 = new ModelInfo { Id = a.Exam102Model!.Id, Title = a.Exam102Model.Title, IsArchived = a.Exam102Model.IsArchived, ModelType = a.Exam102Model.ModelType, CurriculumId = a.Exam102Model.CurriculumId }
                 })
@@ -744,9 +689,6 @@ namespace QdratNew.Services.RemedialTracks
                 CheckModel(prefix + "الاختبار الأول", a.M101, stats, issues, null, track.CurriculumId);
                 CheckModel(prefix + "الاختبار الثاني", a.M102, stats, issues, null, track.CurriculumId);
             }
-
-            foreach (var e in RemedialTrackSchedule.Validate(axes.Select(x => x.ReleaseDay).ToList()))
-                issues.Add("جدول الأيام: " + e);
 
             return issues;
         }

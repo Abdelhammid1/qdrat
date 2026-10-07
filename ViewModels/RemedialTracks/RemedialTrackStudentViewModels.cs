@@ -63,8 +63,6 @@ namespace QdratNew.ViewModels.RemedialTracks
         public int VideoCount { get; set; }
         public double? Exam101Percent { get; set; }
         public double? Exam102Percent { get; set; }
-        public int DayNumber { get; set; } = 1;              // يوم المحور في جدول الخطة
-        public DateTime? AvailableAtLocal { get; set; }      // موعد ظهوره (يُعرض للمحاور المغلقة فقط)
 
         public bool IsLocked => Status == RemedialTrackAxisStatus.Locked;
         public bool IsCurrent => Status is RemedialTrackAxisStatus.Videos or RemedialTrackAxisStatus.AwaitingExam101

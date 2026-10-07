@@ -515,13 +515,42 @@
             try { setIcon(btnMute, current.toggleMute() ? 'fa-volume-mute' : 'fa-volume-up'); } catch (e) { }
         });
     }
+    // ═════ RTK v2 — ملء الشاشة: Fullscreen API (+WebKit) ثم بديل CSS عند التعذّر (iPhone/WebView) ═════
+    function fsElement() { return document.fullscreenElement || document.webkitFullscreenElement || null; }
+
+    function requestFs(el) {
+        var fn = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+        if (!fn) return Promise.reject(new Error('no-fs-api'));
+        try { var r = fn.call(el); return (r && r.then) ? r : Promise.resolve(); }
+        catch (e) { return Promise.reject(e); }
+    }
+
+    function exitFs() {
+        var fn = document.exitFullscreen || document.webkitExitFullscreen;
+        if (fn) { try { fn.call(document); } catch (e) { } }
+    }
+
+    function setPseudoFs(on) {
+        wrapEl.classList.toggle('rtk-pseudo-fs', on);
+        document.documentElement.classList.toggle('rtk-no-scroll', on);
+        setIcon(btnFull, on ? 'fa-compress' : 'fa-expand');
+        try {
+            if (on && screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function () { });
+            if (!on && screen.orientation && screen.orientation.unlock) screen.orientation.unlock();
+        } catch (e) { }
+    }
+
     if (btnFull && wrapEl) {
         btnFull.addEventListener('click', function () {
-            if (document.fullscreenElement) { document.exitFullscreen(); }
-            else if (wrapEl.requestFullscreen) { wrapEl.requestFullscreen().catch(function () { }); }
+            if (wrapEl.classList.contains('rtk-pseudo-fs')) { setPseudoFs(false); return; }
+            if (fsElement()) { exitFs(); return; }
+            requestFs(wrapEl).catch(function () { setPseudoFs(true); });
         });
-        document.addEventListener('fullscreenchange', function () {
-            setIcon(btnFull, document.fullscreenElement ? 'fa-compress' : 'fa-expand');
+        ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (ev) {
+            document.addEventListener(ev, function () { setIcon(btnFull, fsElement() ? 'fa-compress' : 'fa-expand'); });
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && wrapEl.classList.contains('rtk-pseudo-fs')) setPseudoFs(false);
         });
     }
 

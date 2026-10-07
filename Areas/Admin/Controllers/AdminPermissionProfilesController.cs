@@ -277,7 +277,10 @@ namespace QdratNew.Areas.Admin.Controllers
         ("Batches", "إدارة الدفعات"),
         ("EnhancementSkills", "المهارات التعزيزية"),
         ("Settings", "الإعدادات العامة"),
-        ("IntegrityViolations", "مخالفات النزاهة (ترجمة المتصفح)")
+        ("IntegrityViolations", "مخالفات النزاهة (ترجمة المتصفح)"),
+        ("RemedialTracks", "الخطط العلاجية (بناء الخطة)"),
+        ("RemedialTrackPublications", "نشر الخطط العلاجية ومتابعتها"),
+        ("RemedialTrackReports", "تقارير الخطة العلاجية وولي الأمر")
     };
         }
 

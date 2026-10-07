@@ -208,7 +208,6 @@
                     <!-- إعدادات المحور -->
                     <div class="rtk-sub"><i class="fas fa-sliders" style="color:#339999"></i> إعدادات المحور</div>
                     <dl class="rtk-kv">
-                        <div><dt>يوم الظهور</dt><dd><span class="rtk-daychip">اليوم @axis.ReleaseDay</span></dd></div>
                         <div><dt>الاختبار الأول</dt><dd>@axis.Exam101Title</dd></div>
                         <div><dt>الاختبار الثاني</dt><dd>@axis.Exam102Title</dd></div>
                         <div><dt>مدة الاختبار</dt><dd>@axis.ExamDurationMinutes دقيقة</dd></div>
@@ -352,45 +351,6 @@
         }
     </section>
 
-    <!-- جدول الأيام: لوحة عمل — عمود لكل يوم -->
-    @if (Model.Axes.Count > 0)
-    {
-        <section class="rtk-panel" aria-label="جدول الأيام" id="rtkSchedule" data-editable="@(Model.CanModifyStructure ? "1" : "0")">
-            <h2><i class="fas fa-calendar-days ms-1"></i> جدول الأيام</h2>
-            <p class="rtk-hint mb-2">
-                كل عمود يوم دراسة. اليوم 1 = لحظة النشر، واليوم 2 بعدها بيوم بنفس الساعة، وهكذا. لا يُفتح المحور قبل إتمام الطالب للسابق،
-                وعند انتقاله لمحور جديد تُغلق فيديوهات السابق. انقل المحور بالأسهم بين الأيام (يلتزم الجدول بترتيب المحاور تلقائيًا).
-            </p>
-
-            <form data-rtk-form="SaveSchedule" novalidate>
-                <input type="hidden" name="TrackId" value="@Model.Id" />
-                <div id="rtkSchedData" hidden>
-                    @for (var i = 0; i < Model.Axes.Count; i++)
-                    {
-                        var ax = Model.Axes[i];
-                        <span data-sched-axis data-order="@ax.Order" data-title="@ax.DisplayTitle" data-videos="@ax.Videos.Count">
-                            <input type="hidden" name="Items[@i].AxisId" value="@ax.Id" />
-                            <input type="hidden" name="Items[@i].Day" value="@ax.ReleaseDay" data-schedule-day />
-                        </span>
-                    }
-                </div>
-
-                <div class="rtk-board" id="rtkBoard" role="list" aria-live="polite"></div>
-
-                @if (Model.CanModifyStructure)
-                {
-                    <div class="rtk-form-actions">
-                        <button type="submit" class="rtk-btn"><i class="fas fa-floppy-disk"></i> حفظ جدول الأيام</button>
-                        <span class="rtk-hint" id="rtkSchedDirty" hidden><i class="fas fa-circle-exclamation"></i> تغييرات غير محفوظة</span>
-                    </div>
-                }
-                else
-                {
-                    <div class="rtk-hint">الجدول مقفل بعد أول نشر. لتغييره استخدم «نسخ الخطة».</div>
-                }
-            </form>
-        </section>
-    }
 
     <!-- إضافة محور -->
     @if (Model.CanModifyStructure)
@@ -479,7 +439,6 @@
         urls.MoveAxis = '@Url.Action("MoveAxis", "RemedialTracks", new { area = "Admin" })';
         urls.RemoveAxis = '@Url.Action("RemoveAxis", "RemedialTracks", new { area = "Admin" })';
         urls.SaveAxisExams = '@Url.Action("SaveAxisExams", "RemedialTracks", new { area = "Admin" })';
-        urls.SaveSchedule = '@Url.Action("SaveSchedule", "RemedialTracks", new { area = "Admin" })';
         urls.AddVideo = '@Url.Action("AddVideo", "RemedialTracks", new { area = "Admin" })';
         urls.EditVideo = '@Url.Action("EditVideo", "RemedialTracks", new { area = "Admin" })';
         urls.MoveVideo = '@Url.Action("MoveVideo", "RemedialTracks", new { area = "Admin" })';
@@ -584,58 +543,6 @@
 
         // قوائم النماذج في نموذج إضافة المحور
         document.querySelectorAll('form[data-rtk-form="AddAxis"] select[data-models]').forEach(fillModels);
-
-        // لوحة جدول الأيام: الحالة = يوم كل محور بترتيب المحاور؛ النقل بالأسهم مع ضغط الأيام الفارغة
-        var board = document.getElementById('rtkBoard');
-        var sched = document.getElementById('rtkSchedule');
-        var schedDirty = document.getElementById('rtkSchedDirty');
-        var schedEditable = sched && sched.getAttribute('data-editable') === '1';
-        var schedItems = board ? Array.prototype.map.call(document.querySelectorAll('#rtkSchedData [data-sched-axis]'), function (el) {
-            return { order: el.getAttribute('data-order'), title: el.getAttribute('data-title'), videos: el.getAttribute('data-videos'), input: el.querySelector('[data-schedule-day]') };
-        }) : [];
-
-        function schedDays() { return schedItems.map(function (it) { return parseInt(it.input.value, 10) || 1; }); }
-        function compactDays(d) {
-            var uniq = d.filter(function (v, i) { return d.indexOf(v) === i; }).sort(function (a, b) { return a - b; });
-            return d.map(function (v) { return uniq.indexOf(v) + 1; });
-        }
-        function applyDays(d) { compactDays(d).forEach(function (v, i) { schedItems[i].input.value = v; }); }
-
-        function renderBoard() {
-            if (!board) return;
-            var d = schedDays(), maxDay = d.length ? Math.max.apply(null, d) : 1, html = '';
-            for (var day = 1; day <= maxDay; day++) {
-                var chips = '';
-                d.forEach(function (v, i) {
-                    if (v !== day) return;
-                    var first = i === 0 || d[i - 1] < v, last = i === d.length - 1 || d[i + 1] > v;
-                    var alone = first && last;
-                    var canPrev = schedEditable && first && v > 1;
-                    var canNext = schedEditable && last && !(alone && v === maxDay);
-                    chips += '<div class="rtk-chip" role="listitem"><span class="rtk-chip__n">' + esc(schedItems[i].order) + '</span>' +
-                        '<span class="rtk-chip__t">' + esc(schedItems[i].title) + '<small>' + esc(schedItems[i].videos) + ' فيديو</small></span>' +
-                        (schedEditable ? '<span class="rtk-chip__tools">' +
-                            '<button type="button" class="rtk-btn rtk-btn--outline rtk-btn--sm" data-sched-move="-1" data-i="' + i + '" title="لليوم السابق" aria-label="نقل لليوم السابق"' + (canPrev ? '' : ' disabled') + '><i class="fas fa-arrow-right"></i></button>' +
-                            '<button type="button" class="rtk-btn rtk-btn--outline rtk-btn--sm" data-sched-move="1" data-i="' + i + '" title="لليوم التالي" aria-label="نقل لليوم التالي"' + (canNext ? '' : ' disabled') + '><i class="fas fa-arrow-left"></i></button>' +
-                            '</span>' : '') + '</div>';
-                });
-                html += '<div class="rtk-day" role="group" aria-label="اليوم ' + day + '"><div class="rtk-day__head"><strong>اليوم ' + day + '</strong>' +
-                    '<small>' + (day === 1 ? 'يوم النشر' : 'بعد النشر بـ ' + (day - 1) + (day === 2 ? ' يوم' : ' أيام')) + '</small></div>' + chips + '</div>';
-            }
-            board.innerHTML = html;
-        }
-        if (board) {
-            renderBoard();
-            board.addEventListener('click', function (e) {
-                var b = e.target.closest('[data-sched-move]');
-                if (!b || b.disabled) return;
-                var i = parseInt(b.getAttribute('data-i'), 10), d = schedDays();
-                d[i] += parseInt(b.getAttribute('data-sched-move'), 10);
-                applyDays(d);
-                renderBoard();
-                if (schedDirty) schedDirty.hidden = false;
-            });
-        }
 
         root.addEventListener('submit', function (e) {
             var form = e.target.closest('form[data-rtk-form]');
