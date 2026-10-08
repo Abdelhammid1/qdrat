@@ -230,7 +230,7 @@ namespace QdratNew.Services.RemedialTracks
                         Round = ap.Round,
                         Exam101Percent = ap.Exam101Percent,
                         Exam102Percent = ap.Exam102Percent,
-                        AttemptsCount = ap.Attempts.Count(t => t.Status != RemedialTrackAttemptStatus.InProgress),
+                        AttemptsCount = ap.Attempts.Count(t => t.Status != RemedialTrackAttemptStatus.InProgress && t.AddendumId == null),
                         FailedAtUtc = ap.FailedAtUtc,
                         AdminOpenedByName = ap.AdminOpenedByName,
                         AdminOpenReason = ap.AdminOpenReason,
@@ -281,11 +281,11 @@ namespace QdratNew.Services.RemedialTracks
                         .Where(a => a.AxisId == e.CurrentAxisId)
                         .Select(a => (int?)a.Round).FirstOrDefault(),
                     LastExamNumber = db.RemedialTrackExamAttempts
-                        .Where(t => t.AxisProgress!.EnrollmentId == e.Id && t.Status != RemedialTrackAttemptStatus.InProgress)
+                        .Where(t => t.AxisProgress!.EnrollmentId == e.Id && t.Status != RemedialTrackAttemptStatus.InProgress && t.AddendumId == null)
                         .OrderByDescending(t => t.SubmittedAtUtc ?? t.ExpiresAtUtc).ThenByDescending(t => t.Id)
                         .Select(t => (RemedialTrackExamNumber?)t.ExamNumber).FirstOrDefault(),
                     LastScorePercent = db.RemedialTrackExamAttempts
-                        .Where(t => t.AxisProgress!.EnrollmentId == e.Id && t.Status != RemedialTrackAttemptStatus.InProgress)
+                        .Where(t => t.AxisProgress!.EnrollmentId == e.Id && t.Status != RemedialTrackAttemptStatus.InProgress && t.AddendumId == null)
                         .OrderByDescending(t => t.SubmittedAtUtc ?? t.ExpiresAtUtc).ThenByDescending(t => t.Id)
                         .Select(t => (double?)t.ScorePercent).FirstOrDefault(),
                     LastActivityUtc = db.RemedialTrackEvents

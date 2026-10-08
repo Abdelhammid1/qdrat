@@ -52,14 +52,19 @@ namespace QdratNew.Enums
     public enum RemedialTrackExamNumber
     {
         Exam101 = 101,
-        Exam102 = 102
+        Exam102 = 102,
+        Addendum = 3   // RTK-S13: اختبار «الملحق» — لا يمر على آلة حالة المحور أبدًا (D29)
     }
 
-    /// <summary>الاسم المعروض للاختبار في الواجهات (الاختبار الأول / الاختبار الثاني) — القيم 101/102 داخلية فقط.</summary>
+    /// <summary>الاسم المعروض للاختبار في الواجهات (الاختبار الأول / الاختبار الثاني / اختبار الملحق) — القيم داخلية فقط.</summary>
     public static class RemedialTrackExamNumberExtensions
     {
-        public static string DisplayName(this RemedialTrackExamNumber number)
-            => number == RemedialTrackExamNumber.Exam101 ? "الاختبار الأول" : "الاختبار الثاني";
+        public static string DisplayName(this RemedialTrackExamNumber number) => number switch
+        {
+            RemedialTrackExamNumber.Exam101 => "الاختبار الأول",
+            RemedialTrackExamNumber.Addendum => "اختبار الملحق",
+            _ => "الاختبار الثاني"
+        };
     }
 
     public enum RemedialTrackAttemptStatus

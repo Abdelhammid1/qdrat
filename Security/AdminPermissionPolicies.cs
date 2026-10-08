@@ -208,6 +208,7 @@
         public const string RemedialTrackPublications_Delete = "RemedialTrackPublications:Delete";         // RTK v2/D26: حذف ناعم
         public const string RemedialTrackPublications_Restore = "RemedialTrackPublications:Restore";       // RTK v2/D26: استرجاع المحذوف
         public const string RemedialTrackPublications_ManageReview = "RemedialTrackPublications:ManageReview"; // RTK v2/D24: وضع مراجعة الفيديوهات
+        public const string RemedialTrackPublications_ManageAddendum = "RemedialTrackPublications:ManageAddendum"; // RTK-S13: إضافة/إيقاف ملاحق المحاور
 
         // RemedialTrackReports — التقارير
         public const string RemedialTrackReports_Read = "RemedialTrackReports:Read";

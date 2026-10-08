@@ -162,6 +162,7 @@
     {
         var k = dash.Kpis;
         var canReview = dash.CanManageReview && Model.IsActive;   // RTK v2/D24: وضع مراجعة الفيديوهات
+        var canAddendum = Model.Addenda.CanManage && Model.Addenda.PublicationActive;   // RTK-S13: تحديد طلاب الملحق من نفس الجدول
         var chartData = new
         {
             status = new[] { k.NotStarted, k.InProgress, k.Completed, k.CompletedWithFailures, k.Cancelled },
@@ -195,6 +196,8 @@
                 <div class="rtk-hint" id="rtkChartFallback" hidden>تعذّر تحميل الرسوم البيانية؛ الأرقام متاحة في المؤشرات والجدول.</div>
             </section>
         }
+        <partial name="_AddendaPanel" model="Model" />
+
 
         <section class="rtk-panel" aria-label="جدول الطلاب" id="rtkStudents">
             <h2>الطلاب <span class="rtk-count">@dash.Total</span>
@@ -245,6 +248,10 @@
                             {
                                 <th class="rtk-noprint"><label class="rtk-chk"><input type="checkbox" id="rtkReviewSelectAll" aria-label="تحديد كل طلاب الصفحة" /></label></th>
                             }
+                            @if (canAddendum)
+                            {
+                                <th class="rtk-noprint"><label class="rtk-chk"><input type="checkbox" id="rtkAddSelectAll" aria-label="تحديد كل طلاب الصفحة للملحق" /> ملحق</label></th>
+                            }
                             <th>الطالب</th><th>الحالة</th><th>المحور الحالي</th><th>آخر نتيجة</th><th>آخر نشاط</th><th>مراجعة الفيديوهات</th><th>إجراءات</th>
                         </tr></thead>
                         <tbody>
@@ -255,6 +262,10 @@
                                     @if (canReview)
                                     {
                                         <td class="rtk-noprint"><label class="rtk-chk"><input type="checkbox" class="rtk-review-cb" value="@s.EnrollmentId" aria-label="تحديد @s.StudentName" /></label></td>
+                                    }
+                                    @if (canAddendum)
+                                    {
+                                        <td class="rtk-noprint"><label class="rtk-chk"><input type="checkbox" class="rtk-add-cb" value="@s.EnrollmentId" aria-label="تحديد @s.StudentName للملحق" /></label></td>
                                     }
                                     <td class="rtk-name">@s.StudentName</td>
                                     <td><span class="rtk-pill rtk-pill--@StatusKey(s.Status)">@EnrollmentLabel(s.Status)</span>@if (s.IsBlocked) { <text> </text><span class="rtk-badge rtk-badge--lock"><i class="fas fa-lock"></i> محجوب</span> }</td>
@@ -387,25 +398,6 @@
             }
         </section>
 
-        @if (canReview)
-        {
-            <section class="rtk-panel" id="rtkReviewBox" aria-label="وضع مراجعة الفيديوهات">
-                <h2><i class="fas fa-eye"></i> وضع مراجعة الفيديوهات</h2>
-                <p class="rtk-hint">يتيح فيديوهات المحاور المنتهية (المُجتازة أو المنقول منها) للمشاهدة فقط قبل اختبار معمل القياس، ولا يتغيّر أي تقدّم أو درجة. المحور المغلق لم يُفتح بعد لا يدخل في المراجعة.</p>
-                <div class="rtk-field">
-                    <label for="rtkReviewUntil">تاريخ انتهاء المراجعة (اختياري — بتوقيت السعودية، حتى 90 يومًا؛ فارغ = مفتوحة حتى تُغلقها)</label>
-                    <input type="datetime-local" id="rtkReviewUntil" />
-                </div>
-                <p class="rtk-hint" id="rtkReviewSel" role="status" aria-live="polite">لم يُحدَّد أي طالب في هذه الصفحة.</p>
-                <div class="rtk-form-actions">
-                    <button type="button" class="rtk-btn" data-rtk-act="review-sel-open" disabled><i class="fas fa-eye"></i> فتح المراجعة للمحدّدين</button>
-                    <button type="button" class="rtk-btn rtk-btn--outline" data-rtk-act="review-sel-close" disabled><i class="fas fa-eye-slash"></i> إغلاقها للمحدّدين</button>
-                    <button type="button" class="rtk-btn" data-rtk-act="review-all-open"><i class="fas fa-eye"></i> فتح للجميع</button>
-                    <button type="button" class="rtk-btn rtk-btn--outline" data-rtk-act="review-all-close"><i class="fas fa-eye-slash"></i> إغلاق للجميع</button>
-                </div>
-            </section>
-        }
-
         @if (dash.CanUnlock && Model.IsActive)
         {
             <section class="rtk-panel" id="rtkUnlockBox" hidden aria-label="فتح المحور التالي">
@@ -424,6 +416,8 @@
     }
     else
     {
+    <partial name="_AddendaPanel" model="Model" />
+
     <section class="rtk-panel" aria-label="الطلاب">
         <h2>الطلاب</h2>
         @if (Model.StatusCounts.Count > 0)
@@ -492,6 +486,26 @@
         </section>
     }
 
+    @* RTK-S13: بطاقة وضع مراجعة الفيديوهات آخر الصفحة، بخلفية فاتحة تفصلها عن العمل العام *@
+    @if (Model.Dashboard is { } dashReview && dashReview.CanManageReview && Model.IsActive)
+    {
+        <section class="rtk-panel rtk-panel--review" id="rtkReviewBox" aria-label="وضع مراجعة الفيديوهات">
+            <h2><i class="fas fa-eye"></i> وضع مراجعة الفيديوهات</h2>
+            <p class="rtk-hint">يتيح فيديوهات المحاور المنتهية (المُجتازة أو المنقول منها) للمشاهدة فقط قبل اختبار معمل القياس، ولا يتغيّر أي تقدّم أو درجة. المحور المغلق لم يُفتح بعد لا يدخل في المراجعة.</p>
+            <div class="rtk-field">
+                <label for="rtkReviewUntil">تاريخ انتهاء المراجعة (اختياري — بتوقيت السعودية، حتى 90 يومًا؛ فارغ = مفتوحة حتى تُغلقها)</label>
+                <input type="datetime-local" id="rtkReviewUntil" />
+            </div>
+            <p class="rtk-hint" id="rtkReviewSel" role="status" aria-live="polite">لم يُحدَّد أي طالب في هذه الصفحة.</p>
+            <div class="rtk-form-actions">
+                <button type="button" class="rtk-btn" data-rtk-act="review-sel-open" disabled><i class="fas fa-eye"></i> فتح المراجعة للمحدّدين</button>
+                <button type="button" class="rtk-btn rtk-btn--outline" data-rtk-act="review-sel-close" disabled><i class="fas fa-eye-slash"></i> إغلاقها للمحدّدين</button>
+                <button type="button" class="rtk-btn" data-rtk-act="review-all-open"><i class="fas fa-eye"></i> فتح للجميع</button>
+                <button type="button" class="rtk-btn rtk-btn--outline" data-rtk-act="review-all-close"><i class="fas fa-eye-slash"></i> إغلاق للجميع</button>
+            </div>
+        </section>
+    }
+
     <div class="rtk-toast" id="rtkToast" role="status" aria-live="polite"></div>
 </div>
 
@@ -545,7 +559,10 @@
             del: '@Url.Action("Delete", "RemedialTrackPublications", new { area = "Admin" })',
             restore: '@Url.Action("Restore", "RemedialTrackPublications", new { area = "Admin" })',
             unlock: '@Url.Action("Unlock", "RemedialTrackPublications", new { area = "Admin" })',
-            review: '@Url.Action("SetVideoReview", "RemedialTrackPublications", new { area = "Admin" })'
+            review: '@Url.Action("SetVideoReview", "RemedialTrackPublications", new { area = "Admin" })',
+            addCreate: '@Url.Action("CreateAddendum", "RemedialTrackPublications", new { area = "Admin" })',
+            addToggle: '@Url.Action("SetAddendumActive", "RemedialTrackPublications", new { area = "Admin" })',
+            addStudents: '@Url.Action("AddendumStudents", "RemedialTrackPublications", new { area = "Admin" })'
         };
         var unlockTarget = null;
         var toast = document.getElementById('rtkToast');
@@ -616,11 +633,101 @@
             post(urls.review, fd, btn, function () { setTimeout(function () { window.location.reload(); }, 900); });
         }
 
+        // ── RTK-S13: الملاحق (مطلوب إضافي) ──
+        function addChecks() { return [].slice.call(root.querySelectorAll('.rtk-add-cb')); }
+        function selectedAddIds() { return addChecks().filter(function (c) { return c.checked; }).map(function (c) { return c.value; }); }
+        function refreshAddSelection() {
+            var n = selectedAddIds().length;
+            var info = document.getElementById('rtkAddSel');
+            if (info) info.textContent = n === 0 ? 'لم يُحدَّد أي طالب في هذه الصفحة.' : 'المحدّدون في هذه الصفحة: ' + n;
+            var all = document.getElementById('rtkAddSelectAll'), cbs = addChecks();
+            if (all) all.checked = cbs.length > 0 && n === cbs.length;
+        }
+        root.addEventListener('change', function (e) {
+            var t = e.target;
+            if (!t) return;
+            if (t.id === 'rtkAddSelectAll') {
+                addChecks().forEach(function (c) { c.checked = t.checked; });
+                refreshAddSelection();
+            } else if (t.classList && t.classList.contains('rtk-add-cb')) {
+                refreshAddSelection();
+            } else if (t.id === 'rtkAddModel') {
+                var box = document.getElementById('rtkAddMinutesBox'); if (box) box.hidden = !t.value;
+            }
+        });
+        refreshAddSelection();
+
+        function submitAddendum(btn) {
+            var form = document.getElementById('rtkAddForm');
+            if (!form) return;
+            function val(id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; }
+            var axis = val('rtkAddAxis'), title = val('rtkAddTitle'), url = val('rtkAddUrl'), reason = val('rtkAddReason');
+            var duration = val('rtkAddDuration'), model = val('rtkAddModel'), minutes = val('rtkAddMinutes');
+            var selectedMode = (form.querySelector('input[name="addTarget"]:checked') || {}).value === 'selected';
+            var ids = selectedMode ? selectedAddIds() : [];
+            if (!axis) { showToast('⚠️ اختر المحور المعني.', false); return; }
+            if (!title) { showToast('⚠️ عنوان الفيديو مطلوب.', false); return; }
+            if (!/^https:\/\//i.test(url)) { showToast('⚠️ رابط الفيديو يجب أن يبدأ بـ https://', false); return; }
+            if (reason.length < 5 || reason.length > 300) { showToast('⚠️ سبب الإضافة إلزامي (5–300 حرف).', false); return; }
+            if (model && (!minutes || +minutes < 5 || +minutes > 180)) { showToast('⚠️ مدة الاختبار بين 5 و180 دقيقة.', false); return; }
+            if (selectedMode && ids.length === 0) { showToast('⚠️ حدّد طالبًا واحدًا على الأقل من عمود «ملحق» أو اختر «كل طلاب هذا الأمر».', false); return; }
+            var scopeText = selectedMode ? ids.length + ' طالبًا محدّدًا' : 'جميع طلاب هذا الأمر';
+            if (!window.confirm('سيُلزَم ' + scopeText + ' بمشاهدة «' + title + '»' + (model ? ' وإعادة اختبار خاص بمحتواه' : '') +
+                '. لا يمنع ذلك تقدّمهم في المحاور ولا يغيّر نتائجهم.\nهل تريد المتابعة؟')) return;
+            var fd = new FormData();
+            fd.set('publicationId', id); fd.set('axisId', axis); fd.set('title', title); fd.set('url', url); fd.set('reason', reason);
+            if (duration) fd.set('durationSeconds', duration);
+            if (model) { fd.set('examModelId', model); fd.set('examDurationMinutes', minutes); }
+            fd.set('applyToAll', selectedMode ? 'false' : 'true');
+            ids.forEach(function (v) { fd.append('enrollmentIds', v); });
+            post(urls.addCreate, fd, btn, function () { setTimeout(function () { window.location.hash = 'rtkAddenda'; window.location.reload(); }, 900); });
+        }
+
+        var addStudentsState = { addendum: null, page: 1, totalPages: 1 };
+        function loadAddStudents(addendumId, page, title) {
+            var box = document.getElementById('rtkAddStudents'), body = document.getElementById('rtkAddStudentsBody');
+            if (!box || !body) return;
+            addStudentsState.addendum = addendumId;
+            box.hidden = false;
+            if (title) document.getElementById('rtkAddStudentsTitle').textContent = 'طلاب الملحق: ' + title;
+            body.innerHTML = '<tr><td colspan="6" class="rtk-hint">جارٍ التحميل…</td></tr>';
+            fetch(urls.addStudents + '?addendumId=' + encodeURIComponent(addendumId) + '&page=' + page, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                .then(function (res) {
+                    var d = res.data;
+                    addStudentsState.page = d.page; addStudentsState.totalPages = d.totalPages;
+                    document.getElementById('rtkAddStudentsPage').textContent = 'الصفحة ' + d.page + ' من ' + d.totalPages + ' — ' + d.total + ' طالب';
+                    if (!d.items.length) { body.innerHTML = '<tr><td colspan="6" class="rtk-empty">لا يوجد طلاب في هذا الملحق.</td></tr>'; return; }
+                    body.innerHTML = d.items.map(function (s) {
+                        return '<tr><td class="rtk-name">' + esc(s.name) + '</td>' +
+                            '<td>' + (s.videoCompleted ? 'اكتملت' : s.watchedPercent + '%') + '</td>' +
+                            '<td>' + (s.examPassed ? 'اجتاز' : (s.attempts > 0 ? 'لم يجتز بعد' : '—')) + '</td>' +
+                            '<td>' + (s.bestScore == null ? '—' : esc(String(Math.round(s.bestScore * 10) / 10)) + '%') + '</td>' +
+                            '<td>' + esc(String(s.attempts)) + '</td>' +
+                            '<td>' + esc(s.lastActivity || '—') + '</td></tr>';
+                    }).join('');
+                })
+                .catch(function () { body.innerHTML = '<tr><td colspan="6" class="rtk-hint">تعذّر تحميل الطلاب. أعد المحاولة.</td></tr>'; });
+        }
+
         root.addEventListener('click', function (e) {
             var btn = e.target.closest('[data-rtk-act]');
             if (!btn || !root.contains(btn)) return;
             var act = btn.getAttribute('data-rtk-act');
             var cancelBox = document.getElementById('rtkCancelBox');
+
+            if (act === 'add-create') { submitAddendum(btn); return; }
+            if (act === 'add-toggle') {
+                var turnOn = btn.getAttribute('data-active') === 'true';
+                if (!window.confirm(turnOn ? 'سيعود الملحق ظاهرًا للطلاب. هل تريد التفعيل؟' : 'سيختفي الملحق عن الطلاب والتقارير ولا يُحذف منه شيء. هل تريد الإيقاف؟')) return;
+                var tfd = new FormData(); tfd.set('addendumId', btn.getAttribute('data-addendum')); tfd.set('active', turnOn ? 'true' : 'false');
+                post(urls.addToggle, tfd, btn, function () { setTimeout(function () { window.location.reload(); }, 900); });
+                return;
+            }
+            if (act === 'add-students') { loadAddStudents(btn.getAttribute('data-addendum'), 1, btn.getAttribute('data-title')); return; }
+            if (act === 'add-students-prev') { if (addStudentsState.page > 1) loadAddStudents(addStudentsState.addendum, addStudentsState.page - 1); return; }
+            if (act === 'add-students-next') { if (addStudentsState.page < addStudentsState.totalPages) loadAddStudents(addStudentsState.addendum, addStudentsState.page + 1); return; }
+            if (act === 'add-students-close') { var asb = document.getElementById('rtkAddStudents'); if (asb) asb.hidden = true; return; }
 
             if (act === 'review-sel-open') { submitReview(btn, true, false); return; }
             if (act === 'review-sel-close') { submitReview(btn, false, false); return; }

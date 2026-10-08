@@ -48,7 +48,9 @@ namespace QdratNew.ViewModels.RemedialTracks
         FinalReport = 2,         // اجتاز وكان آخر محور
         RewatchThenExam102 = 3,  // 101 دون الحد ← إعادة الفيديوهات ثم 102
         AwaitAdmin = 4,          // 102 دون الحد وهناك محاور لاحقة ← بانتظار الإدارة
-        AwaitAdminFinal = 5      // 102 دون الحد وكان آخر محور
+        AwaitAdminFinal = 5,     // 102 دون الحد وكان آخر محور
+        AddendumPassed = 6,      // RTK-S13: اجتاز اختبار الملحق (لا أثر على المحاور)
+        AddendumRetry = 7        // RTK-S13: دون الحد ← إعادة اختبار الملحق (محاولات غير محدودة)
     }
 
     /// <summary>RTK-S5.3: صفحة النتيجة — بلا كشف الإجابات الصحيحة ولا مراجعة الأسئلة.</summary>
@@ -69,6 +71,7 @@ namespace QdratNew.ViewModels.RemedialTracks
         public RemedialTrackResultNext Next { get; set; }
         public int? NextAxisProgressId { get; set; }
         public string? NextAxisTitle { get; set; }
+        public int? AddendumId { get; set; }                 // RTK-S13: يُملأ لنتيجة اختبار ملحق فقط
         public ResultTone Tone { get; set; } = new();
     }
 

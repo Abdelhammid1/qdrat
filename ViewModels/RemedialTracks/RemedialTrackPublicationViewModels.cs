@@ -162,6 +162,9 @@ namespace QdratNew.ViewModels.RemedialTracks
         /// <summary>RTK-S9.3: آخر ≤ 20 إجراءً على أمر النشر أو خطته (إنشاء/إلغاء/حذف/استرجاع/تعديل فيديو/تعديل نماذج/فتح محور).</summary>
         public List<RemedialTrackRecentChangeVm> RecentChanges { get; set; } = new();
 
+        /// <summary>RTK-S13: لوحة الملاحق (تُملأ في الكنترولر).</summary>
+        public RemedialTrackAddendaPanelVm Addenda { get; set; } = new();
+
         public int Id { get; set; }
         public int TrackId { get; set; }
         public string TrackCode { get; set; } = string.Empty;

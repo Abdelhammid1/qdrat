@@ -1,0 +1,129 @@
+@model QdratNew.ViewModels.RemedialTracks.RemedialTrackPublicationDetailsVm
+@inject QdratNew.Services.Interfaces.ITimeZoneService Tz
+@{ var add = Model.Addenda; }
+@* RTK-S13: لوحة الملاحق (مطلوب إضافي) — تُعرض بعد الرسوم البيانية مباشرة؛ لا تمنع المحور التالي ولا تغيّر نتيجة المحور *@
+<section class="rtk-panel" id="rtkAddenda" aria-label="الملاحق">
+    <h2><i class="fas fa-circle-plus ms-1"></i> الملاحق (مطلوب إضافي) <span class="rtk-count">@add.Total</span></h2>
+    <p class="rtk-hint">فيديو إضافي (واختبار قصير اختياري) يُلزَم به الطلاب بعد النشر. لا يمنع المحور التالي أبدًا ولا يغيّر نتيجة المحور أو حالته أو تقرير ولي الأمر؛ يظهر كسطر «مطلوب إضافي» مستقل.</p>
+
+    @if (add.Rows.Count == 0)
+    {
+        <div class="rtk-empty"><i class="fas fa-circle-plus"></i> لا توجد ملاحق على هذا الأمر بعد.</div>
+    }
+    else
+    {
+        <div class="rtk-table-wrap">
+            <table class="rtk-table rtk-table--zebra">
+                <thead><tr>
+                    <th>المحور</th><th>الملحق</th><th>المستهدفون</th><th>شاهدوا</th><th>اجتازوا الاختبار</th><th>المحاولات</th><th>آخر نشاط</th><th>الحالة</th><th class="rtk-noprint">إجراءات</th>
+                </tr></thead>
+                <tbody>
+                    @foreach (var r in add.Rows)
+                    {
+                        <tr class="rtk-row @(r.IsActive ? "" : "rtk-row--moved")">
+                            <td>@r.AxisOrder. @r.AxisTitle</td>
+                            <td class="rtk-name">@r.Title<div class="rtk-hint">@r.Reason@(r.HasExam ? " — مع اختبار" : "")</div></td>
+                            <td>@r.Targeted</td>
+                            <td>@r.VideoCompleted / @r.Targeted</td>
+                            <td>@(r.HasExam ? r.ExamPassed + " / " + r.Targeted : "—")</td>
+                            <td>@r.AttemptsTotal</td>
+                            <td>@(r.LastActivityUtc.HasValue ? Tz.ConvertToSaudi(r.LastActivityUtc.Value).ToString("yyyy-MM-dd HH:mm") : "—")</td>
+                            <td>@(r.IsActive ? "فعّال" : "موقوف")</td>
+                            <td class="rtk-noprint">
+                                <div class="d-flex gap-1 flex-wrap">
+                                    <button type="button" class="rtk-btn rtk-btn--sm rtk-btn--outline" data-rtk-act="add-students" data-addendum="@r.AddendumId" data-title="@r.Title"><i class="fas fa-users"></i> الطلاب</button>
+                                    @if (add.CanManage)
+                                    {
+                                        <button type="button" class="rtk-btn rtk-btn--sm @(r.IsActive ? "rtk-btn--danger" : "")" data-rtk-act="add-toggle" data-addendum="@r.AddendumId" data-active="@(r.IsActive ? "false" : "true")">
+                                            <i class="fas @(r.IsActive ? "fa-pause" : "fa-play")"></i> @(r.IsActive ? "إيقاف" : "تفعيل")
+                                        </button>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (add.TotalPages > 1)
+        {
+            <nav class="rtk-pager" aria-label="صفحات الملاحق">
+                @for (var pg = 1; pg <= add.TotalPages; pg++)
+                {
+                    if (pg == add.Page) { <span class="is-current" aria-current="page">@pg</span> }
+                    else { <a asp-action="Details" asp-route-id="@Model.Id" asp-route-addendaPage="@pg" asp-fragment="rtkAddenda">@pg</a> }
+                }
+            </nav>
+        }
+    }
+
+    <div id="rtkAddStudents" hidden class="mt-3" aria-live="polite">
+        <h3 class="h6 fw-bold" id="rtkAddStudentsTitle"></h3>
+        <div class="rtk-table-wrap">
+            <table class="rtk-table rtk-table--zebra">
+                <thead><tr><th>الطالب</th><th>المشاهدة</th><th>الاختبار</th><th>أفضل نسبة</th><th>المحاولات</th><th>آخر نشاط</th></tr></thead>
+                <tbody id="rtkAddStudentsBody"></tbody>
+            </table>
+        </div>
+        <div class="d-flex gap-2 align-items-center mt-2 rtk-noprint">
+            <button type="button" class="rtk-btn rtk-btn--sm rtk-btn--outline" data-rtk-act="add-students-prev">السابق</button>
+            <span class="rtk-hint" id="rtkAddStudentsPage"></span>
+            <button type="button" class="rtk-btn rtk-btn--sm rtk-btn--outline" data-rtk-act="add-students-next">التالي</button>
+            <button type="button" class="rtk-btn rtk-btn--sm rtk-btn--outline" data-rtk-act="add-students-close">إغلاق</button>
+        </div>
+    </div>
+
+    @if (add.CanManage && add.PublicationActive)
+    {
+        <form id="rtkAddForm" class="mt-3" novalidate autocomplete="off">
+            <h3 class="h6 fw-bold">إضافة ملحق</h3>
+            <div class="rtk-field">
+                <label for="rtkAddAxis">المحور المعني</label>
+                <select id="rtkAddAxis" name="axisId" required>
+                    <option value="">— اختر المحور —</option>
+                    @foreach (var ax in add.Axes) { <option value="@ax.Id">@ax.Text</option> }
+                </select>
+            </div>
+            <div class="rtk-field">
+                <label for="rtkAddTitle">عنوان الفيديو</label>
+                <input id="rtkAddTitle" name="title" type="text" maxlength="200" required />
+            </div>
+            <div class="rtk-field">
+                <label for="rtkAddUrl">رابط الفيديو (https — YouTube أو Vimeo أو منصة أخرى)</label>
+                <input id="rtkAddUrl" name="url" type="url" dir="ltr" maxlength="500" required />
+            </div>
+            <div class="rtk-field">
+                <label for="rtkAddDuration">مدة الفيديو بالثواني (إلزامي للمنصات الأخرى، اختياري لـ YouTube/Vimeo)</label>
+                <input id="rtkAddDuration" name="durationSeconds" type="number" min="10" max="86400" inputmode="numeric" />
+            </div>
+            <div class="rtk-field">
+                <label for="rtkAddReason">سبب الإضافة (5–300 حرف)</label>
+                <textarea id="rtkAddReason" name="reason" maxlength="300" required></textarea>
+            </div>
+            <div class="rtk-field">
+                <label for="rtkAddModel">اختبار الملحق (اختياري)</label>
+                <select id="rtkAddModel" name="examModelId">
+                    <option value="">بلا اختبار — يكتمل الملحق بإتمام الفيديو</option>
+                    @foreach (var m in add.ExamModels) { <option value="@m.Id">@m.Text</option> }
+                </select>
+            </div>
+            <div class="rtk-field" id="rtkAddMinutesBox" hidden>
+                <label for="rtkAddMinutes">مدة الاختبار بالدقائق (5–180)</label>
+                <input id="rtkAddMinutes" name="examDurationMinutes" type="number" min="5" max="180" value="15" inputmode="numeric" />
+            </div>
+            <fieldset class="rtk-field">
+                <legend class="h6">الاستهداف</legend>
+                <label class="rtk-choice__item"><input type="radio" name="addTarget" value="all" checked /> كل طلاب هذا الأمر</label>
+                <label class="rtk-choice__item"><input type="radio" name="addTarget" value="selected" /> طلاب محدّدون (حدّدهم من عمود «ملحق» في جدول الطلاب أعلاه — حتى @QdratNew.Services.RemedialTracks.RemedialTrackAddendumService.MaxTargetEnrollmentIds)</label>
+                <p class="rtk-hint" id="rtkAddSel" role="status" aria-live="polite"></p>
+            </fieldset>
+            <div class="rtk-form-actions">
+                <button type="button" class="rtk-btn" data-rtk-act="add-create"><i class="fas fa-circle-plus"></i> إضافة الملحق</button>
+            </div>
+        </form>
+    }
+    else if (add.CanManage)
+    {
+        <div class="rtk-hint mt-2">لا يمكن إضافة ملاحق لأمر نشر غير نشط.</div>
+    }
+</section>

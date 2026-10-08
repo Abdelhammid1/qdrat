@@ -118,6 +118,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<RemedialTrackExamAttemptQuestion> RemedialTrackExamAttemptQuestions { get; set; }
     public DbSet<RemedialTrackEvent> RemedialTrackEvents { get; set; }
     public DbSet<RemedialTrackParentReport> RemedialTrackParentReports { get; set; }
+    public DbSet<RemedialTrackAddendum> RemedialTrackAddenda { get; set; }
+    public DbSet<RemedialTrackAddendumProgress> RemedialTrackAddendumProgresses { get; set; }
     public DbSet<HomeworkSet> HomeworkSets { get; set; }
     public DbSet<HomeworkArchiveAccess> HomeworkArchiveAccesses { get; set; }
     public DbSet<AttendanceBatchArchiveAccess> AttendanceBatchArchiveAccesses { get; set; }
@@ -1641,9 +1643,15 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         modelBuilder.Entity<RemedialTrackExamAttempt>(e =>
         {
             e.ToTable("RemedialTrackExamAttempts");
-            // محاولة واحدة لكل اختبار (101 مرة، 102 مرة) في المحور
-            e.HasIndex(x => new { x.AxisProgressId, x.ExamNumber }).IsUnique();
+            // محاولة واحدة لكل اختبار (101 مرة، 102 مرة) في المحور — RTK-S13: لمحاور الخطة فقط (محاولات الملحق غير محدودة)
+            e.HasIndex(x => new { x.AxisProgressId, x.ExamNumber }).IsUnique().HasFilter("[AddendumId] IS NULL");
+            // RTK-S13: محاولة ملحق واحدة جارية في آن واحد لكل (ملحق، طالب-محور) — الحارس النهائي ضد التزامن (Status 0 = InProgress)
+            e.HasIndex(x => new { x.AddendumId, x.AxisProgressId })
+             .HasDatabaseName("UX_RemedialTrackExamAttempts_Addendum_OpenAttempt")
+             .IsUnique()
+             .HasFilter("[AddendumId] IS NOT NULL AND [Status] = 0");
             e.HasOne(x => x.AxisProgress).WithMany(a => a.Attempts).HasForeignKey(x => x.AxisProgressId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Addendum).WithMany().HasForeignKey(x => x.AddendumId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<RemedialTrackExamAttemptQuestion>(e =>
@@ -1674,6 +1682,25 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             // صفحة ولي الأمر: تقارير ولي أمر بعينه حسب الحالة والأحدث
             e.HasIndex(x => new { x.ParentId, x.Status, x.CreatedAtUtc }).HasDatabaseName("IX_RemedialTrackParentReports_Parent_Status_CreatedAt");
             e.HasOne(x => x.Enrollment).WithMany().HasForeignKey(x => x.EnrollmentId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // RTK-S13 (D29–D34): ملاحق المحاور — كيانان مستقلان عن آلة حالة المحور
+        modelBuilder.Entity<RemedialTrackAddendum>(e =>
+        {
+            e.ToTable("RemedialTrackAddenda");
+            e.HasIndex(x => new { x.PublicationId, x.IsActive }).HasDatabaseName("IX_RemedialTrackAddenda_Publication_IsActive");
+            e.HasOne(x => x.Publication).WithMany().HasForeignKey(x => x.PublicationId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Axis).WithMany().HasForeignKey(x => x.AxisId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.ExamModel).WithMany().HasForeignKey(x => x.ExamModelId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<RemedialTrackAddendumProgress>(e =>
+        {
+            e.ToTable("RemedialTrackAddendumProgresses");
+            e.HasIndex(x => new { x.AddendumId, x.EnrollmentId }).IsUnique().HasDatabaseName("UX_RemedialTrackAddendumProgresses_Addendum_Enrollment");
+            e.HasIndex(x => new { x.EnrollmentId, x.CompletedAtUtc }).HasDatabaseName("IX_RemedialTrackAddendumProgresses_Enrollment_CompletedAt");
+            e.HasOne(x => x.Addendum).WithMany(a => a.Progresses).HasForeignKey(x => x.AddendumId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Enrollment).WithMany().HasForeignKey(x => x.EnrollmentId).OnDelete(DeleteBehavior.Restrict);
         });
 
     }

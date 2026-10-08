@@ -15,6 +15,13 @@
     var PING_MS = 15000;
     var enrollmentId = parseInt(root.dataset.enrollmentId, 10);
     var pingUrl = root.dataset.pingUrl;
+    // RTK-S13: data-mode="addendum" يوجّه النبضات إلى Endpoint الملحق (pingUrl) ويرسل معرّف تقدّم الملحق؛ ما عداه كما كان
+    var ADDENDUM = root.dataset.mode === 'addendum';
+    function pingBody(id, state, position, duration) {
+        var body = { enrollmentId: enrollmentId, state: state, position: position, duration: duration };
+        if (ADDENDUM) body.addendumProgressId = id; else body.videoProgressId = id;
+        return body;
+    }
     var tokenInput = root.querySelector('input[name="__RequestVerificationToken"]');
     var listEl = document.getElementById('rtkVideoList');
     var stateEl = document.getElementById('rtkState');
@@ -105,13 +112,7 @@
         var pos = 0, dur = 0;
         Promise.resolve(c.readTimes ? c.readTimes() : [0, 0]).then(function (t) {
             pos = t[0] || 0; dur = t[1] || 0;
-            return post({
-                enrollmentId: enrollmentId,
-                videoProgressId: c.id,
-                state: state,
-                position: pos,
-                duration: dur
-            });
+            return post(pingBody(c.id, state, pos, dur));
         }).then(function (r) {
             inFlight = false;
             if (current !== c) return;
@@ -581,7 +582,7 @@
     window.addEventListener('pagehide', function () {
         if (REVIEW || !current || !current.playing) return;
         try {
-            var body = JSON.stringify({ enrollmentId: enrollmentId, videoProgressId: current.id, state: 'paused', position: 0, duration: 0 });
+            var body = JSON.stringify(pingBody(current.id, 'paused', 0, 0));
             fetch(pingUrl, {
                 method: 'POST', keepalive: true, credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': tokenInput ? tokenInput.value : '' },

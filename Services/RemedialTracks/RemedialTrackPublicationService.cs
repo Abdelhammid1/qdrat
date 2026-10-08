@@ -263,6 +263,8 @@ namespace QdratNew.Services.RemedialTracks
             "RemedialTrackVideoEdited" => "تعديل فيديو",
             "RemedialTrackAxisExamsEdited" => "تعديل نموذجي الاختبار",
             "RemedialTrackVideoReviewChanged" => "وضع مراجعة الفيديوهات",
+            "RemedialTrackAddendumCreated" => "إضافة ملحق",
+            "RemedialTrackAddendumToggled" => "تفعيل/إيقاف ملحق",
             "RemedialTrackParentReportSent" => "إرسال تقرير ولي الأمر",
             _ => "إجراء"
         };

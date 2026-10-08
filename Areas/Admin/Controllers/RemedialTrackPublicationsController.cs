@@ -24,6 +24,7 @@ namespace QdratNew.Areas.Admin.Controllers
         private readonly IRemedialTrackPublicationService _publications;
         private readonly IRemedialTrackReportService _reports;
         private readonly IRemedialTrackParentReportAdminService _parentAdmin;
+        private readonly IRemedialTrackAddendumService _addenda;
         private readonly IEmployeeBatchAccessService _batchAccess;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IAuthorizationService _authorization;
@@ -33,6 +34,7 @@ namespace QdratNew.Areas.Admin.Controllers
             IRemedialTrackPublicationService publications,
             IRemedialTrackReportService reports,
             IRemedialTrackParentReportAdminService parentAdmin,
+            IRemedialTrackAddendumService addenda,
             IEmployeeBatchAccessService batchAccess,
             UserManager<ApplicationUser> userManager,
             IAuthorizationService authorization,
@@ -42,6 +44,7 @@ namespace QdratNew.Areas.Admin.Controllers
             _publications = publications;
             _reports = reports;
             _parentAdmin = parentAdmin;
+            _addenda = addenda;
             _batchAccess = batchAccess;
             _userManager = userManager;
             _authorization = authorization;
@@ -125,7 +128,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
         [HttpGet]
         [AdminPermission("RemedialTrackPublications", "Read")]
-        public async Task<IActionResult> Details(int id, RemedialTrackEnrollmentStatus? status, bool blockedOnly = false, string? q = null, int page = 1, CancellationToken ct = default)
+        public async Task<IActionResult> Details(int id, RemedialTrackEnrollmentStatus? status, bool blockedOnly = false, string? q = null, int page = 1, int addendaPage = 1, CancellationToken ct = default)
         {
             var canManageCode = await CanAsync(AdminPermissionPolicies.RemedialTrackPublications_ManageCode);
             var vm = await _publications.GetDetailsAsync(id, canManageCode, await ScopeAsync(), ct);
@@ -152,7 +155,81 @@ namespace QdratNew.Areas.Admin.Controllers
                 vm.Dashboard.CanReadReports = await CanAsync(AdminPermissionPolicies.RemedialTrackReports_Read);
                 vm.Dashboard.CanManageReview = await CanAsync(AdminPermissionPolicies.RemedialTrackPublications_ManageReview);
             }
+
+            // RTK-S13: لوحة الملاحق (خيارات النموذج تُحمَّل لمن يملك ManageAddendum فقط)
+            var canManageAddendum = await CanAsync(AdminPermissionPolicies.RemedialTrackPublications_ManageAddendum);
+            vm.Addenda = await _addenda.GetPanelAsync(id, addendaPage, canManageAddendum, await ScopeAsync(), ct) ?? new RemedialTrackAddendaPanelVm();
             return View(vm);
+        }
+
+        // ---------------- RTK-S13: ملاحق المحاور (فيديو إضافي + اختبار اختياري، لا يمنع المحور التالي) ----------------
+
+        [HttpPost, ValidateAntiForgeryToken]
+        [AdminPermission("RemedialTrackPublications", "ManageAddendum")]
+        public async Task<IActionResult> CreateAddendum([FromForm] CreateRemedialTrackAddendumInput input, CancellationToken ct)
+        {
+            if (!ModelState.IsValid)
+                return ValidationFail();
+
+            var actor = await ActorAsync();
+            if (actor is null)
+                return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
+
+            var r = await _addenda.CreateAsync(
+                new CreateAddendumInput(
+                    input.PublicationId, input.AxisId, input.Title, input.Url, input.DurationSeconds, input.Reason,
+                    input.ExamModelId, input.ExamDurationMinutes, input.ApplyToAll, input.EnrollmentIds),
+                actor, await ScopeAsync(), ct);
+            return Json(new { success = r.Success, message = r.Message, data = r.Data, warnings = r.Warnings });
+        }
+
+        [HttpPost, ValidateAntiForgeryToken]
+        [AdminPermission("RemedialTrackPublications", "ManageAddendum")]
+        public async Task<IActionResult> SetAddendumActive([FromForm] SetRemedialTrackAddendumActiveInput input, CancellationToken ct)
+        {
+            if (!ModelState.IsValid)
+                return ValidationFail();
+
+            var actor = await ActorAsync();
+            if (actor is null)
+                return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
+
+            var r = await _addenda.SetActiveAsync(input.AddendumId, input.Active, actor, await ScopeAsync(), ct);
+            return Json(new { success = r.Success, message = r.Message, data = r.Data, warnings = r.Warnings });
+        }
+
+        [HttpGet]
+        [AdminPermission("RemedialTrackPublications", "Read")]
+        public async Task<IActionResult> AddendumStudents(int addendumId, int page = 1, CancellationToken ct = default)
+        {
+            var result = await _addenda.GetStudentsAsync(addendumId, page, await ScopeAsync(), ct);
+            if (result is null) return NotFound();   // خارج نطاق الدفعات ≡ غير موجود (لا تسريب)
+
+            return Json(new
+            {
+                success = true,
+                message = string.Empty,
+                data = new
+                {
+                    items = result.Items.Select(s => new
+                    {
+                        enrollmentId = s.EnrollmentId,
+                        name = s.StudentName,
+                        watchedPercent = s.WatchedPercent,
+                        videoCompleted = s.VideoCompleted,
+                        examPassed = s.ExamPassed,
+                        bestScore = s.BestScorePercent,
+                        attempts = s.AttemptsCount,
+                        lastActivity = s.LastActivityUtc.HasValue
+                            ? _tz.ConvertToSaudi(s.LastActivityUtc.Value).ToString("yyyy-MM-dd HH:mm")
+                            : null,
+                        completed = s.Completed
+                    }),
+                    page = result.Page,
+                    totalPages = result.TotalPages,
+                    total = result.Total
+                }
+            });
         }
 
         [HttpPost, ValidateAntiForgeryToken]

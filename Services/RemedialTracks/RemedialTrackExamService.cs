@@ -19,17 +19,20 @@ namespace QdratNew.Services.RemedialTracks
         private readonly IDbContextFactory<ApplicationDbContext> _dbFactory;
         private readonly TimeProvider _time;
         private readonly IRemedialTrackProgressService _progress;
+        private readonly IRemedialTrackAddendumStudentService _addenda;
         private readonly ILogger<RemedialTrackExamService> _logger;
 
         public RemedialTrackExamService(
             IDbContextFactory<ApplicationDbContext> dbFactory,
             TimeProvider time,
             IRemedialTrackProgressService progress,
+            IRemedialTrackAddendumStudentService addenda,
             ILogger<RemedialTrackExamService> logger)
         {
             _dbFactory = dbFactory;
             _time = time;
             _progress = progress;
+            _addenda = addenda;
             _logger = logger;
         }
 
@@ -40,6 +43,7 @@ namespace QdratNew.Services.RemedialTracks
             int AxisProgressId,
             int EnrollmentId,
             RemedialTrackExamNumber ExamNumber,
+            int? AddendumId,
             RemedialTrackAttemptStatus Status,
             DateTime ExpiresAtUtc,
             RemedialTrackAxisStatus AxisStatus,
@@ -57,6 +61,7 @@ namespace QdratNew.Services.RemedialTracks
                     a.AxisProgressId,
                     a.AxisProgress!.EnrollmentId,
                     a.ExamNumber,
+                    a.AddendumId,
                     a.Status,
                     a.ExpiresAtUtc,
                     a.AxisProgress.Status,
@@ -237,7 +242,7 @@ namespace QdratNew.Services.RemedialTracks
             if (now > head.ExpiresAtUtc.AddSeconds(SubmitGraceSeconds))
             {
                 await ScoreAndCloseAsync(attemptId, RemedialTrackAttemptStatus.Expired, now, ct);
-                await _progress.OnExamSubmittedAsync(attemptId, ct);
+                await NotifySubmittedAsync(attemptId, head.AddendumId, ct);
                 return new(RemedialTrackSolveStatus.Closed);
             }
 
@@ -381,9 +386,15 @@ namespace QdratNew.Services.RemedialTracks
             }
 
             // دائمًا (Idempotent): يُصلح حالة انقطاع بين حفظ التصحيح والانتقال
-            await _progress.OnExamSubmittedAsync(attemptId, ct);
+            await NotifySubmittedAsync(attemptId, head.AddendumId, ct);
             return new(alreadyClosed ? RemedialTrackSubmitStatus.AlreadyClosed : RemedialTrackSubmitStatus.Submitted);
         }
+
+        // RTK-S13: محاولة الملحق لا تمر على آلة حالة المحور أبدًا (D29) — تُحسب نتيجتها في خدمة الملحق؛ ما عداها كما كان.
+        private Task NotifySubmittedAsync(int attemptId, int? addendumId, CancellationToken ct) =>
+            addendumId.HasValue
+                ? _addenda.OnAttemptSubmittedAsync(attemptId, ct)
+                : _progress.OnExamSubmittedAsync(attemptId, ct);
 
         // يصحّح ويغلق المحاولة بـ SaveChanges واحد (لا حلقة استعلامات). لا أثر إن لم تعد InProgress.
         private async Task ScoreAndCloseAsync(int attemptId, RemedialTrackAttemptStatus closeStatus, DateTime now, CancellationToken ct)
@@ -453,6 +464,14 @@ namespace QdratNew.Services.RemedialTracks
                 await ScoreAndCloseAsync(attemptId, RemedialTrackAttemptStatus.Expired, now, ct);
             }
 
+            // RTK-S13: نتيجة اختبار ملحق — بلا أي منطق لمحاور الخطة (لا «المحور التالي» ولا إصلاح ذاتي على الحالة)
+            if (head.AddendumId.HasValue)
+            {
+                if (head.Status == RemedialTrackAttemptStatus.InProgress)
+                    await _addenda.OnAttemptSubmittedAsync(attemptId, ct);   // أُغلقت الآن بانتهاء الوقت
+                return await GetAddendumResultAsync(db, head, ct);
+            }
+
             // إصلاح ذاتي: محاولة مُغلقة لكن المحور ما زال ينتظر نفس الاختبار (انقطاع قبل الانتقال)
             var awaitingThis = head.ExamNumber == RemedialTrackExamNumber.Exam101
                 ? RemedialTrackAxisStatus.AwaitingExam101
@@ -504,6 +523,44 @@ namespace QdratNew.Services.RemedialTracks
                 NextAxisProgressId = next?.Id,
                 NextAxisTitle = next?.Title,
                 // نبرة محايدة بلا لغة رسوب (قاعدة المشروع): الحد = نسبة اجتياز الخطة
+                Tone = ResultToneHelper.Build(att.ScorePercent, ResultContext.Exam, att.PassPercent)
+            });
+        }
+
+        // RTK-S13: صفحة نتيجة اختبار الملحق — بلا كشف الإجابات، ونبرة محايدة، والمحاولات غير محدودة حتى النجاح
+        private static async Task<RemedialTrackAttemptResult> GetAddendumResultAsync(
+            ApplicationDbContext db, AttemptHead head, CancellationToken ct)
+        {
+            var att = await db.RemedialTrackExamAttempts.AsNoTracking()
+                .Where(a => a.Id == head.Id)
+                .Select(a => new
+                {
+                    a.Status,
+                    a.ScorePercent,
+                    a.IsPassed,
+                    a.CorrectCount,
+                    a.TotalQuestions,
+                    AddendumTitle = a.Addendum!.Title,
+                    PassPercent = a.AxisProgress!.Enrollment!.Publication!.Track!.PassPercent
+                })
+                .FirstAsync(ct);
+
+            return new(RemedialTrackResultStatus.Ok, new StudentRemedialTrackResultVm
+            {
+                AttemptId = head.Id,
+                EnrollmentId = head.EnrollmentId,
+                AxisProgressId = head.AxisProgressId,
+                TrackTitle = head.TrackTitle,
+                AxisTitle = att.AddendumTitle,   // عنوان الملحق في خانة العنوان الفرعي
+                ExamNumber = head.ExamNumber,
+                ScorePercent = att.ScorePercent,
+                IsPassed = att.IsPassed,
+                TimedOut = att.Status == RemedialTrackAttemptStatus.Expired,
+                CorrectCount = att.CorrectCount,
+                TotalQuestions = att.TotalQuestions,
+                PassPercent = att.PassPercent,
+                Next = att.IsPassed ? RemedialTrackResultNext.AddendumPassed : RemedialTrackResultNext.AddendumRetry,
+                AddendumId = head.AddendumId,
                 Tone = ResultToneHelper.Build(att.ScorePercent, ResultContext.Exam, att.PassPercent)
             });
         }

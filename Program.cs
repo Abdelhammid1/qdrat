@@ -291,6 +291,7 @@ builder.Services.AddAuthorization(options =>
         AdminPermissionPolicies.RemedialTrackPublications_Delete,
         AdminPermissionPolicies.RemedialTrackPublications_Restore,
         AdminPermissionPolicies.RemedialTrackPublications_ManageReview,
+        AdminPermissionPolicies.RemedialTrackPublications_ManageAddendum,
         AdminPermissionPolicies.RemedialTrackReports_Read,
         AdminPermissionPolicies.RemedialTrackReports_Edit,
         AdminPermissionPolicies.RemedialTrackReports_Send
@@ -1043,6 +1044,10 @@ builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackProgre
                            QdratNew.Services.RemedialTracks.RemedialTrackProgressService>();
 builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackExamService,
                            QdratNew.Services.RemedialTracks.RemedialTrackExamService>();
+builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackAddendumService,
+                           QdratNew.Services.RemedialTracks.RemedialTrackAddendumService>();
+builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackAddendumStudentService,
+                           QdratNew.Services.RemedialTracks.RemedialTrackAddendumStudentService>();
 builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackReportService,
                            QdratNew.Services.RemedialTracks.RemedialTrackReportService>();
 // RTK-S12.1: طابور تقارير أولياء الأمور للأدمن

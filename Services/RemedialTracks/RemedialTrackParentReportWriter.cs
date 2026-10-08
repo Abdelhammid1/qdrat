@@ -44,6 +44,8 @@ namespace QdratNew.Services.RemedialTracks
                 PassedAxes = vm.PassedAxes,
                 FollowUpAxes = vm.FollowUpAxes,
                 AverageScorePercent = vm.AverageScorePercent,
+                AddendaTotal = vm.AddendaTotal,          // RTK-S13/D33: الملاحق القائمة وقت إنشاء اللقطة فقط
+                AddendaCompleted = vm.AddendaCompleted,
                 Axes = vm.Axes.Select(a => new RemedialTrackParentReportSnapshotAxis
                 {
                     Order = a.Order,

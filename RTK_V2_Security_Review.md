@@ -45,3 +45,50 @@
 - سلوك ملء الشاشة على iPhone Safari وAndroid Chrome الحقيقيين مع YouTube/Vimeo (يدوي إلزامي؛ المختبر Chromium بحجب `requestFullscreen`).
 - عدم تكرار العدّادات عبر نسخ متعددة فعلية (F2).
 - اختبار الحمل (`RTK_LOAD=1`) لم يُشغَّل.
+
+---
+
+# RTK-S13 — إضافة مراجعة «ملحق المحور» (D29–D34)
+
+> التاريخ: 2026-10-07 · النطاق: كيانا `RemedialTrackAddendum`/`RemedialTrackAddendumProgress`، الخدمتان `RemedialTrackAddendumService` (أدمن) و`RemedialTrackAddendumStudentService` (طالب)، الـ Actions الأربعة الجديدة، تعديل حارس `OnExamSubmittedAsync`، تقارير الطالب/الأدمن/ولي الأمر.
+> الطريقة: قراءة الكود + بحث نصي + اختبارات آلية فعلية (وحدات InMemory، SQL Server حقيقي على قاعدة الاختبار المعزولة، Playwright 375px).
+
+## الخلاصة
+
+- **لا Critical ولا High** مفتوح ضمن نطاق S13. (الخطر **R8** — محاولة اختبار رقمها غير 101 تُعامل كأنها 102 — أُغلق: حارس صريح + `switch` + اختبارات.)
+- **Medium:** لا جديد (F1/F2 أعلاه تنطبق كما هي على سياستي `rtk-ping`/`rtk-exam` اللتين يرثهما الملحق).
+- ملاحظات Low أدناه.
+
+## النتائج
+
+| # | الخطورة | النتيجة | الدليل | المعالجة |
+|---|---|---|---|---|
+| S13-R8 | كان High (مُغلق) | `OnExamSubmittedAsync` كان يعامل أي `ExamNumber` غير 101 كأنه 102 ← محاولة ملحق كانت ستجتاز/ترسب المحور وتفتح التالي. | `RemedialTrackProgressService.OnExamSubmittedAsync` | حارس فوري `ExamNumber == Addendum ← لا انتقال` + `switch` صريح لا يفترض 102 + `Exam102Percent` لا يُكتب إلا لـ102. اختبارات: `SubmittingAddendumAttempt_NeverChangesAnyAxisOrEnrollmentState` (4 حالات)، `ConcurrentDoubleSubmit_CountsOnce_AndAxisStateIsUntouched` (SQL حقيقي). |
+| S13-1 | Low | الفهرس الفريد `IX_RemedialTrackExamAttempts_AxisProgressId_ExamNumber` صار **مُصفّى** (`AddendumId IS NULL`) ليسمح بمحاولات الملحق غير المحدودة؛ هذا استبدال فهرس موجود (لا إضافة فقط). | `RTK_Addendum.sql` | قاعدة «محاولة واحدة لكل اختبار 101/102» محفوظة بالضبط (اختبار SQL: `AxisExamIndex_StillEnforcesOneAttemptPerExam_AndIgnoresAddendumAttempts`)، وفهرس مُصفّى ثانٍ يضمن محاولة ملحق جارية واحدة. |
+| S13-2 | Low | تراجع السكربت يحذف محاولات الملحق وأسئلتها (وإلا فشل إعادة الفهرس القديم). | `RTK_Addendum_Rollback.sql` | موثَّق في رأس السكربت؛ لا أثر على درجات المحاور. |
+| S13-3 | Low | الإشعار برابط عام `/Students/RemedialTrack` (دالة الإشعار تقبل رابطًا واحدًا لكل الطلاب)، لا رابط مباشر للملحق. | `RemedialTrackAddendumService.NotifyAsync` | مقبول؛ البطاقة تظهر في صفحة الخطة. لا يُشعَر طالب محوره `Locked` (يظهر له الملحق عند فتح المحور، D31). |
+| S13-4 | Low | محاولة ملحق جارية تُكمَل حتى لو أُوقف الملحق أثناءها (الإيقاف يخفيه عن البدء/المشاهدة/البطاقات/التقارير، لا يقتل محاولة بدأت). | `RemedialTrackExamService` | سلوك مقصود (لا خسارة إجابات)؛ وأمر محذوف/ملغى يمنع الجميع (D34). |
+| N-S13-1 | ملاحظة | **IDOR:** كل مسار طالب يُحمَّل بـ`EnrollmentId` يخص `studentId` من الهوية؛ غير المستهدف/تسجيل غيره/أمر آخر/محور `Locked`/ملحق غير نشط/أمر محذوف أو ملغى ← 404 (أو `NotFound` في الخدمة). الرابط/المعرّف لا يُسلَّم إلا قبل اكتمال الفيديو ولمن استُهدف. | `Get_Owner_SeesLink_NonTargetedAndOtherPublicationGet404`، `Exam_OtherStudentOrOtherOrder_CannotStartOrReadAttempt`، `Ping_OtherStudentOrWrongEnrollment_NotFound...`، Playwright (IDOR على الصفحة ومحاولة الاختبار) | مغطّى. |
+| N-S13-2 | ملاحظة | **Antiforgery + صلاحيات:** `CreateAddendum`/`SetAddendumActive` = `[HttpPost]` + `[ValidateAntiForgeryToken]` + `[AdminPermission(..."ManageAddendum")]`؛ `AddendumPing`/`StartAddendumExam` = POST + Antiforgery + `rtk-ping`/`rtk-exam`؛ المفتاح الجديد في الأماكن الثلاثة (ثابت السياسة + الكتالوج + `Program.cs`). النبضة بلا رمز ← 400 (Playwright). موظف بلا `ManageAddendum` مرفوض ومعه مسموح (معالج التفويض). | `RemedialTrackAddendumTests` (الأمان) | مغطّى. |
+| N-S13-3 | ملاحظة | **نطاق الدفعات:** الإنشاء/الإيقاف/اللوحة/طلاب الملحق كلها تفرض `RemedialTrackBatchScope` داخل الخدمة؛ خارج النطاق ≡ غير موجود. معرّف تسجيل غريب أو ملغى ← رفض الطلب كله بلا أي إدراج. | `Create_ForeignOrCancelledEnrollmentId_RejectsWholeRequest`، `Create_DeletedOrCancelledPublication_AndOutOfScope_AreRejected`، `Students_Drilldown_IsScopedAndPaged` | مغطّى. |
+| N-S13-4 | ملاحظة | **Overposting:** نموذج POST مخصّص (`CreateRemedialTrackAddendumInput`) بلا `IsActive`/`CreatedBy*`/`Provider`/`ExternalId`/أي حقل حالة؛ الرابط يُحلَّل عبر `RemedialTrackVideoUrlParser` (https فقط، لا `javascript:`) ويُبنى الـembed من `ExternalId` لا من النص المُدخل. | `CreateInput_HasNoOverpostableFields_AndValidatesReason`، `Create_BadUrl_Rejected` | مغطّى. |
+| N-S13-5 | ملاحظة | **XSS:** لا `Html.Raw` في الـ Views الجديدة (grep فارغ)؛ نصوص العنوان/السبب/اسم الطالب تُرمَّز، وجدول الطلاب في JS يمرّ على `esc()`. | `Addendum.cshtml`، `Details.cshtml` | مغطّى. |
+| N-S13-6 | ملاحظة | **سلامة المشاهدة (D32):** الرصيد بزمن الخادم وسقف 20ث للنبضة، العميل لا يضخّم الزمن، التحديث ذرّي بشرط `LastPingAtUtc` (8 نبضات متزامنة ← رصيد واحد على SQL حقيقي). | `Ping_ClientCannotInflateWatchedTime`، `ConcurrentPings_DoNotDoubleCreditServerTime` | مغطّى. |
+| N-S13-7 | ملاحظة | **عدم تسريب الإجابة (D15):** صفحة حل الملحق بلا `CorrectAnswer`/`Explanation`/`VideoUrl`؛ ولا يظهر أي منها في HTML في Playwright. | `Solve_AddendumAttempt_NeverLeaksCorrectAnswerOrExplanation` + Playwright | مغطّى. |
+| N-S13-8 | ملاحظة | **عدم المساس بالمحور (D29):** لقطة `AxisProgress`/`Enrollment`/الأحداث/تقارير ولي الأمر قبل/بعد أي عمل على الملحق متطابقة؛ والمحور التالي يُفتح قبل الملحق وبعده. | `Create_AllEnrollments_..._NeverTouchesAxes`، `PassingAxis_WithPendingAddendum_StillOpensNextAxis`، Playwright | مغطّى. |
+
+## مراجعة الإنتاج على ما تغيّر
+
+| البند | النتيجة |
+|---|---|
+| N+1 / حلقات | إنشاء الملحق: استعلام واحد للتسجيلات + `AddRange` + `SaveChanges` واحد (52 تسجيلًا ← صف إدراج لكل طالب دفعة واحدة). لا استعلام داخل حلقة في أي مسار جديد. تقرير الطالب/ولي الأمر +1 استعلام ثابت (الملاحق) فيصير 5 استعلامات ثابتة بغض النظر عن عدد المحاور. |
+| التوافق مع SQL Server | لا `Contains`/`IN` على قوائم في الخدمات الجديدة (تقاطع المعرّفات في الذاكرة)؛ لا `OPENJSON`؛ نُفِّذت كل استعلامات القراءة فعليًا على `UseCompatibilityLevel(120)`. |
+| الفهارس | `UX_RemedialTrackAddendumProgresses_Addendum_Enrollment` (فريد)، `IX_..._Enrollment_CompletedAt`، `IX_RemedialTrackAddenda_Publication_IsActive`، `UX_RemedialTrackExamAttempts_Addendum_OpenAttempt` (مُصفّى) — مختبرة على SQL حقيقي. |
+| الترحيلات | `RTK_Addendum.sql` مُشغَّل **مرتين** بلا خطأ، ثم `RTK_Addendum_Rollback.sql` مرتين، ثم إعادة التطبيق، على قاعدة الاختبار المعزولة (بيانات المحاور سليمة). |
+| Pagination / AsNoTracking | لوحة الملاحق 10/صفحة، طلاب الملحق 20/صفحة، كل القراءات `AsNoTracking`. |
+| التوسّع | نفس تحفظ F2 (عدّادات الـ Rate Limit محلية لكل نسخة). |
+
+## ما لم يُتحقق منه
+
+- تشغيل فيديو حقيقي (YouTube/Vimeo) على iPhone/Android في صفحة الملحق — يدوي إلزامي ضمن بوابة النشر (§7 بند 7).
+- بروفة السكربتات بالترتيب الكامل `RTK_TermsAccepted ← … ← RTK_Addendum` على **نسخة من الإنتاج** (Staging) والنسخة الاحتياطية الفعلية للإنتاج: قرار تشغيلي خارج هذه الجلسة.

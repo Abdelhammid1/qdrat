@@ -16,6 +16,9 @@ namespace QdratNew.ViewModels.RemedialTracks
         public int TotalAxes { get; set; }
         public int PassedAxes { get; set; }
         public int ProgressPercent => TotalAxes == 0 ? 0 : (int)Math.Round(PassedAxes * 100.0 / TotalAxes);
+
+        /// <summary>RTK-S13: ملاحق «مطلوب إضافي» غير المكتملة على محاور مفتوحة (تنبيه في كرت الخطة). لا تمنع التقدّم.</summary>
+        public IReadOnlyList<StudentRemedialTrackPendingAddendumVm> PendingAddenda { get; set; } = Array.Empty<StudentRemedialTrackPendingAddendumVm>();
     }
 
     public sealed class StudentRemedialTrackIndexVm
@@ -56,6 +59,7 @@ namespace QdratNew.ViewModels.RemedialTracks
     public sealed class StudentRemedialTrackAxisItemVm
     {
         public int AxisProgressId { get; set; }
+        public int AxisId { get; set; }                      // RTK-S13: لربط بطاقات «مطلوب إضافي» بالمحور
         public int Order { get; set; }
         public string Title { get; set; } = string.Empty;
         public RemedialTrackAxisStatus Status { get; set; }
@@ -80,6 +84,9 @@ namespace QdratNew.ViewModels.RemedialTracks
         public RemedialTrackDeliveryMode Mode { get; set; }
         public RemedialTrackEnrollmentStatus Status { get; set; }
         public IReadOnlyList<StudentRemedialTrackAxisItemVm> Axes { get; set; } = Array.Empty<StudentRemedialTrackAxisItemVm>();
+
+        /// <summary>RTK-S13: «مطلوب إضافي» — لا يمنع التقدّم (D29). لا تظهر لمحور Locked (D31).</summary>
+        public IReadOnlyList<StudentRemedialTrackAddendumCardVm> Addenda { get; set; } = Array.Empty<StudentRemedialTrackAddendumCardVm>();
     }
 
     /// <summary>RTK-S4.3/4.4: فيديو داخل صفحة المحور.</summary>
@@ -154,5 +161,16 @@ namespace QdratNew.ViewModels.RemedialTracks
         [JsonPropertyName("nextVideo")] public RemedialTrackNextVideoDto? NextVideo { get; set; }
         [JsonPropertyName("allDone")] public bool AllDone { get; set; }
         [JsonPropertyName("needsCode")] public bool NeedsCode { get; set; }
+    }
+}
+
+namespace QdratNew.ViewModels.RemedialTracks
+{
+    /// <summary>RTK-S13: ملحق معلّق يظهر كتنبيه في كرت الخطة (قائمة الخطط).</summary>
+    public sealed class StudentRemedialTrackPendingAddendumVm
+    {
+        public int AddendumId { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string AxisTitle { get; set; } = string.Empty;
     }
 }

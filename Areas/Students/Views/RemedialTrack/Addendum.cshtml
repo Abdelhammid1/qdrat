@@ -1,0 +1,172 @@
+@using QdratNew.Enums
+@using QdratNew.ViewModels.RemedialTracks
+@model StudentAddendumVm
+@{
+    ViewData["Title"] = Model.Title;
+    var canWatch = !Model.VideoCompleted;               // الفيديو يُشاهد مرة حتى الاكتمال، ولا يُسلَّم رابطه بعده
+    var cultureInv = System.Globalization.CultureInfo.InvariantCulture;
+}
+@section Styles {
+    <link href="~/css/student-rtk.css" rel="stylesheet" asp-append-version="true" />
+    <link href="~/css/student-rtk-axis.css" rel="stylesheet" asp-append-version="true" />
+}
+
+<div class="rtk-page rtk-axis-page rtk-addendum-page">
+    <header class="ax-hero">
+        <a class="ax-back" asp-action="Open" asp-route-enrollmentId="@Model.EnrollmentId">
+            <i class="fas fa-arrow-right" aria-hidden="true"></i> العودة إلى الخطة
+        </a>
+        <div class="ax-hero-row">
+            <div class="ax-hero-text">
+                <div class="ax-eyebrow">
+                    <span class="ax-chip"><i class="fas fa-circle-plus" aria-hidden="true"></i> مطلوب إضافي</span>
+                    <span class="ax-chip"><i class="fas fa-layer-group" aria-hidden="true"></i> @Model.AxisTitle</span>
+                    <span class="ax-chip"><i class="fas fa-unlock" aria-hidden="true"></i> لا يمنع التقدّم</span>
+                </div>
+                <h1>@Model.Title</h1>
+                <p class="ax-hero-track">@Model.TrackTitle</p>
+            </div>
+        </div>
+    </header>
+
+    <div class="ax-banner ax-banner-info">
+        <i class="fas fa-circle-info" aria-hidden="true"></i>
+        <div><strong>سبب الإضافة:</strong> @Model.Reason</div>
+    </div>
+
+    @if (Model.IsCompleted)
+    {
+        <div class="ax-banner ax-banner-ok"><i class="fas fa-circle-check" aria-hidden="true"></i><div>أتممت هذا الملحق. أحسنت!</div></div>
+    }
+
+    @if (TempData["RtkMessage"] is string rtkMessage)
+    {
+        <div class="ax-banner ax-banner-info" role="alert"><i class="fas fa-circle-info" aria-hidden="true"></i><div>@rtkMessage</div></div>
+    }
+
+    <div id="rtkRoot"
+         class="ax-layout @(canWatch ? "has-player" : "")"
+         data-mode="addendum"
+         data-enrollment-id="@Model.EnrollmentId"
+         data-can-watch="@(canWatch ? "1" : "0")"
+         data-review="0"
+         data-open-url="@Url.Action("Open", "RemedialTrack", new { area = "Students", enrollmentId = Model.EnrollmentId })"
+         data-ping-url="@Url.Action("AddendumPing", "RemedialTrack", new { area = "Students" })">
+
+        @Html.AntiForgeryToken()
+
+        @if (canWatch)
+        {
+            <section class="ax-card ax-player-card" aria-label="مشغّل الفيديو">
+                <div class="ax-now">
+                    <span class="ax-now-badge"><i class="fas fa-circle-play" aria-hidden="true"></i> يُعرض الآن</span>
+                    <h3 id="rtkNowTitle"></h3>
+                </div>
+                <div class="rtk-player-wrap" id="rtkPlayerWrap" hidden>
+                    <div id="rtkPlayerHost" class="rtk-player-host"></div>
+                    <div class="rtk-player-shield" id="rtkPlayerShield" aria-hidden="true"></div>
+                    <div class="rtk-watermark rtk-watermark-a" aria-hidden="true"><span class="rtk-wm-name">@Model.WatermarkText</span>@if (!string.IsNullOrEmpty(Model.WatermarkIdText)){<span class="rtk-wm-id">@Model.WatermarkIdText</span>}</div>
+                    <div class="rtk-watermark rtk-watermark-b" aria-hidden="true"><span class="rtk-wm-name">@Model.WatermarkText</span>@if (!string.IsNullOrEmpty(Model.WatermarkIdText)){<span class="rtk-wm-id">@Model.WatermarkIdText</span>}</div>
+                    <div class="rtk-player-controls" id="rtkPlayerControls" dir="ltr">
+                        <button type="button" id="rtkBtnPlay" class="rtk-ctl-btn" aria-label="تشغيل / إيقاف مؤقت"><i class="fas fa-play" aria-hidden="true"></i></button>
+                        <button type="button" id="rtkBtnMute" class="rtk-ctl-btn" aria-label="كتم / تشغيل الصوت"><i class="fas fa-volume-up" aria-hidden="true"></i></button>
+                        <span class="rtk-ctl-time" id="rtkTime">0:00 / 0:00</span>
+                        <input type="range" id="rtkSeek" class="rtk-seek" min="0" max="1000" value="0" step="1" aria-label="موضع الفيديو (يمكنك الرجوع فقط داخل ما شاهدته)" />
+                        <button type="button" id="rtkBtnFull" class="rtk-ctl-btn" aria-label="ملء الشاشة"><i class="fas fa-expand" aria-hidden="true"></i></button>
+                    </div>
+                </div>
+                <div id="rtkOtherBox" hidden>
+                    <p class="small mb-2">هذا الفيديو على منصة خارجية. افتحه في نافذة جديدة وأبقِ هذه الصفحة مفتوحة أثناء المشاهدة.</p>
+                    <a id="rtkOtherLink" class="rtk-btn rtk-btn-outline mb-2" target="_blank" rel="noopener noreferrer"><i class="fas fa-up-right-from-square" aria-hidden="true"></i> فتح الفيديو</a>
+                    <button type="button" id="rtkManualDone" class="rtk-btn" disabled><i class="fas fa-check" aria-hidden="true"></i> أنهيت المشاهدة</button>
+                </div>
+                <div class="rtk-player-state" id="rtkState" role="status" aria-live="polite"></div>
+            </section>
+        }
+
+        <aside class="ax-side">
+            <div class="ax-card ax-side-card">
+                <div class="ax-side-head"><h2>فيديو الملحق</h2></div>
+                <ol class="rtk-videos" id="rtkVideoList">
+                    @* عنصر واحد بنفس بنية قائمة المحور ليعيد المشغّل استعماله؛ لا يُطبع الرابط/المعرّف بعد اكتمال الفيديو *@
+                    <li class="rtk-video-item @(Model.VideoCompleted ? "is-done" : "")"
+                        data-vp-id="@Model.AddendumProgressId"
+                        data-order="1"
+                        data-title="@Model.Title"
+                        data-provider="@Model.Provider"
+                        data-external-id="@(canWatch ? Model.ExternalId : null)"
+                        data-embed-url="@(canWatch ? Model.EmbedUrl : null)"
+                        data-url="@(canWatch ? Model.Url : null)"
+                        data-duration="@(Model.DurationSeconds?.ToString() ?? "")"
+                        data-required="@Model.RequiredSeconds"
+                        data-completed="@(Model.VideoCompleted ? "1" : "0")"
+                        data-unlocked="1">
+                        <i class="rtk-video-icon fas @(Model.VideoCompleted ? "fa-circle-check" : "fa-circle-play")" aria-hidden="true"></i>
+                        <span class="rtk-video-title">@Model.Title</span>
+                        @if (canWatch)
+                        {
+                            <button type="button" class="rtk-btn rtk-btn-outline rtk-select-video">تشغيل</button>
+                        }
+                    </li>
+                </ol>
+            </div>
+        </aside>
+    </div>
+
+    @* منطقة تُحدَّث من الخادم بعد إتمام الفيديو بلا إعادة تحميل (بطاقة بدء الاختبار + النتائج) *@
+    <div id="rtkExamArea">
+    @if (Model.HasExam && Model.VideoCompleted && !Model.ExamPassed)
+    {
+        <section class="rtk-exam-start" aria-label="اختبار الملحق">
+            <div class="ax-exam-icon" aria-hidden="true"><i class="fas fa-clipboard-check"></i></div>
+            <div class="ax-exam-text">
+                <h3>اختبار الملحق</h3>
+                <p>أنهيت فيديو الملحق. مدة الاختبار @Model.ExamDurationMinutes دقيقة، ويبدأ العدّ التنازلي لحظة الضغط على الزر. يمكنك إعادة الاختبار حتى تجتازه.</p>
+            </div>
+            @if (Model.InProgressAttemptId.HasValue)
+            {
+                <div class="ax-exam-cta">
+                    <a class="rtk-btn" asp-action="Solve" asp-route-attemptId="@Model.InProgressAttemptId">
+                        <i class="fas fa-play" aria-hidden="true"></i> متابعة اختبار الملحق
+                    </a>
+                </div>
+            }
+            else
+            {
+                <form class="ax-exam-cta" asp-action="StartAddendumExam" asp-route-enrollmentId="@Model.EnrollmentId" asp-route-addendumId="@Model.AddendumId" method="post">
+                    <button type="submit" class="rtk-btn"><i class="fas fa-pen" aria-hidden="true"></i> @(Model.AttemptsCount > 0 ? "أعد اختبار الملحق" : "ابدأ اختبار الملحق")</button>
+                </form>
+            }
+        </section>
+    }
+
+    @if (Model.HasExam && Model.ExamPassed)
+    {
+        <div class="ax-banner ax-banner-ok"><i class="fas fa-circle-check" aria-hidden="true"></i><div>اجتزت اختبار الملحق@(Model.BestScorePercent.HasValue ? " بأفضل نسبة " + Model.BestScorePercent.Value.ToString("0.#", cultureInv) + "%" : "").</div></div>
+    }
+
+    @if (Model.Attempts.Count > 0)
+    {
+        <section class="ax-card ax-results">
+            <h3>محاولات اختبار الملحق</h3>
+            <ul class="ax-results-list">
+                @foreach (var a in Model.Attempts)
+                {
+                    <li class="ax-result-row">
+                        <span class="ax-result-name">@a.SubmittedAtLocal.ToString("yyyy/MM/dd HH:mm", cultureInv)</span>
+                        <span class="ax-result-score">@a.ScorePercent.ToString("0.#", cultureInv)%</span>
+                        <a class="ax-result-link" asp-action="Result" asp-route-attemptId="@a.AttemptId">عرض النتيجة <i class="fas fa-arrow-left" aria-hidden="true"></i></a>
+                    </li>
+                }
+            </ul>
+        </section>
+    }
+    </div>
+</div>
+
+@section Scripts {
+    @if (canWatch)
+    {
+        <script src="~/js/remedial-track-player.js" asp-append-version="true"></script>
+    }
+}

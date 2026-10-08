@@ -9,6 +9,9 @@ namespace QdratNew.Entities
         public int AxisProgressId { get; set; }
         public RemedialTrackAxisProgress? AxisProgress { get; set; }
         public RemedialTrackExamNumber ExamNumber { get; set; }
+        /// <summary>RTK-S13: يُملأ لمحاولة «الملحق» فقط (ExamNumber = Addendum) — AxisProgressId يبقى محور الملحق للملكية فقط.</summary>
+        public int? AddendumId { get; set; }
+        public RemedialTrackAddendum? Addendum { get; set; }
         public int ModelId { get; set; }                     // ProfessionalModel وقت البدء
         public RemedialTrackAttemptStatus Status { get; set; } = RemedialTrackAttemptStatus.InProgress;
 

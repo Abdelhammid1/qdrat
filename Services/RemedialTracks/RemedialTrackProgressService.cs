@@ -100,10 +100,34 @@ namespace QdratNew.Services.RemedialTracks
                 .Take(200)
                 .ToListAsync(ct);
 
+            // RTK-S13: ملاحق معلّقة للطالب كله في استعلام واحد (بلا IN): فعّالة، غير مكتملة، محورها مفتوح، الأمر نشط وغير محذوف
+            var pendingRows = await db.RemedialTrackAddendumProgresses.AsNoTracking()
+                .Where(p => p.Enrollment!.StudentId == studentId
+                            && p.CompletedAtUtc == null
+                            && p.Addendum!.IsActive
+                            && p.Enrollment.Status != RemedialTrackEnrollmentStatus.Cancelled
+                            && p.Enrollment.Publication!.Status == RemedialTrackPublicationStatus.Active
+                            && !p.Enrollment.Publication.IsDeleted
+                            && p.Enrollment.AxisProgresses.Any(a => a.AxisId == p.Addendum.AxisId && a.Status != RemedialTrackAxisStatus.Locked))
+                .OrderBy(p => p.Addendum!.CreatedAtUtc)
+                .Select(p => new
+                {
+                    p.EnrollmentId,
+                    p.AddendumId,
+                    p.Addendum!.Title,
+                    AxisTitle = p.Addendum.Axis!.TitleOverride ?? p.Addendum.Axis.Section!.Title
+                })
+                .Take(500)
+                .ToListAsync(ct);
+            var pendingByEnrollment = pendingRows.ToLookup(x => x.EnrollmentId);
+
             return new StudentRemedialTrackIndexVm
             {
                 Items = rows.Select(r => new StudentRemedialTrackListItemVm
                 {
+                    PendingAddenda = pendingByEnrollment[r.Id]
+                        .Select(x => new StudentRemedialTrackPendingAddendumVm { AddendumId = x.AddendumId, Title = x.Title, AxisTitle = x.AxisTitle })
+                        .ToList(),
                     EnrollmentId = r.Id,
                     TrackTitle = r.TrackTitle,
                     CurriculumName = r.Curriculum ?? string.Empty,
@@ -146,6 +170,7 @@ namespace QdratNew.Services.RemedialTracks
                 .Select(a => new StudentRemedialTrackAxisItemVm
                 {
                     AxisProgressId = a.Id,
+                    AxisId = a.AxisId,
                     Order = a.Order,
                     Title = a.Axis!.TitleOverride ?? a.Axis.Section!.Title,
                     Status = a.Status,
@@ -156,6 +181,38 @@ namespace QdratNew.Services.RemedialTracks
                 })
                 .ToListAsync(ct);
 
+            // RTK-S13: «مطلوب إضافي» — استعلام واحد؛ تظهر حتى لو المحور Passed، ولا تظهر لمحور Locked (D31). لا تمنع التقدّم (D29)
+            var openAxisIds = new HashSet<int>(axes.Where(a => !a.IsLocked).Select(a => a.AxisId));
+            var cardRows = await db.RemedialTrackAddendumProgresses.AsNoTracking()
+                .Where(p => p.EnrollmentId == enrollmentId && p.Addendum!.IsActive)
+                .OrderBy(p => p.Addendum!.CreatedAtUtc).ThenBy(p => p.AddendumId)
+                .Select(p => new
+                {
+                    p.AddendumId,
+                    p.Addendum!.AxisId,
+                    p.Addendum.Title,
+                    p.Addendum.Reason,
+                    HasExam = p.Addendum.ExamModelId != null,
+                    p.WatchedSeconds,
+                    p.VideoCompleted,
+                    p.CompletedAtUtc,
+                    p.AttemptsCount
+                })
+                .ToListAsync(ct);
+
+            var addenda = cardRows
+                .Where(r => openAxisIds.Contains(r.AxisId))
+                .Select(r => new StudentRemedialTrackAddendumCardVm
+                {
+                    AddendumId = r.AddendumId,
+                    AxisId = r.AxisId,
+                    Title = r.Title,
+                    Reason = r.Reason,
+                    HasExam = r.HasExam,
+                    State = RemedialTrackAddendumRules.StateOf(r.WatchedSeconds, r.VideoCompleted, r.AttemptsCount, r.CompletedAtUtc.HasValue)
+                })
+                .ToList();
+
             return new StudentRemedialTrackPlanVm
             {
                 EnrollmentId = head.Id,
@@ -164,7 +221,8 @@ namespace QdratNew.Services.RemedialTracks
                 CurriculumName = head.Curriculum ?? string.Empty,
                 Mode = head.Mode,
                 Status = head.Status,
-                Axes = axes
+                Axes = axes,
+                Addenda = addenda
             };
         }
 
@@ -273,7 +331,7 @@ namespace QdratNew.Services.RemedialTracks
 
             // RTK-S5: محاولات المحور (استعلام واحد صغير)
             var attempts = await db.RemedialTrackExamAttempts.AsNoTracking()
-                .Where(x => x.AxisProgressId == ap.Id)
+                .Where(x => x.AxisProgressId == ap.Id && x.AddendumId == null)   // RTK-S13: محاولات الملحق لها صفحتها
                 .OrderBy(x => x.ExamNumber)
                 .Select(x => new StudentRemedialTrackAttemptItemVm
                 {
@@ -683,15 +741,26 @@ namespace QdratNew.Services.RemedialTracks
                     .Select(a => new { a.AxisProgressId, a.ExamNumber, a.Status, a.ScorePercent, a.IsPassed })
                     .FirstOrDefaultAsync(ct);
                 if (att is null) return new RemedialTrackTransitionResult(false, null, 0, "المحاولة غير موجودة.");
+
+                // RTK-S13/D29 (حارس إلزامي): محاولة «الملحق» لا تنقل حالة المحور ولا تُحسب 102 أبدًا
+                if (att.ExamNumber == RemedialTrackExamNumber.Addendum)
+                    return new RemedialTrackTransitionResult(false, null, 0, "محاولة ملحق: لا تنتقل بها حالة المحور.");
+
                 if (att.Status == RemedialTrackAttemptStatus.InProgress)
                     return new RemedialTrackTransitionResult(false, null, 0, "المحاولة لم تُسلَّم بعد.");
 
                 var ap = await db.RemedialTrackAxisProgresses.FirstAsync(a => a.Id == att.AxisProgressId, ct);
 
                 // Idempotent: التسليم المزدوج/إعادة الاستدعاء لا أثر له بعد أن تحوّلت الحالة
-                var expected = att.ExamNumber == RemedialTrackExamNumber.Exam101
-                    ? RemedialTrackAxisStatus.AwaitingExam101
-                    : RemedialTrackAxisStatus.AwaitingExam102;
+                // switch صريح: أي رقم غير 101/102 لا يُفترض 102 (قيمة غير معروفة ← لا انتقال)
+                RemedialTrackAxisStatus expected;
+                switch (att.ExamNumber)
+                {
+                    case RemedialTrackExamNumber.Exam101: expected = RemedialTrackAxisStatus.AwaitingExam101; break;
+                    case RemedialTrackExamNumber.Exam102: expected = RemedialTrackAxisStatus.AwaitingExam102; break;
+                    default:
+                        return new RemedialTrackTransitionResult(false, ap.Status, ap.Round, "رقم الاختبار غير مدعوم لانتقال المحور.");
+                }
                 if (ap.Status != expected)
                     return new RemedialTrackTransitionResult(false, ap.Status, ap.Round);
 
@@ -711,7 +780,7 @@ namespace QdratNew.Services.RemedialTracks
                 var score = Pct(att.ScorePercent);
 
                 if (att.ExamNumber == RemedialTrackExamNumber.Exam101) ap.Exam101Percent = att.ScorePercent;
-                else ap.Exam102Percent = att.ScorePercent;
+                else if (att.ExamNumber == RemedialTrackExamNumber.Exam102) ap.Exam102Percent = att.ScorePercent;
                 ap.Status = t.NewStatus;
                 ap.Round = t.NewRound;
 

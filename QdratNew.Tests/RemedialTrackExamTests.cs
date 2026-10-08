@@ -56,7 +56,9 @@ namespace QdratNew.Tests
             public Fx()
             {
                 Progress = new RemedialTrackProgressService(Factory, Clock, new FakeTz(), NullLogger<RemedialTrackProgressService>.Instance);
-                Exams = new RemedialTrackExamService(Factory, Clock, Progress, NullLogger<RemedialTrackExamService>.Instance);
+                Exams = new RemedialTrackExamService(Factory, Clock, Progress,
+                    new RemedialTrackAddendumStudentService(Factory, Clock, new FakeTz(), NullLogger<RemedialTrackAddendumStudentService>.Instance),
+                    NullLogger<RemedialTrackExamService>.Instance);
             }
 
             public async Task SeedAsync(

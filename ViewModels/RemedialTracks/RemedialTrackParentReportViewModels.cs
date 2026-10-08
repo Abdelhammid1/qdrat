@@ -29,6 +29,10 @@ namespace QdratNew.ViewModels.RemedialTracks
         public int FollowUpAxes { get; set; }
         public double? AverageScorePercent { get; set; }
 
+        /// <summary>RTK-S13/D33: الملاحق القائمة وقت إنشاء اللقطة فقط (لقطات سابقة = 0). لا تدخل في أي نسبة.</summary>
+        public int AddendaTotal { get; set; }
+        public int AddendaCompleted { get; set; }
+
         public List<RemedialTrackParentReportSnapshotAxis> Axes { get; set; } = new();
     }
 

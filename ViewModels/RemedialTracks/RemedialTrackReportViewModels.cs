@@ -94,6 +94,11 @@ namespace QdratNew.ViewModels.RemedialTracks
 
         public IReadOnlyList<RemedialTrackReportAxisVm> Axes { get; set; } = Array.Empty<RemedialTrackReportAxisVm>();
 
+        /// <summary>RTK-S13/D33: الملاحق الفعّالة — سطر مستقل «مطلوب إضافي»، خارج نسب المحاور وحالة ولي الأمر.</summary>
+        public IReadOnlyList<RemedialTrackReportAddendumVm> Addenda { get; set; } = Array.Empty<RemedialTrackReportAddendumVm>();
+        public int AddendaTotal => Addenda.Count;
+        public int AddendaCompleted => Addenda.Count(a => a.Completed);
+
         public int TotalAxes => Axes.Count;
         public int PassedAxes => Axes.Count(a => a.Outcome == RemedialTrackReportAxisOutcome.Passed);
         public int FollowUpAxes => Axes.Count(a => a.Outcome is RemedialTrackReportAxisOutcome.NeedsFollowUp or RemedialTrackReportAxisOutcome.MovedByAdmin);

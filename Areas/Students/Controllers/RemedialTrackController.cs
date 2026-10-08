@@ -21,6 +21,7 @@ namespace QdratNew.Areas.Students.Controllers
         private readonly IRemedialTrackProgressService _progress;
         private readonly IRemedialTrackExamService _exams;
         private readonly IRemedialTrackReportService _reports;
+        private readonly IRemedialTrackAddendumStudentService _addenda;
         private readonly ITimeZoneService _tz;
 
         public RemedialTrackController(
@@ -29,6 +30,7 @@ namespace QdratNew.Areas.Students.Controllers
             IRemedialTrackProgressService progress,
             IRemedialTrackExamService exams,
             IRemedialTrackReportService reports,
+            IRemedialTrackAddendumStudentService addenda,
             ITimeZoneService tz)
         {
             _identity = identity;
@@ -36,6 +38,7 @@ namespace QdratNew.Areas.Students.Controllers
             _progress = progress;
             _exams = exams;
             _reports = reports;
+            _addenda = addenda;
             _tz = tz;
         }
 
@@ -311,6 +314,78 @@ namespace QdratNew.Areas.Students.Controllers
                 RemedialTrackResultStatus.Forbidden => View("Unavailable"),
                 _ => NotFound()
             };
+        }
+
+        // ───────────── RTK-S13: ملحق المحور (D29–D34) — لا يمر على آلة حالة المحور ولا يمنع التقدّم ─────────────
+
+        [HttpGet]
+        public async Task<IActionResult> Addendum(int enrollmentId, int addendumId, CancellationToken ct)
+        {
+            var studentId = await _identity.GetCurrentStudentIdAsync(User);
+            if (studentId == 0) return Challenge();
+
+            var gate = await _access.EvaluateAsync(studentId, enrollmentId, ct);
+            var blocked = HandleGate(gate, enrollmentId);
+            if (blocked is not null) return blocked;
+
+            var vm = await _addenda.GetAsync(studentId, enrollmentId, addendumId, ct);
+            if (vm is null) return NotFound();   // غير مستهدف/أمر آخر/محور مقفل/ملحق غير نشط/أمر محذوف ≡ غير موجود
+            return View(vm);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [EnableRateLimiting("rtk-ping")]
+        public async Task<IActionResult> AddendumPing([FromBody] RemedialTrackAddendumPingRequest request, CancellationToken ct)
+        {
+            if (request is null) return BadRequest(new RemedialTrackVideoPingResponse { Ok = false, Reason = "bad-request" });
+
+            var studentId = await _identity.GetCurrentStudentIdAsync(User);
+            if (studentId == 0) return Unauthorized();
+
+            var result = await _addenda.RecordPingAsync(studentId, request, ct);
+            return result.Status switch
+            {
+                RemedialTrackPingStatus.Ok => Ok(result.Body),
+                RemedialTrackPingStatus.BadRequest => BadRequest(result.Body),
+                RemedialTrackPingStatus.NotFound => NotFound(result.Body),
+                RemedialTrackPingStatus.Conflict => Conflict(result.Body),
+                _ => StatusCode(StatusCodes.Status403Forbidden, result.Body)
+            };
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [EnableRateLimiting("rtk-exam")]
+        public async Task<IActionResult> StartAddendumExam(int enrollmentId, int addendumId, CancellationToken ct)
+        {
+            var studentId = await _identity.GetCurrentStudentIdAsync(User);
+            if (studentId == 0) return Challenge();
+
+            var gate = await _access.EvaluateAsync(studentId, enrollmentId, ct);
+            var blocked = HandleGate(gate, enrollmentId);
+            if (blocked is not null) return blocked;
+
+            var result = await _addenda.StartExamAsync(studentId, enrollmentId, addendumId, ct);
+            switch (result.Status)
+            {
+                case RemedialTrackExamStartStatus.Created:
+                case RemedialTrackExamStartStatus.Existing:
+                    return RedirectToAction(nameof(Solve), new { attemptId = result.AttemptId });
+
+                case RemedialTrackExamStartStatus.NotFound:
+                    return NotFound();
+
+                case RemedialTrackExamStartStatus.Forbidden:
+                    return View("Unavailable");
+
+                case RemedialTrackExamStartStatus.NeedsCode:
+                    return RedirectToAction(nameof(Open), new { enrollmentId });
+
+                default: // Conflict | NoQuestions — رسالة وعودة لصفحة الملحق
+                    TempData["RtkMessage"] = result.Message ?? "تعذّر بدء الاختبار الآن.";
+                    return RedirectToAction(nameof(Addendum), new { enrollmentId, addendumId });
+            }
         }
 
         // ───────────── مساعدات ─────────────

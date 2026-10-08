@@ -33,8 +33,13 @@ namespace QdratNew.Tests.Integration
 
             var baseUrl = $"http://127.0.0.1:{port}";
 
-            var dllPath = Path.GetFullPath(Path.Combine(
-                AppContext.BaseDirectory, "..", "..", "..", "..", "bin", "Debug", "net8.0", "QdratNew.dll"));
+            // QDRAT_E2E_DLL (اختياري): مسار QdratNew.dll مبني في مكان آخر — مفيد حين يكون bin/Debug مقفلًا بتطبيق قيد التشغيل.
+            // بدونه السلوك كما كان: bin/Debug.
+            var overrideDll = Environment.GetEnvironmentVariable("QDRAT_E2E_DLL");
+            var dllPath = !string.IsNullOrWhiteSpace(overrideDll)
+                ? Path.GetFullPath(overrideDll)
+                : Path.GetFullPath(Path.Combine(
+                    AppContext.BaseDirectory, "..", "..", "..", "..", "bin", "Debug", "net8.0", "QdratNew.dll"));
             if (!File.Exists(dllPath))
                 throw new FileNotFoundException("لم يُعثَر على QdratNew.dll المبني — شغّل dotnet build على المشروع الرئيسي أولًا.", dllPath);
 

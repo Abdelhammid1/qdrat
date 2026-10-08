@@ -6,7 +6,7 @@ using QdratNew.ViewModels.RemedialTracks;
 namespace QdratNew.Services.RemedialTracks
 {
     /// <summary>
-    /// RTK-S6/S11.1: البناء المشترك لتقرير تسجيل واحد — 4 استعلامات ثابتة (ترويسة، محاور، تقدّم فيديو مجمّع، محاولات).
+    /// RTK-S6/S11.1: البناء المشترك لتقرير تسجيل واحد — 5 استعلامات ثابتة (ترويسة، محاور، تقدّم فيديو مجمّع، محاولات، ملاحق — S13).
     /// يُستخدم من خدمة التقارير ومن إنشاء لقطة ولي الأمر داخل معاملة التسليم (نفس الأرقام، بلا حلقات استعلام).
     /// </summary>
     public static class RemedialTrackReportBuilder
@@ -78,7 +78,8 @@ namespace QdratNew.Services.RemedialTracks
                 .ToListAsync(ct);
 
             var attempts = await db.RemedialTrackExamAttempts.AsNoTracking()
-                .Where(t => t.AxisProgress!.EnrollmentId == enrollmentId && t.Status != RemedialTrackAttemptStatus.InProgress)
+                .Where(t => t.AxisProgress!.EnrollmentId == enrollmentId && t.Status != RemedialTrackAttemptStatus.InProgress
+                            && t.AddendumId == null)   // RTK-S13/D33: محاولات الملحق خارج نسب المحاور
                 .OrderBy(t => t.AxisProgressId).ThenBy(t => t.StartedAtUtc).ThenBy(t => t.ExamNumber)
                 .Select(t => new
                 {
@@ -90,6 +91,20 @@ namespace QdratNew.Services.RemedialTracks
                     t.TotalQuestions,
                     t.ScorePercent,
                     t.IsPassed
+                })
+                .ToListAsync(ct);
+
+            // RTK-S13/D33: الملاحق الفعّالة لهذا التسجيل — استعلام واحد، سطر مستقل «مطلوب إضافي» لا يدخل في نسب المحاور
+            var addenda = await db.RemedialTrackAddendumProgresses.AsNoTracking()
+                .Where(p => p.EnrollmentId == enrollmentId && p.Addendum!.IsActive
+                            // D31: ملحق محور لم يُفتح بعد للطالب لا يظهر في تقريره (كما لا يظهر في خطته)
+                            && p.Enrollment!.AxisProgresses.Any(a => a.AxisId == p.Addendum.AxisId && a.Status != RemedialTrackAxisStatus.Locked))
+                .OrderBy(p => p.Addendum!.CreatedAtUtc).ThenBy(p => p.AddendumId)
+                .Select(p => new RemedialTrackReportAddendumVm
+                {
+                    Title = p.Addendum!.Title,
+                    AxisTitle = p.Addendum.Axis!.TitleOverride ?? p.Addendum.Axis.Section!.Title,
+                    Completed = p.CompletedAtUtc != null
                 })
                 .ToListAsync(ct);
 
@@ -167,7 +182,8 @@ namespace QdratNew.Services.RemedialTracks
                 PassPercent = head.PassPercent,
                 IssuedAtUtc = nowUtc,
                 AdminNote = includeNote ? head.AdminReportNote : null,
-                Axes = rows
+                Axes = rows,
+                Addenda = addenda
             };
         }
 

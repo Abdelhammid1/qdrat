@@ -342,6 +342,9 @@ namespace QdratNew.Tests.Integration
             {
                 $"DELETE FROM RemedialTrackExamAttemptQuestions WHERE AttemptId IN {atts}",
                 $"DELETE FROM RemedialTrackExamAttempts WHERE AxisProgressId IN {aps}",
+                // RTK-S13: الملاحق (تقدّم الطلاب ثم الملحق) قبل التسجيلات والأوامر — مع حارس غياب الجدول في قاعدة لم يُطبَّق عليها RTK_Addendum.sql
+                "IF OBJECT_ID(N'RemedialTrackAddendumProgresses', N'U') IS NOT NULL DELETE FROM RemedialTrackAddendumProgresses WHERE EnrollmentId IN (SELECT Id FROM RemedialTrackEnrollments WHERE TrackId IN (SELECT Id FROM RemedialTracks WHERE Code LIKE 'RTKS7-%'))",
+                "IF OBJECT_ID(N'RemedialTrackAddenda', N'U') IS NOT NULL DELETE FROM RemedialTrackAddenda WHERE PublicationId IN (SELECT Id FROM RemedialTrackPublications WHERE TrackId IN (SELECT Id FROM RemedialTracks WHERE Code LIKE 'RTKS7-%'))",
                 $"DELETE FROM RemedialTrackVideoProgresses WHERE AxisProgressId IN {aps}",
                 $"DELETE FROM RemedialTrackParentReports WHERE EnrollmentId IN {enr}",
                 $"DELETE FROM RemedialTrackEvents WHERE EnrollmentId IN {enr}",

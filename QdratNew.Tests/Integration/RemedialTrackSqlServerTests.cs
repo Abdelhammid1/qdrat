@@ -31,7 +31,10 @@ namespace QdratNew.Tests.Integration
             => new(new RtkRealDb.Factory(), TimeProvider.System, new RealTz(), NullLogger<RemedialTrackProgressService>.Instance);
 
         private static RemedialTrackExamService NewExams()
-            => new(new RtkRealDb.Factory(), TimeProvider.System, NewProgress(), NullLogger<RemedialTrackExamService>.Instance);
+            => new(new RtkRealDb.Factory(), TimeProvider.System, NewProgress(), NewAddenda(), NullLogger<RemedialTrackExamService>.Instance);
+
+        private static RemedialTrackAddendumStudentService NewAddenda()
+            => new(new RtkRealDb.Factory(), TimeProvider.System, new RealTz(), NullLogger<RemedialTrackAddendumStudentService>.Instance);
 
         public Task InitializeAsync() => RtkRealDb.IsConfigured ? RtkRealDb.CleanupAsync() : Task.CompletedTask;
 
