@@ -67,9 +67,12 @@ namespace QdratNew.Areas.Students.Controllers
             if (studentId == null)
                 return RedirectToAction("Login", "Account", new { area = "" });
 
+            // الاختبار لا يظهر للطالب قبل موعد الظهور المحدد وقت الإسناد (VisibleFrom == null = يظهر فورًا)
+            var now = DateTime.Now;
+
             var assignedDirectExamIds = await _context.MinistrySimExamAssignmentsToStudents
                 .AsNoTracking()
-                .Where(x => x.StudentId == studentId.Value)
+                .Where(x => x.StudentId == studentId.Value && (x.VisibleFrom == null || x.VisibleFrom <= now))
                 .Select(x => x.MinistrySimExamId)
                 .ToListAsync();
 
@@ -81,7 +84,7 @@ namespace QdratNew.Areas.Students.Controllers
 
             var assignedViaBatchExamIds = await _context.MinistrySimExamAssignmentsToBatches
                 .AsNoTracking()
-                .Where(x => EF.Constant(studentBatchIds).Contains(x.BatchId))
+                .Where(x => EF.Constant(studentBatchIds).Contains(x.BatchId) && (x.VisibleFrom == null || x.VisibleFrom <= now))
                 .Select(x => x.MinistrySimExamId)
                 .ToListAsync();
 

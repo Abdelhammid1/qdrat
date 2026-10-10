@@ -45,31 +45,65 @@ namespace QdratNew.Services.Exams.Implementations
                 return existingAttempt;
             }
 
-            var assignedDirectly = await _context.MinistrySimExamAssignmentsToStudents
+            // موعد الظهور: الإسناد الذي لم يحن موعده لا يُعدّ إسنادًا متاحًا بعد (VisibleFrom == null = متاح فورًا)
+            var now = DateTime.Now;
+            var hasUpcomingAssignment = false;
+
+            var directVisibleFrom = await _context.MinistrySimExamAssignmentsToStudents
                 .AsNoTracking()
-                .AnyAsync(x => x.MinistrySimExamId == ministrySimExamId && x.StudentId == studentId);
+                .Where(x => x.MinistrySimExamId == ministrySimExamId && x.StudentId == studentId)
+                .Select(x => new { x.VisibleFrom })
+                .FirstOrDefaultAsync();
+
+            var assignedDirectly = directVisibleFrom != null;
+            if (assignedDirectly && directVisibleFrom.VisibleFrom.HasValue && directVisibleFrom.VisibleFrom.Value > now)
+            {
+                assignedDirectly = false;
+                hasUpcomingAssignment = true;
+            }
 
             var assignedViaBatch = false;
             if (!assignedDirectly)
             {
-                var assignedBatchIds = await _context.MinistrySimExamAssignmentsToBatches
+                var assignedBatches = await _context.MinistrySimExamAssignmentsToBatches
                     .AsNoTracking()
                     .Where(x => x.MinistrySimExamId == ministrySimExamId)
-                    .Select(x => x.BatchId)
+                    .Select(x => new { x.BatchId, x.VisibleFrom })
                     .ToListAsync();
 
-                if (assignedBatchIds.Any())
+                var visibleBatchIds = assignedBatches
+                    .Where(x => x.VisibleFrom == null || x.VisibleFrom <= now)
+                    .Select(x => x.BatchId)
+                    .ToList();
+
+                if (visibleBatchIds.Any())
                 {
                     assignedViaBatch = await _context.StudentBatchEnrollments
                         .AsNoTracking()
                         .AnyAsync(e => e.StudentID == studentId
                                        && e.Status == "Active"
-                                       && EF.Constant(assignedBatchIds).Contains(e.BatchId));
+                                       && EF.Constant(visibleBatchIds).Contains(e.BatchId));
+                }
+
+                if (!assignedViaBatch && assignedBatches.Count > visibleBatchIds.Count)
+                {
+                    var upcomingBatchIds = assignedBatches
+                        .Where(x => x.VisibleFrom > now)
+                        .Select(x => x.BatchId)
+                        .ToList();
+
+                    hasUpcomingAssignment = hasUpcomingAssignment || await _context.StudentBatchEnrollments
+                        .AsNoTracking()
+                        .AnyAsync(e => e.StudentID == studentId
+                                       && e.Status == "Active"
+                                       && EF.Constant(upcomingBatchIds).Contains(e.BatchId));
                 }
             }
 
             if (!assignedDirectly && !assignedViaBatch)
-                throw new InvalidOperationException("هذا الاختبار غير مُسنَد إليك.");
+                throw new InvalidOperationException(hasUpcomingAssignment
+                    ? "هذا الاختبار لم يحن موعد ظهوره بعد."
+                    : "هذا الاختبار غير مُسنَد إليك.");
 
             var attempt = new MinistrySimExamStudentAttempt
             {

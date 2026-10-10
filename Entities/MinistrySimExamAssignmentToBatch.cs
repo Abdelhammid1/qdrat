@@ -26,5 +26,8 @@ namespace QdratNew.Entities
         // رمز واحد لكل سجل إسناد (= جلسة معمل واحدة تُعلَن شفهيًا لكل الحاضرين) وليس لكل طالب فرديًا.
         public bool IsOnline { get; set; } = true;
         public string? ReferenceCode { get; set; }
+
+        // موعد ظهور الاختبار لطلاب الدفعة في أريا الطالب (null = يظهر فورًا)
+        public DateTime? VisibleFrom { get; set; }
     }
 }

@@ -22,7 +22,7 @@ namespace QdratNew.Services.Exams.Implementations
         // E1: إسناد لدفعة/دفعات — يتطلب IsPublished == true (القرار الملزم بالقسم 8 من الملف التنفيذي).
         // يُسجَّل رابط دفعة واحد لكل دفعة، ثم تُسنَد الأسئلة تلقائيًا لكل طالب مسجَّل فعليًا (Status = Active) في هذه الدفعات
         // (يُستثنى: طالب مُسنَد له الاختبار فرديًا بالفعل، أو طالب لديه محاولة مسجَّلة أصلاً لهذا الاختبار — القرار #7 / E4).
-        public async Task<MinistrySimExamAssignmentResult> AssignToBatchesAsync(int ministrySimExamId, List<int> batchIds, int? createdByInstructorId, bool isOnline = true)
+        public async Task<MinistrySimExamAssignmentResult> AssignToBatchesAsync(int ministrySimExamId, List<int> batchIds, int? createdByInstructorId, bool isOnline = true, DateTime? visibleFrom = null)
         {
             var result = new MinistrySimExamAssignmentResult();
 
@@ -84,7 +84,8 @@ namespace QdratNew.Services.Exams.Implementations
                     IsSentToStudents = true,
                     CreatedByInstructorId = createdByInstructorId,
                     IsOnline = isOnline,
-                    ReferenceCode = generatedCode
+                    ReferenceCode = generatedCode,
+                    VisibleFrom = visibleFrom
                 }).ToList();
 
                 await _context.BulkInsertAsync(batchAssignments);
@@ -107,7 +108,7 @@ namespace QdratNew.Services.Exams.Implementations
             // ملاحظة تصميمية (Sprint 17): الصف الفردي لكل طالب مُسنَد عبر دفعة يحمل نفس IsOnline/ReferenceCode
             // لدفعته وقت إسنادها (وليس دفعته الحالية إن تغيّرت لاحقًا) — هذا يجعل MinistrySimExamAssignmentToStudent
             // مصدر الحقيقة الوحيد الذي تفحصه ValidateReferenceCodeAsync، بدل ازدواج الفحص بين جدولي الدفعة والطالب.
-            var assignedCount = await AssignStudentsInternalAsync(ministrySimExamId, enrolledStudentIds, "Batch", result.SkippedMessages, isOnline, generatedCode);
+            var assignedCount = await AssignStudentsInternalAsync(ministrySimExamId, enrolledStudentIds, "Batch", result.SkippedMessages, isOnline, generatedCode, visibleFrom);
             result.AssignedStudentsCount = assignedCount;
 
             result.Success = true;
@@ -116,7 +117,7 @@ namespace QdratNew.Services.Exams.Implementations
         }
 
         // E2: إسناد لطالب/طلاب محددين — يتطلب IsPublished == true، ويُقبل فقط الطلاب المسجَّلين فعليًا في دورة هذا الاختبار.
-        public async Task<MinistrySimExamAssignmentResult> AssignToStudentsAsync(int ministrySimExamId, List<int> studentIds, bool isOnline = true)
+        public async Task<MinistrySimExamAssignmentResult> AssignToStudentsAsync(int ministrySimExamId, List<int> studentIds, bool isOnline = true, DateTime? visibleFrom = null)
         {
             var result = new MinistrySimExamAssignmentResult();
 
@@ -164,7 +165,7 @@ namespace QdratNew.Services.Exams.Implementations
                 ? await GenerateReferenceCodeAsync(ministrySimExamId)
                 : null;
 
-            var assignedCount = await AssignStudentsInternalAsync(ministrySimExamId, validStudentIds, "Official", result.SkippedMessages, isOnline, generatedCode);
+            var assignedCount = await AssignStudentsInternalAsync(ministrySimExamId, validStudentIds, "Official", result.SkippedMessages, isOnline, generatedCode, visibleFrom);
             result.AssignedStudentsCount = assignedCount;
             result.GeneratedReferenceCode = assignedCount > 0 ? generatedCode : null;
 
@@ -244,7 +245,7 @@ namespace QdratNew.Services.Exams.Implementations
         // - طالب مُسنَد له الاختبار بالفعل (لا تكرار).
         // - طالب لديه محاولة مسجَّلة أصلاً لهذا الاختبار (القرار #7 / E4 — الفهرس الفريد من Sprint 1 هو الضامن النهائي،
         //   وهذا تحقق صريح إضافي عند الإسناد نفسه بدل ترك الخطأ يظهر لاحقًا عند بدء المحاولة).
-        private async Task<int> AssignStudentsInternalAsync(int ministrySimExamId, List<int> studentIds, string sourceType, List<string> skippedMessages, bool isOnline = true, string referenceCode = null)
+        private async Task<int> AssignStudentsInternalAsync(int ministrySimExamId, List<int> studentIds, string sourceType, List<string> skippedMessages, bool isOnline = true, string referenceCode = null, DateTime? visibleFrom = null)
         {
             if (studentIds == null || studentIds.Count == 0)
                 return 0;
@@ -281,7 +282,8 @@ namespace QdratNew.Services.Exams.Implementations
                 StudentId = studentId,
                 SourceType = sourceType,
                 IsOnline = isOnline,
-                ReferenceCode = referenceCode
+                ReferenceCode = referenceCode,
+                VisibleFrom = visibleFrom
             }).ToList();
 
             await _context.BulkInsertAsync(studentAssignments);

@@ -820,7 +820,8 @@ namespace QdratNew.Areas.Admin.Controllers
                     QuestionId = q.Id,
                     Title = q.Title,
                     CorrectAnswer = q.CorrectAnswer,
-                    DifficultyLevel = (int)q.Difficulty
+                    DifficultyLevel = (int)q.Difficulty,
+                    InternalNote = q.InternalNote
                 })
                 .ToListAsync();
 
@@ -906,7 +907,7 @@ namespace QdratNew.Areas.Admin.Controllers
         // Sprint 17 (MSE-J / J2): isOnline من Radio أونلاين/حضوري في الشاشة — حضوري يولّد رمزًا مرجعيًا يُعرض في Details بعد التحويل
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> AssignToBatch(int id, List<int> batchIds, bool isOnline = true)
+        public async Task<IActionResult> AssignToBatch(int id, List<int> batchIds, bool isOnline = true, DateTime? visibleFrom = null)
         {
             var courseId = await _context.MinistrySimExams
                 .AsNoTracking()
@@ -926,7 +927,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 .Select(icb => (int?)icb.InstructorId)
                 .FirstOrDefaultAsync();
 
-            var result = await _assignmentService.AssignToBatchesAsync(id, batchIds, instructorId, isOnline);
+            var result = await _assignmentService.AssignToBatchesAsync(id, batchIds, instructorId, isOnline, visibleFrom);
 
             TempData[result.Success ? "Success" : "Error"] = result.Message;
             if (result.SkippedMessages.Any())
@@ -1028,9 +1029,9 @@ namespace QdratNew.Areas.Admin.Controllers
         // Sprint 17 (MSE-J / J2): isOnline من Radio أونلاين/حضوري في الشاشة — حضوري يولّد رمزًا مرجعيًا يُعرض في Details بعد التحويل
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> AssignToStudent(int id, List<int> studentIds, bool isOnline = true)
+        public async Task<IActionResult> AssignToStudent(int id, List<int> studentIds, bool isOnline = true, DateTime? visibleFrom = null)
         {
-            var result = await _assignmentService.AssignToStudentsAsync(id, studentIds, isOnline);
+            var result = await _assignmentService.AssignToStudentsAsync(id, studentIds, isOnline, visibleFrom);
 
             TempData[result.Success ? "Success" : "Error"] = result.Message;
             if (result.SkippedMessages.Any())

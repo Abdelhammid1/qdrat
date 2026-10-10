@@ -1,161 +1,427 @@
 @model QdratNew.ViewModels.Exam.MinistrySimExamReplaceQuestionVm
 @using QdratNew.Helpers
+@using System.Text.RegularExpressions
 @{
     ViewData["Title"] = "استبدال سؤال";
+
+    string diffLabel = Model.DifficultyLevel switch
+    {
+        0 => "سهل",
+        1 => "متوسط",
+        2 => "صعب",
+        _ => "صعب جدًا"
+    };
+    var diffClass = Model.DifficultyLevel > 3 ? 3 : Model.DifficultyLevel;
+    var withNote = Model.Alternatives.Count(a => !string.IsNullOrWhiteSpace(a.InternalNote));
 }
 
-<link href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+@* === COMPONENT: ReplaceQuestionPage === *@
+@* Description: اختيار سؤال بديل من نفس المؤشر ونفس الصعوبة — لوحة السؤال الحالي + شبكة بدائل قابلة للبحث *@
 
 <style>
-    .qdrat-page { direction: rtl; text-align: right; }
+    /* ───── Tokens ───── */
+    .rq-page {
+        --rq-bg: #f4f7fb;
+        --rq-surface: #ffffff;
+        --rq-surface-2: #f8fafc;
+        --rq-border: #e2e8f0;
+        --rq-text: #0f172a;
+        --rq-muted: #64748b;
+        --rq-primary: #4f46e5;
+        --rq-primary-soft: #eef2ff;
+        --rq-accent: #0ea5e9;
+        --rq-success: #059669;
+        --rq-success-soft: #ecfdf5;
+        --rq-warn-soft: #fffbeb;
+        --rq-warn-border: #fcd34d;
+        --rq-warn-text: #92400e;
+        --rq-shadow: 0 10px 30px rgba(15, 23, 42, .07);
+        --rq-radius: 20px;
 
-    .qdrat-hero {
-        background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 48%, #2563eb 100%);
-        border-radius: 24px; padding: 28px; color: #fff; margin-bottom: 24px;
-        box-shadow: 0 18px 45px rgba(15, 23, 42, .18);
+        direction: rtl;
+        text-align: right;
+        background: var(--rq-bg);
+        color: var(--rq-text);
+        border-radius: 28px;
+        padding: 24px;
     }
 
-    .qdrat-card {
-        background: #fff; border: 1px solid #e5e7eb; border-radius: 22px;
-        box-shadow: 0 10px 30px rgba(15, 23, 42, .06); padding: 20px; margin-bottom: 18px;
+    /* Dark mode */
+    @@media (prefers-color-scheme: dark) {
+        .rq-page {
+            --rq-bg: #0b1220;
+            --rq-surface: #111a2e;
+            --rq-surface-2: #16213a;
+            --rq-border: #243252;
+            --rq-text: #e5ecf8;
+            --rq-muted: #93a4c3;
+            --rq-primary: #818cf8;
+            --rq-primary-soft: #1e2547;
+            --rq-success: #34d399;
+            --rq-success-soft: #0f2a24;
+            --rq-warn-soft: #2a2410;
+            --rq-warn-border: #6b5a1c;
+            --rq-warn-text: #fcd34d;
+            --rq-shadow: 0 10px 30px rgba(0, 0, 0, .4);
+        }
     }
 
-    .qdrat-empty { padding: 40px 20px; text-align: center; color: #64748b; }
+    /* ───── Hero ───── */
+    .rq-hero {
+        position: relative; overflow: hidden;
+        background: linear-gradient(135deg, #312e81 0%, #4f46e5 50%, #0ea5e9 100%);
+        border-radius: 24px; padding: 28px 30px; color: #fff; margin-bottom: 22px;
+        box-shadow: 0 18px 45px rgba(79, 70, 229, .28);
+    }
+    .rq-hero::before, .rq-hero::after {
+        content: ""; position: absolute; border-radius: 50%; background: rgba(255, 255, 255, .08);
+    }
+    .rq-hero::before { width: 260px; height: 260px; inset-inline-start: -70px; top: -110px; }
+    .rq-hero::after { width: 160px; height: 160px; inset-inline-end: 8%; bottom: -80px; }
+    .rq-hero-inner { position: relative; z-index: 1; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+    .rq-hero h3 { margin: 0 0 12px; font-weight: 900; font-size: 24px; }
+    .rq-crumbs { display: flex; flex-wrap: wrap; gap: 8px; }
+    .rq-crumb {
+        background: rgba(255, 255, 255, .16); border: 1px solid rgba(255, 255, 255, .28);
+        border-radius: 999px; padding: 5px 14px; font-size: 13px; font-weight: 700;
+    }
+    .rq-back {
+        background: #fff; color: #312e81; border-radius: 12px; padding: 8px 16px;
+        font-weight: 800; font-size: 13px; text-decoration: none; transition: transform .2s ease, box-shadow .2s ease;
+    }
+    .rq-back:hover { transform: translateY(-2px); box-shadow: 0 8px 18px rgba(0, 0, 0, .2); color: #312e81; }
 
-    .alt-note {
-        display: inline-block; background: #fffbeb; border: 1px dashed #fcd34d; color: #92400e;
-        border-radius: 10px; padding: 3px 10px; font-size: 12.5px; font-weight: 700;
+    /* ───── Layout ───── */
+    .rq-layout { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 22px; align-items: start; }
+    .rq-aside { position: sticky; top: 16px; }
+
+    .rq-card {
+        background: var(--rq-surface); border: 1px solid var(--rq-border);
+        border-radius: var(--rq-radius); box-shadow: var(--rq-shadow); overflow: hidden;
+    }
+    .rq-card-head {
+        padding: 14px 18px; background: var(--rq-surface-2); border-bottom: 1px solid var(--rq-border);
+        display: flex; align-items: center; justify-content: space-between; gap: 10px; font-weight: 900;
+    }
+    .rq-card-body { padding: 18px; }
+
+    /* ───── Current question ───── */
+    .rq-current-tag {
+        display: inline-flex; align-items: center; gap: 6px; background: var(--rq-primary-soft);
+        color: var(--rq-primary); border-radius: 999px; padding: 3px 12px; font-size: 12px; font-weight: 800;
+    }
+    .rq-current-title {
+        margin-top: 12px; line-height: 1.9; max-height: 210px; overflow: auto; font-size: 15px;
+    }
+    .rq-current-title img, .rq-current-title svg { max-width: 100%; height: auto; }
+    .rq-facts { display: grid; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--rq-border); }
+    .rq-fact { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
+    .rq-fact span:first-child { color: var(--rq-muted); font-weight: 700; }
+    .rq-fact span:last-child { font-weight: 800; text-align: left; }
+    .rq-rule {
+        margin-top: 14px; background: var(--rq-success-soft); color: var(--rq-success);
+        border-radius: 12px; padding: 10px 12px; font-size: 12.5px; font-weight: 700; line-height: 1.7;
+    }
+
+    /* ───── Buttons ───── */
+    .rq-btn {
+        display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;
+        border: 1px solid transparent; border-radius: 12px; padding: 8px 14px; font-size: 13px; font-weight: 800;
+        transition: transform .2s ease, box-shadow .2s ease, background .2s ease; font-family: inherit;
+    }
+    .rq-btn:focus-visible { outline: 3px solid var(--rq-accent); outline-offset: 2px; }
+    .rq-btn:active { transform: scale(.97); }
+    .rq-btn-ghost { background: var(--rq-surface); border-color: var(--rq-border); color: var(--rq-text); }
+    .rq-btn-ghost:hover { border-color: var(--rq-primary); color: var(--rq-primary); }
+    .rq-btn-primary { background: var(--rq-primary); color: #fff; }
+    .rq-btn-primary:hover { box-shadow: 0 8px 18px rgba(79, 70, 229, .35); transform: translateY(-1px); }
+    .rq-btn-block { width: 100%; margin-top: 14px; }
+    .rq-btn[disabled] { opacity: .6; cursor: progress; }
+
+    /* ───── Toolbar ───── */
+    .rq-toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+    .rq-search-wrap { position: relative; flex: 1; min-width: 240px; }
+    .rq-search-wrap i { position: absolute; inset-inline-start: 14px; top: 50%; transform: translateY(-50%); color: var(--rq-muted); }
+    .rq-search {
+        width: 100%; background: var(--rq-surface); color: var(--rq-text); border: 1px solid var(--rq-border);
+        border-radius: 14px; padding: 11px 14px 11px 14px; padding-inline-start: 40px; font-size: 14px; font-family: inherit;
+        transition: border-color .2s ease, box-shadow .2s ease;
+    }
+    .rq-search:focus { outline: none; border-color: var(--rq-primary); box-shadow: 0 0 0 4px var(--rq-primary-soft); }
+    .rq-toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--rq-muted); cursor: pointer; }
+    .rq-count { font-size: 13px; font-weight: 800; color: var(--rq-muted); }
+
+    /* ───── Alternatives grid ───── */
+    .rq-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+    .rq-alt {
+        background: var(--rq-surface); border: 1px solid var(--rq-border); border-radius: var(--rq-radius);
+        box-shadow: var(--rq-shadow); display: flex; flex-direction: column; overflow: hidden;
+        transition: transform .25s ease, border-color .25s ease;
+    }
+    .rq-alt:hover { transform: translateY(-3px); border-color: var(--rq-primary); }
+    .rq-alt.is-hidden { display: none; }
+    .rq-alt-body { padding: 16px 18px; flex: 1; }
+    .rq-alt-title { position: relative; max-height: 96px; overflow: hidden; line-height: 1.9; font-size: 14.5px; }
+    .rq-alt-title::after {
+        content: ""; position: absolute; inset-inline: 0; bottom: 0; height: 28px;
+        background: linear-gradient(180deg, transparent, var(--rq-surface));
+    }
+    .rq-alt-title img, .rq-alt-title svg { max-height: 70px; max-width: 100%; }
+    .rq-alt-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
+    .rq-pill { border-radius: 999px; padding: 3px 11px; font-size: 12px; font-weight: 800; background: var(--rq-surface-2); color: var(--rq-muted); border: 1px solid var(--rq-border); }
+    .rq-pill-ok { background: var(--rq-success-soft); color: var(--rq-success); border-color: transparent; }
+    .rq-note {
+        margin-top: 10px; background: var(--rq-warn-soft); border: 1px dashed var(--rq-warn-border);
+        color: var(--rq-warn-text); border-radius: 12px; padding: 7px 11px; font-size: 12.5px; font-weight: 700; line-height: 1.7;
+    }
+    .rq-alt-foot { display: flex; gap: 8px; padding: 12px 18px; background: var(--rq-surface-2); border-top: 1px solid var(--rq-border); }
+    .rq-alt-foot .rq-btn { flex: 1; }
+
+    .rq-more { display: flex; justify-content: center; margin-top: 18px; }
+    .rq-empty { padding: 56px 20px; text-align: center; color: var(--rq-muted); }
+    .rq-empty i { font-size: 38px; }
+
+    mark.rq-hit { background: #fde68a; color: #111827; border-radius: 4px; padding: 0 2px; }
+
+    @@media (max-width: 992px) {
+        .rq-layout { grid-template-columns: 1fr; }
+        .rq-aside { position: static; }
+    }
+    @@media (max-width: 576px) {
+        .rq-page { padding: 14px; border-radius: 18px; }
+        .rq-hero { padding: 20px; }
+        .rq-grid { grid-template-columns: 1fr; }
+    }
+    @@media (prefers-reduced-motion: reduce) {
+        .rq-page * { transition: none !important; }
     }
 </style>
 
-<div class="container-fluid py-4 qdrat-page">
-    <div class="qdrat-hero">
-        <h3 class="mb-1"><i class="bi bi-arrow-repeat ms-2"></i> استبدال سؤال</h3>
-        <p class="mb-0" style="opacity:.9">المؤشر: @Model.LessonTitle — المحور: @Model.SectionTitle — الترتيب داخل القسم: #@Model.StageOrder</p>
-    </div>
+<div class="container-fluid py-3">
+    <div class="rq-page" id="rqPage" data-stage-question-id="@Model.StageQuestionId">
 
-    <div class="alert alert-info d-flex justify-content-between align-items-start gap-3 flex-wrap">
-        <div>
-            <strong>السؤال الحالي:</strong> @Html.Raw(NumberHelper.ToIndicNumbersSafe(Model.OldTitle))
-            <div class="small mt-2">البدائل المعروضة من نفس المؤشر (<strong>@Model.LessonTitle</strong>) ونفس مستوى الصعوبة فقط.</div>
-        </div>
-        <button type="button" class="btn btn-outline-primary btn-sm flex-shrink-0" onclick="msePreviewQuestion('@Model.OldQuestionId')">
-            <i class="bi bi-eye ms-1"></i> معاينة الحالي
-        </button>
-    </div>
-
-    <form id="antiForm">@Html.AntiForgeryToken()</form>
-
-    <div class="qdrat-card">
-        @if (!Model.Alternatives.Any())
-        {
-            <div class="qdrat-empty">
-                <i class="bi bi-inbox" style="font-size:28px"></i>
-                <p class="mb-0 mt-2">لا توجد بدائل متاحة من نفس المؤشر ونفس مستوى الصعوبة حاليًا.</p>
+        <header class="rq-hero">
+            <div class="rq-hero-inner">
+                <div>
+                    <h3><i class="bi bi-arrow-repeat ms-2"></i> استبدال سؤال</h3>
+                    <div class="rq-crumbs">
+                        <span class="rq-crumb"><i class="bi bi-diagram-3 ms-1"></i> المحور: @Model.SectionTitle</span>
+                        <span class="rq-crumb"><i class="bi bi-bullseye ms-1"></i> المؤشر: @Model.LessonTitle</span>
+                        <span class="rq-crumb"><i class="bi bi-speedometer2 ms-1"></i> @diffLabel</span>
+                        <span class="rq-crumb"><i class="bi bi-hash ms-1"></i> الترتيب داخل القسم: @Model.StageOrder</span>
+                    </div>
+                </div>
+                <a class="rq-back" href="@Url.Action("ReviewStage", "MinistrySimExam", new { area = "Admin", stageId = Model.StageId })">
+                    <i class="bi bi-arrow-right ms-1"></i> رجوع لمراجعة القسم
+                </a>
             </div>
-        }
-        else
-        {
-            <table id="altTable" class="table table-striped table-bordered text-center">
-                <thead>
-                    <tr>
-                        <th>نص السؤال</th>
-                        <th>صح</th>
-                        <th>اللمحة</th>
-                        <th>إجراء</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var q in Model.Alternatives)
-                    {
-                        <tr>
-                            <td class="text-start">@Html.Raw(NumberHelper.ToIndicNumbersSafe(q.Title))</td>
-                            <td>@Html.Raw(NumberHelper.ToIndicNumbersSafe(q.CorrectAnswer))</td>
-                            @* data-search يحمل النص الكامل اللمحة ليكون البحث فعالًا حتى لو كان المعروض مختصرًا *@
-                            <td data-search="@q.InternalNote">
-                                @if (string.IsNullOrWhiteSpace(q.InternalNote))
-                                {
-                                    <span class="text-muted">—</span>
-                                }
-                                else
-                                {
-                                    <span class="alt-note" title="@q.InternalNote">@(q.InternalNote.Length > 36 ? q.InternalNote.Substring(0, 36) + "..." : q.InternalNote)</span>
-                                }
-                            </td>
-                            <td class="text-nowrap">
-                                <button type="button" class="btn btn-primary btn-sm" onclick="msePreviewQuestion('@q.QuestionId')">
-                                    <i class="bi bi-eye"></i> معاينة
-                                </button>
-                                <button type="button" class="btn btn-outline-primary btn-sm"
-                                        onclick="confirmReplace('@Model.StageQuestionId', '@q.QuestionId')">
-                                    <i class="bi bi-arrow-repeat"></i> استبدال
-                                </button>
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        }
+        </header>
+
+        <form id="antiForm">@Html.AntiForgeryToken()</form>
+
+        <div class="rq-layout">
+
+            <aside class="rq-aside" aria-label="السؤال الحالي">
+                <div class="rq-card">
+                    <div class="rq-card-head">
+                        <span><i class="bi bi-bookmark-check ms-1"></i> السؤال الحالي</span>
+                        <span class="rq-current-tag">#@Model.StageOrder</span>
+                    </div>
+                    <div class="rq-card-body">
+                        <div class="rq-current-title">@Html.Raw(NumberHelper.ToIndicNumbersSafe(Model.OldTitle))</div>
+
+                        <div class="rq-facts">
+                            <div class="rq-fact"><span>المحور</span><span>@Model.SectionTitle</span></div>
+                            <div class="rq-fact"><span>المؤشر</span><span>@Model.LessonTitle</span></div>
+                            <div class="rq-fact"><span>الصعوبة</span><span>@diffLabel</span></div>
+                            <div class="rq-fact"><span>البدائل المتاحة</span><span>@Model.Alternatives.Count</span></div>
+                        </div>
+
+                        <div class="rq-rule">
+                            <i class="bi bi-shield-check ms-1"></i>
+                            تُعرض فقط أسئلة من نفس المؤشر ونفس مستوى الصعوبة، وغير المستخدمة في هذا القسم، للحفاظ على اكتمال العدد المطلوب.
+                        </div>
+
+                        <button type="button" class="rq-btn rq-btn-ghost rq-btn-block" data-preview="@Model.OldQuestionId">
+                            <i class="bi bi-eye"></i> معاينة السؤال الحالي
+                        </button>
+                    </div>
+                </div>
+            </aside>
+
+            <section aria-label="الأسئلة البديلة">
+                @if (!Model.Alternatives.Any())
+                {
+                    <div class="rq-card">
+                        <div class="rq-empty">
+                            <i class="bi bi-inbox"></i>
+                            <p class="mb-0 mt-3">لا توجد بدائل متاحة من نفس المؤشر ونفس مستوى الصعوبة حاليًا.</p>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="rq-toolbar">
+                        <div class="rq-search-wrap">
+                            <i class="bi bi-search"></i>
+                            <input type="search" id="rqSearch" class="rq-search"
+                                   placeholder="ابحث في نص السؤال أو الإجابة أو اللمحة..." aria-label="بحث في البدائل" />
+                        </div>
+                        <label class="rq-toggle">
+                            <input type="checkbox" id="rqOnlyNotes" />
+                            بها لمحة فقط (@withNote)
+                        </label>
+                        <span class="rq-count"><span id="rqVisible">@Model.Alternatives.Count</span> / @Model.Alternatives.Count</span>
+                    </div>
+
+                    <div class="rq-grid" id="rqGrid">
+                        @foreach (var q in Model.Alternatives)
+                        {
+                            var plain = Regex.Replace(q.Title ?? "", "<[^>]*>", " ");
+                            var searchText = (plain + " " + Regex.Replace(q.CorrectAnswer ?? "", "<[^>]*>", " ") + " " + q.InternalNote).ToLowerInvariant();
+                            var hasNote = !string.IsNullOrWhiteSpace(q.InternalNote);
+
+                            <article class="rq-alt" data-search="@searchText" data-note="@(hasNote ? "1" : "0")">
+                                <div class="rq-alt-body">
+                                    <div class="rq-alt-title">@Html.Raw(NumberHelper.ToIndicNumbersSafe(q.Title))</div>
+                                    <div class="rq-alt-meta">
+                                        <span class="rq-pill rq-pill-ok"><i class="bi bi-check2-circle ms-1"></i> الصحيحة: @Html.Raw(NumberHelper.ToIndicNumbersSafe(q.CorrectAnswer))</span>
+                                    </div>
+                                    @if (hasNote)
+                                    {
+                                        <div class="rq-note"><i class="bi bi-lightbulb ms-1"></i> @q.InternalNote</div>
+                                    }
+                                </div>
+                                <div class="rq-alt-foot">
+                                    <button type="button" class="rq-btn rq-btn-ghost" data-preview="@q.QuestionId">
+                                        <i class="bi bi-eye"></i> معاينة
+                                    </button>
+                                    <button type="button" class="rq-btn rq-btn-primary" data-replace="@q.QuestionId">
+                                        <i class="bi bi-arrow-repeat"></i> استبدال
+                                    </button>
+                                </div>
+                            </article>
+                        }
+                    </div>
+
+                    <div class="rq-card rq-empty" id="rqNoResults" hidden>
+                        <i class="bi bi-search"></i>
+                        <p class="mb-0 mt-3">لا توجد بدائل مطابقة للبحث.</p>
+                    </div>
+
+                    <div class="rq-more">
+                        <button type="button" class="rq-btn rq-btn-ghost" id="rqMore" hidden>
+                            <i class="bi bi-chevron-down"></i> عرض المزيد
+                        </button>
+                    </div>
+                }
+            </section>
+        </div>
     </div>
 </div>
 
 @await Html.PartialAsync("_QuestionPreviewModalPartial")
 
 @section Scripts {
-<script src="https://code.jquery.com/jquery-3.7.0.js"></script>
-<script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
-    @if (Model.Alternatives.Any())
-    {
-        <text>
-        new DataTable('#altTable', {
-            language: { url: '//cdn.datatables.net/plug-ins/1.13.4/i18n/ar.json' }
-        });
-        </text>
-    }
+    (function () {
+        var PAGE_SIZE = 24;
+        var page = document.getElementById('rqPage');
+        var cards = Array.prototype.slice.call(document.querySelectorAll('#rqGrid .rq-alt'));
+        var search = document.getElementById('rqSearch');
+        var onlyNotes = document.getElementById('rqOnlyNotes');
+        var moreBtn = document.getElementById('rqMore');
+        var shown = PAGE_SIZE;
 
-    function confirmReplace(stageQuestionId, newQuestionId) {
-        Swal.fire({
-            title: "تأكيد الاستبدال؟",
-            text: "سيتم استبدال السؤال بالسؤال الجديد.",
-            icon: "warning",
-            showCancelButton: true,
-            confirmButtonText: "نعم",
-            cancelButtonText: "إلغاء"
-        }).then(function (result) {
-            if (!result.isConfirmed) return;
+        // ── بحث + فلتر + "عرض المزيد" (بدون إعادة تحميل) ──
+        function render() {
+            if (!search) return;
+            var term = (search.value || '').trim().toLowerCase();
+            var matched = 0, visible = 0;
 
-            var token = document.querySelector('#antiForm input[name="__RequestVerificationToken"]').value;
-            var formData = new FormData();
-            formData.append("stageQuestionId", stageQuestionId);
-            formData.append("newQuestionId", newQuestionId);
-
-            fetch('@Url.Action("ReplaceQuestionConfirm", "MinistrySimExam", new { area = "Admin" })', {
-                method: "POST",
-                headers: { "RequestVerificationToken": token },
-                body: formData
-            })
-            .then(function (r) { return r.json(); })
-            .then(function (data) {
-                if (data.success) {
-                    Swal.fire({
-                        icon: "success",
-                        title: "تم الاستبدال بنجاح",
-                        timer: 1500,
-                        showConfirmButton: false
-                    }).then(function () {
-                        window.location.href = '@Url.Action("ReviewStage", "MinistrySimExam", new { area = "Admin", stageId = Model.StageId })';
-                    });
-                } else {
-                    Swal.fire("خطأ", data.message || "تعذّر الاستبدال.", "error");
-                }
-            })
-            .catch(function () {
-                Swal.fire("خطأ", "تعذّر الاتصال بالخادم — حاول مرة أخرى.", "error");
+            cards.forEach(function (card) {
+                var ok = (!term || (card.dataset.search || '').indexOf(term) !== -1)
+                      && (!onlyNotes.checked || card.dataset.note === '1');
+                if (ok) matched++;
+                var show = ok && matched <= shown;
+                card.classList.toggle('is-hidden', !show);
+                if (show) visible++;
             });
+
+            document.getElementById('rqVisible').textContent = matched;
+            document.getElementById('rqNoResults').hidden = matched !== 0;
+            moreBtn.hidden = matched <= shown;
+        }
+
+        if (search) {
+            search.addEventListener('input', function () { shown = PAGE_SIZE; render(); });
+            onlyNotes.addEventListener('change', function () { shown = PAGE_SIZE; render(); });
+            moreBtn.addEventListener('click', function () { shown += PAGE_SIZE; render(); });
+            render();
+        }
+
+        // ── تفويض الأحداث: معاينة / استبدال (ربط واحد فقط) ──
+        page.addEventListener('click', function (e) {
+            var previewBtn = e.target.closest('[data-preview]');
+            if (previewBtn) {
+                msePreviewQuestion(previewBtn.getAttribute('data-preview'));
+                return;
+            }
+
+            var replaceBtn = e.target.closest('[data-replace]');
+            if (replaceBtn) {
+                confirmReplace(replaceBtn);
+            }
         });
-    }
+
+        function confirmReplace(btn) {
+            var newQuestionId = btn.getAttribute('data-replace');
+
+            Swal.fire({
+                title: "تأكيد الاستبدال؟",
+                text: "سيتم استبدال السؤال بالسؤال الجديد.",
+                icon: "warning",
+                showCancelButton: true,
+                confirmButtonText: "نعم",
+                cancelButtonText: "إلغاء"
+            }).then(function (result) {
+                if (!result.isConfirmed) return;
+
+                var token = document.querySelector('#antiForm input[name="__RequestVerificationToken"]').value;
+                var formData = new FormData();
+                formData.append("stageQuestionId", page.dataset.stageQuestionId);
+                formData.append("newQuestionId", newQuestionId);
+
+                var original = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> جارٍ الاستبدال...';
+
+                fetch('@Url.Action("ReplaceQuestionConfirm", "MinistrySimExam", new { area = "Admin" })', {
+                    method: "POST",
+                    headers: { "RequestVerificationToken": token },
+                    body: formData
+                })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data.success) {
+                        Swal.fire({ icon: "success", title: "تم الاستبدال بنجاح", timer: 1500, showConfirmButton: false })
+                            .then(function () {
+                                window.location.href = '@Url.Action("ReviewStage", "MinistrySimExam", new { area = "Admin", stageId = Model.StageId })';
+                            });
+                    } else {
+                        btn.disabled = false;
+                        btn.innerHTML = original;
+                        Swal.fire("خطأ", data.message || "تعذّر الاستبدال.", "error");
+                    }
+                })
+                .catch(function () {
+                    btn.disabled = false;
+                    btn.innerHTML = original;
+                    Swal.fire("خطأ", "تعذّر الاتصال بالخادم — حاول مرة أخرى.", "error");
+                });
+            });
+        }
+    })();
 </script>
 }

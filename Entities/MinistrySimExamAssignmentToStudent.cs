@@ -22,5 +22,8 @@ namespace QdratNew.Entities
         // Sprint 17 (MSE-J / J1): أونلاين (فتح مباشر) أو حضوري (يلزم رمزًا مرجعيًا من الأدمن في المعمل).
         public bool IsOnline { get; set; } = true;
         public string? ReferenceCode { get; set; }
+
+        // موعد ظهور الاختبار للطالب في أريا الطالب (null = يظهر فورًا)
+        public DateTime? VisibleFrom { get; set; }
     }
 }
