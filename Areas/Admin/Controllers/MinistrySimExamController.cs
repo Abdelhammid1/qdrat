@@ -534,10 +534,32 @@ namespace QdratNew.Areas.Admin.Controllers
                     Title = q.Question.Title,
                     CorrectAnswer = q.Question.CorrectAnswer,
                     DifficultyLevel = (int)q.Question.Difficulty,
+                    LessonId = q.Question.LessonId,
                     LessonTitle = q.Question.Lesson.Title,
-                    SectionTitle = q.Question.Lesson.Section.Title
+                    SectionTitle = q.Question.Lesson.Section.Title,
+                    InternalNote = q.Question.InternalNote
                 })
                 .ToListAsync();
+
+            // عدد البدائل المتاحة لكل (مؤشر، صعوبة) — استعلام واحد (NOT EXISTS) بدون Contains/OPENJSON وبدون استعلام لكل سؤال
+            var alternativeCounts = await _context.Questions
+                .AsNoTracking()
+                .Where(q => q.IsReviewed && !q.IsRejected && q.CorrectAnswer != null
+                            && _context.MinistrySimExamStageIndicatorSelections.Any(x =>
+                                   x.MinistrySimExamStageId == stageId && x.LessonId == q.LessonId && x.Difficulty == q.Difficulty)
+                            && !_context.MinistrySimExamStageQuestions.Any(sq =>
+                                   sq.MinistrySimExamStageId == stageId && sq.QuestionId == q.Id))
+                .GroupBy(q => new { q.LessonId, q.Difficulty })
+                .Select(g => new { g.Key.LessonId, g.Key.Difficulty, Count = g.Count() })
+                .ToListAsync();
+
+            foreach (var item in questions)
+            {
+                item.AlternativesAvailable = alternativeCounts
+                    .Where(a => a.LessonId == item.LessonId && (int)a.Difficulty == item.DifficultyLevel)
+                    .Select(a => a.Count)
+                    .FirstOrDefault();
+            }
 
             // Sprint 7 (MSE-D / D3-D4): حالة كل مؤشر (مطلوب مقابل فعلي) لعرض أزرار "إعادة توليد"/"إضافة يدوية" عند النقص
             var indicatorSelections = await _context.MinistrySimExamStageIndicatorSelections
@@ -636,7 +658,8 @@ namespace QdratNew.Areas.Admin.Controllers
                     QuestionId = q.Id,
                     Title = q.Title,
                     CorrectAnswer = q.CorrectAnswer,
-                    DifficultyLevel = (int)q.Difficulty
+                    DifficultyLevel = (int)q.Difficulty,
+                    InternalNote = q.InternalNote
                 })
                 .ToListAsync();
 
@@ -655,6 +678,30 @@ namespace QdratNew.Areas.Admin.Controllers
             };
 
             return View(vm);
+        }
+
+        // معاينة سؤال داخل Modal بنفس شكل السؤال (نص + مقارنات + صور + خيارات) عبر نفس البارشال المعتمد في بنك الأسئلة
+        [HttpGet]
+        public async Task<IActionResult> PreviewQuestion(Guid questionId)
+        {
+            var question = await _context.Questions
+                .AsNoTracking()
+                .Include(q => q.Options)
+                .Include(q => q.VerbalPassage)
+                .Include(q => q.Curriculum)
+                .Include(q => q.Lesson).ThenInclude(l => l.Section)
+                .FirstOrDefaultAsync(q => q.Id == questionId);
+
+            if (question == null)
+                return NotFound("❌ لم يتم العثور على السؤال.");
+
+            var model = question.ToDisplayModel();
+            model.IsRTL = question.Curriculum?.IsRTL ?? true;
+
+            while (model.Options.Count < 4)
+                model.Options.Add(new QdratNew.ViewModels.Question.QuestionOptionDisplayViewModel { Text = string.Empty, ImageUrl = string.Empty });
+
+            return PartialView("~/Views/Shared/_QuestionPreviewPartial.cshtml", model);
         }
 
         // Sprint 6 (MSE-D / D2): يستبدل السؤال بتحديث QuestionId على نفس رابط MinistrySimExamStageQuestion —

@@ -42,8 +42,15 @@ namespace QdratNew.ViewModels.Exam
         public string Title { get; set; }
         public string CorrectAnswer { get; set; }
         public int DifficultyLevel { get; set; }
+        public int LessonId { get; set; }
         public string LessonTitle { get; set; }
         public string SectionTitle { get; set; }
+
+        // اللمحة (الملاحظة الداخلية) كما في بنك الأسئلة
+        public string? InternalNote { get; set; }
+
+        // عدد البدائل المتاحة من نفس المؤشر ونفس الصعوبة (غير مستخدمة في المرحلة) — يحدد حالة زر الاستبدال
+        public int AlternativesAvailable { get; set; }
     }
 
     // Sprint 6 (MSE-D / D2): شاشة استبدال سؤال — بدائل من نفس المؤشر (Lesson) ونفس الصعوبة بالضبط
@@ -69,6 +76,9 @@ namespace QdratNew.ViewModels.Exam
         public string Title { get; set; }
         public string CorrectAnswer { get; set; }
         public int DifficultyLevel { get; set; }
+
+        // اللمحة (الملاحظة الداخلية) كما في بنك الأسئلة
+        public string? InternalNote { get; set; }
     }
 
     // Sprint 7 (MSE-D / D4): شاشة اختيار سؤال لإضافته يدويًا لمؤشر ناقص ضمن مرحلة — مرشحون من نفس Lesson+Difficulty فقط

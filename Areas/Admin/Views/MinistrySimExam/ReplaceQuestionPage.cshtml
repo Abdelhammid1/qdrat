@@ -21,6 +21,11 @@
     }
 
     .qdrat-empty { padding: 40px 20px; text-align: center; color: #64748b; }
+
+    .alt-note {
+        display: inline-block; background: #fffbeb; border: 1px dashed #fcd34d; color: #92400e;
+        border-radius: 10px; padding: 3px 10px; font-size: 12.5px; font-weight: 700;
+    }
 </style>
 
 <div class="container-fluid py-4 qdrat-page">
@@ -29,8 +34,14 @@
         <p class="mb-0" style="opacity:.9">المؤشر: @Model.LessonTitle — المحور: @Model.SectionTitle — الترتيب داخل القسم: #@Model.StageOrder</p>
     </div>
 
-    <div class="alert alert-info">
-        <strong>السؤال الحالي:</strong> @Html.Raw(NumberHelper.ToIndicNumbersSafe(Model.OldTitle))
+    <div class="alert alert-info d-flex justify-content-between align-items-start gap-3 flex-wrap">
+        <div>
+            <strong>السؤال الحالي:</strong> @Html.Raw(NumberHelper.ToIndicNumbersSafe(Model.OldTitle))
+            <div class="small mt-2">البدائل المعروضة من نفس المؤشر (<strong>@Model.LessonTitle</strong>) ونفس مستوى الصعوبة فقط.</div>
+        </div>
+        <button type="button" class="btn btn-outline-primary btn-sm flex-shrink-0" onclick="msePreviewQuestion('@Model.OldQuestionId')">
+            <i class="bi bi-eye ms-1"></i> معاينة الحالي
+        </button>
     </div>
 
     <form id="antiForm">@Html.AntiForgeryToken()</form>
@@ -50,6 +61,7 @@
                     <tr>
                         <th>نص السؤال</th>
                         <th>صح</th>
+                        <th>اللمحة</th>
                         <th>إجراء</th>
                     </tr>
                 </thead>
@@ -59,7 +71,21 @@
                         <tr>
                             <td class="text-start">@Html.Raw(NumberHelper.ToIndicNumbersSafe(q.Title))</td>
                             <td>@Html.Raw(NumberHelper.ToIndicNumbersSafe(q.CorrectAnswer))</td>
-                            <td>
+                            @* data-search يحمل النص الكامل اللمحة ليكون البحث فعالًا حتى لو كان المعروض مختصرًا *@
+                            <td data-search="@q.InternalNote">
+                                @if (string.IsNullOrWhiteSpace(q.InternalNote))
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                                else
+                                {
+                                    <span class="alt-note" title="@q.InternalNote">@(q.InternalNote.Length > 36 ? q.InternalNote.Substring(0, 36) + "..." : q.InternalNote)</span>
+                                }
+                            </td>
+                            <td class="text-nowrap">
+                                <button type="button" class="btn btn-primary btn-sm" onclick="msePreviewQuestion('@q.QuestionId')">
+                                    <i class="bi bi-eye"></i> معاينة
+                                </button>
                                 <button type="button" class="btn btn-outline-primary btn-sm"
                                         onclick="confirmReplace('@Model.StageQuestionId', '@q.QuestionId')">
                                     <i class="bi bi-arrow-repeat"></i> استبدال
@@ -72,6 +98,8 @@
         }
     </div>
 </div>
+
+@await Html.PartialAsync("_QuestionPreviewModalPartial")
 
 @section Scripts {
 <script src="https://code.jquery.com/jquery-3.7.0.js"></script>
