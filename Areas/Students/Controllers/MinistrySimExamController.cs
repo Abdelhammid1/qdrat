@@ -188,12 +188,27 @@ namespace QdratNew.Areas.Students.Controllers
 
             if (stage == null)
             {
-                TempData["ErrorMessage"] = "لم يتم العثور على هذه المرحلة ضمن الاختبار.";
+                TempData["ErrorMessage"] = "لم يتم العثور على هذا القسم ضمن الاختبار.";
                 return RedirectToAction("Index", "Dashboard");
             }
 
-            vm.QuantSectionTitle = stage.QuantSection?.Title ?? "المحور الكمي";
-            vm.VerbalSectionTitle = stage.VerbalSection?.Title ?? "المحور اللفظي";
+            // قد يضم الفرع الواحد أكثر من محور (محاور إضافية)؛ تُعرض كلها بالأساسي أولاً
+            var axisTitleRows = await _context.MinistrySimExamStageIndicatorSelections
+                .AsNoTracking()
+                .Where(sel => sel.MinistrySimExamStageId == stage.Id)
+                .Select(sel => new { sel.IsQuant, Title = sel.Section.Title })
+                .Distinct()
+                .ToListAsync();
+
+            string JoinTitles(bool isQuant, string primary)
+            {
+                var titles = axisTitleRows.Where(r => r.IsQuant == isQuant).Select(r => r.Title).Distinct()
+                    .OrderBy(t => t == primary ? 0 : 1).ToList();
+                return titles.Count > 1 ? string.Join(" + ", titles) : primary;
+            }
+
+            vm.QuantSectionTitle = JoinTitles(true, stage.QuantSection?.Title ?? "المحور الكمي");
+            vm.VerbalSectionTitle = JoinTitles(false, stage.VerbalSection?.Title ?? "المحور اللفظي");
             vm.QuantQuestionCount = stage.QuantQuestionCount;
             vm.VerbalQuestionCount = stage.VerbalQuestionCount;
             vm.DurationMinutes = stage.DurationMinutes;
@@ -304,7 +319,7 @@ namespace QdratNew.Areas.Students.Controllers
 
             if (progress == null)
             {
-                TempData["ErrorMessage"] = "يجب بدء هذه المرحلة أولاً من شاشة الترحيب.";
+                TempData["ErrorMessage"] = "يجب بدء هذا القسم أولاً من شاشة الترحيب.";
                 return RedirectToAction("Welcome", new { examId });
             }
 
@@ -321,7 +336,7 @@ namespace QdratNew.Areas.Students.Controllers
 
             var vm = await BuildSolveViewModelAsync(examId, attempt.Id, stageNumber, q);
             if (vm == null)
-                return NotFound("⚠️ لا توجد أسئلة في هذه المرحلة.");
+                return NotFound("⚠️ لا توجد أسئلة في هذا القسم.");
 
             var stage = await _context.MinistrySimExamStages
                 .AsNoTracking()
@@ -365,7 +380,7 @@ namespace QdratNew.Areas.Students.Controllers
             if (realStage == null || realStage.MinistrySimExamId != examId || realStage.StageNumber != stageNumber
                 || realStage.QuestionId != currentQuestionId)
             {
-                TempData["ErrorMessage"] = "طلب غير صالح — بيانات السؤال لا تطابق المرحلة الحالية.";
+                TempData["ErrorMessage"] = "طلب غير صالح — بيانات السؤال لا تطابق القسم الحالي.";
                 return RedirectToAction("Welcome", new { examId });
             }
 
@@ -387,7 +402,7 @@ namespace QdratNew.Areas.Students.Controllers
             {
                 if (!Guid.TryParse(nav.Substring("review:".Length), out var targetId) || !orderedIds.Contains(targetId))
                 {
-                    TempData["ErrorMessage"] = "يمكن مراجعة أسئلة المرحلة الحالية فقط.";
+                    TempData["ErrorMessage"] = "يمكن مراجعة أسئلة القسم الحالي فقط.";
                     return RedirectToAction("Solve", new { examId, stageNumber, q = currentQuestionId });
                 }
 
@@ -517,7 +532,7 @@ namespace QdratNew.Areas.Students.Controllers
                     return RedirectToAction("Welcome", new { examId });
 
                 case MinistrySimExamResultStatus.NotCompleted:
-                    TempData["ErrorMessage"] = "لم تُتم مراحل هذا الاختبار بعد.";
+                    TempData["ErrorMessage"] = "لم تُتم أقسام هذا الاختبار بعد.";
                     return RedirectToAction("Welcome", new { examId });
 
                 case MinistrySimExamResultStatus.ExamNotFound:
@@ -548,11 +563,11 @@ namespace QdratNew.Areas.Students.Controllers
                     return RedirectToAction("Welcome", new { examId });
 
                 case MinistrySimExamQuestionReviewStatus.NotCompleted:
-                    TempData["ErrorMessage"] = "لم تُتم مراحل هذا الاختبار بعد.";
+                    TempData["ErrorMessage"] = "لم تُتم أقسام هذا الاختبار بعد.";
                     return RedirectToAction("Welcome", new { examId });
 
                 case MinistrySimExamQuestionReviewStatus.StageNotFound:
-                    return NotFound("❌ لم يتم العثور على مرحلة اختبار معمل القياس المطلوبة.");
+                    return NotFound("❌ لم يتم العثور على قسم اختبار معمل القياس المطلوب.");
 
                 default:
                     return View(lookup.Vm);

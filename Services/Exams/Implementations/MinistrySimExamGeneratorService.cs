@@ -42,26 +42,28 @@ namespace QdratNew.Services.Exams.Implementations
                 .FirstOrDefaultAsync(s => s.Id == stageId);
 
             if (stage == null)
-                throw new InvalidOperationException("لم يتم العثور على مرحلة اختبار معمل القياس المطلوبة.");
+                throw new InvalidOperationException("لم يتم العثور على قسم اختبار معمل القياس المطلوب.");
 
-            var quantSectionTitle = await _context.Sections
-                .AsNoTracking()
-                .Where(s => s.Id == stage.QuantSectionId)
-                .Select(s => s.Title)
-                .FirstOrDefaultAsync() ?? "المحور الكمي";
+            // عناوين كل المحاور المعنيّة (الأساسي + الإضافية) في استعلام واحد
+            var sectionIds = quantSelections.Concat(verbalSelections)
+                .Select(s => s.SectionId)
+                .Concat(new[] { stage.QuantSectionId, stage.VerbalSectionId })
+                .Where(id => id > 0)
+                .Distinct()
+                .ToList();
 
-            var verbalSectionTitle = await _context.Sections
+            var sectionTitles = await _context.Sections
                 .AsNoTracking()
-                .Where(s => s.Id == stage.VerbalSectionId)
-                .Select(s => s.Title)
-                .FirstOrDefaultAsync() ?? "المحور اللفظي";
+                .Where(s => EF.Constant(sectionIds).Contains(s.Id))
+                .Select(s => new { s.Id, s.Title })
+                .ToDictionaryAsync(s => s.Id, s => s.Title);
 
             var result = new MinistrySimExamGenerationResult { IsSuccess = true };
             var newStageQuestions = new List<MinistrySimExamStageQuestion>();
             var usedThisCall = new HashSet<Guid>(excludeQuestionIds);
 
-            await SelectAxisQuestionsAsync(stage, quantSelections, stage.QuantSectionId, quantSectionTitle, isQuant: true, newStageQuestions, usedThisCall, result);
-            await SelectAxisQuestionsAsync(stage, verbalSelections, stage.VerbalSectionId, verbalSectionTitle, isQuant: false, newStageQuestions, usedThisCall, result);
+            await SelectAxisQuestionsAsync(stage, quantSelections, stage.QuantSectionId, sectionTitles, "المحور الكمي", isQuant: true, newStageQuestions, usedThisCall, result);
+            await SelectAxisQuestionsAsync(stage, verbalSelections, stage.VerbalSectionId, sectionTitles, "المحور اللفظي", isQuant: false, newStageQuestions, usedThisCall, result);
 
             // إعادة البناء الكاملة لأسئلة المرحلة (لا دمج جزئي عند الضغط على "بناء الأسئلة" مجددًا)
             var oldQuestions = await _context.MinistrySimExamStageQuestions
@@ -90,8 +92,9 @@ namespace QdratNew.Services.Exams.Implementations
         private async Task SelectAxisQuestionsAsync(
             MinistrySimExamStage stage,
             List<IndicatorSelectionInput> selections,
-            int sectionId,
-            string sectionTitle,
+            int primarySectionId,
+            Dictionary<int, string> sectionTitles,
+            string fallbackSectionTitle,
             bool isQuant,
             List<MinistrySimExamStageQuestion> newStageQuestions,
             HashSet<Guid> usedThisCall,
@@ -151,7 +154,11 @@ namespace QdratNew.Services.Exams.Implementations
                     });
                 }
 
-                UpsertIndicatorSelection(existingSelections, stage.Id, sectionId, sel);
+                // SectionId == 0 → المحور الأساسي للفرع؛ غير ذلك = محور إضافي داخل نفس الفرع
+                var sectionId = sel.SectionId > 0 ? sel.SectionId : primarySectionId;
+                var sectionTitle = sectionTitles.TryGetValue(sectionId, out var title) ? title : fallbackSectionTitle;
+
+                UpsertIndicatorSelection(existingSelections, stage.Id, sectionId, isQuant, sel);
 
                 if (take.Count < sel.RequestedCount)
                 {
@@ -160,7 +167,7 @@ namespace QdratNew.Services.Exams.Implementations
 
                     result.IsSuccess = false;
                     result.ShortfallMessages.Add(
-                        $"المرحلة {stage.StageNumber} - المحور «{sectionTitle}» - المؤشر «{lessonTitle}» - صعوبة {DifficultyArabic(sel.Difficulty)}: " +
+                        $"{QdratNew.Helpers.SectionNameHelper.Name(stage.StageNumber)} - المحور «{sectionTitle}» - المؤشر «{lessonTitle}» - صعوبة {DifficultyArabic(sel.Difficulty)}: " +
                         $"مطلوب {sel.RequestedCount} سؤال وناقص {shortfall} (المتاح فعليًا في البنك {take.Count}).");
                 }
             }
@@ -170,6 +177,7 @@ namespace QdratNew.Services.Exams.Implementations
             List<MinistrySimExamStageIndicatorSelection> existingSelections,
             int stageId,
             int sectionId,
+            bool isQuant,
             IndicatorSelectionInput sel)
         {
             var existing = existingSelections.FirstOrDefault(x => x.LessonId == sel.LessonId && x.Difficulty == sel.Difficulty);
@@ -180,6 +188,7 @@ namespace QdratNew.Services.Exams.Implementations
                 {
                     MinistrySimExamStageId = stageId,
                     SectionId = sectionId,
+                    IsQuant = isQuant,
                     LessonId = sel.LessonId,
                     Difficulty = sel.Difficulty,
                     RequestedCount = sel.RequestedCount
@@ -190,6 +199,7 @@ namespace QdratNew.Services.Exams.Implementations
             else
             {
                 existing.SectionId = sectionId;
+                existing.IsQuant = isQuant;
                 existing.RequestedCount = sel.RequestedCount;
             }
         }
@@ -266,7 +276,7 @@ namespace QdratNew.Services.Exams.Implementations
             {
                 result.IsValid = false;
                 result.ShortfallMessages.Add(
-                    $"الاختبار يحتوي على {stages.Count} مرحلة فقط من أصل {exam.TotalStages} مرحلة مطلوبة — أكمل بناء كل المراحل قبل النشر.");
+                    $"الاختبار يحتوي على {stages.Count} قسمًا فقط من أصل {exam.TotalStages} قسمًا مطلوبًا — أكمل بناء كل الأقسام قبل النشر.");
                 return result;
             }
 
@@ -281,6 +291,25 @@ namespace QdratNew.Services.Exams.Implementations
                 .Select(g => new { g.Key.MinistrySimExamStageId, g.Key.IsQuant, Count = g.Count() })
                 .ToListAsync();
 
+            // عناوين كل محاور كل فرع (الأساسي + الإضافية) لعرضها في رسائل النقص — استعلام واحد
+            var axisTitleRows = await _context.MinistrySimExamStageIndicatorSelections
+                .AsNoTracking()
+                .Where(sel => sel.MinistrySimExamStage.MinistrySimExamId == ministrySimExamId)
+                .Select(sel => new { sel.MinistrySimExamStageId, sel.IsQuant, Title = sel.Section.Title })
+                .Distinct()
+                .ToListAsync();
+
+            string AxisTitles(int stageId, bool isQuant, string primaryTitle)
+            {
+                var titles = axisTitleRows
+                    .Where(r => r.MinistrySimExamStageId == stageId && r.IsQuant == isQuant)
+                    .Select(r => r.Title)
+                    .Distinct()
+                    .OrderBy(t => t == primaryTitle ? 0 : 1)
+                    .ToList();
+                return titles.Count > 1 ? string.Join(" + ", titles) : primaryTitle;
+            }
+
             foreach (var stage in stages)
             {
                 var quantActual = axisCounts.FirstOrDefault(a => a.MinistrySimExamStageId == stage.Id && a.IsQuant)?.Count ?? 0;
@@ -290,14 +319,14 @@ namespace QdratNew.Services.Exams.Implementations
                 {
                     result.IsValid = false;
                     result.ShortfallMessages.Add(
-                        $"المرحلة {stage.StageNumber} - المحور «{stage.QuantSectionTitle}» (كمي): مطلوب {stage.QuantQuestionCount} سؤال والموجود فعليًا {quantActual}.");
+                        $"{QdratNew.Helpers.SectionNameHelper.Name(stage.StageNumber)} - المحور «{AxisTitles(stage.Id, true, stage.QuantSectionTitle)}» (كمي): مطلوب {stage.QuantQuestionCount} سؤال والموجود فعليًا {quantActual}.");
                 }
 
                 if (verbalActual != stage.VerbalQuestionCount)
                 {
                     result.IsValid = false;
                     result.ShortfallMessages.Add(
-                        $"المرحلة {stage.StageNumber} - المحور «{stage.VerbalSectionTitle}» (لفظي): مطلوب {stage.VerbalQuestionCount} سؤال والموجود فعليًا {verbalActual}.");
+                        $"{QdratNew.Helpers.SectionNameHelper.Name(stage.StageNumber)} - المحور «{AxisTitles(stage.Id, false, stage.VerbalSectionTitle)}» (لفظي): مطلوب {stage.VerbalQuestionCount} سؤال والموجود فعليًا {verbalActual}.");
                 }
             }
 
@@ -339,13 +368,13 @@ namespace QdratNew.Services.Exams.Implementations
                 if (actual < sel.RequestedCount)
                 {
                     result.ShortfallMessages.Add(
-                        $"المرحلة {stageNumber} - المؤشر «{sel.LessonTitle}» - صعوبة {DifficultyArabic(sel.Difficulty)}: " +
+                        $"{QdratNew.Helpers.SectionNameHelper.Name(stageNumber)} - المؤشر «{sel.LessonTitle}» - صعوبة {DifficultyArabic(sel.Difficulty)}: " +
                         $"مطلوب {sel.RequestedCount} وناقص {sel.RequestedCount - actual} (الموجود فعليًا {actual}).");
                 }
                 else
                 {
                     result.ShortfallMessages.Add(
-                        $"المرحلة {stageNumber} - المؤشر «{sel.LessonTitle}» - صعوبة {DifficultyArabic(sel.Difficulty)}: " +
+                        $"{QdratNew.Helpers.SectionNameHelper.Name(stageNumber)} - المؤشر «{sel.LessonTitle}» - صعوبة {DifficultyArabic(sel.Difficulty)}: " +
                         $"مطلوب {sel.RequestedCount} فقط لكن الموجود فعليًا {actual} (زيادة {actual - sel.RequestedCount} عن المطلوب).");
                 }
             }
@@ -362,7 +391,7 @@ namespace QdratNew.Services.Exams.Implementations
                 .FirstOrDefaultAsync(q => q.Id == stageQuestionId);
 
             if (link == null)
-                throw new InvalidOperationException("لم يتم العثور على السؤال المطلوب استبعاده من هذه المرحلة.");
+                throw new InvalidOperationException("لم يتم العثور على السؤال المطلوب استبعاده من هذا القسم.");
 
             var stageId = link.MinistrySimExamStageId;
             var ministrySimExamId = await _context.MinistrySimExamStages
@@ -388,14 +417,14 @@ namespace QdratNew.Services.Exams.Implementations
                 .FirstOrDefaultAsync(s => s.Id == stageId);
 
             if (stage == null)
-                throw new InvalidOperationException("لم يتم العثور على مرحلة اختبار معمل القياس المطلوبة.");
+                throw new InvalidOperationException("لم يتم العثور على قسم اختبار معمل القياس المطلوب.");
 
             var selection = await _context.MinistrySimExamStageIndicatorSelections
                 .AsNoTracking()
                 .FirstOrDefaultAsync(x => x.MinistrySimExamStageId == stageId && x.LessonId == lessonId && x.Difficulty == difficulty);
 
             if (selection == null)
-                throw new InvalidOperationException("لم يتم العثور على اختيار هذا المؤشر بهذه الصعوبة ضمن هذه المرحلة.");
+                throw new InvalidOperationException("لم يتم العثور على اختيار هذا المؤشر بهذه الصعوبة ضمن هذا القسم.");
 
             var lessonTitle = await _context.Lessons
                 .AsNoTracking()
@@ -403,7 +432,7 @@ namespace QdratNew.Services.Exams.Implementations
                 .Select(l => l.Title)
                 .FirstOrDefaultAsync() ?? $"مؤشر #{lessonId}";
 
-            var isQuant = selection.SectionId == stage.QuantSectionId;
+            var isQuant = selection.IsQuant;
             var sectionTitle = await _context.Sections
                 .AsNoTracking()
                 .Where(s => s.Id == selection.SectionId)
@@ -475,7 +504,7 @@ namespace QdratNew.Services.Exams.Implementations
             {
                 var shortfall = selection.RequestedCount - picked.Count;
                 result.ShortfallMessages.Add(
-                    $"المرحلة {stage.StageNumber} - المحور «{sectionTitle}» - المؤشر «{lessonTitle}» - صعوبة {DifficultyArabic(difficulty)}: " +
+                    $"{QdratNew.Helpers.SectionNameHelper.Name(stage.StageNumber)} - المحور «{sectionTitle}» - المؤشر «{lessonTitle}» - صعوبة {DifficultyArabic(difficulty)}: " +
                     $"مطلوب {selection.RequestedCount} سؤال وناقص {shortfall} (المتاح فعليًا في البنك {picked.Count}).");
             }
 
@@ -491,7 +520,7 @@ namespace QdratNew.Services.Exams.Implementations
                 .FirstOrDefaultAsync(s => s.Id == stageId);
 
             if (stage == null)
-                return new MinistrySimExamManualAddResult { Success = false, Message = "لم يتم العثور على مرحلة اختبار معمل القياس المطلوبة." };
+                return new MinistrySimExamManualAddResult { Success = false, Message = "لم يتم العثور على قسم اختبار معمل القياس المطلوب." };
 
             var question = await _context.Questions
                 .AsNoTracking()
@@ -508,16 +537,16 @@ namespace QdratNew.Services.Exams.Implementations
                 .AnyAsync(q => q.MinistrySimExamStageId == stageId && q.QuestionId == questionId);
 
             if (alreadyUsed)
-                return new MinistrySimExamManualAddResult { Success = false, Message = "هذا السؤال مستخدم بالفعل داخل نفس المرحلة." };
+                return new MinistrySimExamManualAddResult { Success = false, Message = "هذا السؤال مستخدم بالفعل داخل نفس القسم." };
 
             var selection = await _context.MinistrySimExamStageIndicatorSelections
                 .AsNoTracking()
                 .FirstOrDefaultAsync(x => x.MinistrySimExamStageId == stageId && x.LessonId == lessonId && x.Difficulty == difficulty);
 
             if (selection == null)
-                return new MinistrySimExamManualAddResult { Success = false, Message = "لا يوجد اختيار مسجَّل لهذا المؤشر بهذه الصعوبة ضمن هذه المرحلة." };
+                return new MinistrySimExamManualAddResult { Success = false, Message = "لا يوجد اختيار مسجَّل لهذا المؤشر بهذه الصعوبة ضمن هذا القسم." };
 
-            var isQuant = selection.SectionId == stage.QuantSectionId;
+            var isQuant = selection.IsQuant;
 
             var currentMaxOrder = await _context.MinistrySimExamStageQuestions
                 .Where(q => q.MinistrySimExamStageId == stageId)

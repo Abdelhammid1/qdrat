@@ -13,6 +13,8 @@ namespace QdratNew.Entities
         public int SectionId { get; set; } // المحور (كمي أو لفظي حسب المرحلة)
         public virtual Section Section { get; set; }
 
+        public bool IsQuant { get; set; } // true = محور كمي، false = لفظي (يسمح بتعدد المحاور داخل كل فرع في القسم الواحد)
+
         public int LessonId { get; set; } // المؤشر
         public virtual Lesson Lesson { get; set; }
 

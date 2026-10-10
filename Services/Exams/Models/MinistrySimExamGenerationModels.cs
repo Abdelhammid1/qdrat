@@ -7,6 +7,8 @@ namespace QdratNew.Services.Exams.Models
     // مدخل اختيار مؤشر واحد (Lesson) بصعوبة معينة أثناء توليد أسئلة مرحلة
     public class IndicatorSelectionInput
     {
+        // 0 = المحور الأساسي للفرع (QuantSectionId/VerbalSectionId) — أي قيمة أخرى = محور إضافي داخل نفس الفرع
+        public int SectionId { get; set; }
         public int LessonId { get; set; }
         public DifficultyLevel Difficulty { get; set; }
         public int RequestedCount { get; set; }

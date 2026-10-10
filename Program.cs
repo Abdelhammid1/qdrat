@@ -1288,7 +1288,12 @@ else
 app.UseHttpsRedirection();
 
 // ⚡ يجب أن يسبق UseStaticFiles حتى يضغط أيضاً استجابات الملفات الثابتة
-app.UseResponseCompression();
+// في بيئة التطوير فقط: حقن Browser Link/Browser Refresh يعدّل جسم الاستجابة المضغوطة فيتلفها
+// (ERR_CONTENT_DECODING_FAILED → صفحة بيضاء)، لذلك يُعطَّل الضغط محلياً ويبقى فعّالاً في الإنتاج.
+if (!app.Environment.IsDevelopment())
+{
+    app.UseResponseCompression();
+}
 
 app.UseStaticFiles();
 

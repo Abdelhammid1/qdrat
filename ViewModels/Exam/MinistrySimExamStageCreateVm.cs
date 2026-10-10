@@ -48,8 +48,8 @@ namespace QdratNew.ViewModels.Exam
         [Display(Name = "عدد أسئلة المحور اللفظي")]
         public int VerbalQuestionCount { get; set; } = 13;
 
-        [Range(1, 180, ErrorMessage = "مدة المرحلة غير صالحة")]
-        [Display(Name = "مدة المرحلة (دقيقة)")]
+        [Range(1, 180, ErrorMessage = "مدة القسم غير صالحة")]
+        [Display(Name = "مدة القسم (دقيقة)")]
         public int DurationMinutes { get; set; } = 26;
 
         // Sprint 5 (MSE-C / C4): اختيارات المؤشرات (Lesson/Difficulty/العدد) المُرسَلة من قائمة المؤشرات الحية لكل محور
@@ -60,6 +60,8 @@ namespace QdratNew.ViewModels.Exam
     // Sprint 5 (MSE-C / C4): مدخل مؤشر واحد (LessonId + Difficulty + العدد المطلوب) قادم من نموذج البناء
     public class MinistrySimExamStageIndicatorInputVm
     {
+        // المحور الذي ينتمي له المؤشر (0 = المحور الأساسي للفرع)
+        public int SectionId { get; set; }
         public int LessonId { get; set; }
         public DifficultyLevel Difficulty { get; set; }
         public int RequestedCount { get; set; }

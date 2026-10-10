@@ -125,20 +125,67 @@ namespace QdratNew.Areas.Admin.Controllers
             _logger.LogWarning("MSE Create POST diagnostic — bound vm.Stages.Count = {Count}", vm.Stages?.Count ?? -1);
 
             if (vm.Stages == null || vm.Stages.Count != 5)
-                ModelState.AddModelError(string.Empty, "يجب تحديد كل المراحل الخمس بالكامل.");
+                ModelState.AddModelError(string.Empty, "يجب تحديد كل الأقسام الخمس بالكامل.");
+
+            // المحاور المسموحة لكل فرع + انتماء كل مؤشر لمحوره (يمنع إرسال محور/مؤشر من خارج الدورة أو من الفرع الخطأ)
+            await PopulateSectionsAsync(vm);
+            var allowedQuantSections = vm.QuantSections.Select(s => int.Parse(s.Value)).ToHashSet();
+            var allowedVerbalSections = vm.VerbalSections.Select(s => int.Parse(s.Value)).ToHashSet();
+
+            var submittedLessonIds = (vm.Stages ?? new List<MinistrySimExamStageCreateVm>())
+                .SelectMany(s => (s.QuantIndicators ?? new()).Concat(s.VerbalIndicators ?? new()))
+                .Select(x => x.LessonId)
+                .Distinct()
+                .ToList();
+
+            var lessonSectionById = await _context.Lessons
+                .AsNoTracking()
+                .Where(l => EF.Constant(submittedLessonIds).Contains(l.Id))
+                .Select(l => new { l.Id, l.SectionId })
+                .ToDictionaryAsync(l => l.Id, l => l.SectionId);
 
             foreach (var stage in vm.Stages ?? new List<MinistrySimExamStageCreateVm>())
             {
+                var stageName = QdratNew.Helpers.SectionNameHelper.Name(stage.StageNumber);
+
+                if (!allowedQuantSections.Contains(stage.QuantSectionId))
+                    ModelState.AddModelError(string.Empty, $"{stageName}: المحور الكمي المختار غير صالح لهذه الدورة.");
+                if (!allowedVerbalSections.Contains(stage.VerbalSectionId))
+                    ModelState.AddModelError(string.Empty, $"{stageName}: المحور اللفظي المختار غير صالح لهذه الدورة.");
+
+                var branches = new[]
+                {
+                    (Items: stage.QuantIndicators, Primary: stage.QuantSectionId, Allowed: allowedQuantSections, Label: "الكمي"),
+                    (Items: stage.VerbalIndicators, Primary: stage.VerbalSectionId, Allowed: allowedVerbalSections, Label: "اللفظي")
+                };
+
+                foreach (var branch in branches)
+                {
+                    foreach (var item in branch.Items ?? new List<MinistrySimExamStageIndicatorInputVm>())
+                    {
+                        if (item.RequestedCount <= 0) continue;
+
+                        var sectionId = item.SectionId > 0 ? item.SectionId : branch.Primary;
+                        if (!branch.Allowed.Contains(sectionId)
+                            || !lessonSectionById.TryGetValue(item.LessonId, out var lessonSectionId)
+                            || lessonSectionId != sectionId)
+                        {
+                            ModelState.AddModelError(string.Empty, $"{stageName}: توجد مؤشرات لا تتبع المحور {branch.Label} المختار.");
+                            break;
+                        }
+                    }
+                }
+
                 var quantSum = stage.QuantIndicators?.Sum(x => x.RequestedCount) ?? 0;
                 var verbalSum = stage.VerbalIndicators?.Sum(x => x.RequestedCount) ?? 0;
 
                 if (quantSum != stage.QuantQuestionCount)
                     ModelState.AddModelError(string.Empty,
-                        $"المرحلة {stage.StageNumber}: مجموع أسئلة المؤشرات الكمية المختارة ({quantSum}) لا يطابق العدد المطلوب ({stage.QuantQuestionCount}).");
+                        $"{QdratNew.Helpers.SectionNameHelper.Name(stage.StageNumber)}: مجموع أسئلة المؤشرات الكمية المختارة ({quantSum}) لا يطابق العدد المطلوب ({stage.QuantQuestionCount}).");
 
                 if (verbalSum != stage.VerbalQuestionCount)
                     ModelState.AddModelError(string.Empty,
-                        $"المرحلة {stage.StageNumber}: مجموع أسئلة المؤشرات اللفظية المختارة ({verbalSum}) لا يطابق العدد المطلوب ({stage.VerbalQuestionCount}).");
+                        $"{QdratNew.Helpers.SectionNameHelper.Name(stage.StageNumber)}: مجموع أسئلة المؤشرات اللفظية المختارة ({verbalSum}) لا يطابق العدد المطلوب ({stage.VerbalQuestionCount}).");
             }
 
             if (!ModelState.IsValid)
@@ -156,7 +203,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
                 TempData["Error"] = errors.Any()
                     ? string.Join("\n", errors)
-                    : "تحقق من البيانات المدخلة: بعض الحقول ناقصة أو عدد المؤشرات المختارة لا يطابق العدد المطلوب لمرحلة ما.";
+                    : "تحقق من البيانات المدخلة: بعض الحقول ناقصة أو عدد المؤشرات المختارة لا يطابق العدد المطلوب لقسم ما.";
                 return View(vm);
             }
 
@@ -215,12 +262,12 @@ namespace QdratNew.Areas.Admin.Controllers
 
                 var quantSelections = (stageVm.QuantIndicators ?? new List<MinistrySimExamStageIndicatorInputVm>())
                     .Where(x => x.RequestedCount > 0)
-                    .Select(x => new IndicatorSelectionInput { LessonId = x.LessonId, Difficulty = x.Difficulty, RequestedCount = x.RequestedCount })
+                    .Select(x => new IndicatorSelectionInput { SectionId = x.SectionId, LessonId = x.LessonId, Difficulty = x.Difficulty, RequestedCount = x.RequestedCount })
                     .ToList();
 
                 var verbalSelections = (stageVm.VerbalIndicators ?? new List<MinistrySimExamStageIndicatorInputVm>())
                     .Where(x => x.RequestedCount > 0)
-                    .Select(x => new IndicatorSelectionInput { LessonId = x.LessonId, Difficulty = x.Difficulty, RequestedCount = x.RequestedCount })
+                    .Select(x => new IndicatorSelectionInput { SectionId = x.SectionId, LessonId = x.LessonId, Difficulty = x.Difficulty, RequestedCount = x.RequestedCount })
                     .ToList();
 
                 // النواقص هنا (إن وجدت) لا تمنع الحفظ كمسودة (ADR-MSE-3) — تُعرض لاحقًا في شاشة Details
@@ -280,6 +327,12 @@ namespace QdratNew.Areas.Admin.Controllers
                 .ToList();
         }
 
+        private static string JoinAxisTitles(IEnumerable<string> titles, string primaryTitle)
+        {
+            var list = titles.Distinct().OrderBy(t => t == primaryTitle ? 0 : 1).ToList();
+            return list.Count > 1 ? string.Join(" + ", list) : primaryTitle;
+        }
+
         // Sprint 5 (MSE-C / C4): شاشة حالة المسودة — يعود إليها الأدمن لاحقًا لمتابعة الاكتمال أو النشر
         [HttpGet]
         public async Task<IActionResult> Details(int id)
@@ -309,6 +362,20 @@ namespace QdratNew.Areas.Admin.Controllers
                     DurationMinutes = s.DurationMinutes
                 })
                 .ToListAsync();
+
+            // محاور إضافية داخل الفرع الواحد: تُعرض كل العناوين مفصولة بـ « + » (الأساسي أولاً)
+            var axisTitleRows = await _context.MinistrySimExamStageIndicatorSelections
+                .AsNoTracking()
+                .Where(sel => sel.MinistrySimExamStage.MinistrySimExamId == id)
+                .Select(sel => new { sel.MinistrySimExamStageId, sel.IsQuant, Title = sel.Section.Title })
+                .Distinct()
+                .ToListAsync();
+
+            foreach (var st in stages)
+            {
+                st.QuantSectionTitle = JoinAxisTitles(axisTitleRows.Where(r => r.MinistrySimExamStageId == st.StageId && r.IsQuant).Select(r => r.Title), st.QuantSectionTitle);
+                st.VerbalSectionTitle = JoinAxisTitles(axisTitleRows.Where(r => r.MinistrySimExamStageId == st.StageId && !r.IsQuant).Select(r => r.Title), st.VerbalSectionTitle);
+            }
 
             var validation = await _generatorService.ValidateExactCountsAsync(id);
 
@@ -429,7 +496,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 .FirstOrDefaultAsync(s => s.Id == stageId);
 
             if (stage == null)
-                return NotFound("❌ لم يتم العثور على مرحلة اختبار معمل القياس المطلوبة.");
+                return NotFound("❌ لم يتم العثور على قسم اختبار معمل القياس المطلوب.");
 
             var quantSectionTitle = await _context.Sections
                 .AsNoTracking()
@@ -442,6 +509,15 @@ namespace QdratNew.Areas.Admin.Controllers
                 .Where(s => s.Id == stage.VerbalSectionId)
                 .Select(s => s.Title)
                 .FirstOrDefaultAsync() ?? "—";
+
+            var axisTitleRows = await _context.MinistrySimExamStageIndicatorSelections
+                .AsNoTracking()
+                .Where(sel => sel.MinistrySimExamStageId == stageId)
+                .Select(sel => new { sel.IsQuant, Title = sel.Section.Title })
+                .Distinct()
+                .ToListAsync();
+            quantSectionTitle = JoinAxisTitles(axisTitleRows.Where(r => r.IsQuant).Select(r => r.Title), quantSectionTitle);
+            verbalSectionTitle = JoinAxisTitles(axisTitleRows.Where(r => !r.IsQuant).Select(r => r.Title), verbalSectionTitle);
 
             var questions = await _context.MinistrySimExamStageQuestions
                 .AsNoTracking()
@@ -467,7 +543,7 @@ namespace QdratNew.Areas.Admin.Controllers
             var indicatorSelections = await _context.MinistrySimExamStageIndicatorSelections
                 .AsNoTracking()
                 .Where(x => x.MinistrySimExamStageId == stageId)
-                .Select(x => new { x.SectionId, x.LessonId, x.Difficulty, x.RequestedCount, LessonTitle = x.Lesson.Title })
+                .Select(x => new { x.SectionId, x.IsQuant, x.LessonId, x.Difficulty, x.RequestedCount, LessonTitle = x.Lesson.Title })
                 .ToListAsync();
 
             var indicatorActualCounts = await (
@@ -483,7 +559,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 {
                     LessonId = sel.LessonId,
                     LessonTitle = sel.LessonTitle,
-                    IsQuant = sel.SectionId == stage.QuantSectionId,
+                    IsQuant = sel.IsQuant,
                     DifficultyLevel = (int)sel.Difficulty,
                     RequestedCount = sel.RequestedCount,
                     ActualCount = indicatorActualCounts
@@ -522,7 +598,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 .FirstOrDefaultAsync(q => q.Id == stageQuestionId);
 
             if (link == null)
-                return NotFound("❌ لم يتم العثور على السؤال المطلوب داخل هذه المرحلة.");
+                return NotFound("❌ لم يتم العثور على السؤال المطلوب داخل هذا القسم.");
 
             var ministrySimExamId = await _context.MinistrySimExamStages
                 .AsNoTracking()
@@ -614,7 +690,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 .AnyAsync(q => q.MinistrySimExamStageId == link.MinistrySimExamStageId && q.QuestionId == newQuestionId);
 
             if (alreadyUsedInStage)
-                return Json(new { success = false, message = "هذا السؤال مستخدم بالفعل داخل نفس المرحلة." });
+                return Json(new { success = false, message = "هذا السؤال مستخدم بالفعل داخل نفس القسم." });
 
             link.QuestionId = newQuestionId;
             link.IsManuallySelected = true;
@@ -667,7 +743,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 .FirstOrDefaultAsync(s => s.Id == stageId);
 
             if (stage == null)
-                return NotFound("❌ لم يتم العثور على مرحلة اختبار معمل القياس المطلوبة.");
+                return NotFound("❌ لم يتم العثور على قسم اختبار معمل القياس المطلوب.");
 
             var lesson = await _context.Lessons
                 .AsNoTracking()
@@ -1004,7 +1080,7 @@ namespace QdratNew.Areas.Admin.Controllers
                     return RedirectToAction(nameof(SelectStudentForResult), new { id });
 
                 case MinistrySimExamResultStatus.NotCompleted:
-                    TempData["Error"] = "لم يُتم هذا الطالب مراحل الاختبار بعد.";
+                    TempData["Error"] = "لم يُتم هذا الطالب أقسام الاختبار بعد.";
                     return RedirectToAction(nameof(SelectStudentForResult), new { id });
 
                 default:
@@ -1021,14 +1097,14 @@ namespace QdratNew.Areas.Admin.Controllers
             switch (lookup.Status)
             {
                 case MinistrySimExamQuestionReviewStatus.StageNotFound:
-                    return NotFound("❌ لم يتم العثور على مرحلة اختبار معمل القياس المطلوبة.");
+                    return NotFound("❌ لم يتم العثور على قسم اختبار معمل القياس المطلوب.");
 
                 case MinistrySimExamQuestionReviewStatus.AttemptNotFound:
                     TempData["Error"] = "لا توجد محاولة مسجَّلة لهذا الطالب في هذا الاختبار.";
                     return RedirectToAction(nameof(SelectStudentForResult), new { id });
 
                 case MinistrySimExamQuestionReviewStatus.NotCompleted:
-                    TempData["Error"] = "لم يُتم هذا الطالب مراحل الاختبار بعد.";
+                    TempData["Error"] = "لم يُتم هذا الطالب أقسام الاختبار بعد.";
                     return RedirectToAction(nameof(SelectStudentForResult), new { id });
 
                 default:
@@ -1076,7 +1152,7 @@ namespace QdratNew.Areas.Admin.Controllers
                     return RedirectToAction(nameof(SelectStudentForResult), new { id = examId });
 
                 case MinistrySimExamResultStatus.NotCompleted:
-                    TempData["Error"] = "لم يُتم هذا الطالب مراحل الاختبار بعد.";
+                    TempData["Error"] = "لم يُتم هذا الطالب أقسام الاختبار بعد.";
                     return RedirectToAction(nameof(SelectStudentForResult), new { id = examId });
             }
 

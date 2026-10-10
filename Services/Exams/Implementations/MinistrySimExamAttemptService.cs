@@ -104,20 +104,20 @@ namespace QdratNew.Services.Exams.Implementations
                 .AnyAsync(s => s.MinistrySimExamId == attempt.MinistrySimExamId && s.StageNumber == stageNumber);
 
             if (!stageExists)
-                throw new InvalidOperationException("لم يتم العثور على هذه المرحلة ضمن الاختبار.");
+                throw new InvalidOperationException("لم يتم العثور على هذا القسم ضمن الاختبار.");
 
             for (int n = 1; n < stageNumber; n++)
             {
                 var prior = attempt.StageProgress.FirstOrDefault(p => p.StageNumber == n);
                 if (prior == null || !prior.IsLocked)
-                    throw new InvalidOperationException("يجب إنهاء المراحل السابقة بالترتيب قبل بدء هذه المرحلة.");
+                    throw new InvalidOperationException("يجب إنهاء الأقسام السابقة بالترتيب قبل بدء هذا القسم.");
             }
 
             var existing = attempt.StageProgress.FirstOrDefault(p => p.StageNumber == stageNumber);
             if (existing != null)
             {
                 if (existing.IsLocked)
-                    throw new InvalidOperationException("هذه المرحلة مقفلة بالفعل ولا يمكن الدخول إليها مرة أخرى.");
+                    throw new InvalidOperationException("هذا القسم مقفل بالفعل ولا يمكن الدخول إليه مرة أخرى.");
 
                 return existing;
             }
@@ -162,7 +162,7 @@ namespace QdratNew.Services.Exams.Implementations
                                            && p.StageNumber == stageQuestion.MinistrySimExamStage.StageNumber);
 
             if (progress == null || progress.IsLocked)
-                throw new InvalidOperationException("هذه المرحلة غير مفتوحة حاليًا — لا يمكن حفظ الإجابة.");
+                throw new InvalidOperationException("هذا القسم غير مفتوح حاليًا — لا يمكن حفظ الإجابة.");
 
             bool? isCorrect = null;
             if (selectedOptionId.HasValue)
@@ -216,7 +216,7 @@ namespace QdratNew.Services.Exams.Implementations
                 .FirstOrDefaultAsync(p => p.MinistrySimExamStudentAttemptId == attemptId && p.StageNumber == stageNumber);
 
             if (progress == null)
-                throw new InvalidOperationException("لم يتم العثور على تقدّم هذه المرحلة — لم تبدأ بعد.");
+                throw new InvalidOperationException("لم يتم العثور على تقدّم هذا القسم — لم يبدأ بعد.");
 
             if (progress.IsLocked)
                 return progress;
