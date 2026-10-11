@@ -277,10 +277,9 @@ namespace QdratNew.Areas.Admin.Controllers
             return RedirectToAction(nameof(Details), new { id = exam.Id });
         }
 
-        // Sprint 12 (تصحيح بعد مراجعة المطوّر): Curriculum.IsQuantitative لا يحدّد محور المنهج (كمي/لفظي) —
-        // هذا الحقل يخص تنسيق عرض الأرقام (هندية/عربية) فقط، وليس له علاقة بموضوع الأسئلة. المحور الحقيقي لكل
-        // محور (Section) يُشتق من أغلبية Question.IsQuantitative لأسئلته الفعلية — وهو نفس الحقل المستخدم فعليًا
-        // في CourseExamGeneratorService لفصل الكمي عن اللفظي، وليس أي حقل على مستوى Curriculum.
+        // تصنيف المحور (كمي/لفظي) يأتي من نوع المنهج Curriculum.CurriculumTypeName، وعند عدم وضوحه (قيمة قديمة
+        // أو مختلفة في الإنتاج) يُستدل عليه من عنوان المنهج. Curriculum.IsQuantitative و Question.IsQuantitative
+        // يخصّان عرض الأرقام (هندية/عربية) فقط ولا يُستخدمان هنا.
         private async Task PopulateSectionsAsync(MinistrySimExamCreateVm vm)
         {
             var curriculumIds = await _context.CourseCurriculums
@@ -292,41 +291,59 @@ namespace QdratNew.Areas.Admin.Controllers
             var sections = await _context.Sections
                 .AsNoTracking()
                 .Where(s => EF.Constant(curriculumIds).Contains(s.CurriculumId))
-                .Select(s => new { s.Id, s.Title })
-                .ToListAsync();
-
-            var sectionIds = sections.Select(s => s.Id).ToList();
-
-            var axisCounts = await _context.Questions
-                .AsNoTracking()
-                .Where(q => q.SectionId != null && EF.Constant(sectionIds).Contains(q.SectionId.Value))
-                .GroupBy(q => q.SectionId)
-                .Select(g => new
+                .Select(s => new
                 {
-                    SectionId = g.Key.Value,
-                    QuantCount = g.Count(q => q.IsQuantitative),
-                    TotalCount = g.Count()
+                    s.Id,
+                    s.Title,
+                    s.CurriculumId,
+                    TypeName = s.Curriculum.CurriculumTypeName,
+                    CurriculumTitle = s.Curriculum.Title
                 })
                 .ToListAsync();
 
-            // قسم بلا أسئلة إطلاقًا (لا يوجد ما يُبنى منه اختبار) يُستبعد من كلا القائمتين عمدًا
-            var isQuantBySection = axisCounts
-                .Where(x => x.TotalCount > 0)
-                .ToDictionary(x => x.SectionId, x => x.QuantCount * 2 >= x.TotalCount);
+            var classified = sections
+                .Select(s => new
+                {
+                    s.Id,
+                    s.Title,
+                    s.CurriculumId,
+                    s.TypeName,
+                    s.CurriculumTitle,
+                    Axis = ClassifyAxis(s.TypeName) ?? ClassifyAxis(s.CurriculumTitle)
+                })
+                .ToList();
 
-            vm.QuantSections = sections
-                .Where(s => isQuantBySection.TryGetValue(s.Id, out var isQuant) && isQuant)
+            var unclassified = classified.Where(x => x.Axis == null).ToList();
+            if (unclassified.Count > 0)
+            {
+                _logger.LogWarning(
+                    "MSE PopulateSections: {Count} محور بلا تصنيف كمي/لفظي (CourseId={CourseId}): {Items}",
+                    unclassified.Count, vm.CourseId,
+                    string.Join(" | ", unclassified.Select(x => $"Section#{x.Id}/Curriculum#{x.CurriculumId} Type='{x.TypeName}' Title='{x.CurriculumTitle}'")));
+            }
+
+            vm.QuantSections = classified
+                .Where(s => s.Axis == "quant")
                 .OrderBy(s => s.Title)
                 .Select(s => new SelectListItem { Value = s.Id.ToString(), Text = s.Title })
                 .ToList();
 
-            vm.VerbalSections = sections
-                .Where(s => isQuantBySection.TryGetValue(s.Id, out var isQuant) && !isQuant)
+            vm.VerbalSections = classified
+                .Where(s => s.Axis == "verbal")
                 .OrderBy(s => s.Title)
                 .Select(s => new SelectListItem { Value = s.Id.ToString(), Text = s.Title })
                 .ToList();
         }
 
+        // يتحمّل اختلاف الصيغ ("لفظي" / "اللفظي" / "لفظى" / "قدرات لفظي") دون الاعتماد على IsQuantitative
+        private static string ClassifyAxis(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return null;
+            var t = text.Trim();
+            if (t.Contains("لفظ")) return "verbal";
+            if (t.Contains("كمي") || t.Contains("كمى")) return "quant";
+            return null;
+        }
         private static string JoinAxisTitles(IEnumerable<string> titles, string primaryTitle)
         {
             var list = titles.Distinct().OrderBy(t => t == primaryTitle ? 0 : 1).ToList();
