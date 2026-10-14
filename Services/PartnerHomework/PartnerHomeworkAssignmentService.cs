@@ -193,7 +193,7 @@ namespace QdratNew.Services.PartnerHomework
 
             foreach (var batchId in validBatchIds)
             {
-                var homeworkSet = new HomeworkSet
+                homeworkSets.Add(new HomeworkSet
                 {
                     Title = draft.Title,
                     CompletionTitle = draft.Title,
@@ -202,9 +202,16 @@ namespace QdratNew.Services.PartnerHomework
                     StartAt = model.StartAt,
                     EndAt = model.EndAt,
                     CreatedAt = DateTime.UtcNow
-                };
+                });
+            }
 
-                homeworkSets.Add(homeworkSet);
+            // BulkInsert لا يضبط المفاتيح الأجنبية من الـ Navigation،
+            // لذلك نُدخل الـ Sets أولاً ونسترجع الـ Ids (SetOutputIdentity)
+            _context.BulkInsert(homeworkSets, new BulkConfig { SetOutputIdentity = true });
+
+            foreach (var homeworkSet in homeworkSets)
+            {
+                var batchId = homeworkSet.BatchId;
 
                 var studentIds = allEnrollments
                     .Where(x => x.BatchId == batchId)
@@ -216,7 +223,7 @@ namespace QdratNew.Services.PartnerHomework
                 {
                     homeworkSetStudents.Add(new HomeworkSetStudent
                     {
-                        HomeworkSet = homeworkSet,
+                        HomeworkSetId = homeworkSet.Id,
                         StudentId = studentId,
                         AssignedAt = DateTime.UtcNow,
                         IsSubmitted = false
@@ -229,7 +236,7 @@ namespace QdratNew.Services.PartnerHomework
 
                         homeworks.Add(new QdratNew.Entities.Homework
                         {
-                            HomeworkSet = homeworkSet,
+                            HomeworkSetId = homeworkSet.Id,
                             StudentId = studentId,
                             QuestionId = question.Id,
                             LessonId = question.LessonId,
@@ -241,7 +248,6 @@ namespace QdratNew.Services.PartnerHomework
                 }
             }
 
-            _context.BulkInsert(homeworkSets);
             _context.BulkInsert(homeworkSetStudents);
             _context.BulkInsert(homeworks);
         }
