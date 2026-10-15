@@ -68,6 +68,7 @@ namespace QdratNew.Services.RemedialTracks
                 q = q.Where(p => ids.Contains(p.BatchId));
             }
 
+            var nowUtc = Now;
             var total = await q.CountAsync(ct);
             var totalPages = total <= 0 ? 1 : (int)Math.Ceiling(total / (double)RemedialTrackPublicationIndexVm.PageSize);
             var current = Math.Clamp(page, 1, totalPages);
@@ -91,11 +92,36 @@ namespace QdratNew.Services.RemedialTracks
                     CreatedAtUtc = p.CreatedAtUtc,
                     DeletedAtUtc = p.DeletedAtUtc,
                     DeletedByName = p.DeletedByName,
-                    DeleteReason = p.DeleteReason
+                    DeleteReason = p.DeleteReason,
+                    // وضع مراجعة الفيديوهات (التسجيلات غير الملغاة فقط؛ المفتوح = مفعّل وغير منتهٍ)
+                    ActiveEnrollments = p.Enrollments.Count(e => e.Status != RemedialTrackEnrollmentStatus.Cancelled),
+                    ReviewOpenEnrollments = p.Enrollments.Count(e => e.Status != RemedialTrackEnrollmentStatus.Cancelled
+                        && e.VideoReviewEnabled && (e.VideoReviewUntilUtc == null || e.VideoReviewUntilUtc > nowUtc))
                 })
                 .ToListAsync(ct);
 
-            return new RemedialTrackPublicationIndexVm { Items = items, Page = current, Total = total, ShowingDeleted = deleted };
+            // إحصائية الأوامر المطابقة للتبويب كلها (لا الصفحة فقط): استعلام مجمَّع واحد
+            var perPublication = await db.RemedialTrackEnrollments.AsNoTracking()
+                .Where(e => e.Status != RemedialTrackEnrollmentStatus.Cancelled && q.Select(p => p.Id).Contains(e.PublicationId))
+                .GroupBy(e => e.PublicationId)
+                .Select(g => new
+                {
+                    Active = g.Count(),
+                    Open = g.Count(e => e.VideoReviewEnabled && (e.VideoReviewUntilUtc == null || e.VideoReviewUntilUtc > nowUtc))
+                })
+                .ToListAsync(ct);
+
+            return new RemedialTrackPublicationIndexVm
+            {
+                Items = items,
+                Page = current,
+                Total = total,
+                ShowingDeleted = deleted,
+                ReviewFullPublications = perPublication.Count(x => x.Open > 0 && x.Open == x.Active),
+                ReviewPartialPublications = perPublication.Count(x => x.Open > 0 && x.Open < x.Active),
+                ReviewOpenStudents = perPublication.Sum(x => x.Open),
+                ReviewActiveStudents = perPublication.Sum(x => x.Active)
+            };
         }
 
         public async Task<RemedialTrackPublishFormVm> GetPublishFormAsync(int? trackId, RemedialTrackBatchScope scope, CancellationToken ct = default)

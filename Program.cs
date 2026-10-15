@@ -283,6 +283,7 @@ builder.Services.AddAuthorization(options =>
         AdminPermissionPolicies.RemedialTracks_Create,
         AdminPermissionPolicies.RemedialTracks_Edit,
         AdminPermissionPolicies.RemedialTracks_Archive,
+        AdminPermissionPolicies.RemedialTracks_ViewAudit,
         AdminPermissionPolicies.RemedialTrackPublications_Read,
         AdminPermissionPolicies.RemedialTrackPublications_Publish,
         AdminPermissionPolicies.RemedialTrackPublications_ManageCode,
@@ -292,6 +293,7 @@ builder.Services.AddAuthorization(options =>
         AdminPermissionPolicies.RemedialTrackPublications_Restore,
         AdminPermissionPolicies.RemedialTrackPublications_ManageReview,
         AdminPermissionPolicies.RemedialTrackPublications_ManageAddendum,
+        AdminPermissionPolicies.RemedialTrackPublications_AllBatches,
         AdminPermissionPolicies.RemedialTrackReports_Read,
         AdminPermissionPolicies.RemedialTrackReports_Edit,
         AdminPermissionPolicies.RemedialTrackReports_Send
@@ -1044,6 +1046,8 @@ builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackProgre
                            QdratNew.Services.RemedialTracks.RemedialTrackProgressService>();
 builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackExamService,
                            QdratNew.Services.RemedialTracks.RemedialTrackExamService>();
+builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackAuditService,
+                           QdratNew.Services.RemedialTracks.RemedialTrackAuditService>();
 builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackAddendumService,
                            QdratNew.Services.RemedialTracks.RemedialTrackAddendumService>();
 builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackAddendumStudentService,

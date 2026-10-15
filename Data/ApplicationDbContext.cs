@@ -119,6 +119,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<RemedialTrackEvent> RemedialTrackEvents { get; set; }
     public DbSet<RemedialTrackParentReport> RemedialTrackParentReports { get; set; }
     public DbSet<RemedialTrackAddendum> RemedialTrackAddenda { get; set; }
+    public DbSet<RemedialTrackAuditLog> RemedialTrackAuditLogs { get; set; }
     public DbSet<RemedialTrackAddendumProgress> RemedialTrackAddendumProgresses { get; set; }
     public DbSet<HomeworkSet> HomeworkSets { get; set; }
     public DbSet<HomeworkArchiveAccess> HomeworkArchiveAccesses { get; set; }
@@ -1692,6 +1693,14 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             e.HasOne(x => x.Publication).WithMany().HasForeignKey(x => x.PublicationId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Axis).WithMany().HasForeignKey(x => x.AxisId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.ExamModel).WithMany().HasForeignKey(x => x.ExamModelId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // RTK: سجل تعديلات الخطة (من عدّل ماذا وبأي بروفايل)
+        modelBuilder.Entity<RemedialTrackAuditLog>(e =>
+        {
+            e.ToTable("RemedialTrackAuditLogs");
+            e.HasIndex(x => new { x.TrackId, x.CreatedAtUtc }).HasDatabaseName("IX_RemedialTrackAuditLogs_Track_CreatedAt");
+            e.HasOne(x => x.Track).WithMany().HasForeignKey(x => x.TrackId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<RemedialTrackAddendumProgress>(e =>

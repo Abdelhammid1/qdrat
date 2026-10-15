@@ -218,10 +218,14 @@ namespace QdratNew.ViewModels.RemedialTracks
         public List<RemedialTrackSelectOption> Curricula { get; set; } = new();
         public List<RemedialTrackSelectOption> ExamModels { get; set; } = new();
 
+        // سجل تعديلات الخطة (يُحمَّل في الكنترولر)
+        public List<QdratNew.Services.RemedialTracks.RemedialTrackAuditEntryVm> AuditEntries { get; set; } = new();
+
         // صلاحيات العرض (تُحدَّد في الكنترولر)
         public bool CanEdit { get; set; }
         public bool CanCreate { get; set; }
         public bool CanArchive { get; set; }
+        public bool CanViewAudit { get; set; }   // RemedialTracks:ViewAudit
         public bool CanPublish { get; set; }   // RTK-S3: RemedialTrackPublications:Publish
 
         public bool IsArchived => Status == RemedialTrackStatus.Archived;

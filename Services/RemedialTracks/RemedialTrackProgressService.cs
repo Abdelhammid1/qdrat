@@ -272,8 +272,9 @@ namespace QdratNew.Services.RemedialTracks
             var videosClosed = ap.Status is RemedialTrackAxisStatus.Passed
                 or RemedialTrackAxisStatus.FailedBlocked or RemedialTrackAxisStatus.FailedOpenedByAdmin;
 
-            // RTK v2/D24: وضع المراجعة — للقراءة فقط، حساب الخادم لحظة الطلب (لا JS)، لمحور منتهٍ فقط (Locked أُخرج أعلاه)
-            var reviewMode = videosClosed && ap.EnrollmentActive
+            // RTK v2/D24: وضع المراجعة — للقراءة فقط، حساب الخادم لحظة الطلب (لا JS)، لكل محور غير متاح للمشاهدة العادية:
+            // منتهٍ (اجتاز/لم يجتز) أو بانتظار الاختبار (Locked أُخرج أعلاه). المحور في Videos/Rewatch يشاهد مشاهدة عادية.
+            var reviewMode = !canWatch && ap.EnrollmentActive
                              && RemedialTrackStateMachine.IsVideoReviewOpen(ap.ReviewEnabled, ap.ReviewUntilUtc, _time.GetUtcNow().UtcDateTime);
 
             if (canWatch)

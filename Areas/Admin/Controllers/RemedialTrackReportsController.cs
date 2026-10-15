@@ -127,6 +127,9 @@ namespace QdratNew.Areas.Admin.Controllers
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
             if (_batchAccess.IsPrivilegedUser(User) || await _batchAccess.HasFullBatchesAccessAsync(userId))
                 return RemedialTrackBatchScope.Unrestricted;
+            var auth = HttpContext.RequestServices.GetRequiredService<Microsoft.AspNetCore.Authorization.IAuthorizationService>();
+            if ((await auth.AuthorizeAsync(User, QdratNew.Security.AdminPermissions.AdminPermissionPolicies.RemedialTrackPublications_AllBatches)).Succeeded)
+                return RemedialTrackBatchScope.Unrestricted;
 
             var ids = await _batchAccess.GetPermittedBatchIdsAsync(userId, InstructorBatchFeature.Exams);
             return new RemedialTrackBatchScope(ids.ToHashSet());

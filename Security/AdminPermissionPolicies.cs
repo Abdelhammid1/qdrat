@@ -198,6 +198,7 @@
         public const string RemedialTracks_Create = "RemedialTracks:Create";
         public const string RemedialTracks_Edit = "RemedialTracks:Edit";
         public const string RemedialTracks_Archive = "RemedialTracks:Archive";
+        public const string RemedialTracks_ViewAudit = "RemedialTracks:ViewAudit";   // عرض سجل تعديلات الخطة
 
         // RemedialTrackPublications — النشر والمتابعة
         public const string RemedialTrackPublications_Read = "RemedialTrackPublications:Read";
@@ -209,6 +210,7 @@
         public const string RemedialTrackPublications_Restore = "RemedialTrackPublications:Restore";       // RTK v2/D26: استرجاع المحذوف
         public const string RemedialTrackPublications_ManageReview = "RemedialTrackPublications:ManageReview"; // RTK v2/D24: وضع مراجعة الفيديوهات
         public const string RemedialTrackPublications_ManageAddendum = "RemedialTrackPublications:ManageAddendum"; // RTK-S13: إضافة/إيقاف ملاحق المحاور
+        public const string RemedialTrackPublications_AllBatches = "RemedialTrackPublications:AllBatches";       // رؤية أوامر وطلاب كل الدفعات (بدون تقييد دفعات الموظف)
 
         // RemedialTrackReports — التقارير
         public const string RemedialTrackReports_Read = "RemedialTrackReports:Read";

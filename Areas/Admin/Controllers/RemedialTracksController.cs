@@ -20,15 +20,18 @@ namespace QdratNew.Areas.Admin.Controllers
         private readonly IRemedialTrackBuilderService _builder;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IAuthorizationService _authorization;
+        private readonly IRemedialTrackAuditService _audit;
 
         public RemedialTracksController(
             IRemedialTrackBuilderService builder,
             UserManager<ApplicationUser> userManager,
-            IAuthorizationService authorization)
+            IAuthorizationService authorization,
+            IRemedialTrackAuditService audit)
         {
             _builder = builder;
             _userManager = userManager;
             _authorization = authorization;
+            _audit = audit;
         }
 
         // ---------------- القائمة ----------------
@@ -72,6 +75,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 var result = await _builder.CreateAsync(input, actor, ct);
                 if (result.Success && result.Data is int id)
                 {
+                    await _audit.LogAsync(id, "RemedialTrackCreated", "إنشاء الخطة", User, actor.Name, ct);
                     TempData["RtkSuccess"] = result.Message;
                     return RedirectToAction(nameof(Builder), new { id });
                 }
@@ -100,6 +104,9 @@ namespace QdratNew.Areas.Admin.Controllers
             vm.CanCreate = await CanAsync(AdminPermissionPolicies.RemedialTracks_Create);
             vm.CanArchive = await CanAsync(AdminPermissionPolicies.RemedialTracks_Archive);
             vm.CanPublish = await CanAsync(AdminPermissionPolicies.RemedialTrackPublications_Publish);
+            vm.CanViewAudit = await CanAsync(AdminPermissionPolicies.RemedialTracks_ViewAudit);
+            if (vm.CanViewAudit)
+                vm.AuditEntries = await _audit.GetAsync(id, 100, ct);
             return View(vm);
         }
 
@@ -107,7 +114,7 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("RemedialTracks", "Edit")]
         public async Task<IActionResult> EditHeader([FromForm] EditRemedialTrackHeaderInput input, CancellationToken ct)
             => ModelState.IsValid
-                ? JsonResult(await _builder.EditHeaderAsync(input, ct))
+                ? await AuditedAsync(input.Id, "RemedialTrackHeaderEdited", "تعديل بيانات الخطة", () => _builder.EditHeaderAsync(input, ct), ct)
                 : ValidationFail();
 
         // ---------------- المحاور ----------------
@@ -116,18 +123,18 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("RemedialTracks", "Edit")]
         public async Task<IActionResult> AddAxis([FromForm] AddRemedialAxisInput input, CancellationToken ct)
             => ModelState.IsValid
-                ? JsonResult(await _builder.AddAxisAsync(input, ct))
+                ? await AuditedAsync(input.TrackId, "RemedialTrackAxisAdded", "إضافة محور", () => _builder.AddAxisAsync(input, ct), ct)
                 : ValidationFail();
 
         [HttpPost, ValidateAntiForgeryToken]
         [AdminPermission("RemedialTracks", "Edit")]
         public async Task<IActionResult> MoveAxis([FromForm] int axisId, [FromForm] int dir, CancellationToken ct)
-            => JsonResult(await _builder.MoveAxisAsync(axisId, dir, ct));
+            => await AuditedAsync(await _audit.TrackIdOfAxisAsync(axisId, ct), "RemedialTrackAxisMoved", "تغيير ترتيب محور (#" + axisId + ")", () => _builder.MoveAxisAsync(axisId, dir, ct), ct);
 
         [HttpPost, ValidateAntiForgeryToken]
         [AdminPermission("RemedialTracks", "Edit")]
         public async Task<IActionResult> RemoveAxis([FromForm] int axisId, CancellationToken ct)
-            => JsonResult(await _builder.RemoveAxisAsync(axisId, ct));
+            => await AuditedAsync(await _audit.TrackIdOfAxisAsync(axisId, ct), "RemedialTrackAxisRemoved", "حذف محور (#" + axisId + ")", () => _builder.RemoveAxisAsync(axisId, ct), ct);
 
         [HttpPost, ValidateAntiForgeryToken]
         [AdminPermission("RemedialTracks", "Edit")]
@@ -140,7 +147,7 @@ namespace QdratNew.Areas.Admin.Controllers
             if (actor is null)
                 return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
 
-            return JsonResult(await _builder.SaveAxisExamsAsync(input, actor, ct));
+            return await AuditedAsync(await _audit.TrackIdOfAxisAsync(input.AxisId, ct), "RemedialTrackAxisExamsSaved", "تعديل اختبارات محور (#" + input.AxisId + ")", () => _builder.SaveAxisExamsAsync(input, actor, ct), ct);
         }
 
         // ---------------- الفيديوهات ----------------
@@ -149,7 +156,7 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("RemedialTracks", "Edit")]
         public async Task<IActionResult> AddVideo([FromForm] AddRemedialVideoInput input, CancellationToken ct)
             => ModelState.IsValid
-                ? JsonResult(await _builder.AddVideoAsync(input, ct))
+                ? await AuditedAsync(await _audit.TrackIdOfAxisAsync(input.AxisId, ct), "RemedialTrackVideoAdded", "إضافة فيديو لمحور (#" + input.AxisId + ")", () => _builder.AddVideoAsync(input, ct), ct)
                 : ValidationFail();
 
         [HttpPost, ValidateAntiForgeryToken]
@@ -163,30 +170,30 @@ namespace QdratNew.Areas.Admin.Controllers
             if (actor is null)
                 return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
 
-            return JsonResult(await _builder.EditVideoAsync(input, actor, ct));
+            return await AuditedAsync(await _audit.TrackIdOfVideoAsync(input.VideoId, ct), "RemedialTrackVideoEditedByAdmin", "تعديل فيديو (#" + input.VideoId + ")", () => _builder.EditVideoAsync(input, actor, ct), ct);
         }
 
         [HttpPost, ValidateAntiForgeryToken]
         [AdminPermission("RemedialTracks", "Edit")]
         public async Task<IActionResult> MoveVideo([FromForm] int videoId, [FromForm] int dir, CancellationToken ct)
-            => JsonResult(await _builder.MoveVideoAsync(videoId, dir, ct));
+            => await AuditedAsync(await _audit.TrackIdOfVideoAsync(videoId, ct), "RemedialTrackVideoMoved", "تغيير ترتيب فيديو (#" + videoId + ")", () => _builder.MoveVideoAsync(videoId, dir, ct), ct);
 
         [HttpPost, ValidateAntiForgeryToken]
         [AdminPermission("RemedialTracks", "Edit")]
         public async Task<IActionResult> RemoveVideo([FromForm] int videoId, CancellationToken ct)
-            => JsonResult(await _builder.RemoveVideoAsync(videoId, ct));
+            => await AuditedAsync(await _audit.TrackIdOfVideoAsync(videoId, ct), "RemedialTrackVideoRemoved", "حذف فيديو (#" + videoId + ")", () => _builder.RemoveVideoAsync(videoId, ct), ct);
 
         // ---------------- التحقق / الأرشفة / النسخ ----------------
 
         [HttpPost, ValidateAntiForgeryToken]
         [AdminPermission("RemedialTracks", "Edit")]
         public async Task<IActionResult> MarkReady([FromForm] int id, CancellationToken ct)
-            => JsonResult(await _builder.MarkReadyAsync(id, ct));
+            => await AuditedAsync(id, "RemedialTrackMarkedReady", "اعتماد الخطة (جاهزة للنشر)", () => _builder.MarkReadyAsync(id, ct), ct);
 
         [HttpPost, ValidateAntiForgeryToken]
         [AdminPermission("RemedialTracks", "Archive")]
         public async Task<IActionResult> Archive([FromForm] int id, CancellationToken ct)
-            => JsonResult(await _builder.ArchiveAsync(id, ct));
+            => await AuditedAsync(id, "RemedialTrackArchived", "أرشفة الخطة", () => _builder.ArchiveAsync(id, ct), ct);
 
         [HttpPost, ValidateAntiForgeryToken]
         [AdminPermission("RemedialTracks", "Create")]
@@ -197,6 +204,11 @@ namespace QdratNew.Areas.Admin.Controllers
                 return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
 
             var result = await _builder.DuplicateAsync(id, actor, ct);
+            if (result.Success && result.Data is int copyId)
+            {
+                await _audit.LogAsync(copyId, "RemedialTrackCreated", "إنشاء الخطة كنسخة من الخطة #" + id, User, actor.Name, ct);
+                await _audit.LogAsync(id, "RemedialTrackDuplicated", "نسخ الخطة إلى الخطة #" + copyId, User, actor.Name, ct);
+            }
             return Json(new
             {
                 success = result.Success,
@@ -209,6 +221,15 @@ namespace QdratNew.Areas.Admin.Controllers
         }
 
         // ---------------- مساعدات ----------------
+
+        // يُسجَّل التعديل على الخطة بعد نجاحه فقط (فشل التسجيل لا يُبطل التعديل)
+        private async Task<IActionResult> AuditedAsync(int? trackId, string action, string label, Func<Task<RemedialTrackResult>> run, CancellationToken ct)
+        {
+            var r = await run();
+            if (r.Success && trackId is > 0)
+                await _audit.LogAsync(trackId.Value, action, string.IsNullOrWhiteSpace(r.Message) ? label : label + " — " + r.Message, User, (await ActorAsync())?.Name, ct);
+            return JsonResult(r);
+        }
 
         private IActionResult JsonResult(RemedialTrackResult r)
             => Json(new { success = r.Success, message = r.Message, data = r.Data, warnings = r.Warnings });

@@ -36,7 +36,8 @@
                     new AdminActionDescriptor { Key = "Read", DisplayNameAr = "عرض الخطط العلاجية" },
                     new AdminActionDescriptor { Key = "Create", DisplayNameAr = "إنشاء خطة علاجية" },
                     new AdminActionDescriptor { Key = "Edit", DisplayNameAr = "تعديل خطة علاجية" },
-                    new AdminActionDescriptor { Key = "Archive", DisplayNameAr = "أرشفة خطة علاجية" }
+                    new AdminActionDescriptor { Key = "Archive", DisplayNameAr = "أرشفة خطة علاجية" },
+                    new AdminActionDescriptor { Key = "ViewAudit", DisplayNameAr = "عرض سجل تعديلات الخطة (من عدّل وبأي بروفايل)" }
                 },
 
                 "RemedialTrackPublications" => new[]
@@ -45,11 +46,12 @@
                     new AdminActionDescriptor { Key = "Publish", DisplayNameAr = "نشر خطة علاجية" },
                     new AdminActionDescriptor { Key = "ManageCode", DisplayNameAr = "عرض/تجديد الرقم المرجعي" },
                     new AdminActionDescriptor { Key = "Cancel", DisplayNameAr = "إلغاء أمر نشر" },
-                    new AdminActionDescriptor { Key = "Unlock", DisplayNameAr = "فتح المحور التالي لطالب" },
+                    new AdminActionDescriptor { Key = "Unlock", DisplayNameAr = "تمرير الطالب للمحور التالي (زر «فتح المحور التالي» في تفاصيل أمر النشر)" },
                     new AdminActionDescriptor { Key = "Delete", DisplayNameAr = "حذف أمر نشر (حذف ناعم)" },
                     new AdminActionDescriptor { Key = "Restore", DisplayNameAr = "استرجاع أمر نشر محذوف" },
                     new AdminActionDescriptor { Key = "ManageReview", DisplayNameAr = "إدارة وضع مراجعة الفيديوهات للطلاب" },
-                    new AdminActionDescriptor { Key = "ManageAddendum", DisplayNameAr = "إدارة ملاحق المحاور (فيديو إضافي واختبار)" }
+                    new AdminActionDescriptor { Key = "ManageAddendum", DisplayNameAr = "إدارة ملاحق المحاور (فيديو إضافي واختبار)" },
+                    new AdminActionDescriptor { Key = "AllBatches", DisplayNameAr = "رؤية أوامر النشر لكل الدفعات (بدون تقييد بدفعات الموظف)" }
                 },
 
                 "RemedialTrackReports" => new[]

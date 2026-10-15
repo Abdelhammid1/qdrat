@@ -165,6 +165,10 @@ namespace QdratNew.Areas.Admin.Controllers
                     displayEmail = appUser?.Email ?? "";
                 }
 
+                // معامل الـ query "userId" هنا معرّف الربط (int) وليس معرّف المستخدم؛ يدخل ModelState بنفس اسم
+                // خاصية UserId فيطغى الـ tag helper على قيمة الحقل المخفي. نزيله ليُعرض معرّف المستخدم الحقيقي.
+                ModelState.Remove(nameof(AdminUserProfileAssignVM.UserId));
+
                 model.UserId             = link.UserId;
                 model.AdminProfileId     = link.AdminProfileId;
                 model.IsEditMode         = true;

@@ -7024,6 +7024,55 @@ namespace QdratNew.Migrations
                     b.ToTable("RemedialTrackAddendumProgresses", (string)null);
                 });
 
+            modelBuilder.Entity("QdratNew.Entities.RemedialTrackAuditLog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActionType")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.Property<string>("ActorName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("ActorProfileName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("ActorRoles")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ActorUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("nvarchar(600)");
+
+                    b.Property<int>("TrackId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TrackId", "CreatedAtUtc")
+                        .HasDatabaseName("IX_RemedialTrackAuditLogs_Track_CreatedAt");
+
+                    b.ToTable("RemedialTrackAuditLogs", (string)null);
+                });
+
             modelBuilder.Entity("QdratNew.Entities.RemedialTrackAxis", b =>
                 {
                     b.Property<int>("Id")
@@ -12049,6 +12098,17 @@ namespace QdratNew.Migrations
                     b.Navigation("Addendum");
 
                     b.Navigation("Enrollment");
+                });
+
+            modelBuilder.Entity("QdratNew.Entities.RemedialTrackAuditLog", b =>
+                {
+                    b.HasOne("QdratNew.Entities.RemedialTrack", "Track")
+                        .WithMany()
+                        .HasForeignKey("TrackId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Track");
                 });
 
             modelBuilder.Entity("QdratNew.Entities.RemedialTrackAxis", b =>

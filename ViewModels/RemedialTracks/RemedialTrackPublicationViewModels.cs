@@ -109,6 +109,12 @@ namespace QdratNew.ViewModels.RemedialTracks
         public DateTime? DeletedAtUtc { get; set; }
         public string? DeletedByName { get; set; }
         public string? DeleteReason { get; set; }
+
+        // وضع مراجعة الفيديوهات: كلي = كل التسجيلات النشطة مفتوحة، جزئي = بعضها
+        public int ActiveEnrollments { get; set; }
+        public int ReviewOpenEnrollments { get; set; }
+        public bool ReviewIsFull => ReviewOpenEnrollments > 0 && ReviewOpenEnrollments >= ActiveEnrollments;
+        public bool ReviewIsPartial => ReviewOpenEnrollments > 0 && ReviewOpenEnrollments < ActiveEnrollments;
     }
 
     public sealed class RemedialTrackPublicationIndexVm
@@ -122,6 +128,12 @@ namespace QdratNew.ViewModels.RemedialTracks
 
         /// <summary>RTK v2 / D26: true = تبويب «المحذوفة».</summary>
         public bool ShowingDeleted { get; set; }
+
+        // إحصائية وضع مراجعة الفيديوهات (كل أوامر التبويب الحالي)
+        public int ReviewFullPublications { get; set; }
+        public int ReviewPartialPublications { get; set; }
+        public int ReviewOpenStudents { get; set; }
+        public int ReviewActiveStudents { get; set; }
 
         // صلاحيات العرض (تُحدَّد في الكنترولر)
         public bool CanPublish { get; set; }

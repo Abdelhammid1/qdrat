@@ -29,6 +29,7 @@ namespace QdratNew.Areas.Admin.Controllers
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IAuthorizationService _authorization;
         private readonly ITimeZoneService _tz;
+        private readonly IRemedialTrackAuditService _audit;
 
         public RemedialTrackPublicationsController(
             IRemedialTrackPublicationService publications,
@@ -38,9 +39,11 @@ namespace QdratNew.Areas.Admin.Controllers
             IEmployeeBatchAccessService batchAccess,
             UserManager<ApplicationUser> userManager,
             IAuthorizationService authorization,
-            ITimeZoneService tz)
+            ITimeZoneService tz,
+            IRemedialTrackAuditService audit)
         {
             _tz = tz;
+            _audit = audit;
             _publications = publications;
             _reports = reports;
             _parentAdmin = parentAdmin;
@@ -107,6 +110,8 @@ namespace QdratNew.Areas.Admin.Controllers
                 return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
 
             var result = await _publications.CreateAsync(input, actor, await ScopeAsync(), ct);
+            if (result.Success && result.Data is RemedialTrackPublicationCreated createdLog)
+                await _audit.LogAsync(input.TrackId, "RemedialTrackPublished", "نشر الخطة (أمر نشر #" + createdLog.PublicationId + ") — " + result.Message, User, actor.Name, ct);
             return Json(new
             {
                 success = result.Success,
@@ -180,6 +185,7 @@ namespace QdratNew.Areas.Admin.Controllers
                     input.PublicationId, input.AxisId, input.Title, input.Url, input.DurationSeconds, input.Reason,
                     input.ExamModelId, input.ExamDurationMinutes, input.ApplyToAll, input.EnrollmentIds),
                 actor, await ScopeAsync(), ct);
+            if (r.Success) await AuditPubAsync(input.PublicationId, "RemedialTrackAddendumCreated", "إضافة ملحق محور", r.Message, actor, ct);
             return Json(new { success = r.Success, message = r.Message, data = r.Data, warnings = r.Warnings });
         }
 
@@ -195,6 +201,11 @@ namespace QdratNew.Areas.Admin.Controllers
                 return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
 
             var r = await _addenda.SetActiveAsync(input.AddendumId, input.Active, actor, await ScopeAsync(), ct);
+            if (r.Success)
+            {
+                var addTrack = await _audit.TrackIdOfAddendumAsync(input.AddendumId, ct);
+                if (addTrack.HasValue) await _audit.LogAsync(addTrack.Value, "RemedialTrackAddendumToggled", (input.Active ? "تفعيل" : "إيقاف") + " ملحق (#" + input.AddendumId + ") — " + r.Message, User, actor.Name, ct);
+            }
             return Json(new { success = r.Success, message = r.Message, data = r.Data, warnings = r.Warnings });
         }
 
@@ -241,6 +252,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
 
             var r = await _publications.RegenerateCodeAsync(id, actor, await ScopeAsync(), ct);
+            if (r.Success) await AuditPubAsync(id, "RemedialTrackCodeRegenerated", "تجديد الرقم المرجعي", r.Message, actor, ct);
             return Json(new { success = r.Success, message = r.Message, data = r.Data, warnings = r.Warnings });
         }
 
@@ -253,6 +265,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
 
             var r = await _publications.CancelAsync(id, reason, actor, await ScopeAsync(), ct);
+            if (r.Success) await AuditPubAsync(id, "RemedialTrackPublicationCancelled", "إلغاء أمر نشر" + (string.IsNullOrWhiteSpace(reason) ? "" : " (السبب: " + reason + ")"), r.Message, actor, ct);
             return Json(new { success = r.Success, message = r.Message, data = r.Data, warnings = r.Warnings });
         }
 
@@ -267,6 +280,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
 
             var r = await _publications.DeleteAsync(id, reason, actor, await ScopeAsync(), ct);
+            if (r.Success) await AuditPubAsync(id, "RemedialTrackPublicationDeleted", "حذف أمر نشر" + (string.IsNullOrWhiteSpace(reason) ? "" : " (السبب: " + reason + ")"), r.Message, actor, ct);
             return Json(new { success = r.Success, message = r.Message, data = r.Data, warnings = r.Warnings });
         }
 
@@ -279,6 +293,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
 
             var r = await _publications.RestoreAsync(id, actor, await ScopeAsync(), ct);
+            if (r.Success) await AuditPubAsync(id, "RemedialTrackPublicationRestored", "استرجاع أمر نشر", r.Message, actor, ct);
             return Json(new { success = r.Success, message = r.Message, data = r.Data, warnings = r.Warnings });
         }
 
@@ -301,6 +316,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 input.PublicationId,
                 new RemedialTrackReviewInput(input.EnrollmentIds, input.ApplyToAll, input.Enabled, untilUtc),
                 actor, await ScopeAsync(), ct);
+            if (r.Success) await AuditPubAsync(input.PublicationId, "RemedialTrackVideoReviewChanged", (input.Enabled ? "تشغيل" : "إيقاف") + " وضع مراجعة الفيديوهات (" + (input.ApplyToAll ? "الكل" : "طلاب محددون") + ")", r.Message, actor, ct);
             return Json(new { success = r.Success, message = r.Message, data = r.Data, warnings = r.Warnings });
         }
 
@@ -316,6 +332,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
             var r = await _parentAdmin.ToggleAutoSendAsync(input.PublicationId, input.Enabled, actor, await ScopeAsync(), ct);
             if (!r.Found) return NotFound();   // خارج نطاق الدفعات ≡ غير موجود (لا تسريب)
+            if (r.Success) await AuditPubAsync(input.PublicationId, "RemedialTrackAutoSendToggled", (input.Enabled ? "تشغيل" : "إيقاف") + " الإرسال التلقائي لتقارير أولياء الأمور", r.Message, actor, ct);
             return Json(new { success = r.Success, message = r.Message });
         }
 
@@ -330,6 +347,11 @@ namespace QdratNew.Areas.Admin.Controllers
                 return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
 
             var r = await _reports.UnlockNextAxisAsync(input.EnrollmentId, input.AxisProgressId, input.Reason, actor, await ScopeAsync(), ct);
+            if (r.Success)
+            {
+                var unlockTrack = await _audit.TrackIdOfEnrollmentAsync(input.EnrollmentId, ct);
+                if (unlockTrack.HasValue) await _audit.LogAsync(unlockTrack.Value, "RemedialTrackAxisUnlocked", "فتح المحور التالي لتسجيل #" + input.EnrollmentId + (string.IsNullOrWhiteSpace(input.Reason) ? "" : " (السبب: " + input.Reason + ")") + " — " + r.Message, User, actor.Name, ct);
+            }
             return Json(new { success = r.Success, message = r.Message, data = r.Data, warnings = r.Warnings });
         }
 
@@ -355,9 +377,18 @@ namespace QdratNew.Areas.Admin.Controllers
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
             if (_batchAccess.IsPrivilegedUser(User) || await _batchAccess.HasFullBatchesAccessAsync(userId))
                 return RemedialTrackBatchScope.Unrestricted;
+            if (await CanAsync(AdminPermissionPolicies.RemedialTrackPublications_AllBatches))
+                return RemedialTrackBatchScope.Unrestricted;
 
             var ids = await _batchAccess.GetPermittedBatchIdsAsync(userId, InstructorBatchFeature.Exams);
             return new RemedialTrackBatchScope(ids.ToHashSet());
+        }
+
+        private async Task AuditPubAsync(int publicationId, string action, string label, string? message, RemedialTrackActor actor, CancellationToken ct)
+        {
+            var trackId = await _audit.TrackIdOfPublicationAsync(publicationId, ct);
+            if (trackId.HasValue)
+                await _audit.LogAsync(trackId.Value, action, "[أمر نشر #" + publicationId + "] " + label + (string.IsNullOrWhiteSpace(message) ? "" : " — " + message), User, actor.Name, ct);
         }
 
         private async Task<bool> CanAsync(string policy)
