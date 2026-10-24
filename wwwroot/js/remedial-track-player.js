@@ -552,7 +552,14 @@
             requestFs(wrapEl).catch(function () { setPseudoFs(true); });
         });
         ['fullscreenchange', 'webkitfullscreenchange'].forEach(function (ev) {
-            document.addEventListener(ev, function () { setIcon(btnFull, fsElement() ? 'fa-compress' : 'fa-expand'); });
+            document.addEventListener(ev, function () {
+                var on = !!fsElement();
+                setIcon(btnFull, on ? 'fa-compress' : 'fa-expand');
+                try {
+                    if (on && screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function () { });
+                    if (!on && screen.orientation && screen.orientation.unlock) screen.orientation.unlock();
+                } catch (e) { }
+            });
         });
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape' && wrapEl.classList.contains('rtk-pseudo-fs')) setPseudoFs(false);

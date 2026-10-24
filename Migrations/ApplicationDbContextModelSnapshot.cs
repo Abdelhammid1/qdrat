@@ -7084,6 +7084,9 @@ namespace QdratNew.Migrations
                     b.Property<int>("Exam101ModelId")
                         .HasColumnType("int");
 
+                    b.Property<int>("Exam102DurationMinutes")
+                        .HasColumnType("int");
+
                     b.Property<int>("Exam102ModelId")
                         .HasColumnType("int");
 

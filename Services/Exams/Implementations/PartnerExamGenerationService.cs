@@ -504,6 +504,8 @@ namespace QdratNew.Services.Exams.Implementations
                 {
                     Title = draftData.Draft.Title,
                     CurriculumId = draftData.Draft.CurriculumId,
+                    // القيمة الافتراضية LevelAssessment تُستبعد من لوحة الطالب
+                    Type = ExamType.Manual,
                     CreatedAt = DateTime.Now,
                     IsActive = true
                 };
@@ -518,6 +520,7 @@ namespace QdratNew.Services.Exams.Implementations
                 {
                     ExamId = exam.Id,
                     BatchId = batchId,
+                    CurriculumId = draftData.Draft.CurriculumId,
                     ScheduledDate = model.StartAt,
                     EndAt = model.EndAt,
                     DurationMinutes = model.DurationMinutes,
@@ -557,10 +560,24 @@ namespace QdratNew.Services.Exams.Implementations
                 var studentIds = await _context.StudentBatchEnrollments
                     .Where(x => x.BatchId == batchId)
                     .Select(x => x.StudentID)
+                    .Distinct()
                     .ToListAsync();
 
                 if (!studentIds.Any())
                     continue;
+
+                // سجل التكليف لكل طالب (تقرأ منه صفحة اختبارات الطالب)
+                var examAssignments = studentIds
+                    .Select(studentId => new ExamAssignment
+                    {
+                        ExamId = exam.Id,
+                        StudentId = studentId,
+                        AssignedAt = DateTime.Now,
+                        DueDate = model.EndAt
+                    })
+                    .ToList();
+
+                _context.ExamAssignments.AddRange(examAssignments);
 
                 // ===============================
                 // 8️⃣ إنشاء Status لكل الطلاب (مرة واحدة)

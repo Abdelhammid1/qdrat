@@ -53,6 +53,8 @@ namespace QdratNew.ViewModels.RemedialTracks
         [Range(1, int.MaxValue, ErrorMessage = "اختر نموذج الاختبار الأول")] public int Exam101ModelId { get; set; }
         [Range(1, int.MaxValue, ErrorMessage = "اختر نموذج الاختبار الثاني")] public int Exam102ModelId { get; set; }
         [Range(5, 180, ErrorMessage = "مدة الاختبار بين 5 و180 دقيقة")] public int ExamDurationMinutes { get; set; } = 30;
+        /// <summary>مدة الاختبار الثاني؛ null = نفس مدة الاختبار الأول (توافق مع العملاء القدامى).</summary>
+        [Range(5, 180, ErrorMessage = "مدة الاختبار الثاني بين 5 و180 دقيقة")] public int? Exam102DurationMinutes { get; set; }
     }
 
     public sealed class SaveRemedialAxisExamsInput
@@ -61,6 +63,8 @@ namespace QdratNew.ViewModels.RemedialTracks
         [Range(1, int.MaxValue, ErrorMessage = "اختر نموذج الاختبار الأول")] public int Exam101ModelId { get; set; }
         [Range(1, int.MaxValue, ErrorMessage = "اختر نموذج الاختبار الثاني")] public int Exam102ModelId { get; set; }
         [Range(5, 180, ErrorMessage = "مدة الاختبار بين 5 و180 دقيقة")] public int ExamDurationMinutes { get; set; } = 30;
+        /// <summary>مدة الاختبار الثاني؛ null = نفس مدة الاختبار الأول (توافق مع العملاء القدامى).</summary>
+        [Range(5, 180, ErrorMessage = "مدة الاختبار الثاني بين 5 و180 دقيقة")] public int? Exam102DurationMinutes { get; set; }
     }
 
     public sealed class AddRemedialVideoInput
@@ -195,6 +199,7 @@ namespace QdratNew.ViewModels.RemedialTracks
         public int Exam102ModelId { get; set; }
         public string Exam102Title { get; set; } = string.Empty;
         public int ExamDurationMinutes { get; set; }
+        public int Exam102DurationMinutes { get; set; }
         public List<RemedialTrackVideoVm> Videos { get; set; } = new();
     }
 

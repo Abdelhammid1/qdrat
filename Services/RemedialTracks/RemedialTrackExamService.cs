@@ -107,7 +107,8 @@ namespace QdratNew.Services.RemedialTracks
                     a.Status,
                     Exam101ModelId = a.Axis!.Exam101ModelId,
                     Exam102ModelId = a.Axis.Exam102ModelId,
-                    Minutes = a.Axis.ExamDurationMinutes,
+                    Minutes101 = a.Axis.ExamDurationMinutes,
+                    Minutes102 = a.Axis.Exam102DurationMinutes,
                     Title = a.Axis.TitleOverride ?? a.Axis.Section!.Title,
                     Access = new RemedialTrackAccessSnapshot(
                         a.Enrollment!.StudentId,
@@ -154,6 +155,7 @@ namespace QdratNew.Services.RemedialTracks
 
             // 4) إنشاء المحاولة بأسئلة مجمّدة (AddRange لرسم كائنات واحد + SaveChanges واحد)
             var modelId = number == RemedialTrackExamNumber.Exam101 ? ap.Exam101ModelId : ap.Exam102ModelId;
+            var minutes = number == RemedialTrackExamNumber.Exam101 ? ap.Minutes101 : ap.Minutes102;
             var questionIds = (await db.ProfessionalModelQuestions.AsNoTracking()
                     .Where(q => q.ModelId == modelId && q.QuestionId != null)
                     .OrderBy(q => q.OrderNumber)
@@ -177,7 +179,7 @@ namespace QdratNew.Services.RemedialTracks
                 ModelId = modelId,
                 Status = RemedialTrackAttemptStatus.InProgress,
                 StartedAtUtc = now,
-                ExpiresAtUtc = now.AddMinutes(Math.Clamp(ap.Minutes, 1, 600)),
+                ExpiresAtUtc = now.AddMinutes(Math.Clamp(minutes, 1, 600)),
                 TotalQuestions = questionIds.Count,
                 Questions = questionIds
                     .Select((id, i) => new RemedialTrackExamAttemptQuestion { QuestionId = id, Order = i + 1 })

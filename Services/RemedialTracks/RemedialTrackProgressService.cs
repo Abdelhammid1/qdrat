@@ -248,6 +248,7 @@ namespace QdratNew.Services.RemedialTracks
                     TrackTitle = a.Enrollment!.Publication!.Track!.Title,
                     MinWatch = a.Enrollment.Publication.Track.MinWatchPercent,
                     ExamMinutes = a.Axis.ExamDurationMinutes,
+                    Exam102Minutes = a.Axis.Exam102DurationMinutes,
                     ReviewEnabled = a.Enrollment.VideoReviewEnabled,
                     ReviewUntilUtc = a.Enrollment.VideoReviewUntilUtc,
                     EnrollmentActive = a.Enrollment.Status != RemedialTrackEnrollmentStatus.Cancelled
@@ -362,7 +363,7 @@ namespace QdratNew.Services.RemedialTracks
                 AllVideosDone = videos.Count > 0 && videos.All(v => v.IsCompleted),
                 ExamReady = ap.Status is RemedialTrackAxisStatus.AwaitingExam101 or RemedialTrackAxisStatus.AwaitingExam102,
                 PendingExam = pendingExam,
-                ExamDurationMinutes = ap.ExamMinutes,
+                ExamDurationMinutes = pendingExam == RemedialTrackExamNumber.Exam102 ? ap.Exam102Minutes : ap.ExamMinutes,
                 InProgressAttemptId = pendingExam.HasValue
                     ? attempts.Where(x => x.ExamNumber == pendingExam.Value && !x.IsClosed).Select(x => (int?)x.AttemptId).FirstOrDefault()
                     : null,

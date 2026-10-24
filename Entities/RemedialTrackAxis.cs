@@ -18,7 +18,8 @@ namespace QdratNew.Entities
         public ProfessionalModel? Exam101Model { get; set; }
         public int Exam102ModelId { get; set; }
         public ProfessionalModel? Exam102Model { get; set; }
-        public int ExamDurationMinutes { get; set; } = 30; // 5..180
+        public int ExamDurationMinutes { get; set; } = 30; // مدة الاختبار الأول (101)، 5..180
+        public int Exam102DurationMinutes { get; set; } = 30; // مدة الاختبار الثاني (102)، 5..180
         /// <summary>مُهمَل منذ RTK v2 (D19): المحور التالي يُفتح فور اجتياز السابق. العمود باقٍ لعدم الترحيل الهدّام.</summary>
         public int ReleaseDay { get; set; } = 1;
 

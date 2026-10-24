@@ -169,7 +169,8 @@ namespace QdratNew.Services.RemedialTracks
                     Exam101Title = a.Exam101Model!.Title,
                     Exam102ModelId = a.Exam102ModelId,
                     Exam102Title = a.Exam102Model!.Title,
-                    ExamDurationMinutes = a.ExamDurationMinutes
+                    ExamDurationMinutes = a.ExamDurationMinutes,
+                    Exam102DurationMinutes = a.Exam102DurationMinutes
                 })
                 .ToListAsync(ct);
 
@@ -315,8 +316,9 @@ namespace QdratNew.Services.RemedialTracks
                 if (axesCount >= MaxAxesPerTrack)
                     return RemedialTrackResult.Fail($"⚠️ الحد الأقصى {MaxAxesPerTrack} محورًا في الخطة.");
 
+                var duration102 = input.Exam102DurationMinutes ?? input.ExamDurationMinutes;
                 var (errors, warnings) = await ValidateExamModelsAsync(
-                    db, track!.CurriculumId, input.Exam101ModelId, input.Exam102ModelId, input.ExamDurationMinutes, c);
+                    db, track!.CurriculumId, input.Exam101ModelId, input.Exam102ModelId, input.ExamDurationMinutes, duration102, c);
                 if (errors.Count > 0)
                     return RemedialTrackResult.Fail("⚠️ " + string.Join(" • ", errors), errors);
 
@@ -331,7 +333,8 @@ namespace QdratNew.Services.RemedialTracks
                     Order = maxOrder + 1,
                     Exam101ModelId = input.Exam101ModelId,
                     Exam102ModelId = input.Exam102ModelId,
-                    ExamDurationMinutes = input.ExamDurationMinutes
+                    ExamDurationMinutes = input.ExamDurationMinutes,
+                    Exam102DurationMinutes = duration102
                 };
                 db.RemedialTrackAxes.Add(axis);
                 MarkStructureChanged(track);
@@ -410,17 +413,19 @@ namespace QdratNew.Services.RemedialTracks
                 var blocked = Guard(track, requireUnlocked: false);   // RTK v2/D25: تعديل النموذجين مسموح بعد النشر
                 if (blocked is not null) return blocked;
 
+                var duration102 = input.Exam102DurationMinutes ?? input.ExamDurationMinutes;
                 var (errors, warnings) = await ValidateExamModelsAsync(
-                    db, track!.CurriculumId, input.Exam101ModelId, input.Exam102ModelId, input.ExamDurationMinutes, c);
+                    db, track!.CurriculumId, input.Exam101ModelId, input.Exam102ModelId, input.ExamDurationMinutes, duration102, c);
                 if (errors.Count > 0)
                     return RemedialTrackResult.Fail("⚠️ " + string.Join(" • ", errors), errors);
 
-                var before = $"101={axis.Exam101ModelId}, 102={axis.Exam102ModelId}, مدة={axis.ExamDurationMinutes}";
+                var before = $"101={axis.Exam101ModelId}, 102={axis.Exam102ModelId}, مدة101={axis.ExamDurationMinutes}, مدة102={axis.Exam102DurationMinutes}";
                 var published = track.IsStructureLocked;
 
                 axis.Exam101ModelId = input.Exam101ModelId;
                 axis.Exam102ModelId = input.Exam102ModelId;
                 axis.ExamDurationMinutes = input.ExamDurationMinutes;
+                axis.Exam102DurationMinutes = duration102;
                 if (!published) MarkStructureChanged(track);   // قبل النشر فقط تعود الخطة Draft
                 else track.UpdatedAtUtc = Now;                 // بعد النشر تبقى Ready
 
@@ -438,7 +443,7 @@ namespace QdratNew.Services.RemedialTracks
                         warnList.Add($"⚠️ {waiting} طالبًا ينتظرون اختبار هذا المحور وسيؤدّون النموذج الجديد؛ المحاولات الجارية لا تتأثر.");
 
                     logAction = "RemedialTrackAxisExamsEdited";
-                    logText = $"[RTK track:{track.Id}] تعديل نموذجي اختبار المحور {axis.Id} في الخطة {track.Id} بعد النشر: [{before}] ← [101={axis.Exam101ModelId}, 102={axis.Exam102ModelId}, مدة={axis.ExamDurationMinutes}]";
+                    logText = $"[RTK track:{track.Id}] تعديل نموذجي اختبار المحور {axis.Id} في الخطة {track.Id} بعد النشر: [{before}] ← [101={axis.Exam101ModelId}, 102={axis.Exam102ModelId}, مدة101={axis.ExamDurationMinutes}, مدة102={axis.Exam102DurationMinutes}]";
                 }
 
                 return RemedialTrackResult.Ok("✅ تم حفظ نموذجي الاختبار.", null, warnList.Count == 0 ? null : warnList);
@@ -671,7 +676,8 @@ namespace QdratNew.Services.RemedialTracks
                         Order = a.Order,
                         Exam101ModelId = a.Exam101ModelId,
                         Exam102ModelId = a.Exam102ModelId,
-                        ExamDurationMinutes = a.ExamDurationMinutes
+                        ExamDurationMinutes = a.ExamDurationMinutes,
+                        Exam102DurationMinutes = a.Exam102DurationMinutes
                     };
                     foreach (var v in a.Videos.OrderBy(v => v.Order))
                     {
@@ -713,6 +719,7 @@ namespace QdratNew.Services.RemedialTracks
                     a.Exam101ModelId,
                     a.Exam102ModelId,
                     a.ExamDurationMinutes,
+                    a.Exam102DurationMinutes,
                     M101 = new ModelInfo { Id = a.Exam101Model!.Id, Title = a.Exam101Model.Title, IsArchived = a.Exam101Model.IsArchived, ModelType = a.Exam101Model.ModelType, CurriculumId = a.Exam101Model.CurriculumId },
                     M102 = new ModelInfo { Id = a.Exam102Model!.Id, Title = a.Exam102Model.Title, IsArchived = a.Exam102Model.IsArchived, ModelType = a.Exam102Model.ModelType, CurriculumId = a.Exam102Model.CurriculumId }
                 })
@@ -748,7 +755,9 @@ namespace QdratNew.Services.RemedialTracks
                     issues.Add(prefix + $"الفيديو «{v.Title}» من منصة أخرى بلا مدة صالحة.");
 
                 if (a.ExamDurationMinutes is < MinExamMinutes or > MaxExamMinutes)
-                    issues.Add(prefix + $"مدة الاختبار يجب أن تكون بين {MinExamMinutes} و{MaxExamMinutes} دقيقة.");
+                    issues.Add(prefix + $"مدة الاختبار الأول يجب أن تكون بين {MinExamMinutes} و{MaxExamMinutes} دقيقة.");
+                if (a.Exam102DurationMinutes is < MinExamMinutes or > MaxExamMinutes)
+                    issues.Add(prefix + $"مدة الاختبار الثاني يجب أن تكون بين {MinExamMinutes} و{MaxExamMinutes} دقيقة.");
                 if (a.Exam101ModelId == a.Exam102ModelId)
                     issues.Add(prefix + "نموذجا الاختبار الأول والثاني يجب أن يكونا مختلفين.");
 
@@ -760,13 +769,15 @@ namespace QdratNew.Services.RemedialTracks
         }
 
         private async Task<(List<string> Errors, List<string> Warnings)> ValidateExamModelsAsync(
-            ApplicationDbContext db, int trackCurriculumId, int id101, int id102, int durationMinutes, CancellationToken ct)
+            ApplicationDbContext db, int trackCurriculumId, int id101, int id102, int durationMinutes, int duration102Minutes, CancellationToken ct)
         {
             var errors = new List<string>();
             var warnings = new List<string>();
 
             if (durationMinutes is < MinExamMinutes or > MaxExamMinutes)
-                errors.Add($"مدة الاختبار بين {MinExamMinutes} و{MaxExamMinutes} دقيقة.");
+                errors.Add($"مدة الاختبار الأول بين {MinExamMinutes} و{MaxExamMinutes} دقيقة.");
+            if (duration102Minutes is < MinExamMinutes or > MaxExamMinutes)
+                errors.Add($"مدة الاختبار الثاني بين {MinExamMinutes} و{MaxExamMinutes} دقيقة.");
             if (id101 == id102)
                 errors.Add("نموذجا الاختبار الأول والثاني يجب أن يكونا مختلفين.");
             if (errors.Count > 0) return (errors, warnings);

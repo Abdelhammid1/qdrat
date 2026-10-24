@@ -1062,17 +1062,49 @@ namespace QdratNew.Areas.Admin.Controllers
             var student = await _context.Students.FindAsync(studentId);
             if (student == null) return NotFound();
 
-            var questions = await (from hw in _context.Homeworks
-                                   join q in _context.Questions on hw.QuestionId equals q.Id
-                                   where hw.StudentId == studentId && hw.HomeworkSetId == homeworkSetId
-                                   select new ReviewedHomeworkQuestionViewModel
-                                   {
-                                       HomeworkId = hw.Id,
-                                       QuestionId = q.Id,
-                                       QuestionText = q.Title,
-                                       Answer = hw.StudentAnswer,
-                                       IsCorrect = hw.IsCorrect
-                                   }).ToListAsync();
+            // نفس مصدر HomeworkParentReport:
+            // أسئلة الواجب من Homeworks + آخر محاولة من QuestionAttemptNew
+            var homeworkQuestions = await (
+                from h in _context.Homeworks.AsNoTracking()
+                join q in _context.Questions.AsNoTracking() on h.QuestionId equals q.Id
+                join l in _context.Lessons.AsNoTracking() on q.LessonId equals l.Id
+                where h.StudentId == studentId
+                      && h.HomeworkSetId == homeworkSetId
+                      && l.IsActive
+                select new
+                {
+                    HomeworkId = h.Id,
+                    h.QuestionId,
+                    QuestionText = q.Title,
+                    h.StudentAnswer,
+                    h.IsCorrect
+                }).ToListAsync();
+
+            var attempts = await _context.QuestionAttemptNew
+                .AsNoTracking()
+                .Where(a => a.StudentId == studentId && a.HomeworkSetId == homeworkSetId)
+                .Select(a => new { a.QuestionId, a.SelectedAnswer, a.IsCorrect, a.AttemptedAt })
+                .ToListAsync();
+
+            var latestAttempts = attempts
+                .GroupBy(a => a.QuestionId)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(a => a.AttemptedAt).First());
+
+            var questions = homeworkQuestions
+                .GroupBy(h => h.QuestionId)
+                .Select(g => g.First())
+                .Select(h =>
+                {
+                    latestAttempts.TryGetValue(h.QuestionId, out var last);
+                    return new ReviewedHomeworkQuestionViewModel
+                    {
+                        HomeworkId = h.HomeworkId,
+                        QuestionId = h.QuestionId,
+                        QuestionText = h.QuestionText,
+                        Answer = last != null ? last.SelectedAnswer : h.StudentAnswer,
+                        IsCorrect = last != null ? last.IsCorrect : h.IsCorrect
+                    };
+                }).ToList();
 
             var model = new StudentHomeworkReviewViewModel
             {
@@ -1116,14 +1148,28 @@ namespace QdratNew.Areas.Admin.Controllers
             // ===============================
             // 2) جلب إجابة الطالب الصحيحة لهذا الواجب
             // ===============================
-            var homeworkAnswer = await _context.Homeworks
-                .Where(h =>
-                    h.QuestionId == id &&
-                    h.StudentId == studentId &&
-                    h.HomeworkSetId == homeworkSetId)
-                .OrderByDescending(h => h.Id)
-                .Select(h => h.StudentAnswer)
+            var homeworkAnswer = await _context.QuestionAttemptNew
+                .AsNoTracking()
+                .Where(a =>
+                    a.QuestionId == id &&
+                    a.StudentId == studentId &&
+                    a.HomeworkSetId == homeworkSetId)
+                .OrderByDescending(a => a.AttemptedAt)
+                .Select(a => a.SelectedAnswer)
                 .FirstOrDefaultAsync();
+
+            if (homeworkAnswer == null)
+            {
+                homeworkAnswer = await _context.Homeworks
+                    .AsNoTracking()
+                    .Where(h =>
+                        h.QuestionId == id &&
+                        h.StudentId == studentId &&
+                        h.HomeworkSetId == homeworkSetId)
+                    .OrderByDescending(h => h.Id)
+                    .Select(h => h.StudentAnswer)
+                    .FirstOrDefaultAsync();
+            }
 
             // ===============================
             // 3) تمرير الإجابة (إن وُجدت)
