@@ -18,16 +18,18 @@
         <h4 class="fw-bold m-0" style="color:#3a7f85;">📝 @SectionNameHelper.Name(Model.StageNumber) — اختبار معمل القياس</h4>
         <div class="d-flex align-items-center gap-2">
             <span id="mse-timer" class="mse-timer mse-timer--ok">--:--</span>
-            <form method="post" asp-action="FinishStage" onsubmit="return confirm('بمجرد إنهاء هذا القسم لن تتمكن من الرجوع إليه أو تعديل إجاباتك فيه مرة أخرى. هل أنت متأكد؟');">
+            @* لا يظهر زر إنهاء للطالب: الانتقال يتم فقط من نافذة ملخص نهاية الوقت، والخادم يرفض الإنهاء قبل انتهاء المدة *@
+            <form id="mse-finish-form" method="post" asp-action="FinishStage" class="d-none">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="examId" value="@Model.MinistrySimExamId" />
                 <input type="hidden" name="stageNumber" value="@Model.StageNumber" />
-                <button type="submit" class="mse-finish-btn">إنهاء القسم</button>
             </form>
         </div>
     </div>
 
-    @await Html.PartialAsync("_StageQuestionCard", Model)
+    <div id="mse-stage-body" class="@(Model.IsTimeExpired ? "mse-stage-body--locked" : "")">
+        @await Html.PartialAsync("_StageQuestionCard", Model)
+    </div>
 </div>
 
 <style>
@@ -36,12 +38,27 @@
     .mse-timer--warning{background:#fbe6da;color:#a8532b;}
     .mse-timer--danger{background:#fee2e2;color:#dc2626;animation:mse-pulse 1s infinite;}
     @@keyframes mse-pulse{0%,100%{opacity:1;}50%{opacity:.55;}}
-    .mse-finish-btn{border:1.5px solid #e5e7eb;background:#fff;color:#4b5563;border-radius:50px;font-weight:700;font-size:.85rem;padding:.45rem 1.1rem;cursor:pointer;}
-    .mse-finish-btn:hover{border-color:#dc2626;color:#dc2626;}
+    .mse-stage-body--locked{pointer-events:none;opacity:.55;}
+    .mse-summary{direction:rtl;text-align:right;font-family:inherit;}
+    .mse-summary__lead{color:#4b5563;font-size:.95rem;line-height:1.9;margin:0 0 1rem;}
+    .mse-summary__grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin-bottom:1rem;}
+    .mse-summary__stat{border-radius:14px;padding:.8rem .4rem;text-align:center;}
+    .mse-summary__stat b{display:block;font-size:1.6rem;line-height:1.2;}
+    .mse-summary__stat span{font-size:.8rem;font-weight:700;}
+    .mse-summary__stat--ok{background:#d1fae5;color:#065f46;}
+    .mse-summary__stat--miss{background:#fee2e2;color:#b91c1c;}
+    .mse-summary__stat--flag{background:#fbe6da;color:#a8532b;}
+    .mse-summary__bar{height:10px;border-radius:50px;background:#e5e7eb;overflow:hidden;margin-bottom:.35rem;}
+    .mse-summary__bar i{display:block;height:100%;background:#3a7f85;}
+    .mse-summary__meta{font-size:.8rem;color:#6b7280;display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap;}
+    .mse-summary__warn{margin-top:1rem;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:12px;padding:.6rem .8rem;font-size:.85rem;font-weight:700;}
 </style>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <script>
     (function () {
+        var expired = @(Model.IsTimeExpired ? "true" : "false");
         var remaining = parseInt('@Model.RemainingSeconds', 10) || 0;
         var end = Date.now() + remaining * 1000;
         var el = document.getElementById('mse-timer');
@@ -64,14 +81,71 @@
             if (diff <= 0) {
                 clearInterval(timer);
                 render(0);
-                // الحسم النهائي على الخادم — إعادة تحميل الصفحة تجعل الخادم يكتشف انتهاء الوقت وينقل الطالب تلقائيًا
-                window.location.reload();
+                // الحسم النهائي على الخادم — إعادة التحميل تجعل الخادم يكتشف انتهاء الوقت ويعرض ملخص القسم وزر الانتقال
+                if (!expired) setTimeout(function () { window.location.reload(); }, 1200);
                 return;
             }
             render(diff);
         }, 1000);
     })();
 </script>
+
+@if (Model.IsTimeExpired)
+{
+    var total = Model.ReviewQuestions.Count;
+    var answered = Model.ReviewQuestions.Count(x => x.IsAnswered);
+    var unanswered = total - answered;
+    var flagged = Model.ReviewQuestions.Count(x => x.IsFlaggedForReview);
+    var percent = total > 0 ? (int)Math.Round(answered * 100.0 / total) : 0;
+    var stageName = SectionNameHelper.Name(Model.StageNumber);
+
+    <script>
+        (function () {
+            var form = document.getElementById('mse-finish-form');
+            var isLast = @(Model.IsLastStage ? "true" : "false");
+            var btnText = isLast ? 'إنهاء الاختبار وعرض النتيجة' : 'الانتقال إلى القسم التالي';
+
+            var html =
+                '<div class="mse-summary">' +
+                '<p class="mse-summary__lead">انتهت المدة المخصصة لـ <b>@stageName</b> (@Model.StageDurationMinutes دقيقة). تم حفظ إجاباتك ولا يمكن تعديلها بعد الآن.</p>' +
+                '<div class="mse-summary__grid">' +
+                '<div class="mse-summary__stat mse-summary__stat--ok"><b>@answered</b><span>تمت الإجابة</span></div>' +
+                '<div class="mse-summary__stat mse-summary__stat--miss"><b>@unanswered</b><span>بدون إجابة</span></div>' +
+                '<div class="mse-summary__stat mse-summary__stat--flag"><b>@flagged</b><span>علامة مراجعة</span></div>' +
+                '</div>' +
+                '<div class="mse-summary__bar"><i style="width:@percent%"></i></div>' +
+                '<div class="mse-summary__meta"><span>نسبة الإنجاز: @percent%</span><span>إجمالي الأسئلة: @total</span></div>' +
+                (@(unanswered) > 0 ? '<div class="mse-summary__warn">لديك @unanswered سؤال بدون إجابة ولن يمكنك الرجوع إليه.</div>' : '') +
+                '</div>';
+
+            function go() { if (form) form.submit(); }
+
+            if (typeof Swal === 'undefined') {
+                // احتياط في حال تعذّر تحميل المكتبة: لا يُترك الطالب بلا مسار للانتقال
+                go();
+                return;
+            }
+
+            Swal.fire({
+                icon: 'info',
+                title: 'انتهى وقت @stageName',
+                html: html,
+                confirmButtonText: btnText,
+                confirmButtonColor: '#3a7f85',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                allowEnterKey: true,
+                showCancelButton: false,
+                width: 520
+            }).then(function (r) {
+                if (r.isConfirmed) {
+                    Swal.update({ showConfirmButton: false });
+                    go();
+                }
+            });
+        })();
+    </script>
+}
 
 <script>
     document.addEventListener('DOMContentLoaded', () => {

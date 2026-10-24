@@ -331,11 +331,8 @@ namespace QdratNew.Areas.Students.Controllers
                 return await ContinueAfterStageAsync(examId, attempt.Id);
             }
 
-            var timeExpired = await _attemptService.EnforceStageTimeLimitAsync(attempt.Id, stageNumber);
-            if (timeExpired)
-            {
-                return await ContinueAfterStageAsync(examId, attempt.Id);
-            }
+            // انتهاء الوقت لا يقفل القسم تلقائيًا: يبقى مفتوحًا للقراءة فقط حتى يضغط الطالب زر الانتقال من ملخص القسم
+            var timeExpired = await _attemptService.IsStageTimeExpiredAsync(attempt.Id, stageNumber);
 
             var vm = await BuildSolveViewModelAsync(examId, attempt.Id, stageNumber, q);
             if (vm == null)
@@ -345,10 +342,20 @@ namespace QdratNew.Areas.Students.Controllers
                 .AsNoTracking()
                 .FirstOrDefaultAsync(s => s.MinistrySimExamId == examId && s.StageNumber == stageNumber);
 
-            var deadline = progress.StartedAt.Value.AddMinutes(stage?.DurationMinutes ?? 26);
+            var totalStages = await _context.MinistrySimExams
+                .AsNoTracking()
+                .Where(e => e.Id == examId)
+                .Select(e => e.TotalStages)
+                .FirstOrDefaultAsync();
+
+            var durationMinutes = stage?.DurationMinutes ?? 26;
+            var deadline = progress.StartedAt.Value.AddMinutes(durationMinutes);
             var remaining = (int)Math.Floor((deadline - DateTime.Now).TotalSeconds);
-            vm.RemainingSeconds = remaining > 0 ? remaining : 0;
+            vm.RemainingSeconds = timeExpired || remaining < 0 ? 0 : remaining;
             vm.IsReviewVisible = review;
+            vm.IsTimeExpired = timeExpired;
+            vm.StageDurationMinutes = durationMinutes;
+            vm.IsLastStage = stageNumber >= totalStages;
 
             return View(vm);
         }
@@ -387,10 +394,10 @@ namespace QdratNew.Areas.Students.Controllers
                 return RedirectToAction("Welcome", new { examId });
             }
 
-            var timeExpired = await _attemptService.EnforceStageTimeLimitAsync(attempt.Id, stageNumber);
-            if (timeExpired)
+            // بعد انتهاء الوقت لا تُقبل أي إجابة أو علامة جديدة — يُعاد الطالب لملخص القسم
+            if (await _attemptService.IsStageTimeExpiredAsync(attempt.Id, stageNumber))
             {
-                return await ContinueAfterStageAsync(examId, attempt.Id);
+                return RedirectToAction("Solve", new { examId, stageNumber, q = currentQuestionId });
             }
 
             var orderedIds = await _context.MinistrySimExamStageQuestions
@@ -470,9 +477,21 @@ namespace QdratNew.Areas.Students.Controllers
             if (attempt == null)
                 return RedirectToAction("Welcome", new { examId });
 
+            // الإنهاء لا يُسمح به إلا بعد انتهاء مدة القسم على الخادم (لا ثقة بالواجهة) — القسم المقفل أصلاً يمر idempotent
+            var progress = await _context.MinistrySimExamStudentStageProgresses
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.MinistrySimExamStudentAttemptId == attempt.Id && p.StageNumber == stageNumber);
+
+            if (progress != null && !progress.IsLocked
+                && !await _attemptService.IsStageTimeExpiredAsync(attempt.Id, stageNumber))
+            {
+                TempData["ErrorMessage"] = "لا يمكن إنهاء القسم قبل انتهاء الوقت المخصص له.";
+                return RedirectToAction("Solve", new { examId, stageNumber });
+            }
+
             try
             {
-                await _attemptService.LockStageAsync(attempt.Id, stageNumber, timeExpired: false);
+                await _attemptService.LockStageAsync(attempt.Id, stageNumber, timeExpired: true);
             }
             catch (InvalidOperationException ex)
             {

@@ -25,6 +25,11 @@ namespace QdratNew.ViewModels.Students
 
         // Sprint 10 (F3): الوقت المتبقي بالثواني عند لحظة العرض — للعرض فقط، الحسم النهائي دائمًا على الخادم
         public int RemainingSeconds { get; set; }
+
+        // انتهى وقت القسم على الخادم: يُمنع التعديل ويظهر ملخص القسم وزر الانتقال اليدوي (الإنهاء مسموح فقط في هذه الحالة)
+        public bool IsTimeExpired { get; set; }
+        public bool IsLastStage { get; set; }
+        public int StageDurationMinutes { get; set; }
     }
 
     public class MinistrySimExamStageNavigationVm

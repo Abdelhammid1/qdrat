@@ -345,6 +345,36 @@ namespace QdratNew.Services.Exams.Implementations
             return true;
         }
 
+        public async Task<bool> IsStageTimeExpiredAsync(int attemptId, int stageNumber)
+        {
+            var progress = await _context.MinistrySimExamStudentStageProgresses
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.MinistrySimExamStudentAttemptId == attemptId && p.StageNumber == stageNumber);
+
+            if (progress == null || progress.IsLocked || !progress.StartedAt.HasValue)
+                return false;
+
+            var examId = await _context.MinistrySimExamStudentAttempts
+                .AsNoTracking()
+                .Where(a => a.Id == attemptId)
+                .Select(a => (int?)a.MinistrySimExamId)
+                .FirstOrDefaultAsync();
+
+            if (!examId.HasValue)
+                return false;
+
+            var durationMinutes = await _context.MinistrySimExamStages
+                .AsNoTracking()
+                .Where(s => s.MinistrySimExamId == examId.Value && s.StageNumber == stageNumber)
+                .Select(s => (int?)s.DurationMinutes)
+                .FirstOrDefaultAsync();
+
+            if (!durationMinutes.HasValue)
+                return false;
+
+            return DateTime.Now >= progress.StartedAt.Value.AddMinutes(durationMinutes.Value);
+        }
+
         // Sprint 17 (MSE-J / J3): مصدر الحقيقة الوحيد هو MinistrySimExamAssignmentToStudent — سواء إسناد فردي
         // مباشر (SourceType = Official) أو إسناد آتٍ أصلاً من دفعة (SourceType = Batch، يُنشَأ في
         // MinistrySimExamAssignmentService.AssignStudentsInternalAsync بنفس IsOnline/ReferenceCode لدفعته وقت
