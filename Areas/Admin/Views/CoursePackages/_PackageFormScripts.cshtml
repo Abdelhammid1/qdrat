@@ -1,0 +1,193 @@
+<script>
+(function () {
+    'use strict';
+    var form = document.getElementById('packageForm');
+    if (!form) return;
+
+    var HEX = /^#[0-9A-Fa-f]{6}$/;
+
+    // ── مزامنة منتقي اللون مع حقل النص ───────────────────────────
+    function bindColorPair(pair) {
+        if (pair.dataset.bound) return;
+        pair.dataset.bound = '1';
+        var picker = pair.querySelector('input[type=color]');
+        var text = pair.querySelector('input[type=text]');
+        if (HEX.test(text.value)) picker.value = text.value;
+        picker.addEventListener('input', function () {
+            text.value = picker.value.toUpperCase();
+            text.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        text.addEventListener('input', function () {
+            if (HEX.test(text.value)) picker.value = text.value;
+        });
+    }
+
+    // ── معاينة أيقونة الدورة ─────────────────────────────────────
+    function bindIconSelect(sel) {
+        if (sel.dataset.bound) return;
+        sel.dataset.bound = '1';
+        var icon = sel.closest('.input-group').querySelector('[data-icon-preview]');
+        function refresh() {
+            var fa = sel.options[sel.selectedIndex].dataset.fa || 'fas fa-book';
+            icon.className = fa;
+            icon.setAttribute('data-icon-preview', '');
+        }
+        sel.addEventListener('change', refresh);
+        refresh();
+    }
+
+    function bindRow(scope) {
+        scope.querySelectorAll('[data-color-pair]').forEach(bindColorPair);
+        scope.querySelectorAll('[data-icon-select]').forEach(bindIconSelect);
+    }
+
+    // ── الصفوف الديناميكية (دورات / وسوم) ────────────────────────
+    function reindex(container) {
+        var prefix = container.dataset.prefix;
+        var rx = new RegExp('^' + prefix + '\\[[^\\]]*\\]');
+        container.querySelectorAll('[data-row]').forEach(function (row, i) {
+            row.querySelectorAll('[name]').forEach(function (el) {
+                el.name = el.name.replace(rx, prefix + '[' + i + ']');
+            });
+            row.querySelectorAll('[data-valmsg-for]').forEach(function (el) {
+                el.setAttribute('data-valmsg-for', el.getAttribute('data-valmsg-for').replace(rx, prefix + '[' + i + ']'));
+            });
+        });
+    }
+
+    function refreshState(container, addBtn, emptyEl) {
+        var rows = container.querySelectorAll('[data-row]');
+        var max = +container.dataset.max, min = +container.dataset.min;
+        addBtn.disabled = rows.length >= max;
+        container.querySelectorAll('[data-remove]').forEach(function (b) { b.disabled = rows.length <= min; });
+        rows.forEach(function (row, i) {
+            var up = row.querySelector('[data-move=up]'), down = row.querySelector('[data-move=down]');
+            if (up) up.disabled = i === 0;
+            if (down) down.disabled = i === rows.length - 1;
+        });
+        if (emptyEl) emptyEl.hidden = rows.length > 0;
+    }
+
+    function setupList(containerId, templateId, addBtnId, emptyId) {
+        var container = document.getElementById(containerId);
+        var tpl = document.getElementById(templateId);
+        var addBtn = document.getElementById(addBtnId);
+        var emptyEl = emptyId ? document.getElementById(emptyId) : null;
+
+        addBtn.addEventListener('click', function () {
+            if (container.querySelectorAll('[data-row]').length >= +container.dataset.max) return;
+            var node = tpl.content.firstElementChild.cloneNode(true);
+            container.appendChild(node);
+            reindex(container);
+            bindRow(node);
+            refreshState(container, addBtn, emptyEl);
+            var first = node.querySelector('input[type=text]');
+            if (first) first.focus();
+        });
+
+        container.addEventListener('click', function (e) {
+            var btn = e.target.closest('button');
+            if (!btn || !container.contains(btn)) return;
+            var row = btn.closest('[data-row]');
+            if (!row) return;
+            if (btn.hasAttribute('data-remove')) {
+                if (container.querySelectorAll('[data-row]').length <= +container.dataset.min) return;
+                row.remove();
+            } else if (btn.dataset.move === 'up' && row.previousElementSibling) {
+                container.insertBefore(row, row.previousElementSibling);
+            } else if (btn.dataset.move === 'down' && row.nextElementSibling) {
+                container.insertBefore(row.nextElementSibling, row);
+            } else {
+                return;
+            }
+            reindex(container);
+            refreshState(container, addBtn, emptyEl);
+        });
+
+        bindRow(container);
+        reindex(container);
+        refreshState(container, addBtn, emptyEl);
+        return { container: container, refresh: function () { reindex(container); } };
+    }
+
+    var lists = [
+        setupList('itemsContainer', 'itemTemplate', 'addItemBtn', null),
+        setupList('tagsContainer', 'tagTemplate', 'addTagBtn', 'tagsEmpty')
+    ];
+
+    bindRow(form);
+
+    // ── معاينة حية ───────────────────────────────────────────────
+    var pv = {
+        box: document.getElementById('pkgPreview'),
+        name: document.getElementById('pvName'),
+        grade: document.getElementById('pvGrade'),
+        btn: document.getElementById('pvButton'),
+        disc: document.getElementById('pvDiscount')
+    };
+    function val(key) { var el = form.querySelector('[data-preview=' + key + ']'); return el ? el.value : ''; }
+    function textColorFor(hex) {
+        var r = parseInt(hex.substr(1, 2), 16) / 255, g = parseInt(hex.substr(3, 2), 16) / 255, b = parseInt(hex.substr(5, 2), 16) / 255;
+        var lin = function (c) { return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+        return (0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)) > 0.4 ? '#1F2937' : '#FFFFFF';
+    }
+    function renderPreview() {
+        var color = HEX.test(val('color')) ? val('color') : '#14A8AE';
+        var fg = textColorFor(color);
+        pv.name.textContent = val('name') || 'اسم الباقة';
+        pv.grade.textContent = val('grade') || 'الصف';
+        pv.box.style.borderColor = color;
+        pv.name.style.color = color;
+        pv.btn.textContent = val('button') || 'احجز الآن';
+        pv.btn.style.background = color;
+        pv.btn.style.color = fg;
+        pv.btn.style.opacity = 1;
+        var d = parseInt(val('discount'), 10);
+        pv.disc.hidden = !(d >= 1 && d <= 100);
+        pv.disc.textContent = 'خصم ' + d + '%';
+        pv.disc.style.background = color;
+        pv.disc.style.color = fg;
+    }
+    form.addEventListener('input', function (e) {
+        if (e.target.matches('[data-preview]')) renderPreview();
+    });
+    renderPreview();
+
+    // ── معاينة البوستر الجديد ────────────────────────────────────
+    var posterInput = document.getElementById('posterInput');
+    var posterBox = document.getElementById('posterPreviewBox');
+    var posterImg = document.getElementById('posterPreviewImg');
+    var objectUrl = null;
+    posterInput.addEventListener('change', function () {
+        if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = null; }
+        var f = posterInput.files && posterInput.files[0];
+        if (!f) { posterBox.hidden = true; return; }
+        objectUrl = URL.createObjectURL(f);
+        posterImg.src = objectUrl;
+        posterBox.hidden = false;
+    });
+
+    var removeCheck = document.getElementById('removePosterCheck');
+    var existingBox = document.getElementById('existingPosterBox');
+    if (removeCheck && existingBox) {
+        removeCheck.addEventListener('change', function () {
+            existingBox.style.opacity = removeCheck.checked ? '0.4' : '1';
+        });
+    }
+
+    // ── منع الإرسال المزدوج + ضمان الترقيم ───────────────────────
+    form.addEventListener('submit', function (e) {
+        if (!form.checkValidity()) {
+            e.preventDefault();
+            form.reportValidity();
+            return;
+        }
+        lists.forEach(function (l) { l.refresh(); });
+        var btn = document.getElementById('packageSubmit');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> جارٍ الحفظ...';
+        }
+    });
+})();
+</script>

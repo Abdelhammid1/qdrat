@@ -1278,6 +1278,8 @@ using (var scope = app.Services.CreateScope())
     AdminPermissionProfileSeeder.Seed(context);
 
     ProfessionalCertificatesSeeder.Seed(context);
+
+    CoursePackagesSeeder.Seed(context);
 }
 
 if (app.Environment.IsDevelopment())
