@@ -2466,6 +2466,223 @@ namespace QdratNew.Migrations
                     b.ToTable("CourseCollectionSponsors");
                 });
 
+            modelBuilder.Entity("QdratNew.Entities.Frontend.CoursePackage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AccentColor")
+                        .IsRequired()
+                        .HasMaxLength(7)
+                        .HasColumnType("nvarchar(7)");
+
+                    b.Property<string>("ButtonText")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DiscountCaption")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<byte?>("DiscountPercent")
+                        .HasColumnType("tinyint");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("int");
+
+                    b.Property<string>("GradeLabel")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("IntroText")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("PosterImagePath")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("ShowOnHomePage")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("nvarchar(160)");
+
+                    b.Property<string>("Subtitle")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Slug")
+                        .IsUnique();
+
+                    b.HasIndex("IsActive", "ShowOnHomePage", "DisplayOrder");
+
+                    b.ToTable("CoursePackages");
+                });
+
+            modelBuilder.Entity("QdratNew.Entities.Frontend.CoursePackageItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ColorHex")
+                        .HasMaxLength(7)
+                        .HasColumnType("nvarchar(7)");
+
+                    b.Property<int>("CoursePackageId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("int");
+
+                    b.Property<string>("IconKey")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<string>("ScheduleNote")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ScheduleText")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("ScheduleTitle")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CoursePackageId");
+
+                    b.ToTable("CoursePackageItems");
+                });
+
+            modelBuilder.Entity("QdratNew.Entities.Frontend.CoursePackageRegistration", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AdminNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime?>("ContactedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CoursePackageId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("HandledByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("nvarchar(45)");
+
+                    b.Property<DateTime?>("LastUpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PackageNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("PhoneNumber")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("SubmittedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status", "SubmittedAt");
+
+                    b.HasIndex("CoursePackageId", "PhoneNumber", "SubmittedAt");
+
+                    b.ToTable("CoursePackageRegistrations");
+                });
+
+            modelBuilder.Entity("QdratNew.Entities.Frontend.CoursePackageTag", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CoursePackageId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("int");
+
+                    b.Property<string>("IconKey")
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CoursePackageId");
+
+                    b.ToTable("CoursePackageTags");
+                });
+
             modelBuilder.Entity("QdratNew.Entities.Frontend.FrontendCourse", b =>
                 {
                     b.Property<int>("Id")
@@ -10454,6 +10671,39 @@ namespace QdratNew.Migrations
                     b.Navigation("CourseCollection");
                 });
 
+            modelBuilder.Entity("QdratNew.Entities.Frontend.CoursePackageItem", b =>
+                {
+                    b.HasOne("QdratNew.Entities.Frontend.CoursePackage", "CoursePackage")
+                        .WithMany("Items")
+                        .HasForeignKey("CoursePackageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CoursePackage");
+                });
+
+            modelBuilder.Entity("QdratNew.Entities.Frontend.CoursePackageRegistration", b =>
+                {
+                    b.HasOne("QdratNew.Entities.Frontend.CoursePackage", "CoursePackage")
+                        .WithMany("Registrations")
+                        .HasForeignKey("CoursePackageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CoursePackage");
+                });
+
+            modelBuilder.Entity("QdratNew.Entities.Frontend.CoursePackageTag", b =>
+                {
+                    b.HasOne("QdratNew.Entities.Frontend.CoursePackage", "CoursePackage")
+                        .WithMany("Tags")
+                        .HasForeignKey("CoursePackageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CoursePackage");
+                });
+
             modelBuilder.Entity("QdratNew.Entities.Frontend.FrontendCourseRegistration", b =>
                 {
                     b.HasOne("QdratNew.Entities.Frontend.FrontendCourse", "FrontendCourse")
@@ -13037,6 +13287,15 @@ namespace QdratNew.Migrations
             modelBuilder.Entity("QdratNew.Entities.Frontend.CourseCollectionCourse", b =>
                 {
                     b.Navigation("Registrations");
+                });
+
+            modelBuilder.Entity("QdratNew.Entities.Frontend.CoursePackage", b =>
+                {
+                    b.Navigation("Items");
+
+                    b.Navigation("Registrations");
+
+                    b.Navigation("Tags");
                 });
 
             modelBuilder.Entity("QdratNew.Entities.Frontend.FrontendCourse", b =>

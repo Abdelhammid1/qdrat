@@ -229,6 +229,10 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<CourseCollectionCourse> CourseCollectionCourses { get; set; }
     public DbSet<CourseCollectionSponsor> CourseCollectionSponsors { get; set; }
     public DbSet<CourseCollectionRegistration> CourseCollectionRegistrations { get; set; }
+    public DbSet<CoursePackage> CoursePackages { get; set; }
+    public DbSet<CoursePackageItem> CoursePackageItems { get; set; }
+    public DbSet<CoursePackageTag> CoursePackageTags { get; set; }
+    public DbSet<CoursePackageRegistration> CoursePackageRegistrations { get; set; }
 
     public DbSet<MinistrySimExam> MinistrySimExams { get; set; }
     public DbSet<MinistrySimExamStage> MinistrySimExamStages { get; set; }
@@ -1348,7 +1352,26 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             .HasForeignKey(x => x.CourseCollectionCourseId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // ==== 🚀 فهارس تحسين الأداء (تقرير Qdrat_Performance_Report.md) ====
+        // Course Packages Module (PKG-S1)
+        modelBuilder.Entity<CoursePackage>().HasIndex(x => x.Slug).IsUnique();
+        modelBuilder.Entity<CoursePackage>().HasIndex(x => new { x.IsActive, x.ShowOnHomePage, x.DisplayOrder });
+
+        modelBuilder.Entity<CoursePackageItem>()
+            .HasOne(x => x.CoursePackage).WithMany(p => p.Items)
+            .HasForeignKey(x => x.CoursePackageId).OnDelete(DeleteBehavior.Cascade);   // أبناء لا معنى لهم بدون الباقة
+
+        modelBuilder.Entity<CoursePackageTag>()
+            .HasOne(x => x.CoursePackage).WithMany(p => p.Tags)
+            .HasForeignKey(x => x.CoursePackageId).OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<CoursePackageRegistration>()
+            .HasOne(x => x.CoursePackage).WithMany(p => p.Registrations)
+            .HasForeignKey(x => x.CoursePackageId).OnDelete(DeleteBehavior.Restrict);  // الطلبات سجل لا يُفقد
+
+        modelBuilder.Entity<CoursePackageRegistration>().HasIndex(x => new { x.Status, x.SubmittedAt });
+        modelBuilder.Entity<CoursePackageRegistration>().HasIndex(x => new { x.CoursePackageId, x.PhoneNumber, x.SubmittedAt });
+
+        // ====🚀 فهارس تحسين الأداء (تقرير Qdrat_Performance_Report.md) ====
 
         // Index #1 — QuestionOptions(QuestionId): كل سؤال يُحمَّل مع خياراته باستمرار
         Microsoft.EntityFrameworkCore.SqlServerIndexBuilderExtensions.IncludeProperties(
