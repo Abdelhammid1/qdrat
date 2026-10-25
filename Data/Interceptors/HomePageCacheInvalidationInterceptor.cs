@@ -34,6 +34,12 @@ public sealed class HomePageCacheInvalidationInterceptor : SaveChangesIntercepto
         typeof(CourseCollectionSponsor), typeof(CourseCollectionRegistration)
     };
 
+    // الطلبات (CoursePackageRegistration) لا تظهر في الرئيسية فلا تُبطل الكاش
+    private static readonly HashSet<Type> PackageTypes = new()
+    {
+        typeof(CoursePackage), typeof(CoursePackageItem), typeof(CoursePackageTag)
+    };
+
     private readonly IMemoryCache _cache;
     private readonly ConditionalWeakTable<DbContext, HashSet<string>> _pending = new();
 
@@ -100,6 +106,10 @@ public sealed class HomePageCacheInvalidationInterceptor : SaveChangesIntercepto
             else if (CourseCollectionTypes.Contains(type))
             {
                 keys.Add(HomePageCache.CourseCollectionsSectionKey);
+            }
+            else if (PackageTypes.Contains(type))
+            {
+                keys.Add(HomePageCache.PackagesSectionKey);
             }
         }
 

@@ -1,0 +1,169 @@
+@model QdratNew.ViewModels.Admin.CoursePackages.CoursePackageRegistrationsIndexViewModel
+@using QdratNew.Enums
+@{
+    ViewData["Title"] = "طلبات الباقات";
+    Layout = "~/Areas/Admin/Views/Shared/_AdminLayout.cshtml";
+
+    var c = Model.Counts;
+    var f = Model.Filter;
+    var riyadh = TimeSpan.FromHours(3);
+
+    string StatusLabel(CoursePackageRegistrationStatus s) => s switch
+    {
+        CoursePackageRegistrationStatus.New => "جديد",
+        CoursePackageRegistrationStatus.Contacted => "تم التواصل",
+        CoursePackageRegistrationStatus.NeedFollowUp => "يحتاج متابعة",
+        CoursePackageRegistrationStatus.Converted => "مؤكد",
+        CoursePackageRegistrationStatus.Rejected => "مرفوض",
+        _ => s.ToString()
+    };
+
+    string StatusBadge(CoursePackageRegistrationStatus s) => s switch
+    {
+        CoursePackageRegistrationStatus.New => "bg-danger",
+        CoursePackageRegistrationStatus.Contacted => "bg-info text-dark",
+        CoursePackageRegistrationStatus.NeedFollowUp => "bg-warning text-dark",
+        CoursePackageRegistrationStatus.Converted => "bg-success",
+        CoursePackageRegistrationStatus.Rejected => "bg-secondary",
+        _ => "bg-light text-dark"
+    };
+
+    var cards = new (CoursePackageRegistrationStatus? Status, string Label, int Count, string Css)[]
+    {
+        (null, "الكل", c.TotalCount, "text-dark"),
+        (CoursePackageRegistrationStatus.New, "جديد", c.NewCount, "text-danger"),
+        (CoursePackageRegistrationStatus.Contacted, "تم التواصل", c.ContactedCount, "text-info"),
+        (CoursePackageRegistrationStatus.NeedFollowUp, "يحتاج متابعة", c.NeedFollowUpCount, "text-warning"),
+        (CoursePackageRegistrationStatus.Converted, "مؤكد", c.ConvertedCount, "text-success"),
+        (CoursePackageRegistrationStatus.Rejected, "مرفوض", c.RejectedCount, "text-secondary")
+    };
+}
+
+<div class="container-fluid py-4">
+    <div class="mb-4">
+        <h4 class="mb-0 fw-bold"><i class="fas fa-inbox me-2 text-success"></i>طلبات الباقات</h4>
+        <small class="text-muted">طلبات الحجز الواردة من صفحات الباقات (الاسم + الجوال)</small>
+    </div>
+
+    <div class="row g-3 mb-4">
+        @foreach (var card in cards)
+        {
+            var active = f.Status == card.Status;
+            <div class="col-6 col-md-4 col-xl-2">
+                <a asp-action="Index"
+                   asp-route-status="@card.Status"
+                   asp-route-packageId="@f.PackageId"
+                   asp-route-search="@f.Search"
+                   class="card border-0 shadow-sm rounded-4 text-decoration-none h-100 @(active ? "border border-2 border-success" : "")"
+                   aria-current="@(active ? "true" : null)">
+                    <div class="card-body text-center py-3">
+                        <div class="fs-3 fw-bold @card.Css">@card.Count</div>
+                        <div class="small text-muted">@card.Label</div>
+                    </div>
+                </a>
+            </div>
+        }
+    </div>
+
+    <form method="get" asp-action="Index" class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-body row g-2 align-items-end">
+            <div class="col-12 col-md-4">
+                <label class="form-label small mb-1" for="regSearch">بحث بالاسم أو الجوال</label>
+                <input type="text" id="regSearch" name="search" value="@f.Search" maxlength="100"
+                       class="form-control" placeholder="اسم أو رقم جوال" />
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small mb-1" for="regPackage">الباقة</label>
+                <select id="regPackage" name="packageId" class="form-select">
+                    <option value="">كل الباقات</option>
+                    @foreach (var p in Model.Packages)
+                    {
+                        <option value="@p.Id" selected="@(f.PackageId == p.Id)">@p.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small mb-1" for="regStatus">الحالة</label>
+                <select id="regStatus" name="status" class="form-select">
+                    <option value="">كل الحالات</option>
+                    @foreach (var card in cards.Where(x => x.Status.HasValue))
+                    {
+                        <option value="@((int)card.Status!.Value)" selected="@(f.Status == card.Status)">@card.Label</option>
+                    }
+                </select>
+            </div>
+            <div class="col-12 col-md-2 d-flex gap-2">
+                <button type="submit" class="btn btn-success flex-fill"><i class="fas fa-search me-1"></i> تصفية</button>
+                <a asp-action="Index" class="btn btn-outline-secondary" title="إعادة ضبط" aria-label="إعادة ضبط الفلاتر"><i class="fas fa-rotate-left"></i></a>
+            </div>
+        </div>
+    </form>
+
+    <div class="card border-0 shadow-sm rounded-4">
+        <div class="card-body p-0">
+            @if (Model.Rows.Count == 0)
+            {
+                <div class="text-center text-muted py-5">
+                    <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+                    لا توجد طلبات مطابقة.
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>#</th>
+                                <th>الاسم</th>
+                                <th>الجوال</th>
+                                <th>الباقة</th>
+                                <th>التاريخ</th>
+                                <th class="text-center">الحالة</th>
+                                <th class="text-center">إجراءات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var r in Model.Rows)
+                            {
+                                <tr>
+                                    <td class="text-muted small">@r.Id</td>
+                                    <td class="fw-semibold">@r.FullName</td>
+                                    <td dir="ltr" class="text-end">@r.PhoneNumber</td>
+                                    <td>@r.PackageNameSnapshot</td>
+                                    <td class="small text-muted" dir="ltr">@((r.SubmittedAt + riyadh).ToString("yyyy-MM-dd HH:mm"))</td>
+                                    <td class="text-center"><span class="badge @StatusBadge(r.Status)">@StatusLabel(r.Status)</span></td>
+                                    <td class="text-center text-nowrap">
+                                        <a href="tel:@r.PhoneNumber" class="btn btn-sm btn-outline-primary" title="اتصال" aria-label="اتصال بـ @r.FullName"><i class="fas fa-phone"></i></a>
+                                        <a href="https://wa.me/@r.WhatsAppNumber" target="_blank" rel="noopener noreferrer"
+                                           class="btn btn-sm btn-outline-success" title="واتساب" aria-label="واتساب @r.FullName"><i class="fab fa-whatsapp"></i></a>
+                                        <a asp-action="Details" asp-route-id="@r.Id" class="btn btn-sm btn-outline-dark" title="التفاصيل" aria-label="تفاصيل الطلب @r.Id"><i class="fas fa-eye"></i></a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+
+    @if (Model.TotalPages > 1)
+    {
+        <nav class="mt-3" aria-label="ترقيم الصفحات">
+            <ul class="pagination justify-content-center flex-wrap mb-0">
+                <li class="page-item @(f.Page <= 1 ? "disabled" : "")">
+                    <a class="page-link" asp-action="Index" asp-all-route-data="@(new Dictionary<string, string?> {
+                        ["status"] = f.Status.HasValue ? ((int)f.Status.Value).ToString() : null,
+                        ["packageId"] = f.PackageId?.ToString(), ["search"] = f.Search, ["page"] = (f.Page - 1).ToString() })">السابق</a>
+                </li>
+                <li class="page-item disabled"><span class="page-link">صفحة @f.Page من @Model.TotalPages (@Model.TotalItems طلب)</span></li>
+                <li class="page-item @(f.Page >= Model.TotalPages ? "disabled" : "")">
+                    <a class="page-link" asp-action="Index" asp-all-route-data="@(new Dictionary<string, string?> {
+                        ["status"] = f.Status.HasValue ? ((int)f.Status.Value).ToString() : null,
+                        ["packageId"] = f.PackageId?.ToString(), ["search"] = f.Search, ["page"] = (f.Page + 1).ToString() })">التالي</a>
+                </li>
+            </ul>
+        </nav>
+    }
+</div>

@@ -1124,6 +1124,8 @@ builder.Services.AddScoped<IInstructorAnalyticsService, InstructorAnalyticsServi
 builder.Services.AddScoped<IProfessionalCertificateService, ProfessionalCertificateService>();
 builder.Services.AddScoped<ICourseCollectionService, CourseCollectionService>();
 builder.Services.AddScoped<ICoursePackageAdminService, CoursePackageAdminService>();
+builder.Services.AddScoped<ICoursePackagePublicService, CoursePackagePublicService>();
+builder.Services.AddScoped<ICoursePackageRegistrationAdminService, CoursePackageRegistrationAdminService>();
 builder.Services.AddScoped<QdratNew.Services.Frontend.PublicRegistration.IPublicRegistrationService, QdratNew.Services.Frontend.PublicRegistration.PublicRegistrationService>();
 builder.Services.AddScoped<QdratNew.Services.Frontend.Leads.IFrontendLeadAdminService, QdratNew.Services.Frontend.Leads.FrontendLeadAdminService>();
 

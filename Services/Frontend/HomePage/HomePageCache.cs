@@ -13,6 +13,7 @@ public static class HomePageCache
     public const string CatalogKey = "HP:FrontendCatalog";
     public const string ProfCertSectionKey = "HP:ProfCertSection";
     public const string CourseCollectionsSectionKey = "HP:CourseCollectionsSection";
+    public const string PackagesSectionKey = "HP:PackagesSection";
 
     /// <summary>محتوى يتغيّر من لوحة الأدمن فقط — شبكة أمان في حال فات إبطال.</summary>
     public static readonly TimeSpan ContentTtl = TimeSpan.FromMinutes(10);
@@ -33,6 +34,7 @@ public static class HomePageCache
         InvalidateContent(cache);
         cache.Remove(ProfCertSectionKey);
         cache.Remove(CourseCollectionsSectionKey);
+        cache.Remove(PackagesSectionKey);
     }
 
     /// <summary>
