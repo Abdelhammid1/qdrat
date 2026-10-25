@@ -243,6 +243,7 @@ public class CoursePackagePublicService : ICoursePackagePublicService
                 Title = i.Title,
                 IconBiClass = PackageIconCatalog.Resolve(i.IconKey).BiClass,
                 ColorHex = PackageStyleGuard.IsValidHex(i.ColorHex) ? i.ColorHex : null,
+                OnColorHex = PackageStyleGuard.IsValidHex(i.ColorHex) ? PackageStyleGuard.ReadableTextColor(i.ColorHex!) : "#FFFFFF",
                 ScheduleTitle = string.IsNullOrWhiteSpace(i.ScheduleTitle) ? i.Title : i.ScheduleTitle!,
                 ScheduleText = i.ScheduleText,
                 ScheduleNote = i.ScheduleNote

@@ -149,6 +149,23 @@ namespace QdratNew.Tests.CoursePackages
             Assert.True(cache.TryGetValue(HomePageCache.PackagesSectionKey, out _));
         }
 
+        [Fact]
+        public async Task GetBySlug_ItemOnColor_IsReadableAndFallsBackForInvalidColor()
+        {
+            var (ctx, _, svc) = Create();
+            var pkg = NewPackage("p-1");
+            pkg.Items.Add(new CoursePackageItem { Title = "فاتح", IconKey = "book", DisplayOrder = 3, ColorHex = "#FACC15" });
+            pkg.Items.Add(new CoursePackageItem { Title = "داكن", IconKey = "book", DisplayOrder = 4, ColorHex = "#1B3A57" });
+            ctx.CoursePackages.Add(pkg);
+            await ctx.SaveChangesAsync();
+
+            var vm = await svc.GetBySlugAsync("p-1");
+
+            Assert.Equal("#1F2937", vm!.Items.Single(i => i.Title == "فاتح").OnColorHex);
+            Assert.Equal("#FFFFFF", vm.Items.Single(i => i.Title == "داكن").OnColorHex);
+            Assert.Equal("#FFFFFF", vm.Items.Single(i => i.Title == "أ").OnColorHex); // لون غير صالح → الافتراضي
+        }
+
         private static QdratNew.ViewModels.Frontend.Packages.PackageRegisterFormViewModel Form(string name, string phone) =>
             new() { FullName = name, PhoneNumber = phone };
 
