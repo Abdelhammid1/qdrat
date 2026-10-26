@@ -1207,6 +1207,27 @@ namespace QdratNew.Tests
         }
 
         [Fact]
+        public async Task AttemptReview_Failed101_LockedUntilExam102Closes_ThenBothOpen()
+        {
+            var f = await NewAsync();
+            var id101 = await f.RunExamAsync(0, 1);                       // 101 دون الحد
+            await SeedLessonAsync(f);
+            var svc = new RemedialTrackAttemptReviewService(f.Factory, f.Clock);
+
+            Assert.Equal(RemedialTrackAttemptReviewStatus.ReviewLocked, (await svc.GetReviewAsync(Fx.Student, id101, "/b")).Status);
+            Assert.Equal(RemedialTrackAttemptReviewStatus.ReviewLocked, (await svc.GetReportAsync(Fx.Student, id101)).Status);
+            Assert.False((await f.Exams.GetResultAsync(Fx.Student, id101)).Model!.CanReviewAnswers);
+
+            await f.CompleteVideosAsync(0);
+            var id102 = await f.RunExamAsync(0, 2);                       // 102 مغلق
+
+            Assert.Equal(RemedialTrackAttemptReviewStatus.Ok, (await svc.GetReviewAsync(Fx.Student, id101, "/b")).Status);
+            Assert.Equal(RemedialTrackAttemptReviewStatus.Ok, (await svc.GetReportAsync(Fx.Student, id101)).Status);
+            Assert.Equal(RemedialTrackAttemptReviewStatus.Ok, (await svc.GetReviewAsync(Fx.Student, id102, "/b")).Status);
+            Assert.True((await f.Exams.GetResultAsync(Fx.Student, id101)).Model!.CanReviewAnswers);
+        }
+
+        [Fact]
         public async Task AttemptReview_InProgressAttempt_NeverRevealsAnswers()
         {
             var f = await NewAsync();

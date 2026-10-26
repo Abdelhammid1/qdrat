@@ -330,6 +330,7 @@ namespace QdratNew.Areas.Students.Controllers
             {
                 RemedialTrackAttemptReviewStatus.Ok => View("~/Areas/Students/Views/StudentExamResults/ExamReview.cshtml", r.Model),
                 RemedialTrackAttemptReviewStatus.InProgress => RedirectToAction(nameof(Result), new { attemptId }),
+                RemedialTrackAttemptReviewStatus.ReviewLocked => RedirectToAction(nameof(Result), new { attemptId }),
                 RemedialTrackAttemptReviewStatus.Forbidden => View("Unavailable"),
                 _ => NotFound()
             };
@@ -345,7 +346,8 @@ namespace QdratNew.Areas.Students.Controllers
             return r.Status switch
             {
                 RemedialTrackAttemptReviewStatus.Ok => View(r.Model),
-                RemedialTrackAttemptReviewStatus.InProgress => RedirectToAction(nameof(Result), new { attemptId }),
+                RemedialTrackAttemptReviewStatus.InProgress or RemedialTrackAttemptReviewStatus.ReviewLocked
+                    => RedirectToAction(nameof(Result), new { attemptId }),
                 RemedialTrackAttemptReviewStatus.Forbidden => View("Unavailable"),
                 _ => NotFound()
             };

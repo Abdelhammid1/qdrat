@@ -94,6 +94,19 @@ namespace QdratNew.Services.RemedialTracks
                 : null;
         }
 
+        /// <summary>
+        /// مراجعة الإجابات (تكشف الصحيح) تُفتح بعد نهاية الاختبار الثاني؛ ومن اجتاز الأول لا اختبار ثانٍ له فتُفتح فورًا.
+        /// الاختبار الأول الراسب يبقى مقفلًا حتى تُغلق محاولة 102 لنفس المحور (منعًا لتسريب إجابات الثاني).
+        /// </summary>
+        public static bool CanReviewAnswers(RemedialTrackExamNumber number, bool isPassed, bool hasClosedExam102) =>
+            number == RemedialTrackExamNumber.Exam102 || isPassed || hasClosedExam102;
+
+        public static Task<bool> HasClosedExam102Async(ApplicationDbContext db, int axisProgressId, CancellationToken ct) =>
+            db.RemedialTrackExamAttempts.AsNoTracking()
+                .AnyAsync(x => x.AxisProgressId == axisProgressId
+                               && x.ExamNumber == RemedialTrackExamNumber.Exam102
+                               && x.Status != RemedialTrackAttemptStatus.InProgress, ct);
+
         private static string FormatDuration(DateTime startUtc, DateTime? endUtc)
         {
             if (endUtc is null) return "غير محدد";
@@ -110,6 +123,9 @@ namespace QdratNew.Services.RemedialTracks
             var head = await LoadHeadAsync(db, studentId, attemptId, ct);
             var blocked = Gate(head, studentId);
             if (blocked.HasValue) return new(blocked.Value);
+
+            if (!CanReviewAnswers(head!.ExamNumber, head.IsPassed, await HasClosedExam102Async(db, head.AxisProgressId, ct)))
+                return new(RemedialTrackAttemptReviewStatus.ReviewLocked);
 
             var rows = await db.RemedialTrackExamAttemptQuestions.AsNoTracking()
                 .Where(x => x.AttemptId == attemptId)
@@ -198,6 +214,10 @@ namespace QdratNew.Services.RemedialTracks
             var blocked = Gate(head, studentId);
             if (blocked.HasValue) return new(blocked.Value);
 
+            // التقرير يكشف الدروس/الأسئلة الخاطئة فيُفتح بنفس قاعدة مراجعة الإجابات
+            if (!CanReviewAnswers(head!.ExamNumber, head.IsPassed, await HasClosedExam102Async(db, head.AxisProgressId, ct)))
+                return new(RemedialTrackAttemptReviewStatus.ReviewLocked);
+
             // إسقاط خفيف (بلا Include): نحتاج الترتيب والنتيجة والدرس/القسم فقط
             var rows = await db.RemedialTrackExamAttemptQuestions.AsNoTracking()
                 .Where(x => x.AttemptId == attemptId)
@@ -273,6 +293,7 @@ namespace QdratNew.Services.RemedialTracks
                 TimedOut = head.Status == RemedialTrackAttemptStatus.Expired,
                 ScorePercent = head.ScorePercent,
                 IsPassed = head.IsPassed,
+                CanReviewAnswers = true,
                 PassPercent = head.PassPercent,
                 TotalQuestions = total,
                 CorrectCount = correct,

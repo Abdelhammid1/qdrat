@@ -72,6 +72,7 @@ namespace QdratNew.ViewModels.RemedialTracks
         public int? NextAxisProgressId { get; set; }
         public string? NextAxisTitle { get; set; }
         public int? AddendumId { get; set; }                 // RTK-S13: يُملأ لنتيجة اختبار ملحق فقط
+        public bool CanReviewAnswers { get; set; }           // مراجعة الإجابات تُفتح بعد نهاية الاختبار الثاني
         public ResultTone Tone { get; set; } = new();
     }
 
@@ -114,6 +115,7 @@ namespace QdratNew.ViewModels.RemedialTracks
         public int CorrectCount { get; set; }
         public int WrongCount { get; set; }
         public int SkippedCount { get; set; }
+        public bool CanReviewAnswers { get; set; }           // تُفتح بعد نهاية الاختبار الثاني
         public int AllowedMinutes { get; set; }
         public double SolveMinutes { get; set; }
         public ResultTone Tone { get; set; } = new();

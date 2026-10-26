@@ -524,6 +524,9 @@ namespace QdratNew.Services.RemedialTracks
                 Next = nextStep,
                 NextAxisProgressId = next?.Id,
                 NextAxisTitle = next?.Title,
+                CanReviewAnswers = RemedialTrackAttemptReviewService.CanReviewAnswers(
+                    head.ExamNumber, att.IsPassed,
+                    await RemedialTrackAttemptReviewService.HasClosedExam102Async(db, head.AxisProgressId, ct)),
                 // نبرة محايدة بلا لغة رسوب (قاعدة المشروع): الحد = نسبة اجتياز الخطة
                 Tone = ResultToneHelper.Build(att.ScorePercent, ResultContext.Exam, att.PassPercent)
             });
