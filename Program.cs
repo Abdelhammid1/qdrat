@@ -307,6 +307,30 @@ builder.Services.AddAuthorization(options =>
     }
 
 
+    // الباقات والتواصل — صلاحيات البروفايل (تُسند للمستخدم من AdminUserProfiles)
+    foreach (var commPolicy in new[]
+    {
+        AdminPermissionPolicies.CoursePackages_Read,
+        AdminPermissionPolicies.CoursePackages_Create,
+        AdminPermissionPolicies.CoursePackages_Edit,
+        AdminPermissionPolicies.CoursePackages_ToggleVisibility,
+        AdminPermissionPolicies.CoursePackages_Delete,
+        AdminPermissionPolicies.CoursePackageRegistrations_Read,
+        AdminPermissionPolicies.CoursePackageRegistrations_Manage,
+        AdminPermissionPolicies.FrontendLeads_Read,
+        AdminPermissionPolicies.FrontendLeads_Manage,
+        AdminPermissionPolicies.ContactMessages_Read,
+        AdminPermissionPolicies.ContactMessages_Manage,
+        AdminPermissionPolicies.CorporateRequests_Read,
+        AdminPermissionPolicies.CorporateRequests_Manage
+    })
+    {
+        var policyName = commPolicy;
+        options.AddPolicy(
+            policyName,
+            policy => policy.Requirements.Add(new AdminPermissionAuthorizationRequirement(policyName)));
+    }
+
 
     // ===============================
     // 🧪 Placement Exams (Level Assessment)

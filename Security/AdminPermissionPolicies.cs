@@ -216,5 +216,22 @@
         public const string RemedialTrackReports_Read = "RemedialTrackReports:Read";
         public const string RemedialTrackReports_Edit = "RemedialTrackReports:Edit";                       // ملاحظة تقرير ولي الأمر
         public const string RemedialTrackReports_Send = "RemedialTrackReports:Send";                       // RTK-S12.1: إرسال/إعادة/إيقاف تقارير أولياء الأمور
+
+        // ===============================
+        // الباقات والتواصل — تظهر في مصفوفة البروفايل ويُسند البروفايل للمستخدم من AdminUserProfiles
+        // ===============================
+        public const string CoursePackages_Read = "CoursePackages:Read";
+        public const string CoursePackages_Create = "CoursePackages:Create";
+        public const string CoursePackages_Edit = "CoursePackages:Edit";
+        public const string CoursePackages_ToggleVisibility = "CoursePackages:ToggleVisibility"; // تفعيل/تعطيل وإظهار بالرئيسية
+        public const string CoursePackages_Delete = "CoursePackages:Delete";
+        public const string CoursePackageRegistrations_Read = "CoursePackageRegistrations:Read";
+        public const string CoursePackageRegistrations_Manage = "CoursePackageRegistrations:Manage";
+        public const string FrontendLeads_Read = "FrontendLeads:Read";
+        public const string FrontendLeads_Manage = "FrontendLeads:Manage";
+        public const string ContactMessages_Read = "ContactMessages:Read";
+        public const string ContactMessages_Manage = "ContactMessages:Manage";
+        public const string CorporateRequests_Read = "CorporateRequests:Read";
+        public const string CorporateRequests_Manage = "CorporateRequests:Manage";
     }
 }

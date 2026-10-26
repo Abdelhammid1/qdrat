@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Authorization;
+using QdratNew.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using QdratNew.Data;
@@ -8,7 +9,7 @@ using QdratNew.ViewModels;
 namespace QdratNew.Areas.Admin.Controllers
 {
     [Area("Admin")]
-    [Authorize(Roles = "SuperAdmin,Owner,Developer")]
+    [Authorize(Policy = "AdminArea")]
     public class CorporateRequestsController : Controller
     {
         private readonly ApplicationDbContext _context;
@@ -18,6 +19,7 @@ namespace QdratNew.Areas.Admin.Controllers
             _context = context;
         }
 
+        [AdminPermission("CorporateRequests", "Read")]
         public async Task<IActionResult> Index()
         {
             var data = await _context.CorporateRegistrationRequests
@@ -28,6 +30,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
 
         [HttpGet]
+        [AdminPermission("CorporateRequests", "Manage")]
         public async Task<IActionResult> EditStatus(int id)
         {
             var req = await _context.CorporateRegistrationRequests.FindAsync(id);
@@ -54,6 +57,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [AdminPermission("CorporateRequests", "Manage")]
         public async Task<IActionResult> EditStatus(EditCorporateStatusViewModel vm)
         {
             var req = await _context.CorporateRegistrationRequests.FindAsync(vm.Id);
@@ -85,6 +89,7 @@ namespace QdratNew.Areas.Admin.Controllers
         }
 
         [HttpPost]
+        [AdminPermission("CorporateRequests", "Manage")]
         public async Task<IActionResult> SetAutoCloseDate(string company, DateTime autoCloseAt)
         {
             var setting = await _context.CorporateRegistrationSettings
@@ -103,6 +108,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
 
         [HttpPost]
+        [AdminPermission("CorporateRequests", "Manage")]
         public async Task<IActionResult> ClearAutoCloseDate(string company)
         {
             if (string.IsNullOrWhiteSpace(company))
@@ -124,6 +130,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
 
         [HttpGet]
+        [AdminPermission("CorporateRequests", "Manage")]
         public async Task<IActionResult> ManageCompany(string company)
         {
             var setting = await _context.CorporateRegistrationSettings
@@ -145,6 +152,7 @@ namespace QdratNew.Areas.Admin.Controllers
         }
 
         [HttpPost]
+        [AdminPermission("CorporateRequests", "Manage")]
         public async Task<IActionResult> CloseRegistration(string company)
         {
             var setting = await _context.CorporateRegistrationSettings
@@ -163,6 +171,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
 
         [HttpPost]
+        [AdminPermission("CorporateRequests", "Manage")]
         public async Task<IActionResult> OpenRegistration(string company)
         {
             var setting = await _context.CorporateRegistrationSettings
@@ -180,6 +189,7 @@ namespace QdratNew.Areas.Admin.Controllers
         }
 
         [HttpPost]
+        [AdminPermission("CorporateRequests", "Manage")]
         public async Task<IActionResult> ToggleHomeVisibility(string company)
         {
             if (string.IsNullOrWhiteSpace(company))
@@ -201,6 +211,7 @@ namespace QdratNew.Areas.Admin.Controllers
             return RedirectToAction("ManageCompany", new { company });
         }
 
+        [AdminPermission("CorporateRequests", "Read")]
         public IActionResult ExportToExcel()
         {
             var data = _context.CorporateRegistrationRequests.ToList();

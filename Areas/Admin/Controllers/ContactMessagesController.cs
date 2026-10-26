@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Authorization;
+using QdratNew.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using QdratNew.Data;
@@ -7,7 +8,7 @@ using QdratNew.Entities;
 namespace QdratNew.Areas.Admin.Controllers
 {
     [Area("Admin")]
-    [Authorize(Roles = "SuperAdmin,Owner,Developer")]
+    [Authorize(Policy = "AdminArea")]
     public class ContactMessagesController : Controller
     {
         private readonly ApplicationDbContext _context;
@@ -18,6 +19,7 @@ namespace QdratNew.Areas.Admin.Controllers
         }
 
         // ✅ عرض كل الرسائل
+        [AdminPermission("ContactMessages", "Read")]
         public async Task<IActionResult> Index()
         {
             var messages = await _context.ContactMessages
@@ -28,6 +30,7 @@ namespace QdratNew.Areas.Admin.Controllers
         }
 
         // 👁️ عرض التفاصيل + تحديث حالة القراءة
+        [AdminPermission("ContactMessages", "Read")]
         public async Task<IActionResult> Details(int id)
         {
             var message = await _context.ContactMessages.FindAsync(id);
@@ -46,6 +49,7 @@ namespace QdratNew.Areas.Admin.Controllers
         // ✏️ تعديل الحالة والملاحظات
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [AdminPermission("ContactMessages", "Manage")]
         public async Task<IActionResult> UpdateStatus(int id, string status, string adminNotes)
         {
             var msg = await _context.ContactMessages.FindAsync(id);

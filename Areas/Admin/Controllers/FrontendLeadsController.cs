@@ -27,7 +27,7 @@ namespace QdratNew.Areas.Admin.Controllers
         // filter يُبقي الروابط القديمة صالحة: contacted / not-contacted
         // =========================================
         [HttpGet]
-        [AdminPermission("Settings", "EditSettings")]
+        [AdminPermission("FrontendLeads", "Read")]
         public async Task<IActionResult> Index(string filter = "all", CancellationToken ct = default)
         {
             var vm = await _leadAdmin.GetDashboardAsync(ct);
@@ -47,7 +47,7 @@ namespace QdratNew.Areas.Admin.Controllers
         // =========================================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [AdminPermission("Settings", "EditSettings")]
+        [AdminPermission("FrontendLeads", "Manage")]
         public async Task<IActionResult> UpdateStatus([FromBody] UpdateLeadStatusRequest req, CancellationToken ct)
         {
             if (req == null || !ModelState.IsValid || !Enum.IsDefined(typeof(FrontendLeadStatus), req.Status))
@@ -72,7 +72,7 @@ namespace QdratNew.Areas.Admin.Controllers
         // =========================================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [AdminPermission("Settings", "EditSettings")]
+        [AdminPermission("FrontendLeads", "Manage")]
         public async Task<IActionResult> MarkContacted(int id, CancellationToken ct)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);

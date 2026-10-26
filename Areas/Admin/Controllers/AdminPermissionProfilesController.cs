@@ -280,7 +280,12 @@ namespace QdratNew.Areas.Admin.Controllers
         ("IntegrityViolations", "مخالفات النزاهة (ترجمة المتصفح)"),
         ("RemedialTracks", "الخطط العلاجية (بناء الخطة)"),
         ("RemedialTrackPublications", "نشر الخطط العلاجية ومتابعتها"),
-        ("RemedialTrackReports", "تقارير الخطة العلاجية وولي الأمر")
+        ("RemedialTrackReports", "تقارير الخطة العلاجية وولي الأمر"),
+        ("CoursePackages", "إدارة الباقات"),
+        ("CoursePackageRegistrations", "طلبات حجز الباقات"),
+        ("FrontendLeads", "التواصل: طلبات الالتحاق"),
+        ("ContactMessages", "التواصل: رسائل التواصل"),
+        ("CorporateRequests", "التواصل: طلبات تسجيل الرعاة")
     };
         }
 

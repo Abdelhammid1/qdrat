@@ -61,6 +61,39 @@
                     new AdminActionDescriptor { Key = "Send", DisplayNameAr = "إدارة تقارير أولياء الأمور (إرسال / إعادة إرسال / إيقاف)" }
                 },
 
+                "CoursePackages" => new[]
+                {
+                    new AdminActionDescriptor { Key = "Read", DisplayNameAr = "عرض إدارة الباقات" },
+                    new AdminActionDescriptor { Key = "Create", DisplayNameAr = "إضافة باقة" },
+                    new AdminActionDescriptor { Key = "Edit", DisplayNameAr = "تعديل باقة" },
+                    new AdminActionDescriptor { Key = "ToggleVisibility", DisplayNameAr = "تفعيل / تعطيل الباقة وإظهارها في الرئيسية" },
+                    new AdminActionDescriptor { Key = "Delete", DisplayNameAr = "حذف باقة" }
+                },
+
+                "CoursePackageRegistrations" => new[]
+                {
+                    new AdminActionDescriptor { Key = "Read", DisplayNameAr = "عرض طلبات حجز الباقات" },
+                    new AdminActionDescriptor { Key = "Manage", DisplayNameAr = "تحديث حالة طلب حجز باقة" }
+                },
+
+                "FrontendLeads" => new[]
+                {
+                    new AdminActionDescriptor { Key = "Read", DisplayNameAr = "عرض طلبات الالتحاق" },
+                    new AdminActionDescriptor { Key = "Manage", DisplayNameAr = "تحديث حالة طلب الالتحاق / تسجيل التواصل" }
+                },
+
+                "ContactMessages" => new[]
+                {
+                    new AdminActionDescriptor { Key = "Read", DisplayNameAr = "عرض رسائل التواصل" },
+                    new AdminActionDescriptor { Key = "Manage", DisplayNameAr = "تحديث حالة رسالة التواصل وملاحظات الإدارة" }
+                },
+
+                "CorporateRequests" => new[]
+                {
+                    new AdminActionDescriptor { Key = "Read", DisplayNameAr = "عرض طلبات تسجيل الرعاة" },
+                    new AdminActionDescriptor { Key = "Manage", DisplayNameAr = "إدارة طلبات الرعاة (الحالة، الإغلاق/الفتح، الظهور في الرئيسية)" }
+                },
+
                 "Curriculums" => new[]
                 {
                     new AdminActionDescriptor { Key = "Read", DisplayNameAr = "عرض المناهج" },

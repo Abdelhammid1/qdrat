@@ -1,3 +1,4 @@
+using QdratNew.Security;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -7,7 +8,7 @@ using QdratNew.ViewModels.Admin.CoursePackages;
 namespace QdratNew.Areas.Admin.Controllers;
 
 [Area("Admin")]
-[Authorize(Roles = "SuperAdmin,Owner,Developer")]
+[Authorize(Policy = "AdminArea")]
 public class CoursePackagesController : Controller
 {
     private readonly ICoursePackageAdminService _service;
@@ -19,6 +20,7 @@ public class CoursePackagesController : Controller
         _env = env;
     }
 
+    [AdminPermission("CoursePackages", "Read")]
     public async Task<IActionResult> Index(CancellationToken ct)
     {
         var packages = await _service.GetListAsync(ct);
@@ -26,6 +28,7 @@ public class CoursePackagesController : Controller
     }
 
     [HttpGet]
+    [AdminPermission("CoursePackages", "Create")]
     public IActionResult Create()
     {
         return View(new CoursePackageFormViewModel());
@@ -33,6 +36,7 @@ public class CoursePackagesController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [AdminPermission("CoursePackages", "Create")]
     public async Task<IActionResult> Create(CoursePackageFormViewModel model, CancellationToken ct)
     {
         RemoveOptionalFileState(model);
@@ -50,6 +54,7 @@ public class CoursePackagesController : Controller
     }
 
     [HttpGet]
+    [AdminPermission("CoursePackages", "Edit")]
     public async Task<IActionResult> Edit(int id, CancellationToken ct)
     {
         var vm = await _service.GetFormAsync(id, ct);
@@ -59,6 +64,7 @@ public class CoursePackagesController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [AdminPermission("CoursePackages", "Edit")]
     public async Task<IActionResult> Edit(CoursePackageFormViewModel model, CancellationToken ct)
     {
         RemoveOptionalFileState(model);
@@ -78,6 +84,7 @@ public class CoursePackagesController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [AdminPermission("CoursePackages", "ToggleVisibility")]
     public async Task<IActionResult> ToggleActive(int id, CancellationToken ct)
     {
         await _service.ToggleActiveAsync(id, ct);
@@ -86,6 +93,7 @@ public class CoursePackagesController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [AdminPermission("CoursePackages", "ToggleVisibility")]
     public async Task<IActionResult> ToggleHomeVisibility(int id, CancellationToken ct)
     {
         await _service.ToggleHomeVisibilityAsync(id, ct);
@@ -94,6 +102,7 @@ public class CoursePackagesController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
+    [AdminPermission("CoursePackages", "Delete")]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
         var result = await _service.DeleteAsync(id, _env.WebRootPath, ct);

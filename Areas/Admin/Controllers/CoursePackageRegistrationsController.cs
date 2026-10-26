@@ -21,7 +21,7 @@ public class CoursePackageRegistrationsController : Controller
     }
 
     [HttpGet]
-    [AdminPermission("Settings", "EditSettings")]
+    [AdminPermission("CoursePackageRegistrations", "Read")]
     public async Task<IActionResult> Index(CoursePackageRegistrationFilter filter, CancellationToken ct)
     {
         var vm = await _service.GetIndexAsync(filter ?? new CoursePackageRegistrationFilter(), ct);
@@ -29,7 +29,7 @@ public class CoursePackageRegistrationsController : Controller
     }
 
     [HttpGet]
-    [AdminPermission("Settings", "EditSettings")]
+    [AdminPermission("CoursePackageRegistrations", "Read")]
     public async Task<IActionResult> Details(int id, CancellationToken ct)
     {
         var vm = await _service.GetDetailsAsync(id, ct);
@@ -39,7 +39,7 @@ public class CoursePackageRegistrationsController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [AdminPermission("Settings", "EditSettings")]
+    [AdminPermission("CoursePackageRegistrations", "Manage")]
     public async Task<IActionResult> UpdateStatus(UpdateCoursePackageRegistrationRequest request, CancellationToken ct)
     {
         if (request == null || !Enum.IsDefined(typeof(CoursePackageRegistrationStatus), request.Status))
