@@ -38,6 +38,11 @@ namespace QdratNew.ViewModels.Exam
 
         public List<ExamReviewSectionVm> Sections { get; set; } = new();
         public bool IsRTL { get; internal set; }
+
+        // RTK: مراجعة محاولة مسار علاجي تعيد استخدام نفس الصفحة — رابط عودة مخصّص وإخفاء زمن السؤال (غير مسجّل لكل سؤال)
+        public string? BackUrl { get; set; }
+        public string? BackText { get; set; }
+        public bool ShowQuestionTimes { get; set; } = true;
     }
 
     public class ExamReviewQuestionVm

@@ -336,9 +336,12 @@
             player: null, playing: false, timer: null,
             maxPos: REVIEW ? Number.MAX_SAFE_INTEGER : 0, dur: 0, dragging: false,   // maxPos: أبعد نقطة وصل إليها الطالب بالتشغيل الفعلي (المراجعة: تنقّل حر)
             requiredSeconds: parseInt(li.dataset.required || '0', 10),
-            autoplay: !!autoplay
+            autoplay: !!autoplay,
+            resumeAt: 0
         };
-        renderSeek(0, 0, 0);
+        current.resumeAt = resumePointFor(li);
+        if (current.resumeAt) current.maxPos = current.resumeAt;
+        renderSeek(0, 0, current.maxPos);
         [].forEach.call(listEl.querySelectorAll('.rtk-video-item'), function (x) { x.classList.remove('is-active'); });
         li.classList.add('is-active');
         if (titleEl) titleEl.textContent = li.dataset.title || '';
@@ -358,6 +361,26 @@
 
     function fail(msg) { setState(esc(msg), 'danger'); }
 
+    // نقطة الاستئناف بعد ريفرش/انقطاع: أبعد موضع تحقق منه الخادم (data-resume)، فلا يمكن التخطّي أبعد مما شاهده فعلًا.
+    // نرجع RESUME_BACKOFF ثانية ليرى الطالب ما قبل نقطة الانقطاع. لا استئناف في المراجعة ولا لفيديو منصة أخرى.
+    var RESUME_BACKOFF = 5, RESUME_MIN = 10;
+    function resumePointFor(li) {
+        if (REVIEW || li.dataset.provider === 'Other') return 0;
+        var watched = parseInt(li.dataset.resume || '0', 10);
+        var dur = parseInt(li.dataset.duration || '0', 10);
+        if (!(watched > RESUME_MIN)) return 0;
+        var t = watched - RESUME_BACKOFF;
+        if (dur > 0) t = Math.min(t, dur - 5);
+        return t > 0 ? Math.floor(t) : 0;
+    }
+    function applyResume(c) {
+        if (!c.resumeAt) return;
+        c.maxPos = c.resumeAt;   // يسمح بالرجوع ضمن ما شوهد سابقًا (ويمنع tick من إعادة المؤشر للصفر)
+        try { c.seek(c.resumeAt); } catch (e) { }
+        renderSeek(c.resumeAt, c.dur, c.maxPos);
+        setState('تم استئناف الفيديو من الدقيقة ' + fmt(c.resumeAt) + ' حيث توقفت سابقًا.', 'success');
+    }
+
     function mountYouTube(li) {
         var c = current;
         var vid = li.dataset.externalId;
@@ -371,6 +394,7 @@
                 events: {
                     onReady: function () {
                         setState('');
+                        applyResume(c);
                         if (c.autoplay) { try { c.player.playVideo(); } catch (e) { } }
                     },
                     onStateChange: function (e) {
@@ -400,6 +424,7 @@
             c.player = new Vimeo.Player(host, { url: li.dataset.embedUrl, responsive: true, controls: false, title: false, byline: false, portrait: false, keyboard: false });
             c.player.ready().then(function () {
                 setState('');
+                applyResume(c);
                 if (c.autoplay) { try { c.player.play().catch(function () { }); } catch (e) { } }
             }).catch(function () { fail('هذا الفيديو غير متاح حاليًا. تواصل مع الإدارة.'); });
             c.player.on('play', function () { onPlayerState('playing'); });
@@ -494,6 +519,7 @@
             return;
         }
         if (t > c.maxPos) c.maxPos = t;
+        c.lastT = t;
         if (!c.dragging) renderSeek(t, c.dur, c.maxPos);
     }
     if (seekEl) {
@@ -589,7 +615,7 @@
     window.addEventListener('pagehide', function () {
         if (REVIEW || !current || !current.playing) return;
         try {
-            var body = JSON.stringify(pingBody(current.id, 'paused', 0, 0));
+            var body = JSON.stringify(pingBody(current.id, 'paused', current.lastT || 0, current.dur || 0));
             fetch(pingUrl, {
                 method: 'POST', keepalive: true, credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': tokenInput ? tokenInput.value : '' },

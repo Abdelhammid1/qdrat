@@ -51,15 +51,22 @@
                             }
                         </select>
                     </div>
-                    <div class="rtk-field">
-                        <label for="BatchId">الدفعة</label>
-                        <select id="BatchId" name="BatchId" required>
-                            <option value="">— اختر الدفعة —</option>
+                    <div class="rtk-field rtk-field--wide">
+                        <label>الدفعات (يمكن اختيار أكثر من دفعة)</label>
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <input id="rtkBatchFilter" type="search" maxlength="100" autocomplete="off" placeholder="بحث باسم الدفعة" />
+                            <button type="button" class="rtk-btn rtk-btn--outline rtk-btn--sm" id="rtkBatchAll">تحديد الكل</button>
+                            <button type="button" class="rtk-btn rtk-btn--outline rtk-btn--sm" id="rtkBatchNone">إلغاء التحديد</button>
+                        </div>
+                        <ul class="rtk-students" id="rtkBatchList" style="max-height:220px;overflow:auto">
                             @foreach (var b in Model.Batches)
                             {
-                                <option value="@b.Id">@b.Text</option>
+                                <li data-name="@b.Text">
+                                    <label class="rtk-student"><input type="checkbox" name="BatchIds" value="@b.Id" /> <span>@b.Text</span></label>
+                                </li>
                             }
-                        </select>
+                        </ul>
+                        <div class="rtk-hint">المحدَّدة: <strong id="rtkBatchCount">0</strong>. يُنشأ أمر نشر مستقل لكل دفعة. عند اختيار أكثر من دفعة يكون النشر للدفعة كاملة.</div>
                     </div>
                 </div>
             </section>
@@ -150,11 +157,17 @@
         var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
         var urls = {
             create: '@Url.Action("Create", "RemedialTrackPublications", new { area = "Admin" })',
-            students: '@Url.Action("StudentsOfBatch", "RemedialTrackPublications", new { area = "Admin" })'
+            students: '@Url.Action("StudentsOfBatch", "RemedialTrackPublications", new { area = "Admin" })',
+            index: '@Url.Action("Index", "RemedialTrackPublications", new { area = "Admin" })'
         };
         var MAX = parseInt(root.getAttribute('data-max'), 10) || 1000;
 
-        var batchSel = document.getElementById('BatchId');
+        var batchList = document.getElementById('rtkBatchList');
+        var batchCountEl = document.getElementById('rtkBatchCount');
+        function batchIds() {
+            return [].slice.call(batchList.querySelectorAll('input[name="BatchIds"]:checked')).map(function (c) { return c.value; });
+        }
+        function singleBatch() { var b = batchIds(); return b.length === 1 ? b[0] : ''; }
         var box = document.getElementById('rtkStudentsBox');
         var listEl = document.getElementById('rtkStudentsList');
         var pagerEl = document.getElementById('rtkStudentsPager');
@@ -206,9 +219,9 @@
         }
 
         function loadStudents(page) {
-            var batchId = batchSel.value;
+            var batchId = singleBatch();
             pageItems = []; renderList(); pagerEl.innerHTML = '';
-            if (!batchId) { showState('اختر الدفعة أولًا.'); return; }
+            if (!batchId) { showState('اختر دفعة واحدة فقط لتحديد طلاب بعينهم.'); return; }
             showState('جارٍ تحميل الطلاب…');
             var seq = ++loadSeq;
             var url = urls.students + '?batchId=' + encodeURIComponent(batchId) +
@@ -233,6 +246,17 @@
             box.hidden = !sel;
             if (sel) loadStudents(1);
         }
+        // تحديد طلاب بعينهم متاح لدفعة واحدة فقط؛ مع أكثر من دفعة يُفرض «الدفعة كاملة»
+        function syncBatches() {
+            var n = batchIds().length;
+            batchCountEl.textContent = n;
+            var selRadio = form.querySelector('input[name="Scope"][value="2"]');
+            var wholeRadio = form.querySelector('input[name="Scope"][value="1"]');
+            selRadio.disabled = n > 1;
+            if (n > 1 && selRadio.checked) { wholeRadio.checked = true; }
+            selected = {}; updateCount();
+            syncScope();
+        }
         function syncMode() {
             document.getElementById('rtkInPersonHint').hidden = mode() !== '2';
         }
@@ -240,7 +264,7 @@
         form.addEventListener('change', function (e) {
             if (e.target.name === 'Scope') syncScope();
             else if (e.target.name === 'Mode') syncMode();
-            else if (e.target === batchSel) { selected = {}; updateCount(); if (scope() === '2') loadStudents(1); }
+            else if (e.target.name === 'BatchIds') syncBatches();
             else if (e.target.matches('input[data-sid]')) {
                 var id = e.target.getAttribute('data-sid');
                 if (e.target.checked) selected[id] = true; else delete selected[id];
@@ -270,45 +294,86 @@
             showError('');
 
             if (!form.TrackId.value) { showError('⚠️ اختر الخطة.'); return; }
-            if (!batchSel.value) { showError('⚠️ اختر الدفعة.'); return; }
+            var batches = batchIds();
+            if (!batches.length) { showError('⚠️ اختر دفعة واحدة على الأقل.'); return; }
             var ids = selectedIds();
             if (scope() === '2') {
                 if (!ids.length) { showError('⚠️ اختر طالبًا واحدًا على الأقل.'); return; }
                 if (ids.length > MAX) { showError('⚠️ الحد الأقصى ' + MAX + ' طالب لأمر النشر الواحد.'); return; }
             }
 
-            var fd = new FormData();
-            fd.set('__RequestVerificationToken', token);
-            fd.set('TrackId', form.TrackId.value);
-            fd.set('BatchId', batchSel.value);
-            fd.set('Scope', scope());
-            fd.set('Mode', mode());
-            if (form.PublishAtLocal.value) fd.set('PublishAtLocal', form.PublishAtLocal.value);
-            if (form.AdminNote.value.trim()) fd.set('AdminNote', form.AdminNote.value.trim());
-            fd.set('AutoSendParentReports', form.AutoSendParentReports.checked ? 'true' : 'false');
-            if (scope() === '2') ids.forEach(function (id) { fd.append('StudentIds', id); });
+            function buildFd(batchId) {
+                var fd = new FormData();
+                fd.set('__RequestVerificationToken', token);
+                fd.set('TrackId', form.TrackId.value);
+                fd.set('BatchId', batchId);
+                fd.set('Scope', batches.length > 1 ? '1' : scope());
+                fd.set('Mode', mode());
+                if (form.PublishAtLocal.value) fd.set('PublishAtLocal', form.PublishAtLocal.value);
+                if (form.AdminNote.value.trim()) fd.set('AdminNote', form.AdminNote.value.trim());
+                fd.set('AutoSendParentReports', form.AutoSendParentReports.checked ? 'true' : 'false');
+                if (batches.length === 1 && scope() === '2') ids.forEach(function (id) { fd.append('StudentIds', id); });
+                return fd;
+            }
+            function unlock() { submitting = false; submitBtn.disabled = false; submitBtn.classList.remove('is-busy'); }
 
             submitting = true;
             submitBtn.disabled = true; submitBtn.classList.add('is-busy');
 
-            fetch(urls.create, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-                .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-                .then(function (res) {
-                    if (!res.success) {
-                        showError(res.message || 'تعذّر النشر.');
-                        submitting = false; submitBtn.disabled = false; submitBtn.classList.remove('is-busy');
-                        return;
-                    }
-                    showToast(res.message || 'تم النشر.', true);
-                    setTimeout(function () { window.location.href = res.data.url; }, 900);
-                })
-                .catch(function () {
-                    showError('تعذّر الاتصال بالخادم. تحقق من الشبكة ثم تأكد من قائمة أوامر النشر قبل إعادة المحاولة كي لا يتكرر النشر.');
-                    submitting = false; submitBtn.disabled = false; submitBtn.classList.remove('is-busy');
+            // أمر نشر مستقل لكل دفعة، بالتتابع؛ فشل دفعة لا يوقف الباقي ويُعرض في الملخص
+            var results = [];
+            var lastUrl = null;
+            function next(i) {
+                if (i >= batches.length) { finish(); return; }
+                var name = (batchList.querySelector('input[value="' + batches[i] + '"]').parentNode.textContent || '').trim();
+                fetch(urls.create, { method: 'POST', body: buildFd(batches[i]), credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                    .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                    .then(function (res) {
+                        results.push({ name: name, ok: !!res.success, msg: res.message || '' });
+                        if (res.success && res.data) lastUrl = res.data.url;
+                    })
+                    .catch(function () { results.push({ name: name, ok: false, msg: 'تعذّر الاتصال بالخادم — تحقق من قائمة أوامر النشر قبل إعادة المحاولة.' }); })
+                    .then(function () { next(i + 1); });
+            }
+            function finish() {
+                var okCount = results.filter(function (x) { return x.ok; }).length;
+                var failed = results.filter(function (x) { return !x.ok; });
+                if (!failed.length) {
+                    showToast(batches.length > 1 ? 'تم النشر على ' + okCount + ' دفعة.' : (results[0].msg || 'تم النشر.'), true);
+                    setTimeout(function () { window.location.href = (batches.length === 1 && lastUrl) ? lastUrl : urls.index; }, 900);
+                    return;
+                }
+                showError((okCount ? 'نجح النشر على ' + okCount + ' دفعة. ' : '') + 'تعذّر على: ' +
+                    failed.map(function (x) { return x.name + ' (' + x.msg + ')'; }).join(' • '));
+                // الدفعات الناجحة تُلغى من التحديد كي لا يُعاد النشر عليها
+                results.forEach(function (x) {
+                    if (!x.ok) return;
+                    [].forEach.call(batchList.querySelectorAll('input[name="BatchIds"]'), function (c) {
+                        if ((c.parentNode.textContent || '').trim() === x.name) c.checked = false;
+                    });
                 });
+                syncBatches();
+                unlock();
+            }
+            next(0);
         });
 
-        syncScope(); syncMode(); updateCount();
+        document.getElementById('rtkBatchAll').addEventListener('click', function () {
+            [].forEach.call(batchList.querySelectorAll('li:not([hidden]) input[name="BatchIds"]'), function (c) { c.checked = true; });
+            syncBatches();
+        });
+        document.getElementById('rtkBatchNone').addEventListener('click', function () {
+            [].forEach.call(batchList.querySelectorAll('input[name="BatchIds"]'), function (c) { c.checked = false; });
+            syncBatches();
+        });
+        document.getElementById('rtkBatchFilter').addEventListener('input', function (e) {
+            var q = e.target.value.trim().toLowerCase();
+            [].forEach.call(batchList.querySelectorAll('li'), function (li) {
+                li.hidden = q && (li.getAttribute('data-name') || '').toLowerCase().indexOf(q) === -1;
+            });
+        });
+
+        syncBatches(); syncMode();
     })();
     </script>
 }

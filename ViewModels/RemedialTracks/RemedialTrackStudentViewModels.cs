@@ -103,6 +103,7 @@ namespace QdratNew.ViewModels.RemedialTracks
         public bool IsCompleted { get; set; }
         public bool IsUnlocked { get; set; }      // السابق مكتمل (تسلسلي)
         public int WatchedSeconds { get; set; }
+        public int ResumeSeconds { get; set; }    // نقطة الاستئناف: أبعد موضع تحقق منه الخادم
         public int RequiredSeconds { get; set; }
     }
 

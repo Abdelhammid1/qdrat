@@ -25,6 +25,9 @@ namespace QdratNew.Services.RemedialTracks
         /// <summary>عند النجاح: Data = الرقم المرجعي الجديد (string).</summary>
         Task<RemedialTrackResult> RegenerateCodeAsync(int id, RemedialTrackActor actor, RemedialTrackBatchScope scope, CancellationToken ct = default);
 
+        /// <summary>تعديل وقت ظهور أمر نشر نشط (وملاحظته). يُرفض إن ظهر للطلاب وبدأ بعضهم فعلًا.</summary>
+        Task<RemedialTrackResult> EditScheduleAsync(EditRemedialTrackPublicationInput input, RemedialTrackActor actor, RemedialTrackBatchScope scope, CancellationToken ct = default);
+
         Task<RemedialTrackResult> CancelAsync(int id, string? reason, RemedialTrackActor actor, RemedialTrackBatchScope scope, CancellationToken ct = default);
 
         /// <summary>RTK v2/D26: حذف ناعم (يخفي الأمر عن الطلاب والقائمة؛ لا يمس التسجيلات ولا التقدّم). السبب 5–300 حرف.</summary>

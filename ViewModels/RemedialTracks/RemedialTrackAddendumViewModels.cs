@@ -159,6 +159,7 @@ namespace QdratNew.ViewModels.RemedialTracks
         public string? EmbedUrl { get; set; }
         public int? DurationSeconds { get; set; }
         public int WatchedSeconds { get; set; }
+        public int ResumeSeconds { get; set; }    // نقطة الاستئناف: أبعد موضع تحقق منه الخادم
         public int RequiredSeconds { get; set; }
         public bool VideoCompleted { get; set; }
 

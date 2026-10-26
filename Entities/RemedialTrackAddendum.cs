@@ -45,6 +45,7 @@ namespace QdratNew.Entities
         public RemedialTrackEnrollment? Enrollment { get; set; }
 
         public double WatchedSeconds { get; set; }            // بزمن الخادم
+        public double MaxPositionSeconds { get; set; }        // أبعد موضع وصل إليه الطالب (يتحقق منه الخادم) — نقطة الاستئناف
         public int? DurationSeconds { get; set; }
         public bool EndedSeen { get; set; }
         public bool VideoCompleted { get; set; }

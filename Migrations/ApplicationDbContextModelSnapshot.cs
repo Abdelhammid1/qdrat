@@ -7214,6 +7214,9 @@ namespace QdratNew.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("nvarchar(10)");
 
+                    b.Property<double>("MaxPositionSeconds")
+                        .HasColumnType("float");
+
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
                         .IsRequired()
@@ -7881,6 +7884,9 @@ namespace QdratNew.Migrations
                     b.Property<string>("LastPingState")
                         .HasMaxLength(10)
                         .HasColumnType("nvarchar(10)");
+
+                    b.Property<double>("MaxPositionSeconds")
+                        .HasColumnType("float");
 
                     b.Property<int>("Round")
                         .HasColumnType("int");

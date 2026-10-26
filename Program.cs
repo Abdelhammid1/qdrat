@@ -1071,6 +1071,8 @@ builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackProgre
                            QdratNew.Services.RemedialTracks.RemedialTrackProgressService>();
 builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackExamService,
                            QdratNew.Services.RemedialTracks.RemedialTrackExamService>();
+builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackAttemptReviewService,
+                           QdratNew.Services.RemedialTracks.RemedialTrackAttemptReviewService>();
 builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackAuditService,
                            QdratNew.Services.RemedialTracks.RemedialTrackAuditService>();
 builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackAddendumService,

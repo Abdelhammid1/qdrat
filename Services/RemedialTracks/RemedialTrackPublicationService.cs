@@ -561,6 +561,78 @@ namespace QdratNew.Services.RemedialTracks
             return result;
         }
 
+        public async Task<RemedialTrackResult> EditScheduleAsync(
+            EditRemedialTrackPublicationInput input, RemedialTrackActor actor, RemedialTrackBatchScope scope, CancellationToken ct = default)
+        {
+            if (!input.PublishAtLocal.HasValue)
+                return RemedialTrackResult.Fail("⚠️ حدّد وقت النشر.");
+
+            var now = Now;
+            var newPublishAtUtc = _tz.ConvertToUtc(DateTime.SpecifyKind(input.PublishAtLocal.Value, DateTimeKind.Unspecified));
+            if (newPublishAtUtc < now - MaxPastPublishSkew)
+                return RemedialTrackResult.Fail("⚠️ وقت النشر أقدم من الوقت الحالي بأكثر من ساعة.");
+
+            var note = string.IsNullOrWhiteSpace(input.AdminNote) ? null : Truncate(input.AdminNote.Trim(), 500);
+            var batchId = 0;
+            DateTime oldPublishAtUtc = default;
+
+            RemedialTrackResult result;
+            try
+            {
+                result = await WriteCoreAsync(async (db, token) =>
+                {
+                    var pub = await db.RemedialTrackPublications.FirstOrDefaultAsync(p => p.Id == input.Id, token);
+                    if (pub is null || !scope.Allows(pub.BatchId))
+                        return RemedialTrackResult.Fail("⚠️ أمر النشر غير موجود.");
+                    if (pub.IsDeleted || pub.Status != RemedialTrackPublicationStatus.Active)
+                        return RemedialTrackResult.Fail("⚠️ لا يمكن تعديل أمر نشر ملغى أو محذوف.");
+
+                    // بعد ظهور الأمر للطلاب وبدء بعضهم لا يُعاد ضبط الوقت (يخلّ بتقدّمهم)
+                    if (pub.PublishAtUtc <= now
+                        && await db.RemedialTrackEnrollments.AsNoTracking()
+                            .AnyAsync(e => e.PublicationId == pub.Id && e.Status != RemedialTrackEnrollmentStatus.NotStarted, token))
+                        return RemedialTrackResult.Fail("🔒 الأمر ظاهر للطلاب وبدأ بعضهم، فلا يمكن تغيير وقت النشر. يمكنك تعديل الملاحظة بإبقاء الوقت الحالي أو إلغاء الأمر ونشر جديد.");
+
+                    batchId = pub.BatchId;
+                    oldPublishAtUtc = pub.PublishAtUtc;
+
+                    pub.AdminNote = note;
+                    if (newPublishAtUtc != pub.PublishAtUtc)
+                    {
+                        pub.PublishAtUtc = newPublishAtUtc;
+
+                        // أول محور مفتوح لتسجيلات لم تبدأ: يتبع الوقت الجديد (تحميل واحد + SaveChanges واحد)
+                        var firstAxes = await db.RemedialTrackAxisProgresses
+                            .Where(a => a.Enrollment!.PublicationId == pub.Id
+                                        && a.Enrollment.Status == RemedialTrackEnrollmentStatus.NotStarted
+                                        && a.Status == RemedialTrackAxisStatus.Videos)
+                            .ToListAsync(token);
+                        foreach (var a in firstAxes)
+                            a.OpenedAtUtc = newPublishAtUtc;
+                    }
+
+                    await db.SaveChangesAsync(token);
+                    return RemedialTrackResult.Ok("✅ تم حفظ تعديلات أمر النشر.");
+                }, ct);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return RemedialTrackResult.Fail("⚠️ عُدّل أمر النشر من مستخدم آخر. حدّث الصفحة وأعد المحاولة.");
+            }
+            catch (DbUpdateException ex)
+            {
+                _logger.LogError(ex, "RTK edit schedule failed (publication {PublicationId})", input.Id);
+                return RemedialTrackResult.Fail("⚠️ تعذّر حفظ التعديل. أعد المحاولة.");
+            }
+
+            if (result.Success)
+                await LogActivityAsync(
+                    "RemedialTrack.EditSchedule",
+                    $"[RTK pub:{input.Id}] تعديل أمر النشر #{input.Id} — وقت النشر: {_tz.ConvertToSaudi(oldPublishAtUtc):yyyy-MM-dd HH:mm} ← {input.PublishAtLocal:yyyy-MM-dd HH:mm}",
+                    actor, batchId);
+            return result;
+        }
+
         public async Task<RemedialTrackResult> CancelAsync(
             int id, string? reason, RemedialTrackActor actor, RemedialTrackBatchScope scope, CancellationToken ct = default)
         {

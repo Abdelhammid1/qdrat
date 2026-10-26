@@ -515,6 +515,40 @@ namespace QdratNew.Tests
         }
 
         [Fact]
+        public void ComputePing_MaxPosition_AdvancesOnlyByElapsedTime_NoForwardJump()
+        {
+            // آخر نبضة playing قبل 15ث عند 100؛ موضع مزيّف 5000 ← لا يتقدّم أكثر من 15+3
+            var jump = RemedialTrackProgressService.ComputePing(100, false, "playing", T0, T0.AddSeconds(15), "playing",
+                RemedialTrackVideoProvider.YouTube, 6000, null, 0, 90, clientPosition: 5000, previousMaxPosition: 100);
+            Assert.Equal(118, jump.MaxPositionSeconds);
+
+            // رجوع الطالب للخلف لا يُنقص أبعد موضع
+            var back = RemedialTrackProgressService.ComputePing(100, false, "playing", T0, T0.AddSeconds(15), "playing",
+                RemedialTrackVideoProvider.YouTube, 6000, null, 0, 90, clientPosition: 20, previousMaxPosition: 100);
+            Assert.Equal(100, back.MaxPositionSeconds);
+
+            // بعد pause لا زمن منقضٍ محتسب: سماح 3ث فقط
+            var afterPause = RemedialTrackProgressService.ComputePing(100, false, "paused", T0, T0.AddSeconds(600), "playing",
+                RemedialTrackVideoProvider.YouTube, 6000, null, 0, 90, clientPosition: 4000, previousMaxPosition: 100);
+            Assert.Equal(103, afterPause.MaxPositionSeconds);
+        }
+
+        [Fact]
+        public void ComputePing_InternetGap_CreditsVerifiedPositionAdvance_NotLost()
+        {
+            // انقطاع 120ث والفيديو تقدّم 110ث فعلًا ← يُحتسب 110 بدل 20 فقط
+            var c = RemedialTrackProgressService.ComputePing(100, false, "playing", T0, T0.AddSeconds(120), "playing",
+                RemedialTrackVideoProvider.YouTube, 6000, null, 0, 90, clientPosition: 210, previousMaxPosition: 100);
+            Assert.Equal(210, c.WatchedSeconds);
+            Assert.Equal(210, c.MaxPositionSeconds);
+
+            // موضع لم يتقدّم (المشغّل متوقف بلا إنترنت) ← الرصيد القديم 20ث فقط
+            var stalled = RemedialTrackProgressService.ComputePing(100, false, "playing", T0, T0.AddSeconds(120), "playing",
+                RemedialTrackVideoProvider.YouTube, 6000, null, 0, 90, clientPosition: 100, previousMaxPosition: 100);
+            Assert.Equal(120, stalled.WatchedSeconds);
+        }
+
+        [Fact]
         public void ComputePing_AdminDurationOverridesClient_AndClientDurationNeverDecreases()
         {
             var admin = RemedialTrackProgressService.ComputePing(0, false, null, null, T0, "playing",

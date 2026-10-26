@@ -1169,5 +1169,77 @@ namespace QdratNew.Tests
 
             Assert.Equal(RemedialTrackAxisStatus.Locked, (await f.GetApAsync(1)).Status);
         }
+
+        // ═══════════ مراجعة الأسئلة وتقرير المحاولة (بعد الإغلاق فقط) ═══════════
+
+        private static async Task SeedLessonAsync(Fx f)
+        {
+            await using var db = f.Factory.CreateDbContext();
+            var sec = new Section { Title = "قسم المراجعة", CurriculumId = db.Curriculums.First().Id };
+            db.Sections.Add(sec);
+            await db.SaveChangesAsync();
+            db.Lessons.Add(new Lesson { Id = 1, Title = "درس المراجعة", UnitId = 1, SectionId = sec.Id, Content = "c" });
+            await db.SaveChangesAsync();
+        }
+
+        [Fact]
+        public async Task AttemptReview_ClosedAttempt_RevealsCorrectAnswerAndExplanation_ToOwnerOnly()
+        {
+            var f = await NewAsync();
+            var id = await f.RunExamAsync(0, 3);
+            await SeedLessonAsync(f);
+            var svc = new RemedialTrackAttemptReviewService(f.Factory, f.Clock);
+
+            var r = await svc.GetReviewAsync(Fx.Student, id, "/back");
+            Assert.Equal(RemedialTrackAttemptReviewStatus.Ok, r.Status);
+            var vm = r.Model!;
+            Assert.Equal(4, vm.TotalQuestions);
+            Assert.Equal(3, vm.CorrectAnswers);
+            Assert.Equal(1, vm.WrongAnswers + vm.SkippedQuestions);
+            Assert.All(vm.Questions, q => Assert.Equal(Correct, q.CorrectAnswer));
+            Assert.All(vm.Questions, q => Assert.Equal(SecretExplanation, q.Explanation));
+            Assert.Equal("/back", vm.BackUrl);
+            Assert.False(vm.ShowQuestionTimes);
+
+            // IDOR: طالب آخر ≡ غير موجود
+            Assert.Equal(RemedialTrackAttemptReviewStatus.NotFound, (await svc.GetReviewAsync(Fx.Other, id, "/back")).Status);
+            Assert.Equal(RemedialTrackAttemptReviewStatus.NotFound, (await svc.GetReportAsync(Fx.Other, id)).Status);
+        }
+
+        [Fact]
+        public async Task AttemptReview_InProgressAttempt_NeverRevealsAnswers()
+        {
+            var f = await NewAsync();
+            var id = await f.StartAttemptAsync();
+            var svc = new RemedialTrackAttemptReviewService(f.Factory, f.Clock);
+
+            var review = await svc.GetReviewAsync(Fx.Student, id, "/back");
+            Assert.Equal(RemedialTrackAttemptReviewStatus.InProgress, review.Status);
+            Assert.Null(review.Model);
+            var report = await svc.GetReportAsync(Fx.Student, id);
+            Assert.Equal(RemedialTrackAttemptReviewStatus.InProgress, report.Status);
+            Assert.Null(report.Model);
+        }
+
+        [Fact]
+        public async Task AttemptReport_ClosedAttempt_HasCountsSectionsAndMissed()
+        {
+            var f = await NewAsync();
+            var id = await f.RunExamAsync(0, 3);
+            await SeedLessonAsync(f);
+            var svc = new RemedialTrackAttemptReviewService(f.Factory, f.Clock);
+
+            var r = await svc.GetReportAsync(Fx.Student, id);
+            Assert.Equal(RemedialTrackAttemptReviewStatus.Ok, r.Status);
+            var vm = r.Model!;
+            Assert.Equal(4, vm.TotalQuestions);
+            Assert.Equal(3, vm.CorrectCount);
+            Assert.Equal(1, vm.WrongCount + vm.SkippedCount);
+            Assert.Equal(75.0, vm.ScorePercent);
+            var section = Assert.Single(vm.Sections);
+            Assert.Equal(4, section.Total);
+            Assert.Equal(3, section.Correct);
+            Assert.Single(vm.Missed);
+        }
     }
 }

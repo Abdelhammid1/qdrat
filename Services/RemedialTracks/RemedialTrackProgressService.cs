@@ -15,7 +15,8 @@ namespace QdratNew.Services.RemedialTracks
         double DurationSeconds,
         double RequiredSeconds,
         bool Ended,
-        bool Completed);
+        bool Completed,
+        double MaxPositionSeconds = 0);
 
     /// <summary>
     /// RTK-S4: ما يراه الطالب (القائمة، الخطة، المحور) + تسجيل تقدّم الفيديو بزمن الخادم (D4/D5).
@@ -25,6 +26,8 @@ namespace QdratNew.Services.RemedialTracks
     {
         public const double MaxCreditPerPingSeconds = 20;   // نبضة كل 15ث + هامش
         private const double DurationCeilingFactor = 1.05;  // سقف منطقي للمشاهدة المحتسبة
+        private const double MaxGapCreditSeconds = 600;     // أقصى رصيد لفجوة نبضات (انقطاع إنترنت) يثبته تقدّم الموضع
+        private const double PositionToleranceSeconds = 3;  // سماح تقدّم الموضع فوق الزمن المنقضي
 
         private readonly IDbContextFactory<ApplicationDbContext> _dbFactory;
         private readonly TimeProvider _time;
@@ -52,23 +55,37 @@ namespace QdratNew.Services.RemedialTracks
         public static RemedialTrackPingComputation ComputePing(
             double previousWatched, bool previousEnded, string? lastState, DateTime? lastPingAtUtc,
             DateTime nowUtc, string state, RemedialTrackVideoProvider provider,
-            int? adminDuration, int? storedDuration, double clientDuration, int minWatchPercent)
+            int? adminDuration, int? storedDuration, double clientDuration, int minWatchPercent,
+            double clientPosition = 0, double previousMaxPosition = 0)
         {
             double clientSafe = double.IsNaN(clientDuration) || double.IsInfinity(clientDuration) ? 0 : clientDuration;
             double duration = adminDuration.HasValue && adminDuration.Value > 0
                 ? adminDuration.Value
                 : Math.Max(storedDuration ?? 0, Math.Clamp(clientSafe, 5, 4 * 3600));
 
-            double credit = 0;
+            double credit = 0, elapsed = 0;
             if (lastState == "playing" && lastPingAtUtc.HasValue)
-                credit = Math.Clamp((nowUtc - lastPingAtUtc.Value).TotalSeconds, 0, MaxCreditPerPingSeconds);
+            {
+                elapsed = Math.Max(0, (nowUtc - lastPingAtUtc.Value).TotalSeconds);
+                credit = Math.Min(elapsed, MaxCreditPerPingSeconds);
+            }
+
+            // أبعد موضع: لا يتقدّم أكثر من الزمن الفعلي المنقضي منذ آخر نبضة «playing» (+سماح) — لا قفز للأمام ولو أُرسل موضع مزيّف
+            var prevMax = double.IsNaN(previousMaxPosition) || previousMaxPosition < 0 ? 0 : previousMaxPosition;
+            var pos = double.IsNaN(clientPosition) || double.IsInfinity(clientPosition) ? 0 : Math.Clamp(clientPosition, 0, duration);
+            var maxPos = Math.Max(prevMax, Math.Min(pos, prevMax + elapsed + PositionToleranceSeconds));
+            maxPos = Math.Min(maxPos, duration);
+
+            // انقطاع النبضات (فجوة > 20ث) مع تقدّم موضع مثبت: نحتسب ما شوهد فعلًا بدل خسارته، فلا يُرفض الإتمام ظلمًا
+            if (elapsed > MaxCreditPerPingSeconds)
+                credit = Math.Max(credit, Math.Min(Math.Min(elapsed, MaxGapCreditSeconds), maxPos - prevMax));
 
             var ended = previousEnded || state == "ended";
             if (provider == RemedialTrackVideoProvider.Other && state == "manual-done") ended = true;   // D5
 
             var watched = Math.Min(previousWatched + credit, duration * DurationCeilingFactor);
             var required = Math.Ceiling(duration * minWatchPercent / 100.0);
-            return new RemedialTrackPingComputation(watched, duration, required, ended, ended && watched >= required);
+            return new RemedialTrackPingComputation(watched, duration, required, ended, ended && watched >= required, maxPos);
         }
 
         // ═════════════════ RTK-S4.1: القائمة ═════════════════
@@ -294,7 +311,8 @@ namespace QdratNew.Services.RemedialTracks
                     v.Video.Url,
                     Duration = v.Video.DurationSeconds ?? v.DurationSeconds,
                     v.IsCompleted,
-                    v.WatchedSeconds
+                    v.WatchedSeconds,
+                    v.MaxPositionSeconds
                 })
                 .ToListAsync(ct);
 
@@ -317,6 +335,8 @@ namespace QdratNew.Services.RemedialTracks
                     IsCompleted = r.IsCompleted,
                     IsUnlocked = previousDone || reviewMode,
                     WatchedSeconds = (int)Math.Floor(r.WatchedSeconds),
+                    // صفوف ما قبل إضافة MaxPositionSeconds (قيمتها 0) تستأنف من الرصيد المسجّل
+                    ResumeSeconds = (int)Math.Floor(r.MaxPositionSeconds > 0 ? r.MaxPositionSeconds : r.WatchedSeconds),
                     RequiredSeconds = r.Duration.HasValue
                         ? (int)Math.Ceiling(r.Duration.Value * ap.MinWatch / 100.0)
                         : 0
@@ -438,6 +458,7 @@ namespace QdratNew.Services.RemedialTracks
                     v.Round,
                     v.VideoOrder,
                     v.WatchedSeconds,
+                    v.MaxPositionSeconds,
                     v.EndedSeen,
                     v.IsCompleted,
                     v.LastPingAtUtc,
@@ -510,7 +531,8 @@ namespace QdratNew.Services.RemedialTracks
                 return Fail(RemedialTrackPingStatus.BadRequest, "state", "حالة المشاهدة غير صالحة لهذا الفيديو.");
 
             var c = ComputePing(row.WatchedSeconds, row.EndedSeen, row.LastPingState, row.LastPingAtUtc, now,
-                state, row.Provider, row.AdminDuration, row.DurationSeconds, request.Duration, row.MinWatch);
+                state, row.Provider, row.AdminDuration, row.DurationSeconds, request.Duration, row.MinWatch,
+                request.Position, row.MaxPositionSeconds);
 
             var storedState = state == "manual-done" ? "ended" : state;
             var args = new PingWrite(row.Id, row.LastPingAtUtc, c, storedState, now);
@@ -551,6 +573,7 @@ namespace QdratNew.Services.RemedialTracks
         private static async Task<int> ApplyPingUpdateAsync(ApplicationDbContext db, PingWrite w, CancellationToken ct)
         {
             var watched = w.C.WatchedSeconds;
+            var maxPos = w.C.MaxPositionSeconds;
             var duration = (int)Math.Ceiling(w.C.DurationSeconds);
             var ended = w.C.Ended;
             var completed = w.C.Completed;
@@ -565,6 +588,7 @@ namespace QdratNew.Services.RemedialTracks
                     .Where(x => x.Id == id && !x.IsCompleted && x.LastPingAtUtc == expected)
                     .ExecuteUpdateAsync(s => s
                         .SetProperty(x => x.WatchedSeconds, watched)
+                        .SetProperty(x => x.MaxPositionSeconds, maxPos)
                         .SetProperty(x => x.DurationSeconds, (int?)duration)
                         .SetProperty(x => x.EndedSeen, ended)
                         .SetProperty(x => x.LastPingAtUtc, (DateTime?)now)
@@ -578,6 +602,7 @@ namespace QdratNew.Services.RemedialTracks
             var e = await db.RemedialTrackVideoProgresses.FirstOrDefaultAsync(x => x.Id == id && !x.IsCompleted && x.LastPingAtUtc == expected, ct);
             if (e is null) return 0;
             e.WatchedSeconds = watched;
+            e.MaxPositionSeconds = maxPos;
             e.DurationSeconds = duration;
             e.EndedSeen = ended;
             e.LastPingAtUtc = now;

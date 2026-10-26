@@ -30,6 +30,19 @@ namespace QdratNew.ViewModels.RemedialTracks
         public List<int>? StudentIds { get; set; }
     }
 
+    /// <summary>تعديل أمر نشر قائم: وقت الظهور للطالب (بتوقيت السعودية) والملاحظة فقط (لا Overposting).</summary>
+    public sealed class EditRemedialTrackPublicationInput
+    {
+        [Range(1, int.MaxValue, ErrorMessage = "أمر النشر غير صالح")]
+        public int Id { get; set; }
+
+        [Required(ErrorMessage = "حدّد وقت النشر")]
+        public DateTime? PublishAtLocal { get; set; }
+
+        [StringLength(500, ErrorMessage = "الملاحظة أطول من 500 حرف")]
+        public string? AdminNote { get; set; }
+    }
+
     // ============ نطاق الدفعات المسموحة للمستخدم ============
 
     /// <summary>
@@ -219,6 +232,10 @@ namespace QdratNew.ViewModels.RemedialTracks
         public bool CanCancel { get; set; }
         public bool CanDelete { get; set; }
         public bool CanRestore { get; set; }
+        public bool CanEdit { get; set; }
+
+        /// <summary>وقت النشر الحالي بتوقيت السعودية بصيغة datetime-local (يُعبَّأ في الكنترولر).</summary>
+        public string PublishAtLocalValue { get; set; } = string.Empty;
 
         public bool IsActive => Status == RemedialTrackPublicationStatus.Active && !IsDeleted;
         public bool IsInPerson => Mode == RemedialTrackDeliveryMode.InPerson;

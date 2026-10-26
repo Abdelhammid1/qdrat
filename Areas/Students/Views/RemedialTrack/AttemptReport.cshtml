@@ -1,0 +1,123 @@
+@using QdratNew.Enums
+@using QdratNew.ViewModels.RemedialTracks
+@model StudentRemedialTrackAttemptReportVm
+@inject QdratNew.Services.Interfaces.ITimeZoneService Tz
+@functions {
+    static string Pct(double v) => v.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+    static string BarCls(double acc) => acc >= 70 ? "" : acc >= 40 ? "is-mid" : "is-low";
+}
+@{
+    var examName = Model.ExamNumber.DisplayName();
+    ViewData["Title"] = $"تقرير {examName}";
+    var weakLessons = Model.Lessons.Where(l => l.Correct < l.Total).Take(5).ToList();
+    var dateText = Tz.ConvertToSaudi(Model.SubmittedAtUtc ?? Model.StartedAtUtc)
+        .ToString("yyyy/MM/dd HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+}
+@section Styles {
+    <link href="~/css/student-rtk.css" rel="stylesheet" asp-append-version="true" />
+    <link href="~/css/student-rtk-attempt-report.css" rel="stylesheet" asp-append-version="true" />
+}
+
+<div class="rtk-attempt-report @(Model.IsPassed ? "" : "is-growth")">
+    <a class="ar-back" asp-action="Result" asp-route-attemptId="@Model.AttemptId">
+        <i class="fas fa-arrow-right" aria-hidden="true"></i> العودة إلى النتيجة
+    </a>
+
+    <section class="ar-card" aria-label="ملخص الاختبار">
+        <div class="ar-head">
+            <div>
+                <h1>تقرير @examName</h1>
+                <p class="ar-sub">@Model.AxisTitle — @Model.TrackTitle</p>
+                <p class="ar-sub">@dateText (توقيت السعودية)</p>
+            </div>
+            <div class="ar-score" role="img" aria-label="النسبة @Pct(Model.ScorePercent)%">@Pct(Model.ScorePercent)<small>%</small></div>
+        </div>
+        <div class="ar-verdict">
+            <strong>@Model.Tone.Title</strong>
+            <span>@Model.Tone.Subtitle</span>
+        </div>
+        @if (Model.TimedOut)
+        {
+            <p class="ar-sub mt-2 mb-0"><i class="fas fa-hourglass-end" aria-hidden="true"></i> انتهى الوقت فصُحّحت الإجابات المحفوظة.</p>
+        }
+    </section>
+
+    <section class="ar-card" aria-label="الإحصاءات">
+        <ul class="ar-stats">
+            <li class="ar-stat"><strong>@Model.TotalQuestions</strong><small>إجمالي الأسئلة</small></li>
+            <li class="ar-stat is-ok"><strong>@Model.CorrectCount</strong><small>إجابات صحيحة</small></li>
+            <li class="ar-stat is-bad"><strong>@Model.WrongCount</strong><small>إجابات خاطئة</small></li>
+            <li class="ar-stat is-skip"><strong>@Model.SkippedCount</strong><small>أسئلة بلا إجابة</small></li>
+            <li class="ar-stat"><strong>@Model.PassPercent%</strong><small>نسبة الاجتياز</small></li>
+            <li class="ar-stat"><strong>@Pct(Model.SolveMinutes) / @Model.AllowedMinutes</strong><small>الزمن (دقيقة)</small></li>
+        </ul>
+    </section>
+
+    <section class="ar-card" aria-label="الأداء حسب القسم">
+        <h2>الأداء حسب القسم</h2>
+        @if (Model.Sections.Count == 0)
+        {
+            <p class="ar-empty">لا توجد بيانات لعرضها.</p>
+        }
+        else
+        {
+            <ul class="ar-rows">
+                @foreach (var s in Model.Sections)
+                {
+                    <li>
+                        <div class="ar-row-top"><span>@s.Title</span><span>@s.Correct / @s.Total — @Pct(s.AccuracyPercent)%</span></div>
+                        <div class="ar-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Pct(s.AccuracyPercent)"><span class="@BarCls(s.AccuracyPercent)" style="width:@Pct(s.AccuracyPercent)%"></span></div>
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+
+    <section class="ar-card" aria-label="الأداء حسب الدرس">
+        <h2>الأداء حسب الدرس</h2>
+        @if (Model.Lessons.Count == 0)
+        {
+            <p class="ar-empty">لا توجد بيانات لعرضها.</p>
+        }
+        else
+        {
+            <ul class="ar-rows">
+                @foreach (var l in Model.Lessons)
+                {
+                    <li>
+                        <div class="ar-row-top"><span>@l.Title <span class="ar-row-sub">@l.ParentTitle</span></span><span>@l.Correct / @l.Total — @Pct(l.AccuracyPercent)%</span></div>
+                        <div class="ar-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@Pct(l.AccuracyPercent)"><span class="@BarCls(l.AccuracyPercent)" style="width:@Pct(l.AccuracyPercent)%"></span></div>
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+
+    <section class="ar-card" aria-label="نقاط تحتاج مراجعة">
+        <h2>نقاط تحتاج مراجعة</h2>
+        @if (Model.Missed.Count == 0)
+        {
+            <p class="ar-empty"><i class="fas fa-circle-check" aria-hidden="true"></i> أجبت عن جميع الأسئلة إجابة صحيحة. أحسنت!</p>
+        }
+        else
+        {
+            if (weakLessons.Count > 0)
+            {
+                <p class="ar-sub mb-2">ركّز على هذه الدروس: @string.Join("، ", weakLessons.Select(l => l.Title))</p>
+            }
+            <div class="ar-chips" aria-label="أرقام الأسئلة غير الصحيحة">
+                @foreach (var m in Model.Missed)
+                {
+                    <span class="ar-chip @(m.IsSkipped ? "is-skip" : "")" title="@m.LessonTitle">سؤال @m.Order @(m.IsSkipped ? "(بلا إجابة)" : "")</span>
+                }
+            </div>
+        }
+    </section>
+
+    <div class="ar-actions">
+        <a class="rtk-btn" asp-action="AttemptReview" asp-route-attemptId="@Model.AttemptId">
+            <i class="fas fa-list-check" aria-hidden="true"></i> مراجعة الأسئلة والإجابات الصحيحة
+        </a>
+        <a class="rtk-btn rtk-btn-outline" asp-action="Axis" asp-route-enrollmentId="@Model.EnrollmentId" asp-route-axisProgressId="@Model.AxisProgressId">العودة إلى المحور</a>
+    </div>
+</div>

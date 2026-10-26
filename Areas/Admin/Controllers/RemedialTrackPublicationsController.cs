@@ -144,6 +144,8 @@ namespace QdratNew.Areas.Admin.Controllers
             vm.CanCancel = await CanAsync(AdminPermissionPolicies.RemedialTrackPublications_Cancel);
             vm.CanDelete = await CanAsync(AdminPermissionPolicies.RemedialTrackPublications_Delete);
             vm.CanRestore = await CanAsync(AdminPermissionPolicies.RemedialTrackPublications_Restore);
+            vm.CanEdit = await CanAsync(AdminPermissionPolicies.RemedialTrackPublications_Publish);
+            vm.PublishAtLocalValue = _tz.ConvertToSaudi(vm.PublishAtUtc).ToString("yyyy-MM-dd'T'HH:mm");
 
             // RTK-S6.2: لوحة المتابعة
             var filter = new RemedialTrackDashboardFilter
@@ -253,6 +255,22 @@ namespace QdratNew.Areas.Admin.Controllers
 
             var r = await _publications.RegenerateCodeAsync(id, actor, await ScopeAsync(), ct);
             if (r.Success) await AuditPubAsync(id, "RemedialTrackCodeRegenerated", "تجديد الرقم المرجعي", r.Message, actor, ct);
+            return Json(new { success = r.Success, message = r.Message, data = r.Data, warnings = r.Warnings });
+        }
+
+        [HttpPost, ValidateAntiForgeryToken]
+        [AdminPermission("RemedialTrackPublications", "Publish")]
+        public async Task<IActionResult> EditSchedule([FromForm] EditRemedialTrackPublicationInput input, CancellationToken ct)
+        {
+            if (!ModelState.IsValid)
+                return ValidationFail();
+
+            var actor = await ActorAsync();
+            if (actor is null)
+                return Json(new { success = false, message = "🚫 تعذّر تحديد المستخدم الحالي." });
+
+            var r = await _publications.EditScheduleAsync(input, actor, await ScopeAsync(), ct);
+            if (r.Success) await AuditPubAsync(input.Id, "RemedialTrackPublicationEdited", "تعديل وقت النشر إلى " + input.PublishAtLocal?.ToString("yyyy-MM-dd HH:mm"), r.Message, actor, ct);
             return Json(new { success = r.Success, message = r.Message, data = r.Data, warnings = r.Warnings });
         }
 

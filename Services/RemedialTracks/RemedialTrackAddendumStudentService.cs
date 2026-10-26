@@ -46,7 +46,7 @@ namespace QdratNew.Services.RemedialTracks
             int? AxisProgressId, RemedialTrackAxisStatus? AxisStatus, bool AddendumActive,
             string Title, string Reason, RemedialTrackVideoProvider Provider, string? ExternalId, string Url, int? AdminDuration,
             int? ExamModelId, int? ExamMinutes,
-            double WatchedSeconds, int? StoredDuration, bool VideoCompleted, bool ExamPassed, double? BestScore, int AttemptsCount, DateTime? CompletedAtUtc,
+            double WatchedSeconds, double MaxPositionSeconds, int? StoredDuration, bool VideoCompleted, bool ExamPassed, double? BestScore, int AttemptsCount, DateTime? CompletedAtUtc,
             string TrackTitle, string AxisTitle, int MinWatch,
             RemedialTrackAccessSnapshot Access);
 
@@ -70,6 +70,7 @@ namespace QdratNew.Services.RemedialTracks
                     p.Addendum.ExamModelId,
                     p.Addendum.ExamDurationMinutes,
                     p.WatchedSeconds,
+                    p.MaxPositionSeconds,
                     p.DurationSeconds,
                     p.VideoCompleted,
                     p.ExamPassed,
@@ -138,6 +139,7 @@ namespace QdratNew.Services.RemedialTracks
                 EmbedUrl = videoOpen ? RemedialTrackVideoUrlParser.BuildEmbedUrl(h.Provider, h.ExternalId) : null,
                 DurationSeconds = duration,
                 WatchedSeconds = (int)Math.Floor(h.WatchedSeconds),
+                ResumeSeconds = (int)Math.Floor(h.MaxPositionSeconds > 0 ? h.MaxPositionSeconds : h.WatchedSeconds),
                 RequiredSeconds = duration.HasValue ? (int)Math.Ceiling(duration.Value * h.MinWatch / 100.0) : 0,
                 VideoCompleted = h.VideoCompleted,
                 HasExam = hasExam,
@@ -181,6 +183,7 @@ namespace QdratNew.Services.RemedialTracks
                 {
                     p.Id,
                     p.WatchedSeconds,
+                    p.MaxPositionSeconds,
                     p.EndedSeen,
                     p.VideoCompleted,
                     p.LastPingAtUtc,
@@ -238,7 +241,8 @@ namespace QdratNew.Services.RemedialTracks
                 return Fail(RemedialTrackPingStatus.BadRequest, "state", "حالة المشاهدة غير صالحة لهذا الفيديو.");
 
             var c = RemedialTrackProgressService.ComputePing(row.WatchedSeconds, row.EndedSeen, row.LastPingState, row.LastPingAtUtc, now,
-                state, row.Provider, row.AdminDuration, row.DurationSeconds, request.Duration, row.MinWatch);
+                state, row.Provider, row.AdminDuration, row.DurationSeconds, request.Duration, row.MinWatch,
+                request.Position, row.MaxPositionSeconds);
 
             var storedState = state == "manual-done" ? "ended" : state;
             var affected = await ApplyPingAsync(db, row.Id, row.LastPingAtUtc, c, storedState, now, row.HasExam, ct);
@@ -279,6 +283,7 @@ namespace QdratNew.Services.RemedialTracks
                     .Where(x => x.Id == id && !x.VideoCompleted && x.LastPingAtUtc == expected)
                     .ExecuteUpdateAsync(s => s
                         .SetProperty(x => x.WatchedSeconds, watched)
+                        .SetProperty(x => x.MaxPositionSeconds, c.MaxPositionSeconds)
                         .SetProperty(x => x.DurationSeconds, (int?)duration)
                         .SetProperty(x => x.EndedSeen, ended)
                         .SetProperty(x => x.LastPingAtUtc, (DateTime?)now)
@@ -292,6 +297,7 @@ namespace QdratNew.Services.RemedialTracks
             var e = await db.RemedialTrackAddendumProgresses.FirstOrDefaultAsync(x => x.Id == id && !x.VideoCompleted && x.LastPingAtUtc == expected, ct);
             if (e is null) return 0;
             e.WatchedSeconds = watched;
+            e.MaxPositionSeconds = c.MaxPositionSeconds;
             e.DurationSeconds = duration;
             e.EndedSeen = ended;
             e.LastPingAtUtc = now;

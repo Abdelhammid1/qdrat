@@ -316,6 +316,41 @@ namespace QdratNew.Areas.Students.Controllers
             };
         }
 
+        // ───────────── مراجعة أسئلة محاولة مغلقة + تقريرها (قراءة فقط، للمالك) ─────────────
+
+        [HttpGet]
+        public async Task<IActionResult> AttemptReview(int attemptId, [FromServices] IRemedialTrackAttemptReviewService review, CancellationToken ct)
+        {
+            var studentId = await _identity.GetCurrentStudentIdAsync(User);
+            if (studentId == 0) return Challenge();
+
+            var backUrl = Url.Action(nameof(Result), new { attemptId }) ?? string.Empty;
+            var r = await review.GetReviewAsync(studentId, attemptId, backUrl, ct);
+            return r.Status switch
+            {
+                RemedialTrackAttemptReviewStatus.Ok => View("~/Areas/Students/Views/StudentExamResults/ExamReview.cshtml", r.Model),
+                RemedialTrackAttemptReviewStatus.InProgress => RedirectToAction(nameof(Result), new { attemptId }),
+                RemedialTrackAttemptReviewStatus.Forbidden => View("Unavailable"),
+                _ => NotFound()
+            };
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> AttemptReport(int attemptId, [FromServices] IRemedialTrackAttemptReviewService review, CancellationToken ct)
+        {
+            var studentId = await _identity.GetCurrentStudentIdAsync(User);
+            if (studentId == 0) return Challenge();
+
+            var r = await review.GetReportAsync(studentId, attemptId, ct);
+            return r.Status switch
+            {
+                RemedialTrackAttemptReviewStatus.Ok => View(r.Model),
+                RemedialTrackAttemptReviewStatus.InProgress => RedirectToAction(nameof(Result), new { attemptId }),
+                RemedialTrackAttemptReviewStatus.Forbidden => View("Unavailable"),
+                _ => NotFound()
+            };
+        }
+
         // ───────────── RTK-S13: ملحق المحور (D29–D34) — لا يمر على آلة حالة المحور ولا يمنع التقدّم ─────────────
 
         [HttpGet]

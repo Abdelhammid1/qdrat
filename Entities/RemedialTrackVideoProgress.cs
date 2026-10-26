@@ -14,6 +14,7 @@ namespace QdratNew.Entities
         public int Round { get; set; }
 
         public double WatchedSeconds { get; set; }           // D4: بزمن الخادم
+        public double MaxPositionSeconds { get; set; }       // أبعد موضع وصل إليه الطالب (يتحقق منه الخادم) — نقطة الاستئناف بعد الريفرش/الانقطاع
         public int? DurationSeconds { get; set; }
         public bool EndedSeen { get; set; }
         public bool IsCompleted { get; set; }

@@ -75,6 +75,53 @@ namespace QdratNew.ViewModels.RemedialTracks
         public ResultTone Tone { get; set; } = new();
     }
 
+    /// <summary>أداء الطالب في قسم أو درس داخل تقرير محاولة واحدة.</summary>
+    public sealed class StudentRemedialTrackAttemptBreakdownVm
+    {
+        public string Title { get; set; } = string.Empty;
+        public string? ParentTitle { get; set; }             // عنوان القسم لسطر الدرس
+        public int Total { get; set; }
+        public int Correct { get; set; }
+        public int Wrong { get; set; }
+        public int Skipped { get; set; }
+        public double AccuracyPercent => Total <= 0 ? 0 : Math.Round(Correct * 100.0 / Total, 1);
+    }
+
+    /// <summary>سؤال خاطئ/متخطى في تقرير المحاولة (بلا نص الإجابة الصحيحة — تُعرض في صفحة المراجعة).</summary>
+    public sealed class StudentRemedialTrackAttemptMissedVm
+    {
+        public int Order { get; set; }
+        public string LessonTitle { get; set; } = string.Empty;
+        public bool IsSkipped { get; set; }
+    }
+
+    /// <summary>تقرير تفصيلي لمحاولة واحدة مغلقة (101 أو 102).</summary>
+    public sealed class StudentRemedialTrackAttemptReportVm
+    {
+        public int AttemptId { get; set; }
+        public int EnrollmentId { get; set; }
+        public int AxisProgressId { get; set; }
+        public string TrackTitle { get; set; } = string.Empty;
+        public string AxisTitle { get; set; } = string.Empty;
+        public RemedialTrackExamNumber ExamNumber { get; set; }
+        public DateTime StartedAtUtc { get; set; }
+        public DateTime? SubmittedAtUtc { get; set; }
+        public bool TimedOut { get; set; }
+        public double ScorePercent { get; set; }
+        public bool IsPassed { get; set; }
+        public int PassPercent { get; set; }
+        public int TotalQuestions { get; set; }
+        public int CorrectCount { get; set; }
+        public int WrongCount { get; set; }
+        public int SkippedCount { get; set; }
+        public int AllowedMinutes { get; set; }
+        public double SolveMinutes { get; set; }
+        public ResultTone Tone { get; set; } = new();
+        public IReadOnlyList<StudentRemedialTrackAttemptBreakdownVm> Sections { get; set; } = Array.Empty<StudentRemedialTrackAttemptBreakdownVm>();
+        public IReadOnlyList<StudentRemedialTrackAttemptBreakdownVm> Lessons { get; set; } = Array.Empty<StudentRemedialTrackAttemptBreakdownVm>();
+        public IReadOnlyList<StudentRemedialTrackAttemptMissedVm> Missed { get; set; } = Array.Empty<StudentRemedialTrackAttemptMissedVm>();
+    }
+
     /// <summary>سطر محاولة في صفحة المحور.</summary>
     public sealed class StudentRemedialTrackAttemptItemVm
     {
