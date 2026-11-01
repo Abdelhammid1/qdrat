@@ -16,6 +16,9 @@
     // محيط دائرة نصف قطرها 52 — يُستخدم لحساب stroke-dashoffset لحلقة التقدّم
     const double ringCircumference = 326.7;
     var ringOffset = Math.Round(ringCircumference * (1 - stagePct / 100.0), 1);
+
+    var hasAutoStart = Model.AutoStartSeconds.HasValue;
+    var autoStartLabel = hasAutoStart ? $"{Model.AutoStartSeconds.Value / 60:00}:{Model.AutoStartSeconds.Value % 60:00}" : "";
 }
 
 <div class="mse-welcome">
@@ -59,7 +62,7 @@
     }
     else
     {
-        <section class="mse-card">
+        <section class="mse-card @(hasAutoStart ? "mse-card--timed" : "")">
 
             <header class="mse-hero">
                 <span class="mse-hero__chip">اختبار معمل القياس</span>
@@ -77,6 +80,13 @@
             </header>
 
             <div class="mse-body">
+                @if (hasAutoStart)
+                {
+                    <p class="mse-prevstage" id="mse-prevstage">
+                        انتهى وقت @SectionNameHelper.Name(Model.StageNumber - 1) — أجبت عن @Model.PreviousStageAnswered من @Model.PreviousStageTotal سؤال.
+                    </p>
+                }
+
                 <ol class="mse-sections" aria-label="أقسام الاختبار">
                     @for (var i = 1; i <= Model.TotalStages; i++)
                     {
@@ -117,7 +127,7 @@
                         }
                         else
                         {
-                            <p class="mse-stagehead__hint">راجع تفاصيل القسم بالأسفل، ثم ابدأ عندما تكون مستعدًا.</p>
+                            <p class="mse-stagehead__hint">@(hasAutoStart ? "راجع تفاصيل القسم بالأسفل، ويمكنك البدء مباشرة قبل انتهاء العدّاد." : "راجع تفاصيل القسم بالأسفل، ثم ابدأ عندما تكون مستعدًا.")</p>
                         }
                     </div>
                 </div>
@@ -209,7 +219,7 @@
                                 <circle cx="12" cy="13" r="8" />
                                 <path d="M12 9v4l2.5 2M9 2h6" />
                             </svg>
-                            <span>المؤقّت يبدأ فور ضغطك على زر البدء، ويستمر حتى لو أغلقت الصفحة.</span>
+                            <span>@(hasAutoStart ? "المؤقّت يبدأ فور ضغطك على زر البدء أو عند انتهاء العدّاد، ويستمر حتى لو أغلقت الصفحة." : "المؤقّت يبدأ فور ضغطك على زر البدء، ويستمر حتى لو أغلقت الصفحة.")</span>
                         </li>
                     </ul>
                 </div>
@@ -217,13 +227,23 @@
             </div>
 
             <footer class="mse-footer">
-                <p class="mse-footer__note">خذ نفسًا عميقًا وركّز جيدًا — أنت جاهز لهذا القسم.</p>
+                @if (hasAutoStart)
+                {
+                    <p class="mse-autostart" id="mse-autostart" role="timer">
+                        سيبدأ @SectionNameHelper.Name(Model.StageNumber) تلقائيًا خلال
+                        <strong class="mse-autostart__time" id="mse-autostart-time">@autoStartLabel</strong>
+                    </p>
+                }
+                else
+                {
+                    <p class="mse-footer__note">خذ نفسًا عميقًا وركّز جيدًا — أنت جاهز لهذا القسم.</p>
+                }
                 <form method="post" asp-action="StartStage" id="mse-start-form">
                     @Html.AntiForgeryToken()
                     <input type="hidden" name="examId" value="@Model.MinistrySimExamId" />
                     <input type="hidden" name="stageNumber" value="@Model.StageNumber" />
                     <button type="submit" class="mse-btn mse-btn--primary mse-btn--lg" id="mse-start-btn">
-                        <span class="mse-btn__label">@(Model.IsResuming ? "متابعة " + SectionNameHelper.Name(Model.StageNumber) : "ابدأ " + SectionNameHelper.Name(Model.StageNumber))</span>
+                        <span class="mse-btn__label">@(Model.IsResuming ? "متابعة " + SectionNameHelper.Name(Model.StageNumber) : (hasAutoStart ? "ابدأ الآن" : "ابدأ " + SectionNameHelper.Name(Model.StageNumber)))</span>
                         <svg class="mse-btn__icon mse-btn__icon--arrow" viewBox="0 0 24 24" aria-hidden="true">
                             <path d="M19 12H5m7-7-7 7 7 7" />
                         </svg>
@@ -436,6 +456,23 @@
     }
     .mse-footer__note { margin: 0 0 .9rem; font-size: .85rem; font-weight: 600; color: var(--mse-muted); }
 
+    /* ===== عدّاد البدء التلقائي — يبقى مع زر البدء ظاهرًا أثناء تمرير الصفحة ===== */
+    .mse-card--timed { overflow: clip; }
+    .mse-card--timed .mse-footer { position: sticky; bottom: 0; z-index: 5; box-shadow: 0 -8px 20px -14px rgba(15, 23, 42, .45); }
+    .mse-autostart { margin: 0 0 .8rem; font-size: .92rem; font-weight: 700; color: var(--mse-accent-dark); }
+    .mse-autostart__time {
+        display: inline-block; min-width: 4.2rem; padding: .15rem .6rem; margin-inline-start: .25rem;
+        border-radius: 50px; background: var(--mse-accent-soft);
+        font-family: 'IBM Plex Mono', monospace; font-size: 1.05rem; direction: ltr;
+    }
+    .mse-prevstage {
+        margin: 0; padding: .7rem .9rem; border-radius: 12px;
+        background: var(--mse-surface-soft); border: 1px solid var(--mse-line);
+        font-size: .88rem; font-weight: 700; line-height: 1.7;
+    }
+    .mse-autostart.is-urgent { color: #b91c1c; }
+    .mse-autostart.is-urgent .mse-autostart__time { background: #fee2e2; }
+
     .mse-btn {
         display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
         min-height: 48px; padding: .7rem 2rem;
@@ -498,11 +535,35 @@
         var btn = document.getElementById('mse-start-btn');
         if (!form || !btn) return;
 
-        form.addEventListener('submit', function () {
-            if (btn.disabled) return;
+        function markSubmitting() {
             btn.disabled = true;
             var label = btn.querySelector('.mse-btn__label');
             if (label) label.textContent = 'جارٍ التحضير...';
+        }
+
+        form.addEventListener('submit', function () {
+            if (btn.disabled) return;
+            markSubmitting();
         });
+
+        // عدّاد البدء التلقائي — للعرض والانتقال فقط، أما زمن بدء القسم فيحسمه الخادم حتى لو أُغلقت الصفحة
+        var autoSeconds = @(Model.AutoStartSeconds?.ToString() ?? "null");
+        var box = document.getElementById('mse-autostart');
+        var timeEl = document.getElementById('mse-autostart-time');
+        if (autoSeconds === null || !box || !timeEl) return;
+
+        var end = Date.now() + autoSeconds * 1000;
+        var timer = setInterval(function () {
+            var left = Math.max(0, Math.ceil((end - Date.now()) / 1000));
+            timeEl.textContent = String(Math.floor(left / 60)).padStart(2, '0') + ':' + String(left % 60).padStart(2, '0');
+            box.classList.toggle('is-urgent', left <= 10);
+
+            if (left <= 0) {
+                clearInterval(timer);
+                if (btn.disabled) return;
+                markSubmitting();
+                form.submit();
+            }
+        }, 1000);
     })();
 </script>

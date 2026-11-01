@@ -26,6 +26,10 @@ namespace QdratNew.Services.Exams.Interfaces
         // ولإظهار ملخص نهاية الوقت للطالب قبل انتقاله يدويًا للقسم التالي. false لمرحلة غير مبدوءة أو مقفلة.
         Task<bool> IsStageTimeExpiredAsync(int attemptId, int stageNumber);
 
+        // الثواني المتبقية (بوقت الخادم) من فاصل الدقيقة التالي للقسم finishedStageNumber — 0 إن انتهى الفاصل،
+        // null إن لم يبدأ هذا القسم بعد.
+        Task<int?> GetBreakRemainingSecondsAsync(int attemptId, int finishedStageNumber);
+
         // Sprint 17 (MSE-J / J3): بوابة الدخول للاختبار الحضوري — يقارن enteredCode بالرمز المرجعي المُسنَد فعليًا
         // لهذا الطالب. IsOnline == true يتجاوز التحقق بالكامل (يُرجع true دائمًا) — كذلك عدم وجود إسناد فعلي أصلاً
         // (يُترك رفض الوصول لـ StartOrResumeAttemptAsync برسالته العربية الواضحة بدل حلقة تحقق بلا معنى هنا).

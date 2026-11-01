@@ -124,6 +124,10 @@ namespace QdratNew.Areas.Students.Controllers
         [HttpGet]
         public async Task<IActionResult> Welcome(int examId)
         {
+            Response.Headers["Cache-Control"] = "no-cache,no-store,must-revalidate";
+            Response.Headers["Pragma"] = "no-cache";
+            Response.Headers["Expires"] = "0";
+
             var studentId = await GetCurrentStudentIdAsync();
             if (studentId == null)
                 return RedirectToAction("Login", "Account", new { area = "" });
@@ -193,6 +197,25 @@ namespace QdratNew.Areas.Students.Controllers
             {
                 TempData["ErrorMessage"] = "لم يتم العثور على هذا القسم ضمن الاختبار.";
                 return RedirectToAction("Index", "Dashboard");
+            }
+
+            // من القسم الثاني فصاعدًا: فاصل دقيقة واحدة ثم يبدأ القسم تلقائيًا، وإن انتهى الفاصل فلا تُعرض الشاشة أصلاً
+            if (currentUnlocked == null && nextStageNumber > 1)
+            {
+                vm.AutoStartSeconds = await _attemptService.GetBreakRemainingSecondsAsync(attempt.Id, nextStageNumber - 1);
+                if (vm.AutoStartSeconds == 0)
+                    return await ContinueAfterStageAsync(examId, attempt.Id);
+
+                var previousStageNumber = nextStageNumber - 1;
+                vm.PreviousStageTotal = await _context.MinistrySimExamStageQuestions
+                    .AsNoTracking()
+                    .CountAsync(sq => sq.MinistrySimExamStage.MinistrySimExamId == examId
+                                      && sq.MinistrySimExamStage.StageNumber == previousStageNumber);
+                vm.PreviousStageAnswered = await _context.MinistrySimExamStudentAnswers
+                    .AsNoTracking()
+                    .CountAsync(a => a.MinistrySimExamStudentAttemptId == attempt.Id
+                                     && a.SelectedOptionId != null
+                                     && a.StageQuestion.MinistrySimExamStage.StageNumber == previousStageNumber);
             }
 
             // قد يضم الفرع الواحد أكثر من محور (محاور إضافية)؛ تُعرض كلها بالأساسي أولاً
@@ -331,8 +354,20 @@ namespace QdratNew.Areas.Students.Controllers
                 return await ContinueAfterStageAsync(examId, attempt.Id);
             }
 
-            // انتهاء الوقت لا يقفل القسم تلقائيًا: يبقى مفتوحًا للقراءة فقط حتى يضغط الطالب زر الانتقال من ملخص القسم
+            var totalStages = await _context.MinistrySimExams
+                .AsNoTracking()
+                .Where(e => e.Id == examId)
+                .Select(e => e.TotalStages)
+                .FirstOrDefaultAsync();
+
             var timeExpired = await _attemptService.IsStageTimeExpiredAsync(attempt.Id, stageNumber);
+
+            // انتهاء الوقت يقفل القسم وينقل الطالب مباشرة للصفحة الترحيبية؛ آخر قسم فقط يبقى للقراءة مع ملخصه وزر عرض النتيجة
+            if (timeExpired && stageNumber < totalStages)
+            {
+                await _attemptService.LockStageAsync(attempt.Id, stageNumber, timeExpired: true);
+                return RedirectToAction("Welcome", new { examId });
+            }
 
             var vm = await BuildSolveViewModelAsync(examId, attempt.Id, stageNumber, q);
             if (vm == null)
@@ -341,12 +376,6 @@ namespace QdratNew.Areas.Students.Controllers
             var stage = await _context.MinistrySimExamStages
                 .AsNoTracking()
                 .FirstOrDefaultAsync(s => s.MinistrySimExamId == examId && s.StageNumber == stageNumber);
-
-            var totalStages = await _context.MinistrySimExams
-                .AsNoTracking()
-                .Where(e => e.Id == examId)
-                .Select(e => e.TotalStages)
-                .FirstOrDefaultAsync();
 
             var durationMinutes = stage?.DurationMinutes ?? 26;
             var deadline = progress.StartedAt.Value.AddMinutes(durationMinutes);

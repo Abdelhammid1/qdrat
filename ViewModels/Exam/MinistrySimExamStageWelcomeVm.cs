@@ -20,6 +20,13 @@ namespace QdratNew.ViewModels.Exam
         // true لو الطالب يعود لمرحلة بدأها بالفعل ولم تُقفل بعد (تحديث صفحة مثلاً)
         public bool IsResuming { get; set; }
 
+        // الثواني المتبقية قبل البدء التلقائي للقسم (من القسم الثاني فصاعدًا) — null = لا عدّاد (القسم الأول أو الاستئناف)
+        public int? AutoStartSeconds { get; set; }
+
+        // ملخص القسم السابق الذي انتهى وقته — يُعرض مع عدّاد البدء التلقائي
+        public int PreviousStageAnswered { get; set; }
+        public int PreviousStageTotal { get; set; }
+
         // true لو أتم الطالب كل المراحل بالفعل (لا مزيد من المراحل لعرضها)
         public bool IsExamFinished { get; set; }
     }

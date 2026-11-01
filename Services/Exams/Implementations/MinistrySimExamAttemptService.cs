@@ -13,6 +13,12 @@ namespace QdratNew.Services.Exams.Implementations
     // Sprint 10 (MSE-F): LockStageAsync (القفل النهائي أحادي الاتجاه) + EnforceStageTimeLimitAsync (تحقق الخادم من انتهاء الوقت).
     public class MinistrySimExamAttemptService : IMinistrySimExamAttemptService
     {
+        // مدة الصفحة الترحيبية بين قسمين: 5 أقسام × 26 دقيقة + 4 فواصل = 134 دقيقة للاختبار كاملاً
+        public const int StageBreakSeconds = 60;
+
+        // ثوانٍ لتحميل الصفحة بعد انتهاء القسم، حتى يبدأ عدّاد الصفحة الترحيبية من دقيقة كاملة
+        public const int StageTransitionGraceSeconds = 5;
+
         private readonly ApplicationDbContext _context;
 
         public MinistrySimExamAttemptService(ApplicationDbContext context)
@@ -156,18 +162,88 @@ namespace QdratNew.Services.Exams.Implementations
                 return existing;
             }
 
+            // البدء بعد انتهاء الفاصل (أغلق الصفحة وعاد لاحقًا) يُحتسب من لحظة انتهاء الفاصل — لا تكسب مغادرة الصفحة وقتًا إضافيًا
+            var startedAt = DateTime.Now;
+            var breakDeadline = await GetBreakDeadlineAfterStageAsync(attemptId, stageNumber - 1);
+            if (breakDeadline.HasValue && breakDeadline.Value < startedAt)
+                startedAt = breakDeadline.Value;
+
             var progress = new MinistrySimExamStudentStageProgress
             {
                 MinistrySimExamStudentAttemptId = attemptId,
                 StageNumber = stageNumber,
-                StartedAt = DateTime.Now,
+                StartedAt = startedAt,
                 IsLocked = false
             };
 
             _context.MinistrySimExamStudentStageProgresses.Add(progress);
-            await _context.SaveChangesAsync();
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateException)
+            {
+                // البدء التلقائي قد يصل من تبويبين في اللحظة نفسها — الفهرس الفريد يمنع الصف المكرر، ويُعاد صف الطلب الأسبق
+                _context.Entry(progress).State = EntityState.Detached;
+
+                var winner = await _context.MinistrySimExamStudentStageProgresses
+                    .FirstOrDefaultAsync(p => p.MinistrySimExamStudentAttemptId == attemptId && p.StageNumber == stageNumber);
+
+                if (winner == null)
+                    throw;
+
+                return winner;
+            }
 
             return progress;
+        }
+
+        public async Task<int?> GetBreakRemainingSecondsAsync(int attemptId, int finishedStageNumber)
+        {
+            var deadline = await GetBreakDeadlineAfterStageAsync(attemptId, finishedStageNumber);
+            if (!deadline.HasValue)
+                return null;
+
+            return Math.Max(0, (int)Math.Ceiling((deadline.Value - DateTime.Now).TotalSeconds));
+        }
+
+        // الفاصل دقيقة كاملة من لحظة قفل القسم، على ألا تتأخر هذه اللحظة عن الموعد المقرر لانتهائه
+        // إلا بثوانٍ التحميل، حتى لا تمنح العودة بعد غياب طويل دقيقة جديدة.
+        private async Task<DateTime?> GetBreakDeadlineAfterStageAsync(int attemptId, int finishedStageNumber)
+        {
+            var timing = await GetStageTimingAsync(attemptId, finishedStageNumber);
+            if (timing == null)
+                return null;
+
+            var leftAt = timing.Value.ScheduledEnd.AddSeconds(StageTransitionGraceSeconds);
+            if (timing.Value.EndAt.HasValue && timing.Value.EndAt.Value < leftAt)
+                leftAt = timing.Value.EndAt.Value;
+
+            return leftAt.AddSeconds(StageBreakSeconds);
+        }
+
+        private async Task<(DateTime ScheduledEnd, DateTime? EndAt)?> GetStageTimingAsync(int attemptId, int finishedStageNumber)
+        {
+            var finished = await _context.MinistrySimExamStudentStageProgresses
+                .AsNoTracking()
+                .Where(p => p.MinistrySimExamStudentAttemptId == attemptId && p.StageNumber == finishedStageNumber)
+                .Select(p => new { p.StartedAt, p.EndAt, ExamId = p.Attempt.MinistrySimExamId })
+                .FirstOrDefaultAsync();
+
+            if (finished?.StartedAt == null)
+                return null;
+
+            var durationMinutes = await _context.MinistrySimExamStages
+                .AsNoTracking()
+                .Where(s => s.MinistrySimExamId == finished.ExamId && s.StageNumber == finishedStageNumber)
+                .Select(s => (int?)s.DurationMinutes)
+                .FirstOrDefaultAsync();
+
+            if (!durationMinutes.HasValue)
+                return null;
+
+            return (finished.StartedAt.Value.AddMinutes(durationMinutes.Value), finished.EndAt);
         }
 
         // يحفظ/يحدّث إجابة الطالب على سؤال واحد ضمن مرحلة مفتوحة (غير مقفلة) فقط. يحسب IsCorrect فورًا بمقارنة
