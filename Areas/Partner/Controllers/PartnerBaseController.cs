@@ -1,17 +1,23 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.EntityFrameworkCore;
 using QdratNew.Data;
 using QdratNew.Entities;
 using QdratNew.Interfaces;
 using QdratNew.ViewModels.Partner;
 using System.Linq;
+using System.Security.Claims;
 
 namespace QdratNew.Areas.Partner.Controllers
 {
     [Area("Partner")]
+    [Authorize(Policy = "PartnerOnly")] // PPL-S1.2: يورَّث لكل Controllers الشريك
     public abstract class PartnerBaseController : Controller
     {
+        private const string PartnerLinkCheckItemKey = "PPL.ActivePartnerLinked";
+
         protected readonly IPartnerSubscriptionService _subscriptionService;
         protected readonly ApplicationDbContext _context;
 
@@ -58,6 +64,36 @@ namespace QdratNew.Areas.Partner.Controllers
             return null;
         }
 
+        // PPL-S1.2: الشريك النشط في الـ Session يجب أن يخص المستخدم الحالي
+        public override async Task OnActionExecutionAsync(
+            ActionExecutingContext context,
+            ActionExecutionDelegate next)
+        {
+            if (ActivePartnerId > 0 && !await IsActivePartnerLinkedAsync())
+            {
+                HttpContext.Session.Remove("ActivePartnerId");
+                context.Result = RedirectToAction("Select", "PartnerContext");
+                return;
+            }
+
+            await base.OnActionExecutionAsync(context, next);
+        }
+
+        private async Task<bool> IsActivePartnerLinkedAsync()
+        {
+            if (HttpContext.Items[PartnerLinkCheckItemKey] is bool cached)
+                return cached;
+
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var partnerId = ActivePartnerId;
+
+            var linked = await _context.UserPartners
+                .AnyAsync(up => up.UserId == userId && up.PartnerId == partnerId);
+
+            HttpContext.Items[PartnerLinkCheckItemKey] = linked;
+            return linked;
+        }
+
         public override void OnActionExecuting(ActionExecutingContext context)
         {
             var controller = context.ActionDescriptor.RouteValues["controller"];
@@ -68,6 +104,7 @@ namespace QdratNew.Areas.Partner.Controllers
             // =========================================
             if (
                 (controller == "Home" && action == "NoActiveSubscription") ||
+                (controller == "Home" && action == "AccessDenied") || // PPL-S1.5
                 (controller == "PartnerContext") // صفحة اختيار الشريك
             )
             {
@@ -128,8 +165,9 @@ namespace QdratNew.Areas.Partner.Controllers
             // =====================================================
             // ViewBag
             // =====================================================
+            // PPL-S1.5: صفحات Students/Batches تعمل بدون اشتراك نشط
             ViewBag.CanUseProfessionalModels =
-                SubscriptionContext.CanUseProfessionalModels;
+                SubscriptionContext?.CanUseProfessionalModels ?? false;
 
             base.OnActionExecuting(context);
         }

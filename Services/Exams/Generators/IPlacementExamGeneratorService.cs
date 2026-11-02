@@ -40,7 +40,8 @@ namespace QdratNew.Services.Exams.Generators
             int totalQuestions,
             int durationMinutes,
             DateTime? startDate = null,
-            DateTime? endDate = null);
+            DateTime? endDate = null,
+            int? ownerPartnerId = null); // PPL-S2
 
     }
 }

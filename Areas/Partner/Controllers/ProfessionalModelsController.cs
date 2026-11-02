@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using QdratNew.Attributes;
 using QdratNew.Data;
 using QdratNew.Enums;
 using QdratNew.Interfaces;
@@ -8,6 +9,7 @@ using QdratNew.Services.PartnerHomework.ProfessionalModels;
 namespace QdratNew.Areas.Partner.Controllers
 {
     [Area("Partner")]
+    [PartnerFeature(PartnerFeatureType.ProfessionalModels)] // PPL-S1.4
     public class ProfessionalModelsController : PartnerBaseController
     {
         private readonly ApplicationDbContext _context;
@@ -86,16 +88,19 @@ namespace QdratNew.Areas.Partner.Controllers
         // =========================================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult Send(int modelId)
+        public async Task<IActionResult> Send(int modelId)
         {
-            var modelIsAvailable = _context.ProfessionalModels
-                .Any(m => m.Id == modelId && !m.IsArchived);
+            var modelIsAvailable = await _context.ProfessionalModels
+                .AnyAsync(m => m.Id == modelId && !m.IsArchived);
 
             if (!modelIsAvailable)
             {
                 TempData["Error"] = "النموذج الاحترافي غير متاح أو مؤرشف.";
                 return RedirectToAction(nameof(Index));
             }
+
+            if (!await IsModelAvailableForPartnerAsync(modelId))
+                return NotFound();
 
             _modelAssignmentService.SendModelToStudents(
                 modelId,
@@ -112,10 +117,13 @@ namespace QdratNew.Areas.Partner.Controllers
         // =========================================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult SendCustomized(
+        public async Task<IActionResult> SendCustomized(
             int modelId,
             List<Guid> questionIds)
         {
+            if (!await IsModelAvailableForPartnerAsync(modelId))
+                return NotFound();
+
             _modelAssignmentService.SendModelToStudents(
                 modelId,
                 ActivePartnerId,
@@ -125,6 +133,27 @@ namespace QdratNew.Areas.Partner.Controllers
 
             TempData["Success"] = "تم إرسال النموذج بتكوين مخصص.";
             return RedirectToAction(nameof(Index));
+        }
+
+        // =========================================
+        // 🔒 PPL-S1.6: نفس قواعد الإتاحة في Index
+        // =========================================
+        private Task<bool> IsModelAvailableForPartnerAsync(int modelId)
+        {
+            int partnerId = ActivePartnerId;
+            int periodId = ActiveSubscriptionPeriodId;
+
+            return _context.ProfessionalModels
+                .AnyAsync(m =>
+                    m.Id == modelId &&
+                    !m.IsArchived &&
+                    (m.IsGlobal
+                     || _context.ProfessionalModelPartners.Any(p =>
+                            p.ProfessionalModelId == m.Id &&
+                            p.PartnerId == partnerId)
+                     || _context.ProfessionalModelSubscriptionPeriods.Any(sp =>
+                            sp.ProfessionalModelId == m.Id &&
+                            sp.PartnerSubscriptionPeriodId == periodId)));
         }
     }
 }

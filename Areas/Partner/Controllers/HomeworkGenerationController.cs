@@ -9,6 +9,7 @@ using QdratNew.ViewModels.Partner.Homework;
 namespace QdratNew.Areas.Partner.Controllers
 {
     [Area("Partner")]
+    [QdratNew.Attributes.PartnerFeature(PartnerFeatureType.Homework)] // PPL-S1.4
     public class HomeworkGenerationController : PartnerBaseController
     {
         private readonly IHomeworkDraftService _draftService;

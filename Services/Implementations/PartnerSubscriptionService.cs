@@ -155,6 +155,15 @@ namespace QdratNew.Implementations
         }
 
         // =====================================================
+        // 🔹 النماذج الاحترافية (PPL-S1.3)
+        // =====================================================
+        public bool CanUseProfessionalModels(int partnerId)
+        {
+            var sub = GetActiveSubscription(partnerId);
+            return sub != null && sub.CanUseProfessionalModels;
+        }
+
+        // =====================================================
         // 🔹 بنك الأسئلة والفروع
         // =====================================================
         public bool CanUseQuestionBank(int partnerId)

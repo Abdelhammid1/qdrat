@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using QdratNew.Attributes;
 using QdratNew.Data;
 using QdratNew.Enums;
 using QdratNew.Interfaces;
@@ -12,6 +13,7 @@ namespace QdratNew.Areas.Partner.Controllers
 {
     [Area("Partner")]
     [Authorize(Roles = "Partner,PartnerAdmin,PartnerInstructor,SuperAdmin,Owner")]
+    [PartnerFeature(PartnerFeatureType.Homework)] // PPL-S1.4
 
     public class SentHomeworksController : PartnerBaseController
     {

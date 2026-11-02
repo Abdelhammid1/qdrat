@@ -21,20 +21,26 @@ namespace QdratNew.Services.Reports.Implementations
         // =====================================================
         // التقرير الشامل للطالب داخل الدفعة
         // =====================================================
-        public StudentInBatchReportVM GetStudentReport(int batchId, int studentId)
+        public StudentInBatchReportVM GetStudentReport(int partnerId, int batchId, int studentId)
         {
-            var student = _context.Students
-                .AsNoTracking()
-                .FirstOrDefault(s => s.StudentID == studentId);
-
-            if (student == null)
-                return null;
-
             var batch = _context.Batches
                 .AsNoTracking()
-                .FirstOrDefault(b => b.Id == batchId && !b.IsDeleted);
+                .FirstOrDefault(b => b.Id == batchId && !b.IsDeleted && b.Branch.PartnerId == partnerId);
 
             if (batch == null)
+                return null;
+
+            // PPL-S1: الطالب من فروع الشريك أو مسجل في دفعته (لا يكفي امتلاك الدفعة)
+            var student = _context.Students
+                .AsNoTracking()
+                .FirstOrDefault(s =>
+                    s.StudentID == studentId &&
+                    (s.Branch.PartnerId == partnerId ||
+                     _context.StudentBatchEnrollments.Any(e =>
+                         e.StudentID == studentId &&
+                         e.BatchId == batchId)));
+
+            if (student == null)
                 return null;
 
             // ===============================
@@ -159,6 +165,7 @@ namespace QdratNew.Services.Reports.Implementations
         // تقرير مفصل لواجب واحد للطالب
         // =====================================================
         public StudentHomeworkDetailVM GetStudentHomeworkDetails(
+            int partnerId,
             int homeworkSetId,
             int studentId)
         {
@@ -170,6 +177,7 @@ namespace QdratNew.Services.Reports.Implementations
                     on hss.StudentId equals s.StudentID
                 where hs.Id == homeworkSetId
                       && hss.StudentId == studentId
+                      && hs.Batch.Branch.PartnerId == partnerId
                 select new
                 {
                     hs.Id,
@@ -215,6 +223,7 @@ namespace QdratNew.Services.Reports.Implementations
         // تقرير مفصل لاختبار واحد للطالب
         // =====================================================
         public StudentExamDetailVM GetStudentExamDetails(
+            int partnerId,
             int examAssignmentId,
             int studentId)
         {
@@ -226,6 +235,7 @@ namespace QdratNew.Services.Reports.Implementations
                     on es.StudentId equals s.StudentID
                 where ea.Id == examAssignmentId
                       && es.StudentId == studentId
+                      && ea.Batch.Branch.PartnerId == partnerId
                 select new
                 {
                     ea.Id,
@@ -263,11 +273,11 @@ namespace QdratNew.Services.Reports.Implementations
         }
 
 
-        public HomeworkStudentsVM GetHomeworkStudents(int homeworkSetId)
+        public HomeworkStudentsVM GetHomeworkStudents(int partnerId, int homeworkSetId)
         {
             var homework = _context.HomeworkSets
                 .AsNoTracking()
-                .FirstOrDefault(h => h.Id == homeworkSetId);
+                .FirstOrDefault(h => h.Id == homeworkSetId && h.Batch.Branch.PartnerId == partnerId);
 
             if (homework == null)
                 return null;
@@ -315,11 +325,11 @@ namespace QdratNew.Services.Reports.Implementations
         }
 
 
-        public ExamStudentsVM GetExamStudents(int examAssignmentId)
+        public ExamStudentsVM GetExamStudents(int partnerId, int examAssignmentId)
         {
             var exam = _context.ExamAssignmentsToBatches
                 .AsNoTracking()
-                .FirstOrDefault(e => e.Id == examAssignmentId);
+                .FirstOrDefault(e => e.Id == examAssignmentId && e.Batch.Branch.PartnerId == partnerId);
 
             if (exam == null)
                 return null;

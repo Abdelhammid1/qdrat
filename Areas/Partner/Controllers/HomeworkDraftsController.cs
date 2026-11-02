@@ -16,6 +16,7 @@ using QdratNew.ViewModels.Question;
 namespace QdratNew.Areas.Partner.Controllers
 {
     [Area("Partner")]
+    [QdratNew.Attributes.PartnerFeature(QdratNew.Enums.PartnerFeatureType.Homework)] // PPL-S1.4
     public class HomeworkDraftsController : PartnerBaseController
     {
         private readonly IHomeworkDraftService _draftService;

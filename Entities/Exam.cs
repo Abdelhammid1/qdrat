@@ -67,5 +67,9 @@ namespace QdratNew.Entities
         [Display(Name = "السماح بخيار \"لا أعرف الإجابة\"")]
         public bool AllowDontKnowOption { get; set; } = false;
 
+        /// <summary>الشريك المالك (null = اختبار المعهد). PPL-S2</summary>
+        public int? OwnerPartnerId { get; set; }
+        public Partner? OwnerPartner { get; set; }
+
     }
 }

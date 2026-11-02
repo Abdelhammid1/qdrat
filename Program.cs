@@ -134,7 +134,8 @@ builder.Services.AddScoped<IStudentProgressService, StudentProgressService>();
 
 
 var mvcBuilder = builder.Services
-    .AddControllersWithViews()
+    // PPL-S1.3: إنفاذ عقد الشريك عبر [PartnerFeature] — الفلتر لا يعمل إلا على ما يحمل الـ Attribute
+    .AddControllersWithViews(options => options.Filters.AddService<PartnerFeatureFilter>())
     .AddSessionStateTempDataProvider()
     .AddJsonOptions(options =>
     {
@@ -930,6 +931,9 @@ builder.Services.AddScoped<IStudentPracticeService, StudentPracticeService>();
 builder.Services.AddScoped<IEnhancementSkillService, EnhancementSkillService>();
 builder.Services.AddScoped<IStandardExamGeneratorService, StandardExamGeneratorService>();
 builder.Services.AddScoped<IPlacementExamGeneratorService, PlacementExamGeneratorService>();
+// PPL-S2: خدمة إدارة اختبارات تحديد المستوى المشتركة بين الأدمن والشريك + حارس النطاق
+builder.Services.AddScoped<QdratNew.Services.Exams.Placement.IPlacementExamScopeGuard, QdratNew.Services.Exams.Placement.PlacementExamScopeGuard>();
+builder.Services.AddScoped<QdratNew.Services.Exams.Placement.IPlacementExamManagementService, QdratNew.Services.Exams.Placement.PlacementExamManagementService>();
 builder.Services.AddScoped<ITimeZoneService, TimeZoneService>();
 builder.Services.AddScoped<IStudentExamStatisticsService, StudentExamStatisticsService>();
 builder.Services.AddScoped<IExamRecommendationService, ExamRecommendationService>();

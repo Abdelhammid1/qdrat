@@ -829,6 +829,17 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             .OnDelete(DeleteBehavior.Restrict);
 
 
+        // PPL-S2: الشريك المالك للاختبار (null = اختبار المعهد)
+        modelBuilder.Entity<Exam>()
+            .HasOne(e => e.OwnerPartner)
+            .WithMany()
+            .HasForeignKey(e => e.OwnerPartnerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<Exam>()
+            .HasIndex(e => new { e.Type, e.OwnerPartnerId })
+            .HasDatabaseName("IX_Exams_Type_OwnerPartnerId");
+
         modelBuilder.Entity<ExamAssignmentToBatch>()
     .HasOne(e => e.Exam)
     .WithMany()

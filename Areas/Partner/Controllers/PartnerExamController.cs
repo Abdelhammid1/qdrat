@@ -15,6 +15,7 @@ using System.Text.Json;
 namespace QdratNew.Areas.Partner.Controllers
 {
     [Area("Partner")]
+    [QdratNew.Attributes.PartnerFeature(PartnerFeatureType.Exams)] // PPL-S1.4
     public class PartnerExamController : PartnerBaseController
     {
         private readonly IPartnerExamGenerationService _examService;

@@ -17,11 +17,11 @@ namespace QdratNew.Services.Reports.Implementations
         // =====================================================
         // التقرير العام للدفعة
         // =====================================================
-        public BatchReportVM GetBatchReport(int batchId)
+        public BatchReportVM GetBatchReport(int partnerId, int batchId)
         {
             var batch = _context.Batches
                 .AsNoTracking()
-                .FirstOrDefault(b => b.Id == batchId && !b.IsDeleted);
+                .FirstOrDefault(b => b.Id == batchId && !b.IsDeleted && b.Branch.PartnerId == partnerId);
 
             if (batch == null)
                 return null;
@@ -113,11 +113,11 @@ namespace QdratNew.Services.Reports.Implementations
         // =====================================================
         // تقرير الواجبات داخل الدفعة
         // =====================================================
-        public BatchHomeworkReportVM GetBatchHomeworkReport(int batchId)
+        public BatchHomeworkReportVM GetBatchHomeworkReport(int partnerId, int batchId)
         {
             var batch = _context.Batches
                 .AsNoTracking()
-                .FirstOrDefault(b => b.Id == batchId && !b.IsDeleted);
+                .FirstOrDefault(b => b.Id == batchId && !b.IsDeleted && b.Branch.PartnerId == partnerId);
 
             if (batch == null)
                 return null;
@@ -219,11 +219,11 @@ namespace QdratNew.Services.Reports.Implementations
         // =====================================================
         // تقرير الاختبارات داخل الدفعة
         // =====================================================
-        public BatchExamReportVM GetBatchExamReport(int batchId)
+        public BatchExamReportVM GetBatchExamReport(int partnerId, int batchId)
         {
             var batch = _context.Batches
                 .AsNoTracking()
-                .FirstOrDefault(b => b.Id == batchId && !b.IsDeleted);
+                .FirstOrDefault(b => b.Id == batchId && !b.IsDeleted && b.Branch.PartnerId == partnerId);
 
             if (batch == null)
                 return null;

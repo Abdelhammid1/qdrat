@@ -29,6 +29,9 @@ namespace QdratNew.Enums
         EducationalContent = 8,
 
         [Display(Name = "تحليلات الذكاء الاصطناعي")]
-        AIAnalytics = 9
+        AIAnalytics = 9,
+
+        [Display(Name = "النماذج الاحترافية")]
+        ProfessionalModels = 10
     }
 }

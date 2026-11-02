@@ -38,6 +38,7 @@ namespace QdratNew.Interfaces
 
         bool CanUseReinforcementSkills(int partnerId);
         bool CanUseAIAnalytics(int partnerId);
+        bool CanUseProfessionalModels(int partnerId); // PPL-S1.3
 
 
 

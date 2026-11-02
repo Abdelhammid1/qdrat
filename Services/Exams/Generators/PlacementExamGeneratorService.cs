@@ -240,7 +240,8 @@ namespace QdratNew.Services.Exams.Generators
             int totalQuestions,
             int durationMinutes,
             DateTime? startDate = null,
-            DateTime? endDate = null)
+            DateTime? endDate = null,
+            int? ownerPartnerId = null) // PPL-S2
         {
             using var _context = _contextFactory.CreateDbContext();
 
@@ -262,7 +263,8 @@ namespace QdratNew.Services.Exams.Generators
                 DurationMinutes = durationMinutes,
                 CreatedAt = nowUtc,
                 IsActive = true,
-                CourseId = courseId
+                CourseId = courseId,
+                OwnerPartnerId = ownerPartnerId // PPL-S2
             };
             _context.Exams.Add(exam);
             await _context.SaveChangesAsync();

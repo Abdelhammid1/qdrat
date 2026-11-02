@@ -106,7 +106,13 @@ namespace QdratNew.Areas.Partner.Controllers
             {
                 return View();
             }
-       
+
+            // PPL-S1.5: وجهة RequirePermission عند عدم توفر الصلاحية
+            public IActionResult AccessDenied()
+            {
+                return View();
+            }
+
 
 
 

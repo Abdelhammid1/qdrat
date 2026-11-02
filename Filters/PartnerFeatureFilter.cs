@@ -17,9 +17,10 @@ namespace QdratNew.Filters
 
         public void OnActionExecuting(ActionExecutingContext context)
         {
+            // PPL-S1.3: EndpointMetadata يشمل Controller ثم Action — الأخير (الأكثر تحديدًا) هو المعتمد
             var attribute = context.ActionDescriptor.EndpointMetadata
                 .OfType<PartnerFeatureAttribute>()
-                .FirstOrDefault();
+                .LastOrDefault();
 
             if (attribute == null)
                 return;
@@ -65,13 +66,26 @@ namespace QdratNew.Filters
                 PartnerFeatureType.AIAnalytics =>
                     _subscriptionService.CanUseAIAnalytics(partnerId.Value),
 
+                PartnerFeatureType.ProfessionalModels =>
+                    _subscriptionService.CanUseProfessionalModels(partnerId.Value),
+
                 _ => false
             };
+
+            // PPL-S1.4: قراءة التقارير بعد انتهاء العقد حتى AccessUntilDate
+            if (!allowed &&
+                attribute.AllowReadAfterExpiry &&
+                _subscriptionService.GetActiveSubscription(partnerId.Value) == null &&
+                _subscriptionService.HasDataAccess(partnerId.Value))
+            {
+                allowed = true;
+            }
 
             if (!allowed)
             {
                 context.Result = new ViewResult
                 {
+                    StatusCode = StatusCodes.Status403Forbidden,
                     ViewName = "~/Views/Shared/FeatureNotAllowed.cshtml",
                     ViewData = new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(
          new Microsoft.AspNetCore.Mvc.ModelBinding.EmptyModelMetadataProvider(),

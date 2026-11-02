@@ -16,7 +16,7 @@ using QdratNew.Extensions;
 using QdratNew.Security;
 using QdratNew.Security.AdminPermissions;
 using QdratNew.Services;
-using QdratNew.Services.Exams.Generators;
+using QdratNew.Services.Exams.Placement;
 using QdratNew.Services.Interfaces;
 using QdratNew.Services.Reports;
 using QdratNew.ViewModels;
@@ -40,32 +40,43 @@ namespace QdratNew.Areas.Admin.Controllers
     public class PlacementExamsController : Controller
     {
         private readonly ApplicationDbContext _context;
-        private readonly IPlacementExamGeneratorService _placementExamService;
+        private readonly IPlacementExamManagementService _managementService; // PPL-S2
         private readonly ITimeZoneService _timeZoneService;
         private readonly IExamRecommendationService _recommendationService;
-        private readonly IMemoryCache _cache;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IAdminActivityLogger _activityLogger;
         private readonly ReportBrowserProvider _reportBrowserProvider;
 
         public PlacementExamsController(
             ApplicationDbContext context,
-            IPlacementExamGeneratorService placementExamService,
+            IPlacementExamManagementService managementService,
             ITimeZoneService timeZoneService,
             IExamRecommendationService recommendationService,
-            IMemoryCache cache,
             UserManager<ApplicationUser> userManager,
             IAdminActivityLogger activityLogger,
             ReportBrowserProvider reportBrowserProvider)
         {
             _context = context;
-            _placementExamService = placementExamService;
+            _managementService = managementService;
             _timeZoneService = timeZoneService;
             _recommendationService = recommendationService;
-            _cache = cache;
             _userManager = userManager;
             _activityLogger = activityLogger;
             _reportBrowserProvider = reportBrowserProvider;
+        }
+
+        // PPL-S2: كل منطق الإدارة في الخدمة بنطاق الأدمن (اختبارات OwnerPartnerId == null فقط)
+        private PlacementScope AdminScope => PlacementScope.Admin(CurrentUserId(), User.Identity?.Name);
+
+        private void SetResultMessage(PlacementOperationResult result)
+        {
+            var key = result.Outcome switch
+            {
+                PlacementOperationOutcome.Success => "Success",
+                PlacementOperationOutcome.Info => "Info",
+                _ => "Error"
+            };
+            TempData[key] = result.Message;
         }
 
         // ─── Archive helpers ──────────────────────────────────────────
@@ -134,50 +145,7 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("PlacementExams", "Read")]
         public async Task<IActionResult> Index()
         {
-            // الدفعات النشطة (غير مؤرشفة): على الأقل اختبار واحد غير مؤرشف
-            var allAssignments = await _context.ExamAssignmentsToBatches
-                .AsNoTracking()
-                .Include(x => x.Batch)
-                .Include(x => x.Exam)
-                .Where(x => x.Exam != null && x.Exam.Type == ExamType.LevelAssessment && x.Exam.IsActive)
-                .ToListAsync();
-
-            var activeBatches = allAssignments
-                .Where(x => !x.IsArchived)
-                .GroupBy(x => new { x.BatchId, x.Batch?.Name })
-                .Select(g => new PlacementBatchExamVm
-                {
-                    BatchId = g.Key.BatchId,
-                    BatchName = g.Key.Name ?? string.Empty,
-                    ExamsCount = g.Count(),
-                    LastExamDate = g.Max(x => x.CreatedAt)
-                })
-                .OrderByDescending(x => x.LastExamDate)
-                .ToList();
-
-            // الدفعات المؤرشفة: أي دفعة لها تعيينات مؤرشفة
-            var archivedBatchIds = allAssignments
-                .Where(x => x.IsArchived)
-                .Select(x => x.BatchId)
-                .Distinct()
-                .ToHashSet();
-
-            // قائمة الدفعات لمدير الأرشيف (الدفعات النشطة فقط)
-            var allBatchesForArchive = activeBatches
-                .Select(b => new SelectListItem
-                {
-                    Value = b.BatchId.ToString(),
-                    Text = b.BatchName
-                })
-                .ToList();
-
-            var model = new PlacementExamsIndexVM
-            {
-                ActiveBatches = activeBatches,
-                ArchivedBatchCount = archivedBatchIds.Count,
-                AllBatchesForArchive = allBatchesForArchive
-            };
-
+            var model = await _managementService.GetIndexAsync(AdminScope);
             return View(model);
         }
 
@@ -192,7 +160,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 .AsNoTracking()
                 .Include(x => x.Batch)
                 .Include(x => x.Exam)
-                .Where(x => x.IsArchived && x.Exam != null && x.Exam.Type == ExamType.LevelAssessment)
+                .Where(x => x.IsArchived && x.Exam != null && x.Exam.Type == ExamType.LevelAssessment && x.Exam.OwnerPartnerId == null) // PPL-S2
                 .ToListAsync();
 
             var batchGroups = archivedAssignments
@@ -258,7 +226,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
             var assignments = await _context.ExamAssignmentsToBatches
                 .Include(x => x.Batch)
-                .Where(x => selectedBatchIds.Contains(x.BatchId) && !x.IsArchived)
+                .Where(x => selectedBatchIds.Contains(x.BatchId) && !x.IsArchived && (x.Exam == null || x.Exam.OwnerPartnerId == null)) // PPL-S2
                 .ToListAsync();
 
             var batchNames = assignments
@@ -298,7 +266,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
             var assignments = await _context.ExamAssignmentsToBatches
                 .Include(x => x.Batch)
-                .Where(x => selectedBatchIds.Contains(x.BatchId) && x.IsArchived)
+                .Where(x => selectedBatchIds.Contains(x.BatchId) && x.IsArchived && (x.Exam == null || x.Exam.OwnerPartnerId == null)) // PPL-S2
                 .ToListAsync();
 
             var batchNames = assignments
@@ -486,44 +454,9 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("PlacementExams", "Read")]
         public async Task<IActionResult> Review(int examId)
         {
-            var exam = await _context.Exams
-                .Include(e => e.Questions)
-                    .ThenInclude(eq => eq.Question)
-                        .ThenInclude(q => q.Lesson)
-                            .ThenInclude(l => l.Section)
-                .FirstOrDefaultAsync(e => e.Id == examId);
-
-            if (exam == null)
+            var model = await _managementService.GetReviewAsync(AdminScope, examId);
+            if (model == null)
                 return NotFound();
-
-            var model = new PlacementExamReviewVm
-            {
-                ExamId = exam.Id,
-                ExamTitle = exam.Title,
-                TotalQuestions = exam.TotalQuestions,
-                DurationMinutes = exam.DurationMinutes,
-                CreatedAt = exam.CreatedAt,
-                IsInLab = !string.IsNullOrWhiteSpace(exam.ReferenceCode),
-                ReferenceCode = exam.ReferenceCode,
-                AllowDontKnowOption = exam.AllowDontKnowOption,
-                Sections = exam.Questions
-                    .GroupBy(q => q.Question.Lesson.Section)
-                    .Select(g => new PlacementExamReviewSectionVm
-                    {
-                        SectionId = g.Key.Id,
-                        SectionTitle = g.Key.Title,
-                        Questions = g.Select(x => new PlacementExamReviewQuestionVm
-                        {
-                            QuestionId = x.QuestionId,
-                            Title = x.Question.Title,
-                            ImageUrl = x.Question.ImageUrl,
-                            Difficulty = x.Question.Difficulty,
-                            LessonTitle = x.Question.Lesson.Title,
-                            CorrectAnswer = x.Question.CorrectAnswer,
-                            Order = x.Order
-                        }).ToList()
-                    }).ToList()
-            };
 
             return View(model);
         }
@@ -537,21 +470,16 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("PlacementExams", "Create")]
         public async Task<IActionResult> ToggleDontKnowOption(int examId, bool enabled)
         {
-            var exam = await _context.Exams.FirstOrDefaultAsync(e => e.Id == examId);
+            var result = await _managementService.ToggleDontKnowOptionAsync(AdminScope, examId, enabled);
 
-            if (exam == null)
-                return Json(new { success = false, message = "⚠️ لم يتم العثور على الاختبار." });
-
-            exam.AllowDontKnowOption = enabled;
-            await _context.SaveChangesAsync();
+            if (!result.Succeeded)
+                return Json(new { success = false, message = result.Message });
 
             return Json(new
             {
                 success = true,
-                allowDontKnowOption = exam.AllowDontKnowOption,
-                message = enabled
-                    ? "✅ تم تفعيل خيار \"لا أعرف الإجابة\" لهذا الاختبار."
-                    : "✅ تم إلغاء تفعيل خيار \"لا أعرف الإجابة\" لهذا الاختبار."
+                allowDontKnowOption = enabled,
+                message = result.Message
             });
         }
 
@@ -560,111 +488,7 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("PlacementExams", "Create")]
         public async Task<IActionResult> SendExamToStudents(int examId)
         {
-            var strategy = _context.Database.CreateExecutionStrategy();
-
-            try
-            {
-                await strategy.ExecuteAsync(async () =>
-                {
-                    using var transaction = await _context.Database.BeginTransactionAsync();
-
-                    // =========================================
-                    // 1️⃣ تحميل الاختبار
-                    // =========================================
-                    var exam = await _context.Exams
-                        .AsNoTracking()
-                        .FirstOrDefaultAsync(x => x.Id == examId);
-
-                    if (exam == null)
-                        throw new Exception("❌ الاختبار غير موجود.");
-
-                    // =========================================
-                    // 2️⃣ تحميل ربط الدفعات
-                    // =========================================
-                    var batchAssignments = await _context.ExamAssignmentsToBatches
-                        .Where(x => x.ExamId == examId)
-                        .ToListAsync();
-
-                    if (!batchAssignments.Any())
-                        throw new Exception("⚠️ لا يوجد ربط بالدفعات.");
-
-                    if (batchAssignments.Any(x => x.IsSentToStudents))
-                        throw new Exception("⚠️ تم الإرسال مسبقًا.");
-
-                    // =========================================
-                    // 3️⃣ استخراج الطلاب
-                    // =========================================
-                    var batchIds = batchAssignments
-                        .Select(x => x.BatchId)
-                        .Distinct()
-                        .ToList();
-
-                    var students = await _context.StudentBatchEnrollments
-                        .Where(s => batchIds.Contains(s.BatchId))
-                        .Select(s => s.StudentID)
-                        .Distinct()
-                        .ToListAsync();
-
-                    if (!students.Any())
-                        throw new Exception("⚠️ لا يوجد طلاب.");
-
-                    var nowUtc = DateTime.UtcNow;
-
-                    // =========================================
-                    // 4️⃣ تجهيز البيانات
-                    // =========================================
-                    var assignments = new List<ExamAssignment>(students.Count);
-                    var statuses = new List<ExamStudentStatus>(students.Count);
-
-                    foreach (var stId in students)
-                    {
-                        assignments.Add(new ExamAssignment
-                        {
-                            ExamId = examId,
-                            StudentId = stId,
-                            AssignedAt = nowUtc,
-                            DueDate = nowUtc.AddMinutes(exam.DurationMinutes)
-                        });
-
-                        statuses.Add(new ExamStudentStatus
-                        {
-                            StudentId = stId,
-                            ExamId = examId,
-                            AssignedAt = nowUtc,
-                            Status = ExamStatus.Pending
-                        });
-                    }
-
-                    // =========================================
-                    // 5️⃣ Bulk Insert
-                    // =========================================
-                    await _context.BulkInsertAsync(assignments);
-                    await _context.BulkInsertAsync(statuses);
-
-                    // =========================================
-                    // 6️⃣ تحديث الحالة
-                    // =========================================
-                    foreach (var a in batchAssignments)
-                        a.IsSentToStudents = true;
-
-                    await _context.SaveChangesAsync();
-
-                    // =========================================
-                    // 7️⃣ تنظيف الكاش
-                    // =========================================
-                    foreach (var stId in students)
-                        _cache.Remove($"PlacementExamDashboard_{stId}");
-
-                    await transaction.CommitAsync();
-                });
-
-                TempData["Success"] = "✅ تم إرسال الاختبار بنجاح.";
-            }
-            catch (Exception ex)
-            {
-                TempData["Error"] = ex.Message;
-            }
-
+            SetResultMessage(await _managementService.SendToStudentsAsync(AdminScope, examId));
             return RedirectToAction("Index");
         }
 
@@ -675,63 +499,7 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("PlacementExams", "Create")]
         public async Task<IActionResult> SendExamToNewStudents(int examId, int batchId)
         {
-            var exam = await _context.Exams.FirstOrDefaultAsync(e => e.Id == examId);
-            if (exam == null)
-            {
-                TempData["Error"] = "❌ الاختبار غير موجود.";
-                return RedirectToAction("BatchStudents", new { examId, batchId });
-            }
-
-            var batchStudentIds = await _context.StudentBatchEnrollments
-                .Where(s => s.BatchId == batchId)
-                .Select(s => s.StudentID)
-                .Distinct()
-                .ToListAsync();
-
-            var alreadyAssignedIds = await _context.ExamAssignments
-                .Where(a => a.ExamId == examId && batchStudentIds.Contains(a.StudentId))
-                .Select(a => a.StudentId)
-                .Distinct()
-                .ToListAsync();
-
-            var newStudentIds = batchStudentIds.Except(alreadyAssignedIds).ToList();
-
-            if (!newStudentIds.Any())
-            {
-                TempData["Info"] = "لا يوجد طلاب جدد بحاجة لإرسال الاختبار.";
-                return RedirectToAction("BatchStudents", new { examId, batchId });
-            }
-
-            var nowUtc = DateTime.UtcNow;
-            var assignments = new List<ExamAssignment>(newStudentIds.Count);
-            var statuses = new List<ExamStudentStatus>(newStudentIds.Count);
-
-            foreach (var stId in newStudentIds)
-            {
-                assignments.Add(new ExamAssignment
-                {
-                    ExamId = examId,
-                    StudentId = stId,
-                    AssignedAt = nowUtc,
-                    DueDate = nowUtc.AddMinutes(exam.DurationMinutes)
-                });
-
-                statuses.Add(new ExamStudentStatus
-                {
-                    StudentId = stId,
-                    ExamId = examId,
-                    AssignedAt = nowUtc,
-                    Status = ExamStatus.Pending
-                });
-            }
-
-            await _context.BulkInsertAsync(assignments);
-            await _context.BulkInsertAsync(statuses);
-
-            foreach (var stId in newStudentIds)
-                _cache.Remove($"PlacementExamDashboard_{stId}");
-
-            TempData["Success"] = $"✅ تم إرسال الاختبار لـ {newStudentIds.Count} طالب جديد انضم للدفعة.";
+            SetResultMessage(await _managementService.SendToNewStudentsAsync(AdminScope, examId, batchId));
             return RedirectToAction("BatchStudents", new { examId, batchId });
         }
 
@@ -743,106 +511,7 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("PlacementExams", "Create")]
         public async Task<IActionResult> BackfillMissingAssignments(int examId, int batchId)
         {
-            var exam = await _context.Exams.FirstOrDefaultAsync(e => e.Id == examId);
-            if (exam == null)
-            {
-                TempData["Error"] = "❌ الاختبار غير موجود.";
-                return RedirectToAction("BatchStudents", new { examId, batchId });
-            }
-
-            var batchStudentIds = await _context.StudentBatchEnrollments
-                .Where(s => s.BatchId == batchId)
-                .Select(s => s.StudentID)
-                .Distinct()
-                .ToListAsync();
-
-            // الطلاب اللي عندهم محاولات فعلية على هذا الاختبار
-            var studentsWithAttempts = await (
-                from a in _context.QuestionAttemptNew
-                where a.ExamId == examId && batchStudentIds.Contains(a.StudentId)
-                group a by a.StudentId into g
-                select new
-                {
-                    StudentId = g.Key,
-                    FirstAttemptAt = g.Min(x => x.AttemptedAt),
-                    LastAttemptAt = g.Max(x => x.AttemptedAt)
-                }
-            ).ToListAsync();
-
-            var alreadyAssignedIds = await _context.ExamAssignments
-                .Where(a => a.ExamId == examId)
-                .Select(a => a.StudentId)
-                .Distinct()
-                .ToListAsync();
-
-            var toFix = studentsWithAttempts
-                .Where(s => !alreadyAssignedIds.Contains(s.StudentId))
-                .ToList();
-
-            if (!toFix.Any())
-            {
-                TempData["Info"] = "لا يوجد طلاب بحاجة لإصلاح — كل من أنهى الاختبار لديه سجل تعيين بالفعل.";
-                return RedirectToAction("BatchStudents", new { examId, batchId });
-            }
-
-            // 1) إنشاء سجل تعيين لكل طالب ناقص
-            var newAssignments = new List<ExamAssignment>();
-            foreach (var s in toFix)
-            {
-                var assignment = new ExamAssignment
-                {
-                    ExamId = examId,
-                    StudentId = s.StudentId,
-                    AssignedAt = s.FirstAttemptAt,
-                    DueDate = s.LastAttemptAt
-                };
-                _context.ExamAssignments.Add(assignment);
-                newAssignments.Add(assignment);
-            }
-
-            await _context.SaveChangesAsync();
-
-            // 2) إنشاء/تحديث سجل الحالة، وربط المحاولات القديمة برقم التعيين الجديد
-            foreach (var assignment in newAssignments)
-            {
-                var info = toFix.First(x => x.StudentId == assignment.StudentId);
-
-                var status = await _context.ExamStudentStatuses
-                    .FirstOrDefaultAsync(st => st.StudentId == assignment.StudentId && st.ExamId == examId);
-
-                if (status == null)
-                {
-                    _context.ExamStudentStatuses.Add(new ExamStudentStatus
-                    {
-                        StudentId = assignment.StudentId,
-                        ExamId = examId,
-                        AssignedAt = info.FirstAttemptAt,
-                        StartedAt = info.FirstAttemptAt,
-                        SubmittedAt = info.LastAttemptAt,
-                        IsSubmitted = true,
-                        Status = ExamStatus.Completed
-                    });
-                }
-                else
-                {
-                    status.IsSubmitted = true;
-                    status.Status = ExamStatus.Completed;
-                    status.SubmittedAt ??= info.LastAttemptAt;
-                }
-
-                var attemptsToLink = await _context.QuestionAttemptNew
-                    .Where(a => a.StudentId == assignment.StudentId &&
-                                a.ExamId == examId &&
-                                a.ExamAssignmentId == null)
-                    .ToListAsync();
-
-                foreach (var att in attemptsToLink)
-                    att.ExamAssignmentId = assignment.Id;
-            }
-
-            await _context.SaveChangesAsync();
-
-            TempData["Success"] = $"✅ تم إصلاح بيانات {toFix.Count} طالب. أصبح بإمكانك الآن عرض وطباعة تقاريرهم.";
+            SetResultMessage(await _managementService.BackfillMissingAssignmentsAsync(AdminScope, examId, batchId));
             return RedirectToAction("BatchStudents", new { examId, batchId });
         }
 
@@ -1058,36 +727,8 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("PlacementExams", "Read")]
         public async Task<IActionResult> BatchExams(int batchId)
         {
-            var batchName = await _context.Batches
-                .Where(b => b.Id == batchId)
-                .Select(b => b.Name)
-                .FirstOrDefaultAsync();
-
-            // ✅ اجلب كل الاختبارات المرتبطة بهذه الدفعة فقط من ExamAssignmentToBatch
-            var exams = await (
-                from eab in _context.ExamAssignmentsToBatches
-                join e in _context.Exams on eab.ExamId equals e.Id
-                where eab.BatchId == batchId && e.Type == ExamType.LevelAssessment
-                select new PlacementExamListVm
-                {
-                    ExamId = e.Id,
-                    Title = e.Title,
-                    TotalQuestions = e.TotalQuestions,
-                    CreatedAt = e.CreatedAt,
-                    BatchId = batchId,
-                    StudentCount = _context.StudentBatchEnrollments
-                        .Count(s => s.BatchId == batchId),
-                    TestedCount = _context.ExamStudentStatuses
-                        .Count(s => s.ExamId == e.Id
-                            && s.ExamAssignment != null
-                            && s.ExamAssignment.BatchId == batchId
-                            && s.IsSubmitted),
-                    IsActive = e.IsActive,
-                    ReferenceCode = e.ReferenceCode
-                }
-            )
-            .OrderByDescending(x => x.CreatedAt)
-            .ToListAsync();
+            var batchName = await _managementService.GetBatchNameAsync(AdminScope, batchId);
+            var exams = await _managementService.GetBatchExamsAsync(AdminScope, batchId);
 
             ViewBag.BatchName = batchName;
             return View(exams);
@@ -1283,41 +924,7 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("PlacementExams", "Delete")]
         public async Task<IActionResult> HideExam(int id, int? batchId)
         {
-            var userName = User.Identity?.Name ?? "Unknown";
-
-            var exam = await _context.Exams.FirstOrDefaultAsync(e => e.Id == id);
-            if (exam == null)
-            {
-                TempData["Error"] = "⚠️ لم يتم العثور على الاختبار.";
-                return batchId.HasValue
-                    ? RedirectToAction("BatchExams", new { batchId })
-                    : RedirectToAction("Index");
-            }
-
-            if (!exam.IsActive)
-            {
-                TempData["Info"] = "⚠️ هذا الاختبار مخفي بالفعل.";
-                return batchId.HasValue
-                    ? RedirectToAction("BatchExams", new { batchId })
-                    : RedirectToAction("Index");
-            }
-
-            // 🔒 إخفاء الاختبار
-            exam.IsActive = false;
-
-            // 🧾 سجل العملية
-            _context.SystemLogs.Add(new SystemLog
-            {
-                UserName = userName,
-                Action = "Hide",
-                Entity = "Exam",
-                EntityId = id,
-                Description = $"قام {userName} بإخفاء اختبار ({exam.Title})"
-            });
-
-            await _context.SaveChangesAsync();
-
-            TempData["Success"] = "🚫 تم إخفاء الاختبار ولن يظهر للطلاب بعد الآن.";
+            SetResultMessage(await _managementService.HideAsync(AdminScope, id));
 
             // ✅ بعد الحفظ ارجع إلى نفس صفحة الدفعة إن وُجد batchId
             if (batchId.HasValue)
@@ -1335,39 +942,8 @@ namespace QdratNew.Areas.Admin.Controllers
 
         public async Task<IActionResult> RestoreExam(int id, int? batchId)
         {
-            var userName = User.Identity?.Name ?? "Unknown";
+            SetResultMessage(await _managementService.RestoreAsync(AdminScope, id));
 
-            var exam = await _context.Exams.FirstOrDefaultAsync(e => e.Id == id);
-            if (exam == null)
-            {
-                TempData["Error"] = "⚠️ لم يتم العثور على الاختبار.";
-                return batchId.HasValue
-                    ? RedirectToAction("BatchExams", new { batchId })
-                    : RedirectToAction("Index");
-            }
-
-            if (exam.IsActive)
-            {
-                TempData["Info"] = "✅ هذا الاختبار مفعل بالفعل.";
-                return batchId.HasValue
-                    ? RedirectToAction("BatchExams", new { batchId })
-                    : RedirectToAction("Index");
-            }
-
-            exam.IsActive = true;
-
-            _context.SystemLogs.Add(new SystemLog
-            {
-                UserName = userName,
-                Action = "Restore",
-                Entity = "Exam",
-                EntityId = id,
-                Description = $"قام {userName} باسترجاع اختبار ({exam.Title})"
-            });
-
-            await _context.SaveChangesAsync();
-
-            TempData["Success"] = "✅ تم استرجاع الاختبار بنجاح.";
             return batchId.HasValue
                 ? RedirectToAction("BatchExams", new { batchId })
                 : RedirectToAction("Index");
@@ -1381,94 +957,7 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("PlacementExams", "Delete")]
         public async Task<IActionResult> DeleteExamPermanently(int examId, int batchId)
         {
-            var userName = User.Identity?.Name ?? "Unknown";
-
-            try
-            {
-                var exam = await _context.Exams
-                    .FirstOrDefaultAsync(e => e.Id == examId && e.Type == ExamType.LevelAssessment);
-
-                if (exam == null)
-                {
-                    TempData["Error"] = "⚠️ لم يتم العثور على الاختبار.";
-                    return RedirectToAction("BatchExams", new { batchId });
-                }
-
-                var linkedToBatch = await _context.ExamAssignmentsToBatches
-                    .AnyAsync(ea => ea.ExamId == examId && ea.BatchId == batchId);
-
-                if (!linkedToBatch)
-                {
-                    TempData["Error"] = "⚠️ هذا الاختبار غير مرتبط بهذه الدفعة.";
-                    return RedirectToAction("BatchExams", new { batchId });
-                }
-
-                var testedCount = await _context.ExamStudentStatuses
-                    .CountAsync(s => s.ExamId == examId && s.IsSubmitted);
-
-                // ✅ حذف محاولات الأسئلة
-                var questionAttempts = await _context.QuestionAttemptNew
-                    .Where(a => a.ExamId == examId)
-                    .ToListAsync();
-                _context.QuestionAttemptNew.RemoveRange(questionAttempts);
-
-                // ✅ حذف حالات الطلاب
-                var statuses = await _context.ExamStudentStatuses
-                    .Where(s => s.ExamId == examId)
-                    .ToListAsync();
-                _context.ExamStudentStatuses.RemoveRange(statuses);
-
-                // ✅ حذف الأسئلة المرتبطة
-                var questions = await _context.ExamQuestions
-                    .Where(q => q.ExamId == examId)
-                    .ToListAsync();
-                _context.ExamQuestions.RemoveRange(questions);
-
-                // ✅ حذف توزيع الأسئلة (لجميع تعيينات هذا الاختبار على الدفعات)
-                var assignmentIds = await _context.ExamAssignmentsToBatches
-                    .Where(ea => ea.ExamId == examId)
-                    .Select(ea => ea.Id)
-                    .ToListAsync();
-                var counts = await _context.ExamCurriculumQuestionCounts
-                    .Where(c => assignmentIds.Contains(c.ExamAssignmentId))
-                    .ToListAsync();
-                _context.ExamCurriculumQuestionCounts.RemoveRange(counts);
-
-                // ✅ حذف التعيينات الثانوية للطلاب
-                var assignments = await _context.ExamAssignments
-                    .Where(a => a.ExamId == examId)
-                    .ToListAsync();
-                _context.ExamAssignments.RemoveRange(assignments);
-
-                // ✅ حذف الروابط مع الدفعات
-                var batchAssignments = await _context.ExamAssignmentsToBatches
-                    .Where(ea => ea.ExamId == examId)
-                    .ToListAsync();
-                _context.ExamAssignmentsToBatches.RemoveRange(batchAssignments);
-
-                await _context.SaveChangesAsync();
-
-                // ✅ حذف الاختبار نفسه
-                _context.Exams.Remove(exam);
-                await _context.SaveChangesAsync();
-
-                _context.SystemLogs.Add(new SystemLog
-                {
-                    UserName = userName,
-                    Action = "PermanentDelete",
-                    Entity = "Exam",
-                    EntityId = examId,
-                    Description = $"قام {userName} بحذف اختبار ({exam.Title}) نهائياً من الدفعة رقم {batchId}، وكان قد اختبره {testedCount} طالب."
-                });
-                await _context.SaveChangesAsync();
-
-                TempData["Success"] = "🗑️ تم حذف الاختبار نهائياً من قاعدة البيانات.";
-            }
-            catch (Exception ex)
-            {
-                TempData["Error"] = "⚠️ فشل في حذف الاختبار: " + (ex.InnerException?.Message ?? ex.Message);
-            }
-
+            SetResultMessage(await _managementService.DeletePermanentlyAsync(AdminScope, examId, batchId));
             return RedirectToAction("BatchExams", new { batchId });
         }
 
@@ -1766,28 +1255,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
         public async Task<IActionResult> GetSectionsByCourse(int courseId)
         {
-            var data = await (
-                from cc in _context.CourseCurriculums
-                join c in _context.Curriculums on cc.CurriculumId equals c.Id
-                join s in _context.Sections on c.Id equals s.CurriculumId
-                where cc.CourseId == courseId
-                select new
-                {
-                    curriculumId = c.Id,
-                    curriculumTitle = c.Title,
-                    sectionId = s.Id,
-                    sectionTitle = s.Title
-                }
-            ).ToListAsync();
-
-            // فلترة المحاور التي تحتوي على دروس وأسئلة
-            data = data
-                .Where(d =>
-                    _context.Lessons.Any(l => l.SectionId == d.sectionId) &&
-                    _context.Questions.Any(q => _context.Lessons.Any(l => l.Id == q.LessonId && l.SectionId == d.sectionId))
-                )
-                .ToList();
-
+            var data = await _managementService.GetSectionsByCourseAsync(AdminScope, courseId);
             return Json(data);
         }
 
@@ -1797,38 +1265,7 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("PlacementExams", "Create")]
         public async Task<IActionResult> CreateAdvanced()
         {
-            var now = _timeZoneService.GetNowSaudi();
-
-            var model = new PlacementExamCreateAdvancedViewModel
-            {
-                DurationMinutes = 60,
-                TotalQuestions = 60,
-                PassingScore = 60,
-                StartDate = now,
-                EndDate = now.AddHours(2),
-
-                Students = await _context.Students
-                    .Select(s => new SelectListItem
-                    {
-                        Value = s.StudentID.ToString(),
-                        Text = s.FullName
-                    }).ToListAsync(),
-
-                Courses = await _context.Courses
-                    .Select(c => new SelectListItem
-                    {
-                        Value = c.Id.ToString(),
-                        Text = c.Name
-                    }).ToListAsync(),
-
-                Batches = await _context.Batches
-                    .Select(b => new SelectListItem
-                    {
-                        Value = b.Id.ToString(),
-                        Text = b.Name
-                    }).ToListAsync()
-            };
-
+            var model = await _managementService.GetCreateAdvancedAsync(AdminScope);
             return View(model);
         }
 
@@ -1839,140 +1276,17 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("PlacementExams", "Create")]
         public async Task<IActionResult> CreateAdvancedPost(PlacementExamCreateAdvancedViewModel model)
         {
-            try
+            var result = await _managementService.CreateAdvancedAsync(AdminScope, model);
+
+            if (!result.Succeeded)
             {
-                model.SectionSelections = model.SectionSelections?
-                    .Where(x => x != null)
-                    .ToList() ?? new List<PlacementExamSectionSelectionVm>();
-
-                if (!model.SectionSelections.Any())
-                {
-                    TempData["Error"] = "⚠️ لم يتم استقبال أي محور.";
-                    await ReloadDropdowns(model);
-                    return View("CreateAdvanced", model);
-                }
-
-                var selectedSections = model.SectionSelections
-                    .Where(x => x.QuestionCount > 0)
-                    .ToList();
-
-                if (!selectedSections.Any())
-                {
-                    TempData["Error"] = "⚠️ يجب اختيار محور واحد على الأقل.";
-                    await ReloadDropdowns(model);
-                    return View("CreateAdvanced", model);
-                }
-
-                int sum = selectedSections.Sum(x => x.QuestionCount);
-                if (sum != model.TotalQuestions)
-                {
-                    TempData["Error"] = $"⚠️ مجموع الأسئلة ({sum}) لا يساوي المطلوب ({model.TotalQuestions}).";
-                    await ReloadDropdowns(model);
-                    return View("CreateAdvanced", model);
-                }
-
-                int examId;
-
-                // حالة الطالب الفردي
-                if (model.StudentId.HasValue && model.StudentId > 0)
-                {
-                    examId = await _placementExamService.GeneratePlacementTestFromSectionsAsync(
-                        model.StudentId.Value,
-                        model.CourseId,
-                        selectedSections,
-                        model.TotalQuestions,
-                        model.DurationMinutes,
-                        model.StartDate,
-                        model.EndDate
-                    );
-
-                    await ApplyPlacementExamDeliveryModeAsync(examId, model.IsInLab, model.IsRandomized);
-                }
-                else if (model.BatchId.HasValue && model.BatchId > 0)
-                {
-                    // حالة الدفعة
-                    var students = await _context.StudentBatchEnrollments
-                        .Where(s => s.BatchId == model.BatchId.Value)
-                        .Select(s => s.StudentID)
-                        .ToListAsync();
-
-                    if (!students.Any())
-                    {
-                        TempData["Error"] = "⚠️ لا يوجد طلاب داخل الدفعة.";
-                        await ReloadDropdowns(model);
-                        return View("CreateAdvanced", model);
-                    }
-
-                    // 1) إنشاء الاختبار مرة واحدة فقط
-                    examId = await _placementExamService.GeneratePlacementTestFromSectionsAsync(
-                        students.First(),
-                        model.CourseId,
-                        selectedSections,
-                        model.TotalQuestions,
-                        model.DurationMinutes,
-                        model.StartDate,
-                        model.EndDate
-                    );
-
-                    await ApplyPlacementExamDeliveryModeAsync(examId, model.IsInLab, model.IsRandomized);
-
-                    // 2) تسجيله للدفعة
-                    var nowUtc = DateTime.UtcNow;
-
-                    _context.ExamAssignmentsToBatches.Add(new ExamAssignmentToBatch
-                    {
-                        ExamId = examId,
-                        BatchId = model.BatchId.Value,
-                        CreatedAt = nowUtc,
-                        TotalQuestions = model.TotalQuestions,
-                        DurationMinutes = model.DurationMinutes,
-                        Title = "اختبار تحديد المستوى",
-                        IsSentToStudents = false, // مسودة - لم يتم الإرسال بعد
-                        IsOnline = !model.IsInLab,
-                        IsInLab = model.IsInLab
-                    });
-
-                    // 3) توزيع الاختبار على كل طالب
-                  
-                    
-                    //foreach (var stId in students)
-                    //{
-                    //    _context.ExamAssignments.Add(new ExamAssignment
-                    //    {
-                    //        ExamId = examId,
-                    //        StudentId = stId,
-                    //        AssignedAt = model.StartDate ?? nowUtc,
-                    //        DueDate = model.EndDate ?? nowUtc.AddMinutes(model.DurationMinutes)
-                    //    });
-
-                    //    _context.ExamStudentStatuses.Add(new ExamStudentStatus
-                    //    {
-                    //        StudentId = stId,
-                    //        ExamId = examId,
-                    //        AssignedAt = nowUtc,
-                    //        Status = ExamStatus.Pending
-                    //    });
-                    //}
-
-                    await _context.SaveChangesAsync();
-                }
-                else
-                {
-                    TempData["Error"] = "⚠️ يجب اختيار طالب أو دفعة.";
-                    await ReloadDropdowns(model);
-                    return View("CreateAdvanced", model);
-                }
-
-                TempData["Success"] = "تم إنشاء الاختبار كمسودة. يرجى مراجعته قبل الإرسال.";
-                return RedirectToAction("Review", new { examId });
-
-            }
-            catch (Exception ex)
-            {
-                TempData["Error"] = $"❌ حدث خطأ: {ex.Message}";
-                await ReloadDropdowns(model);
+                TempData["Error"] = result.Message;
+                await _managementService.ReloadCreateAdvancedLookupsAsync(AdminScope, model);
                 return View("CreateAdvanced", model);
             }
+
+            TempData["Success"] = result.Message;
+            return RedirectToAction("Review", new { examId = result.ExamId });
         }
 
 
@@ -1981,35 +1295,7 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("PlacementExams", "Create")]
         public async Task<IActionResult> CreateFromProfessionalModel()
         {
-            var vm = new PlacementExamFromModelVm
-            {
-                AvailableModels = await _context.ProfessionalModels
-                    .AsNoTracking()
-                    .Where(x => !x.IsArchived)
-                    .OrderBy(x => x.Title)
-                    .Select(x => new SelectListItem
-                    {
-                        Value = x.Id.ToString(),
-                        Text = x.Title
-                    }).ToListAsync(),
-
-                AvailableBatches = await _context.Batches
-                    .AsNoTracking()
-                    .Select(b => new SelectListItem
-                    {
-                        Value = b.Id.ToString(),
-                        Text = b.Name
-                    }).ToListAsync(),
-
-                AvailableCourses = await _context.Courses
-                    .AsNoTracking()
-                    .Select(c => new SelectListItem
-                    {
-                        Value = c.Id.ToString(),
-                        Text = c.Name
-                    }).ToListAsync()
-            };
-
+            var vm = await _managementService.GetCreateFromModelAsync(AdminScope);
             return View(vm);
         }
 
@@ -2019,212 +1305,29 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("PlacementExams", "Create")]
         public async Task<IActionResult> CreateFromProfessionalModel(PlacementExamFromModelVm vm)
         {
-            var strategy = _context.Database.CreateExecutionStrategy();
+            var result = await _managementService.CreateFromProfessionalModelAsync(AdminScope, vm);
 
-            try
+            if (!result.Succeeded)
             {
-                await strategy.ExecuteAsync(async () =>
-                {
-                    using var transaction = await _context.Database.BeginTransactionAsync();
-
-                    // =========================================
-                    // Validation
-                    // =========================================
-                    if (vm.SelectedModelId <= 0)
-                        throw new Exception("⚠️ يجب اختيار نموذج.");
-
-                    if (vm.SelectedBatchId <= 0)
-                        throw new Exception("⚠️ يجب اختيار دفعة.");
-
-                    // =========================================
-                    // تحميل النموذج
-                    // =========================================
-                    var model = await _context.ProfessionalModels
-                        .Include(m => m.Questions)
-                        .FirstOrDefaultAsync(m => m.Id == vm.SelectedModelId && !m.IsArchived);
-
-                    if (model == null || !model.Questions.Any())
-                        throw new Exception("⚠️ النموذج غير موجود أو لا يحتوي على أسئلة.");
-
-                    // =========================================
-                    // الطلاب
-                    // =========================================
-                    var studentIds = await _context.StudentBatchEnrollments
-                        .Where(x => x.BatchId == vm.SelectedBatchId)
-                        .Select(x => x.StudentID)
-                        .Distinct()
-                        .ToListAsync();
-
-                    if (!studentIds.Any())
-                        throw new Exception("⚠️ لا يوجد طلاب في هذه الدفعة.");
-
-                    var nowUtc = DateTime.UtcNow;
-
-                    // =========================================
-                    // إنشاء الاختبار
-                    // =========================================
-                    var exam = new Exam
-                    {
-                        Title = $"اختبار تحديد مستوى - {model.Title}",
-                        Type = ExamType.LevelAssessment,
-                        CourseId = vm.SelectedCourseId,
-                        CreatedAt = nowUtc,
-                        DurationMinutes = vm.DurationMinutes,
-                        TotalQuestions = model.Questions.Count,
-                        IsActive = true,
-                        IsFromProfessionalModel = true
-                    };
-
-                    _context.Exams.Add(exam);
-                    await _context.SaveChangesAsync();
-
-                    // =========================================
-                    // Bulk Questions
-                    // =========================================
-                    var examQuestions = model.Questions
-                        .OrderBy(q => q.OrderNumber)
-                        .ThenBy(q => q.Id)
-                        .Select((q, i) => new ExamQuestion
-                        {
-                            ExamId = exam.Id,
-                            QuestionId = q.QuestionId ?? Guid.Empty,
-                            Order = i + 1
-                        }).ToList();
-
-                    await _context.BulkInsertAsync(examQuestions);
-
-                    // =========================================
-                    // ربط الدفعة + إرسال
-                    // =========================================
-                    var batchAssignment = new ExamAssignmentToBatch
-                    {
-                        ExamId = exam.Id,
-                        BatchId = vm.SelectedBatchId,
-                        Title = exam.Title,
-                        TotalQuestions = exam.TotalQuestions,
-                        DurationMinutes = exam.DurationMinutes,
-                        CreatedAt = nowUtc,
-                        IsSentToStudents = true // 🔥 تم الإرسال
-                    };
-
-                    _context.ExamAssignmentsToBatches.Add(batchAssignment);
-                    await _context.SaveChangesAsync();
-
-                    // =========================================
-                    // Bulk Assignments (الإرسال الفعلي)
-                    // =========================================
-                    var assignments = new List<ExamAssignment>(studentIds.Count);
-                    var statuses = new List<ExamStudentStatus>(studentIds.Count);
-
-                    foreach (var stId in studentIds)
-                    {
-                        assignments.Add(new ExamAssignment
-                        {
-                            ExamId = exam.Id,
-                            StudentId = stId,
-                            AssignedAt = nowUtc,
-                            DueDate = nowUtc.AddMinutes(exam.DurationMinutes)
-                        });
-
-                        statuses.Add(new ExamStudentStatus
-                        {
-                            StudentId = stId,
-                            ExamId = exam.Id,
-                            AssignedAt = nowUtc,
-                            Status = ExamStatus.Pending
-                        });
-                    }
-
-                    await _context.BulkInsertAsync(assignments);
-                    await _context.BulkInsertAsync(statuses);
-
-                    await transaction.CommitAsync();
-                });
-
-                TempData["Success"] = "✅ تم إنشاء وإرسال الاختبار بنجاح.";
-                return RedirectToAction("Index");
+                TempData["Error"] = result.Message;
+                await _managementService.ReloadCreateFromModelLookupsAsync(AdminScope, vm);
+                return View("CreateFromProfessionalModel", vm);
             }
-            catch (Exception ex)
-            {
-                TempData["Error"] = ex.Message;
-                return await ReloadCreateFromModel(vm);
-            }
+
+            TempData["Success"] = result.Message;
+            return RedirectToAction("Index");
         }
 
 
-        private async Task<IActionResult> ReloadCreateFromModel(PlacementExamFromModelVm vm)
-        {
-            vm.AvailableModels = await _context.ProfessionalModels
-                .Where(x => !x.IsArchived)
-                .OrderBy(x => x.Title)
-                .Select(x => new SelectListItem
-                {
-                    Value = x.Id.ToString(),
-                    Text = x.Title
-                }).ToListAsync();
-
-            vm.AvailableBatches = await _context.Batches
-                .Select(x => new SelectListItem
-                {
-                    Value = x.Id.ToString(),
-                    Text = x.Name
-                }).ToListAsync();
-
-            vm.AvailableCourses = await _context.Courses
-                .Select(x => new SelectListItem
-                {
-                    Value = x.Id.ToString(),
-                    Text = x.Name
-                }).ToListAsync();
-
-            return View("CreateFromProfessionalModel", vm);
-        }
 
 
         [HttpGet]
         [AdminPermission("PlacementExams", "Create")]
         public async Task<IActionResult> ReplaceQuestion(int examId, Guid questionId)
         {
-            // 1️⃣ السؤال الحالي داخل الاختبار
-            var examQuestion = await _context.ExamQuestions
-                .Include(eq => eq.Question)
-                    .ThenInclude(q => q.Lesson)
-                .FirstOrDefaultAsync(eq =>
-                    eq.ExamId == examId &&
-                    eq.QuestionId == questionId);
-
-            if (examQuestion == null)
+            var model = await _managementService.GetReplaceQuestionAsync(AdminScope, examId, questionId);
+            if (model == null)
                 return NotFound();
-
-            var currentQuestion = examQuestion.Question;
-
-            // 2️⃣ جلب الأسئلة البديلة (نفس المؤشر + نفس الصعوبة)
-            var candidates = await _context.Questions
-                .Where(q =>
-                    q.Id != currentQuestion.Id &&
-                    q.LessonId == currentQuestion.LessonId &&
-                    q.Difficulty == currentQuestion.Difficulty &&
-                    q.IsReviewed &&
-                    q.IsComplete &&
-                    !q.IsRejected)
-                .OrderByDescending(q => q.CreatedAt)
-                .Take(20)
-                .Select(q => new ReplaceQuestionCandidateVm
-                {
-                    QuestionId = q.Id,
-                    Title = q.Title,
-                    ImageUrl = q.ImageUrl
-                })
-                .ToListAsync();
-
-            var model = new ReplaceQuestionVm
-            {
-                ExamId = examId,
-                OldQuestionId = questionId,
-                LessonTitle = currentQuestion.Lesson.Title,
-                Difficulty = currentQuestion.Difficulty.ToString(),
-                Candidates = candidates
-            };
 
             return View(model);
         }
@@ -2233,55 +1336,13 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("PlacementExams", "Create")]
         public async Task<IActionResult> AddQuestionFromBank(int examId, int sectionId)
         {
-            var exam = await _context.Exams.FindAsync(examId);
-            if (exam == null)
+            var (result, model) = await _managementService.GetAddQuestionFromBankAsync(AdminScope, examId, sectionId);
+
+            if (result.Outcome == PlacementOperationOutcome.NotFound)
                 return NotFound();
 
-            // 🔒 تأكيد أنه Draft
-            bool isSent = await _context.ExamAssignmentsToBatches
-                .AnyAsync(x => x.ExamId == examId && x.IsSentToStudents);
-
-            if (isSent)
-                return BadRequest("لا يمكن تعديل اختبار تم إرساله.");
-
-            // الأسئلة الموجودة بالفعل في الاختبار
-            var existingQuestionIds = await _context.ExamQuestions
-                .Where(eq => eq.ExamId == examId)
-                .Select(eq => eq.QuestionId)
-                .ToListAsync();
-
-            // أسئلة البنك (نفس المحور + غير مستخدمة)
-            var questions = await _context.Questions
-                .Where(q =>
-                    q.SectionId == sectionId &&
-                    q.IsReviewed &&
-                    q.IsComplete &&
-                    !q.IsRejected)
-                .OrderByDescending(q => q.CreatedAt)
-                .Select(q => new AddQuestionFromBankItemVm
-                {
-                    QuestionId = q.Id,
-                    Title = q.Title,
-                    ImageUrl = q.ImageUrl,
-                    IsAlreadyAdded = false
-                })
-                .ToListAsync();
-
-            // فلترة داخل الذاكرة (توافق SQL 2014)
-            questions = questions
-                .Where(q => !existingQuestionIds.Contains(q.QuestionId))
-                .ToList();
-
-            var model = new AddQuestionFromBankVm
-            {
-                ExamId = examId,
-                SectionId = sectionId,
-                SectionTitle = await _context.Sections
-                    .Where(s => s.Id == sectionId)
-                    .Select(s => s.Title)
-                    .FirstOrDefaultAsync(),
-                Questions = questions
-            };
+            if (result.Outcome == PlacementOperationOutcome.BadRequest)
+                return BadRequest(result.Message);
 
             return View(model);
         }
@@ -2296,40 +1357,15 @@ namespace QdratNew.Areas.Admin.Controllers
     int sectionId,
     Guid questionId)
         {
-            // 🔒 منع التعديل بعد الإرسال
-            bool isSent = await _context.ExamAssignmentsToBatches
-                .AnyAsync(x => x.ExamId == examId && x.IsSentToStudents);
+            var result = await _managementService.AddQuestionFromBankAsync(AdminScope, examId, sectionId, questionId);
 
-            if (isSent)
-                return BadRequest("لا يمكن تعديل اختبار تم إرساله.");
+            if (result.Outcome == PlacementOperationOutcome.NotFound)
+                return NotFound();
 
-            // منع التكرار
-            bool exists = await _context.ExamQuestions
-                .AnyAsync(eq => eq.ExamId == examId && eq.QuestionId == questionId);
+            if (result.Outcome == PlacementOperationOutcome.BadRequest)
+                return BadRequest(result.Message);
 
-            if (exists)
-            {
-                TempData["Error"] = "هذا السؤال مضاف بالفعل.";
-                return RedirectToAction("Review", new { examId });
-            }
-
-            // ترتيب السؤال الجديد
-            int nextOrder = await _context.ExamQuestions
-                .Where(eq => eq.ExamId == examId)
-                .Select(eq => (int?)eq.Order)
-                .MaxAsync() ?? 0;
-
-            _context.ExamQuestions.Add(new ExamQuestion
-            {
-                ExamId = examId,
-                QuestionId = questionId,
-                Order = nextOrder + 1,
-                IsManuallySelected = true
-            });
-
-            await _context.SaveChangesAsync();
-
-            TempData["Success"] = "تمت إضافة السؤال إلى الاختبار.";
+            SetResultMessage(result);
             return RedirectToAction("Review", new { examId });
         }
 
@@ -2338,63 +1374,13 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("PlacementExams", "Create")]
         public async Task<IActionResult> ResendExamToStudent(int examId, int studentId)
         {
-            var now = DateTime.UtcNow;
+            var result = await _managementService.ResendToStudentAsync(AdminScope, examId, studentId);
+            SetResultMessage(result);
 
-            // 1️⃣ جلب الدفعة المرتبطة بالاختبار
-            var examBatch = await _context.ExamAssignmentsToBatches
-                .Where(x => x.ExamId == examId)
-                .Select(x => x.BatchId)
-                .FirstOrDefaultAsync();
-
-            if (examBatch == 0)
-            {
-                TempData["Error"] = "❌ لا يمكن تحديد الدفعة المرتبطة بالاختبار.";
+            if (!result.Succeeded)
                 return RedirectToAction("Index");
-            }
 
-            // 2️⃣ إعادة إنشاء Assignment
-            _context.ExamAssignments.Add(new ExamAssignment
-            {
-                ExamId = examId,
-                StudentId = studentId,
-                AssignedAt = now,
-                DueDate = now.AddMinutes(
-                    await _context.Exams
-                        .Where(e => e.Id == examId)
-                        .Select(e => e.DurationMinutes)
-                        .FirstAsync()
-                )
-            });
-
-            // 3️⃣ حذف الحالة السابقة
-            var oldStatus = await _context.ExamStudentStatuses
-                .Where(s => s.StudentId == studentId && s.ExamId == examId)
-                .ToListAsync();
-
-            if (oldStatus.Any())
-                _context.ExamStudentStatuses.RemoveRange(oldStatus);
-
-            // 4️⃣ إضافة حالة جديدة
-            _context.ExamStudentStatuses.Add(new ExamStudentStatus
-            {
-                StudentId = studentId,
-                ExamId = examId,
-                AssignedAt = now,
-                Status = ExamStatus.Pending
-            });
-
-            // 5️⃣ حذف محاولات الطالب السابقة
-            var oldAttempts = await _context.QuestionAttemptNew
-                .Where(a => a.StudentId == studentId && a.ExamId == examId)
-                .ToListAsync();
-
-            if (oldAttempts.Any())
-                _context.QuestionAttemptNew.RemoveRange(oldAttempts);
-
-            await _context.SaveChangesAsync();
-
-            TempData["Success"] = "✅ تم إعادة إرسال الاختبار للطالب بنجاح.";
-            return RedirectToAction("BatchStudents", new { examId, batchId = examBatch });
+            return RedirectToAction("BatchStudents", new { examId, batchId = result.BatchId });
         }
 
 
@@ -2407,34 +1393,12 @@ namespace QdratNew.Areas.Admin.Controllers
     Guid oldQuestionId,
     Guid newQuestionId)
         {
-            // 1️⃣ جلب السؤال القديم داخل الاختبار
-            var examQuestion = await _context.ExamQuestions
-                .FirstOrDefaultAsync(eq =>
-                    eq.ExamId == examId &&
-                    eq.QuestionId == oldQuestionId);
+            var result = await _managementService.ReplaceQuestionAsync(AdminScope, examId, oldQuestionId, newQuestionId);
 
-            if (examQuestion == null)
+            if (result.Outcome == PlacementOperationOutcome.NotFound)
                 return NotFound();
 
-            // 2️⃣ منع التكرار
-            bool alreadyExists = await _context.ExamQuestions
-                .AnyAsync(eq =>
-                    eq.ExamId == examId &&
-                    eq.QuestionId == newQuestionId);
-
-            if (alreadyExists)
-            {
-                TempData["Error"] = "⚠️ هذا السؤال موجود بالفعل داخل الاختبار.";
-                return RedirectToAction("Review", new { examId });
-            }
-
-            // 3️⃣ الاستبدال
-            examQuestion.QuestionId = newQuestionId;
-            examQuestion.IsManuallySelected = true;
-
-            await _context.SaveChangesAsync();
-
-            TempData["Success"] = "تم استبدال السؤال بنجاح.";
+            SetResultMessage(result);
             return RedirectToAction("Review", new { examId });
         }
 
@@ -2490,32 +1454,6 @@ namespace QdratNew.Areas.Admin.Controllers
         }
 
 
-        private async Task ReloadDropdowns(PlacementExamCreateAdvancedViewModel model)
-        {
-            model.Students = await _context.Students
-                .OrderBy(s => s.FullName)
-                .Select(s => new SelectListItem
-                {
-                    Value = s.StudentID.ToString(),
-                    Text = s.FullName
-                }).ToListAsync();
-
-            model.Batches = await _context.Batches
-                .OrderBy(b => b.Name)
-                .Select(b => new SelectListItem
-                {
-                    Value = b.Id.ToString(),
-                    Text = b.Name
-                }).ToListAsync();
-
-            model.Courses = await _context.Courses
-                .OrderBy(c => c.Name)
-                .Select(c => new SelectListItem
-                {
-                    Value = c.Id.ToString(),
-                    Text = c.Name
-                }).ToListAsync();
-        }
 
 
 
@@ -3067,44 +2005,13 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("PlacementExams", "Create")]
         public async Task<IActionResult> ConfirmSendPost(int examId)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync();
+            var result = await _managementService.ConfirmSendAsync(AdminScope, examId);
+            SetResultMessage(result);
 
-            try
-            {
-                var assignments = await _context.ExamAssignmentsToBatches
-                    .Where(x => x.ExamId == examId)
-                    .ToListAsync();
-
-                if (!assignments.Any())
-                {
-                    TempData["Error"] = "⚠️ لا يوجد ربط بالدفعات.";
-                    return RedirectToAction("Review", new { examId });
-                }
-
-                // 🔴 منع إعادة الإرسال
-                if (assignments.Any(x => x.IsSentToStudents))
-                {
-                    TempData["Info"] = "⚠️ تم إرسال الاختبار بالفعل.";
-                    return RedirectToAction("Review", new { examId });
-                }
-
-                // ✅ تفعيل الإرسال
-                foreach (var a in assignments)
-                    a.IsSentToStudents = true;
-
-                await _context.SaveChangesAsync();
-
-                await transaction.CommitAsync();
-
-                TempData["Success"] = "✅ تم اعتماد وإرسال اختبار تحديد المستوى.";
-                return RedirectToAction("Index");
-            }
-            catch (Exception ex)
-            {
-                await transaction.RollbackAsync();
-                TempData["Error"] = ex.Message;
+            if (!result.Succeeded)
                 return RedirectToAction("Review", new { examId });
-            }
+
+            return RedirectToAction("Index");
         }
 
 
@@ -3115,158 +2022,13 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("PlacementExams", "Read")]
         public async Task<IActionResult> PlacementDetails(int id) // 👈 id = ExamId
         {
-            var exam = await _context.Exams
-                .AsNoTracking()
-                .FirstOrDefaultAsync(e => e.Id == id && e.Type == ExamType.LevelAssessment && e.IsActive);
-
-            if (exam == null)
+            var vm = await _managementService.GetPlacementDetailsAsync(AdminScope, id);
+            if (vm == null)
                 return NotFound();
-
-            var examQuestions = await (
-                from eq in _context.ExamQuestions.AsNoTracking()
-                join q in _context.Questions.AsNoTracking() on eq.QuestionId equals q.Id
-                join l in _context.Lessons.AsNoTracking() on q.LessonId equals l.Id
-                join s in _context.Sections.AsNoTracking() on l.SectionId equals s.Id
-                where eq.ExamId == exam.Id
-                select new
-                {
-                    eq.QuestionId,
-                    eq.Order,
-                    q.Title,
-                    q.ImageUrl,
-                    q.Difficulty,
-                    q.CorrectAnswer,
-                    LessonTitle = l.Title,
-                    SectionId = s.Id,
-                    SectionTitle = s.Title
-                })
-                .ToListAsync();
-
-            // الطلاب الذين بدأوا/أتمّوا الاختبار فعلاً
-            var existingStatuses = await (
-                from status in _context.ExamStudentStatuses.AsNoTracking()
-                join student in _context.Students.AsNoTracking() on status.StudentId equals student.StudentID
-                where status.ExamId == exam.Id
-                select new PlacementExamStudentViewModel
-                {
-                    StudentId    = status.StudentId,
-                    StudentName  = student.FullName,
-                    HasStatus    = true,
-                    Status       = status.Status,
-                    AssignedAt   = status.AssignedAt,
-                    SubmittedAt  = status.SubmittedAt,
-                    Score        = status.Score
-                })
-                .ToListAsync();
-
-            // الدفعات المرتبطة بهذا الاختبار
-            var batchAssignments = await _context.ExamAssignmentsToBatches
-                .AsNoTracking()
-                .Include(x => x.Batch)
-                .Where(x => x.ExamId == exam.Id)
-                .ToListAsync();
-
-            // جميع طلاب تلك الدفعات
-            var batchIds = batchAssignments.Select(x => x.BatchId).Distinct().ToHashSet();
-
-            var allBatchStudents = await (
-                from enroll in _context.Set<StudentBatchEnrollment>().AsNoTracking()
-                join student in _context.Students.AsNoTracking() on enroll.StudentID equals student.StudentID
-                join batch in _context.Batches.AsNoTracking() on enroll.BatchId equals batch.Id
-                where batchIds.Contains(enroll.BatchId)
-                select new { student.StudentID, student.FullName, BatchName = batch.Name, enroll.BatchId })
-                .ToListAsync();
-
-            var existingStudentIds = existingStatuses.Select(s => s.StudentId).ToHashSet();
-
-            // الطلاب في الدفعة الذين لم يبدأوا بعد
-            var notStartedStudents = allBatchStudents
-                .Where(s => !existingStudentIds.Contains(s.StudentID))
-                .GroupBy(s => s.StudentID)
-                .Select(g => g.First())
-                .Select(s => new PlacementExamStudentViewModel
-                {
-                    StudentId   = s.StudentID,
-                    StudentName = s.FullName,
-                    BatchName   = s.BatchName,
-                    HasStatus   = false,
-                    Status      = ExamStatus.Pending,
-                    AssignedAt  = exam.CreatedAt
-                })
-                .ToList();
-
-            var allStudents = existingStatuses.Concat(notStartedStudents)
-                .OrderBy(s => s.HasStatus ? 0 : 1)
-                .ThenBy(s => s.StudentName)
-                .ToList();
-
-            var assignedBatches = batchAssignments
-                .GroupBy(x => new { x.BatchId, BatchName = x.Batch?.Name ?? string.Empty })
-                .Select(g => new PlacementExamBatchInfo
-                {
-                    BatchId          = g.Key.BatchId,
-                    BatchName        = g.Key.BatchName,
-                    IsSentToStudents = g.Any(x => x.IsSentToStudents),
-                    StudentCount     = allBatchStudents.Count(s => s.BatchId == g.Key.BatchId)
-                })
-                .ToList();
-
-            var vm = new PlacementExamDetailsViewModel
-            {
-                ExamId          = exam.Id,
-                Title           = exam.Title,
-                TotalQuestions  = exam.TotalQuestions,
-                DurationMinutes = exam.DurationMinutes,
-                CreatedAt       = exam.CreatedAt,
-                IsInLab         = !string.IsNullOrWhiteSpace(exam.ReferenceCode),
-                ReferenceCode   = exam.ReferenceCode,
-                AssignedBatches = assignedBatches,
-                Sections        = examQuestions
-                    .GroupBy(eq => new { eq.SectionId, eq.SectionTitle })
-                    .Select(g => new PlacementExamReviewSectionVm
-                    {
-                        SectionId    = g.Key.SectionId,
-                        SectionTitle = g.Key.SectionTitle,
-                        Questions    = g.OrderBy(x => x.Order).Select(x => new PlacementExamReviewQuestionVm
-                        {
-                            QuestionId    = x.QuestionId,
-                            Title         = x.Title,
-                            ImageUrl      = x.ImageUrl,
-                            Difficulty    = x.Difficulty,
-                            LessonTitle   = x.LessonTitle,
-                            CorrectAnswer = x.CorrectAnswer,
-                            Order         = x.Order
-                        }).ToList()
-                    }).ToList(),
-                StudentStatuses = allStudents
-            };
 
             return View(vm);
         }
 
-        private async Task ApplyPlacementExamDeliveryModeAsync(int examId, bool isInLab, bool isRandomized = true)
-        {
-            var exam = await _context.Exams.FirstOrDefaultAsync(e => e.Id == examId);
-            if (exam == null)
-                return;
 
-            exam.ReferenceCode = isInLab ? GeneratePlacementReferenceCode() : null;
-            exam.RandomizeQuestions = isRandomized;
-            await _context.SaveChangesAsync();
-        }
-
-        private string GeneratePlacementReferenceCode()
-        {
-            string code;
-            var random = new Random();
-
-            do
-            {
-                code = random.Next(100000, 1000000).ToString();
-            }
-            while (_context.Exams.Any(e => e.ReferenceCode == code));
-
-            return code;
-        }
     }
 }

@@ -1672,6 +1672,9 @@ namespace QdratNew.Migrations
                     b.Property<int>("MediumQuestionCount")
                         .HasColumnType("int");
 
+                    b.Property<int?>("OwnerPartnerId")
+                        .HasColumnType("int");
+
                     b.Property<bool>("RandomizeQuestions")
                         .HasColumnType("bit");
 
@@ -1699,7 +1702,12 @@ namespace QdratNew.Migrations
 
                     b.HasIndex("LessonId");
 
+                    b.HasIndex("OwnerPartnerId");
+
                     b.HasIndex("SectionId");
+
+                    b.HasIndex("Type", "OwnerPartnerId")
+                        .HasDatabaseName("IX_Exams_Type_OwnerPartnerId");
 
                     b.ToTable("Exams");
                 });
@@ -10370,6 +10378,11 @@ namespace QdratNew.Migrations
                         .WithMany()
                         .HasForeignKey("LessonId");
 
+                    b.HasOne("QdratNew.Entities.Partner", "OwnerPartner")
+                        .WithMany()
+                        .HasForeignKey("OwnerPartnerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("QdratNew.Entities.Section", "Section")
                         .WithMany()
                         .HasForeignKey("SectionId");
@@ -10379,6 +10392,8 @@ namespace QdratNew.Migrations
                     b.Navigation("Curriculum");
 
                     b.Navigation("Lesson");
+
+                    b.Navigation("OwnerPartner");
 
                     b.Navigation("Section");
                 });

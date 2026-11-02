@@ -1,9 +1,13 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using QdratNew.Data;
+using System.Security.Claims;
 
 namespace QdratNew.Areas.Partner.Controllers
 {
     [Area("Partner")]
+    [Authorize(Policy = "PartnerOnly")] // PPL-S1.1
     public class PartnerContextController : Controller
     {
         private readonly ApplicationDbContext _context;
@@ -16,25 +20,21 @@ namespace QdratNew.Areas.Partner.Controllers
         // =========================
         // اختيار الشريك
         // =========================
-        public IActionResult Select()
+        public async Task<IActionResult> Select()
         {
-            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
             if (string.IsNullOrEmpty(userId))
                 return Unauthorized();
 
-            var partners = _context.UserPartners
+            var partners = await _context.UserPartners
+                .AsNoTracking()
                 .Where(up => up.UserId == userId)
                 .Select(up => up.Partner)
                 .OrderBy(p => p.Name)
-                .ToList();
+                .ToListAsync();
 
-            // حماية إضافية
-            if (!partners.Any())
-            {
-                return View("NoPartners"); // أو رسالة توضيحية
-            }
-
+            // PPL-S1.1: الـ View يعرض حالة "لا توجد مدارس" عند القائمة الفارغة
             return View(partners);
         }
 
@@ -42,11 +42,17 @@ namespace QdratNew.Areas.Partner.Controllers
         // تثبيت الشريك في Session
         // =========================
         [HttpPost]
-        public IActionResult Set(int partnerId)
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Set(int partnerId)
         {
-            var partnerExists = _context.Partners.Any(p => p.Id == partnerId);
-            if (!partnerExists)
-                return NotFound();
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            // PPL-S1.1: المستخدم لا يختار إلا شريكًا مرتبطًا به فعلًا
+            var linked = await _context.UserPartners
+                .AnyAsync(up => up.UserId == userId && up.PartnerId == partnerId);
+
+            if (!linked)
+                return Forbid();
 
             HttpContext.Session.SetInt32("ActivePartnerId", partnerId);
 
