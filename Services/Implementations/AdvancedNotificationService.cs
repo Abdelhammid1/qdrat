@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using EFCore.BulkExtensions;
+using Microsoft.EntityFrameworkCore;
 using QdratNew.Data;
 using QdratNew.Entities;
 using QdratNew.Enums;
@@ -56,6 +57,13 @@ namespace QdratNew.Services.Implementations
                 SentByInstructorId = sentByInstructorId,
                 SentAt = DateTime.Now
             }).ToList();
+
+            // PPL-S5.2
+            if (notifications.Count > 20)
+            {
+                await _context.BulkInsertAsync(notifications);
+                return;
+            }
 
             _context.Notifications.AddRange(notifications);
             await _context.SaveChangesAsync();

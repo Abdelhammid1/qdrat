@@ -38,6 +38,25 @@ namespace QdratNew.Services.Exams.Placement
             return db.Students.Where(s => s.Branch.PartnerId == partnerId && s.IsActiveForLearning);
         }
 
+        public IQueryable<Student> StudentsWithResults(ApplicationDbContext db, PlacementScope scope)
+        {
+            if (!scope.IsPartner)
+                return db.Students;
+
+            var partnerId = scope.PartnerId!.Value;
+            return db.Students.Where(s => s.Branch.PartnerId == partnerId);
+        }
+
+        public async Task<bool> IsExamDeniedAsync(ApplicationDbContext db, PlacementScope scope, int examId, CancellationToken ct = default)
+            => scope.IsPartner
+                ? !await CanAccessExamAsync(db, scope, examId, ct)
+                : await db.Exams.AnyAsync(e => e.Id == examId && e.OwnerPartnerId != null, ct);
+
+        public Task<bool> CanAccessStudentResultsAsync(ApplicationDbContext db, PlacementScope scope, int studentId, CancellationToken ct = default)
+            => scope.IsPartner
+                ? StudentsWithResults(db, scope).AnyAsync(s => s.StudentID == studentId, ct)
+                : Task.FromResult(true);
+
         public Task<bool> CanAccessExamAsync(ApplicationDbContext db, PlacementScope scope, int examId, CancellationToken ct = default)
             => ExamsInScope(db, scope).AnyAsync(e => e.Id == examId, ct);
 

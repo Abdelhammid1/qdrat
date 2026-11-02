@@ -73,7 +73,7 @@ namespace QdratNew.Services.Reports.Implementations
             ).ToList();
 
             var totalExamAssignments = _context.ExamAssignmentsToBatches
-                .Count(e => e.BatchId == batchId && e.IsSentToStudents);
+                .Count(e => e.BatchId == batchId && e.IsSentToStudents && e.Exam.OwnerPartnerId == null); // PPL-S5
 
             var submittedExams = examStats.Count(x => x.IsSubmitted);
 
@@ -236,7 +236,7 @@ namespace QdratNew.Services.Reports.Implementations
             // =========================
             var exams = _context.ExamAssignmentsToBatches
                 .AsNoTracking()
-                .Where(e => e.BatchId == batchId && e.IsSentToStudents)
+                .Where(e => e.BatchId == batchId && e.IsSentToStudents && e.Exam.OwnerPartnerId == null) // PPL-S5
                 .OrderByDescending(e => e.AssignedAt)
                 .Select(e => new
                 {

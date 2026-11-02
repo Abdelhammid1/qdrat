@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.EntityFrameworkCore;
+using QdratNew.Attributes;
 using QdratNew.Data;
 using QdratNew.Entities;
 using QdratNew.Interfaces;
@@ -94,6 +95,16 @@ namespace QdratNew.Areas.Partner.Controllers
             return linked;
         }
 
+        private bool CanReadAfterExpiry(ActionExecutingContext context)
+        {
+            var feature = context.ActionDescriptor.EndpointMetadata
+                .OfType<PartnerFeatureAttribute>()
+                .LastOrDefault();
+
+            return feature?.AllowReadAfterExpiry == true &&
+                   _subscriptionService.CanReadFeatureAfterExpiry(ActivePartnerId, feature.Feature);
+        }
+
         public override void OnActionExecuting(ActionExecutingContext context)
         {
             var controller = context.ActionDescriptor.RouteValues["controller"];
@@ -155,7 +166,8 @@ namespace QdratNew.Areas.Partner.Controllers
             {
                 // ❗ لا تمنع الوصول لكل الصفحات
                 // اسمح ببعض الصفحات الأساسية
-                if (controller != "Students" && controller != "Batches")
+                // PPL-S6: تقارير AllowReadAfterExpiry تبقى متاحة حتى AccessUntilDate، وPartnerFeatureFilter يكمل الفحص
+                if (controller != "Students" && controller != "Batches" && !CanReadAfterExpiry(context))
                 {
                     context.Result = RedirectToAction("NoActiveSubscription", "Home");
                     return;

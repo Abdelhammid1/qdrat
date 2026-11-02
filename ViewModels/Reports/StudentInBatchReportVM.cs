@@ -10,6 +10,11 @@ namespace QdratNew.ViewModels.Partner.Reports
         public int BatchId { get; set; }
         public string BatchName { get; set; }
 
+        // PPL-S6.3
+        public bool CanViewPlacementExams { get; set; }
+        public List<QdratNew.ViewModels.Partner.PartnerPlacementStudentExamVm> PlacementExams { get; set; }
+            = new();
+
         public double HomeworkCompletionRate { get; set; }
         public double ExamCompletionRate { get; set; }
 

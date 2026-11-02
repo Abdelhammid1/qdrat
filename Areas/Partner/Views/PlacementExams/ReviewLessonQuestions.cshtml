@@ -1,0 +1,156 @@
+@model QdratNew.ViewModels.Partner.PartnerPlacementReportPageVm<QdratNew.ViewModels.Exam.ExamReviewViewModel>
+@using QdratNew.Services.Exams.Placement
+
+@{
+    ViewData["Title"] = "مراجعة إجابات الطالب";
+
+    var report = Model.Report;
+    var correctCount = report.Questions.Count(q => q.IsCorrect);
+    var wrongCount = report.TotalQuestions - correctCount;
+    var percent = report.TotalQuestions > 0 ? Math.Round(correctCount * 100.0 / report.TotalQuestions, 1) : 0;
+    var optionLabels = new[] { "أ", "ب", "ج", "د", "هـ" };
+
+    string FormatSeconds(double seconds)
+    {
+        if (seconds <= 0) return "—";
+        if (seconds < 60) return $"{Math.Round(seconds)} ث";
+        return $"{(int)(seconds / 60)}:{(int)(seconds % 60):D2} د";
+    }
+}
+
+<div class="pp-page">
+    <partial name="_PlacementAlerts" />
+
+    <div class="pp-head">
+        <div>
+            <h1><i class="fa-solid fa-file-circle-check" aria-hidden="true"></i> مراجعة إجابات الطالب</h1>
+            <p>@report.ExamTitle</p>
+        </div>
+
+        <div class="pp-head-actions no-print">
+            <a asp-action="ExamSectionAnalysis"
+               asp-route-assignmentId="@Model.AssignmentId"
+               asp-route-studentId="@Model.StudentId"
+               asp-route-batchId="@Model.BatchId"
+               class="pp-btn pp-btn-light">
+                <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                تقرير المحاور
+            </a>
+        </div>
+    </div>
+
+    <div class="pp-stats">
+        <div class="pp-stat"><b>@report.TotalQuestions</b><span>إجمالي الأسئلة</span></div>
+        <div class="pp-stat"><b>@correctCount</b><span>إجابات صحيحة</span></div>
+        <div class="pp-stat"><b>@wrongCount</b><span>إجابات خاطئة</span></div>
+        <div class="pp-stat"><b>@percent%</b><span>النسبة</span></div>
+    </div>
+
+    <div class="pp-card">
+        @for (var i = 0; i < report.Questions.Count; i++)
+        {
+            var question = report.Questions[i];
+
+            Func<string?, string> show = text =>
+            {
+                var value = text ?? string.Empty;
+                return question.IsQuantitative ? NumberHelper.ToIndicNumbersSafe(value) : value;
+            };
+
+            var isAnswered = !string.IsNullOrWhiteSpace(question.StudentAnswer) && question.StudentAnswer != "—";
+            var matchesOption = question.Options.Any(o => o.Text == question.StudentAnswer);
+
+            <div class="pp-question">
+                <div class="pp-question-head">
+                    <span class="pp-qnum">@(i + 1)</span>
+
+                    @if (!isAnswered)
+                    {
+                        <span class="pp-badge pp-badge-muted"><i class="fa-solid fa-forward" aria-hidden="true"></i> لم يُجب</span>
+                    }
+                    else if (question.IsCorrect)
+                    {
+                        <span class="pp-badge pp-badge-ok"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> صحيح</span>
+                    }
+                    else
+                    {
+                        <span class="pp-badge pp-badge-bad"><i class="fa-solid fa-circle-xmark" aria-hidden="true"></i> خطأ</span>
+                    }
+
+                    <span class="pp-badge pp-badge-muted"><i class="fa-solid fa-clock" aria-hidden="true"></i> @FormatSeconds(question.TimeTakenSeconds)</span>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(question.VerbalPassageContent))
+                {
+                    <div class="pp-passage">@Html.Raw(show(question.VerbalPassageContent))</div>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(question.ComparisonValue1) || !string.IsNullOrWhiteSpace(question.ComparisonValue2))
+                {
+                    <div class="pp-compare">
+                        <div>@Html.Raw(show(question.ComparisonValue1 ?? "—"))</div>
+                        <span>مقارنة</span>
+                        <div>@Html.Raw(show(question.ComparisonValue2 ?? "—"))</div>
+                    </div>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(question.ImageUrl))
+                {
+                    <img src="@Url.Content(question.ImageUrl)" alt="صورة السؤال" class="pp-question-img" loading="lazy" />
+                }
+
+                <div class="pp-question-title">@Html.Raw(show(question.QuestionTitle))</div>
+
+                @if (question.Options.Any())
+                {
+                    <div class="pp-options">
+                        @for (var o = 0; o < question.Options.Count; o++)
+                        {
+                            var option = question.Options[o];
+                            var isSelected = option.Text == question.StudentAnswer;
+                            var isCorrectOption = option.Text == question.CorrectAnswer;
+                            var optionCss = isCorrectOption ? "is-correct" : isSelected ? "is-wrong" : string.Empty;
+
+                            <div class="pp-option @optionCss">
+                                <span class="pp-option-label">@(o < optionLabels.Length ? optionLabels[o] : (o + 1).ToString())</span>
+                                <div class="pp-option-body">
+                                    @if (!string.IsNullOrWhiteSpace(option.ImageUrl))
+                                    {
+                                        <img src="@Url.Content(option.ImageUrl)" alt="صورة الاختيار" loading="lazy" />
+                                    }
+                                    @Html.Raw(show(option.Text))
+                                </div>
+                                @if (isSelected)
+                                {
+                                    <span class="pp-badge pp-badge-main">إجابة الطالب</span>
+                                }
+                                @if (isCorrectOption)
+                                {
+                                    <span class="pp-badge pp-badge-ok">الإجابة الصحيحة</span>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="pp-state">لا توجد اختيارات لهذا السؤال.</div>
+                }
+
+                @* مثل «لا أعرف»: إجابة ليست ضمن الاختيارات. نص حر من المتصفح فلا يُعرض بـ Html.Raw *@
+                @if (isAnswered && !matchesOption)
+                {
+                    <div class="pp-other-answer">إجابة الطالب: @PlacementReportText.ToPlainText(question.StudentAnswer)</div>
+                }
+            </div>
+        }
+
+        @if (!report.Questions.Any())
+        {
+            <div class="pp-empty">
+                <i class="fa-solid fa-inbox" aria-hidden="true"></i>
+                <h2>لا توجد أسئلة لهذا المؤشر</h2>
+            </div>
+        }
+    </div>
+</div>

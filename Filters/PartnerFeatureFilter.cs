@@ -76,7 +76,7 @@ namespace QdratNew.Filters
             if (!allowed &&
                 attribute.AllowReadAfterExpiry &&
                 _subscriptionService.GetActiveSubscription(partnerId.Value) == null &&
-                _subscriptionService.HasDataAccess(partnerId.Value))
+                _subscriptionService.CanReadFeatureAfterExpiry(partnerId.Value, attribute.Feature))
             {
                 allowed = true;
             }

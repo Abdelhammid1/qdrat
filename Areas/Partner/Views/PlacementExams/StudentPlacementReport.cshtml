@@ -1,0 +1,202 @@
+@model QdratNew.ViewModels.Partner.PartnerPlacementReportPageVm<QdratNew.ViewModels.Reports.PlacementReportViewModel>
+
+@{
+    ViewData["Title"] = "تقرير الطالب";
+
+    var report = Model.Report;
+    var hasQuant = report.QuantLabels?.Any() == true;
+    var hasVerbal = report.VerbalLabels?.Any() == true;
+}
+
+<div class="pp-page">
+    <partial name="_PlacementAlerts" />
+
+    <div class="pp-card pp-report-top">
+        <partial name="_PartnerReportHeader" model="Model.Branding" />
+
+        <div class="pp-head-actions no-print">
+            <a asp-action="StudentPlacementReportPrint" asp-route-examId="@Model.ExamId" asp-route-studentId="@Model.StudentId" class="pp-btn pp-btn-light">
+                <i class="fa-solid fa-print" aria-hidden="true"></i>
+                صفحة الطباعة
+            </a>
+            <a asp-action="DownloadStudentReport" asp-route-examId="@Model.ExamId" asp-route-studentId="@Model.StudentId" class="pp-btn pp-btn-light">
+                <i class="fa-solid fa-file-pdf" aria-hidden="true"></i>
+                تحميل PDF
+            </a>
+
+            @if (Model.BatchId > 0)
+            {
+                <a asp-action="BatchStudents" asp-route-examId="@Model.ExamId" asp-route-batchId="@Model.BatchId" class="pp-btn pp-btn-light">
+                    <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                    طلاب الاختبار
+                </a>
+            }
+            else if (!Model.IsReadOnly)
+            {
+                <a asp-action="PlacementDetails" asp-route-id="@Model.ExamId" class="pp-btn pp-btn-light">
+                    <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                    تفاصيل الاختبار
+                </a>
+            }
+            else
+            {
+                <a href="javascript:history.back()" class="pp-btn pp-btn-light">
+                    <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                    عودة
+                </a>
+            }
+        </div>
+    </div>
+
+    <div class="pp-card">
+        <h1 class="pp-card-title"><i class="fa-solid fa-user-graduate" aria-hidden="true"></i> تقرير تحديد المستوى: @report.Student.FullName</h1>
+        <p class="pp-card-sub">
+            المستوى: @report.Student.Level · تاريخ الإسناد: @report.ExamDate · زمن الحل: @report.SolveMinutes دقيقة من @report.TotalMinutes
+        </p>
+
+        <div class="pp-stats">
+            <div class="pp-stat"><b>@report.OverallPercent%</b><span>النسبة العامة</span></div>
+            <div class="pp-stat"><b>@report.TotalQuestions</b><span>عدد الأسئلة</span></div>
+            <div class="pp-stat"><b class="pp-text-ok">@report.CorrectAnswers</b><span>الصحيحة</span></div>
+            <div class="pp-stat"><b class="pp-text-bad">@report.WrongAnswers</b><span>الخاطئة</span></div>
+            <div class="pp-stat"><b>@report.SkippedQuestions</b><span>غير المجابة</span></div>
+            @if (report.DontKnowAnswers > 0)
+            {
+                <div class="pp-stat"><b>@report.DontKnowAnswers</b><span>لا أعرف الإجابة</span></div>
+            }
+            <div class="pp-stat"><b>@report.PercentTime%</b><span>نسبة الوقت المستهلك</span></div>
+        </div>
+    </div>
+
+    <div class="pp-charts">
+        <div class="pp-card">
+            <h2 class="pp-card-title">توزيع الأداء العام</h2>
+            <canvas id="overallChart" height="180" role="img" aria-label="الصحيحة @report.CorrectAnswers، الخاطئة @report.WrongAnswers، غير المجابة @report.SkippedQuestions"></canvas>
+        </div>
+
+        @if (hasQuant)
+        {
+            <div class="pp-card">
+                <h2 class="pp-card-title">التحليل الكمي</h2>
+                <canvas id="quantChart" height="180" role="img" aria-label="نسب المحاور الكمية، والتفاصيل في الجدول أدناه"></canvas>
+            </div>
+        }
+
+        @if (hasVerbal)
+        {
+            <div class="pp-card">
+                <h2 class="pp-card-title">التحليل اللفظي</h2>
+                <canvas id="verbalChart" height="180" role="img" aria-label="نسب المحاور اللفظية، والتفاصيل في الجدول أدناه"></canvas>
+            </div>
+        }
+    </div>
+
+    @foreach (var sectionReport in report.SectionLessonReports)
+    {
+        <div class="pp-card">
+            <h2 class="pp-card-title"><i class="fa-solid fa-layer-group" aria-hidden="true"></i> @sectionReport.SectionName</h2>
+
+            <div class="pp-table-wrap">
+                <table class="pp-table pp-table-cards">
+                    <thead>
+                        <tr>
+                            <th>المؤشر</th>
+                            <th>عدد الأسئلة</th>
+                            <th>الصحيحة</th>
+                            <th>الخاطئة</th>
+                            <th>المتخطاة</th>
+                            <th>نسبة النجاح</th>
+                            <th class="no-print">خيارات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var lesson in sectionReport.Lessons)
+                        {
+                            <tr>
+                                <td data-label="المؤشر">@lesson.LessonName</td>
+                                <td data-label="عدد الأسئلة">@lesson.TotalQuestions</td>
+                                <td data-label="الصحيحة" class="pp-text-ok">@lesson.CorrectCount</td>
+                                <td data-label="الخاطئة" class="pp-text-bad">@lesson.WrongCount</td>
+                                <td data-label="المتخطاة">@lesson.SkippedCount</td>
+                                <td data-label="نسبة النجاح"><b>@lesson.Percent%</b></td>
+                                <td data-label="خيارات" class="no-print">
+                                    @if (report.AssignmentId > 0)
+                                    {
+                                        <a asp-action="ReviewLessonQuestions"
+                                           asp-route-assignmentId="@report.AssignmentId"
+                                           asp-route-studentId="@report.Student.StudentID"
+                                           asp-route-lessonId="@lesson.LessonId"
+                                           asp-route-batchId="@Model.BatchId"
+                                           class="pp-btn pp-btn-light pp-btn-sm">
+                                            <i class="fa-solid fa-eye" aria-hidden="true"></i>
+                                            عرض الأسئلة
+                                        </a>
+                                    }
+                                    else
+                                    {
+                                        <span>—</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    <div class="pp-card">
+        <h2 class="pp-card-title"><i class="fa-solid fa-lightbulb" aria-hidden="true"></i> التوصيات</h2>
+
+        @if (report.Recommendation != null)
+        {
+            <p>@report.Recommendation.PerformanceSummary</p>
+            <div class="pp-charts">
+                <div class="pp-recommendation">
+                    <b>@report.Recommendation.TrackCard1</b>
+                    <p>@report.Recommendation.TrackCard1Desc</p>
+                </div>
+                <div class="pp-recommendation">
+                    <b>@report.Recommendation.TrackCard2</b>
+                    <p>@report.Recommendation.TrackCard2Desc</p>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="pp-state">لا توجد توصيات حاليًا.</div>
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        (function () {
+            if (!window.Chart) {
+                return; // الأرقام نفسها ظاهرة في البطاقات والجداول
+            }
+
+            function bars(id, labels, data, color, max) {
+                var canvas = document.getElementById(id);
+                if (!canvas) {
+                    return;
+                }
+
+                new Chart(canvas, {
+                    type: "bar",
+                    data: { labels: labels, datasets: [{ data: data, backgroundColor: color, borderRadius: 8 }] },
+                    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, max: max } } }
+                });
+            }
+
+            bars("overallChart",
+                ["صحيحة", "خاطئة", "غير مجابة"],
+                @Html.Raw(Json.Serialize(new[] { report.CorrectAnswers, report.WrongAnswers, report.SkippedQuestions })),
+                ["#15803d", "#b91c1c", "#b45309"],
+                @Html.Raw(Json.Serialize(report.TotalQuestions)));
+            bars("quantChart", @Html.Raw(Json.Serialize(report.QuantLabels)), @Html.Raw(Json.Serialize(report.QuantScores)), "#da784d", 100);
+            bars("verbalChart", @Html.Raw(Json.Serialize(report.VerbalLabels)), @Html.Raw(Json.Serialize(report.VerbalScores)), "#9a4a26", 100);
+        })();
+    </script>
+}

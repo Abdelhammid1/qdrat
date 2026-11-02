@@ -1,0 +1,202 @@
+@model QdratNew.ViewModels.Partner.Reports.StudentInBatchReportVM
+
+@{
+    ViewData["Title"] = "تقرير الطالب في الدفعة";
+}
+
+<div class="pp-page">
+    <partial name="~/Areas/Partner/Views/PlacementExams/_PlacementAlerts.cshtml" />
+
+    <div class="pp-head">
+        <div>
+            <h1><i class="fa-solid fa-user-graduate"></i> @Model.StudentName</h1>
+            <p>الدفعة: @Model.BatchName</p>
+        </div>
+
+        <div class="pp-head-actions">
+            <a asp-action="Batch" asp-route-batchId="@Model.BatchId" class="pp-btn pp-btn-light">
+                <i class="fa-solid fa-arrow-right"></i>
+                تقرير الدفعة
+            </a>
+        </div>
+    </div>
+
+    <div class="pp-stats">
+        <div class="pp-stat"><b>@Model.HomeworkCompletionRate.ToString("0.0")%</b><span>إنجاز الواجبات</span></div>
+        <div class="pp-stat"><b>@Model.AverageHomeworkScore.ToString("0.0")</b><span>متوسط درجات الواجبات</span></div>
+        <div class="pp-stat"><b>@Model.ExamCompletionRate.ToString("0.0")%</b><span>إنجاز الاختبارات</span></div>
+        <div class="pp-stat"><b>@Model.AverageExamScore.ToString("0.0")</b><span>متوسط درجات الاختبارات</span></div>
+    </div>
+
+    @if (Model.CanViewPlacementExams)
+    {
+        <div class="pp-card" id="placement">
+            <h2 class="pp-card-title"><i class="fa-solid fa-signal"></i> تحديد المستوى</h2>
+
+            @if (!Model.PlacementExams.Any())
+            {
+                <div class="pp-state">لم يُرسل لهذا الطالب أي اختبار تحديد مستوى.</div>
+            }
+            else
+            {
+                <div class="pp-table-wrap">
+                    <table class="pp-table pp-table-cards">
+                        <thead>
+                            <tr>
+                                <th>الاختبار</th>
+                                <th>تاريخ الإسناد</th>
+                                <th>الحالة</th>
+                                <th>الدرجة</th>
+                                <th>الإجراءات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var exam in Model.PlacementExams)
+                            {
+                                <tr>
+                                    <td data-label="الاختبار">@exam.Title</td>
+                                    <td data-label="تاريخ الإسناد">@exam.AssignedAt.ToString("yyyy/MM/dd")</td>
+                                    <td data-label="الحالة">
+                                        @if (exam.IsSubmitted)
+                                        {
+                                            <span class="pp-badge pp-badge-ok">تم الحل</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="pp-badge pp-badge-muted">لم يكتمل</span>
+                                        }
+                                    </td>
+                                    <td data-label="الدرجة">@(exam.Score.HasValue ? $"{exam.Score}/100" : "—")</td>
+                                    <td data-label="الإجراءات">
+                                        <a asp-controller="PlacementExams"
+                                           asp-action="StudentPlacementReport"
+                                           asp-route-studentId="@Model.StudentId"
+                                           asp-route-examId="@exam.ExamId"
+                                           asp-route-assignmentId="@exam.AssignmentId"
+                                           asp-route-batchId="@exam.BatchId"
+                                           class="pp-btn pp-btn-light pp-btn-sm">
+                                            <i class="fa-solid fa-chart-pie"></i>
+                                            التقرير
+                                        </a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    }
+
+    <div class="pp-card">
+        <h2 class="pp-card-title"><i class="fa-solid fa-file-lines"></i> الواجبات</h2>
+
+        @if (!Model.Homeworks.Any())
+        {
+            <div class="pp-state">لا توجد واجبات مرسلة لهذا الطالب في الدفعة.</div>
+        }
+        else
+        {
+            <div class="pp-table-wrap">
+                <table class="pp-table pp-table-cards">
+                    <thead>
+                        <tr>
+                            <th>الواجب</th>
+                            <th>الحالة</th>
+                            <th>الدرجة</th>
+                            <th>الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var homework in Model.Homeworks)
+                        {
+                            <tr>
+                                <td data-label="الواجب">@homework.Title</td>
+                                <td data-label="الحالة">
+                                    @if (homework.IsLate)
+                                    {
+                                        <span class="pp-badge pp-badge-warn">سُلّم متأخرًا</span>
+                                    }
+                                    else if (homework.IsSubmitted)
+                                    {
+                                        <span class="pp-badge pp-badge-ok">تم التسليم</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="pp-badge pp-badge-muted">لم يُسلَّم</span>
+                                    }
+                                </td>
+                                <td data-label="الدرجة">@(homework.Score?.ToString("0.0") ?? "—")</td>
+                                <td data-label="الإجراءات">
+                                    <a asp-action="StudentHomeworkDetails"
+                                       asp-route-homeworkSetId="@homework.HomeworkSetId"
+                                       asp-route-studentId="@Model.StudentId"
+                                       class="pp-btn pp-btn-light pp-btn-sm">
+                                        <i class="fa-solid fa-eye"></i>
+                                        التفاصيل
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+
+    <div class="pp-card">
+        <h2 class="pp-card-title"><i class="fa-solid fa-clipboard-list"></i> الاختبارات</h2>
+
+        @if (!Model.Exams.Any())
+        {
+            <div class="pp-state">لا توجد اختبارات مرسلة لهذا الطالب في الدفعة.</div>
+        }
+        else
+        {
+            <div class="pp-table-wrap">
+                <table class="pp-table pp-table-cards">
+                    <thead>
+                        <tr>
+                            <th>الاختبار</th>
+                            <th>الحالة</th>
+                            <th>الدرجة</th>
+                            <th>الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var exam in Model.Exams)
+                        {
+                            <tr>
+                                <td data-label="الاختبار">@exam.Title</td>
+                                <td data-label="الحالة">
+                                    @if (exam.IsSubmitted)
+                                    {
+                                        <span class="pp-badge pp-badge-ok">تم التسليم</span>
+                                    }
+                                    else if (exam.HasStarted)
+                                    {
+                                        <span class="pp-badge pp-badge-main">قيد الحل</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="pp-badge pp-badge-muted">لم يبدأ</span>
+                                    }
+                                </td>
+                                <td data-label="الدرجة">@(exam.Score?.ToString("0.0") ?? "—")</td>
+                                <td data-label="الإجراءات">
+                                    <a asp-action="StudentExamDetails"
+                                       asp-route-examAssignmentId="@exam.ExamAssignmentId"
+                                       asp-route-studentId="@Model.StudentId"
+                                       class="pp-btn pp-btn-light pp-btn-sm">
+                                        <i class="fa-solid fa-eye"></i>
+                                        التفاصيل
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>

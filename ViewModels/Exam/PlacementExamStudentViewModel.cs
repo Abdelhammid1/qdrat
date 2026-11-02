@@ -18,5 +18,8 @@ namespace QdratNew.ViewModels.Exam
         public DateTime? SubmittedAt { get; set; }
 
         public int? Score { get; set; }
+
+        // PPL-S5: للشريك فقط — وصله الاختبار وما زال ضمن طلابه النشطين
+        public bool CanResend { get; set; }
     }
 }

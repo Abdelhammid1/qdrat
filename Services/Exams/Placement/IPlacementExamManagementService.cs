@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using QdratNew.ViewModels.Exam;
+using QdratNew.ViewModels.Question;
 
 namespace QdratNew.Services.Exams.Placement
 {
@@ -10,6 +11,41 @@ namespace QdratNew.Services.Exams.Placement
         [JsonPropertyName("curriculumTitle")] public string? CurriculumTitle { get; init; }
         [JsonPropertyName("sectionId")] public int SectionId { get; init; }
         [JsonPropertyName("sectionTitle")] public string? SectionTitle { get; init; }
+    }
+
+    // PPL-S4
+    public sealed class PlacementBatchOptionDto
+    {
+        [JsonPropertyName("batchId")] public int BatchId { get; init; }
+        [JsonPropertyName("batchName")] public string? BatchName { get; init; }
+    }
+
+    // PPL-S4
+    public sealed class PlacementModelSummaryDto
+    {
+        [JsonPropertyName("id")] public int Id { get; init; }
+        [JsonPropertyName("title")] public string? Title { get; init; }
+        [JsonPropertyName("questionsCount")] public int QuestionsCount { get; init; }
+    }
+
+    // PPL-S4
+    public sealed record PlacementContractSummary(DateTime EndDate, bool CanUseProfessionalModels);
+
+    // PPL-S5
+    public sealed record PlacementSendBatchSummary(int BatchId, string BatchName, int StudentCount);
+
+    // PPL-S5
+    public sealed class PlacementSendSummary
+    {
+        public int ExamId { get; init; }
+        public string Title { get; init; } = string.Empty;
+        public int TotalQuestions { get; init; }
+        public int DurationMinutes { get; init; }
+        public string? ReferenceCode { get; init; }
+        public bool IsActive { get; init; }
+        public bool IsDraft { get; init; }
+        public int TotalStudents { get; init; }
+        public List<PlacementSendBatchSummary> Batches { get; init; } = new();
     }
 
     // PPL-S2: منطق إدارة اختبارات تحديد المستوى بنطاق. كل ID يُتحقق من ملكيته هنا لا في الـ Controller.
@@ -45,11 +81,24 @@ namespace QdratNew.Services.Exams.Placement
         Task<PlacementOperationResult> ResendToStudentAsync(PlacementScope scope, int examId, int studentId, CancellationToken ct = default);
         Task<PlacementOperationResult> ConfirmSendAsync(PlacementScope scope, int examId, CancellationToken ct = default);
 
+        /// <summary>PPL-S5: null = الاختبار خارج النطاق.</summary>
+        Task<PlacementSendSummary?> GetSendSummaryAsync(PlacementScope scope, int examId, CancellationToken ct = default);
+
         Task<PlacementOperationResult> HideAsync(PlacementScope scope, int examId, CancellationToken ct = default);
         Task<PlacementOperationResult> RestoreAsync(PlacementScope scope, int examId, CancellationToken ct = default);
         Task<PlacementOperationResult> DeletePermanentlyAsync(PlacementScope scope, int examId, int batchId, CancellationToken ct = default);
 
         Task<List<PlacementSectionOptionDto>> GetSectionsByCourseAsync(PlacementScope scope, int courseId, CancellationToken ct = default);
         Task<PlacementExamDetailsViewModel?> GetPlacementDetailsAsync(PlacementScope scope, int examId, CancellationToken ct = default);
+
+        // PPL-S4
+        Task<List<PlacementBatchOptionDto>> GetBatchesByCourseAsync(PlacementScope scope, int courseId, CancellationToken ct = default);
+        /// <summary>اختبارات الطالب الواحد (بلا ربط دفعة)؛ لا تظهر ضمن كروت الدفعات.</summary>
+        Task<List<PlacementExamListVm>> GetSingleStudentExamsAsync(PlacementScope scope, CancellationToken ct = default);
+        Task<PlacementContractSummary?> GetContractSummaryAsync(PlacementScope scope, CancellationToken ct = default);
+        Task<PlacementModelSummaryDto?> GetModelSummaryAsync(PlacementScope scope, int modelId, CancellationToken ct = default);
+
+        /// <summary>null = السؤال ليس في الاختبار وليس من بنك دورته المتاح للنطاق.</summary>
+        Task<QuestionDisplayViewModel?> GetQuestionPreviewAsync(PlacementScope scope, int examId, Guid questionId, CancellationToken ct = default);
     }
 }

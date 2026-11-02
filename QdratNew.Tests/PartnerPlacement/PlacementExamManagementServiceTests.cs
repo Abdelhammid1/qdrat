@@ -51,6 +51,7 @@ namespace QdratNew.Tests.PartnerPlacement
             public required ApplicationDbContext Db { get; init; }
             public required PlacementExamManagementService Service { get; init; }
             public required TestDbContextFactory Factory { get; init; }
+            public required Mock<IAdvancedNotificationService> Notifications { get; init; }
         }
 
         private static Harness Seed(bool partnerAContractActive = true, bool partnerAModels = true)
@@ -138,15 +139,18 @@ namespace QdratNew.Tests.PartnerPlacement
 
             var generator = new PlacementExamGeneratorService(factory, new Mock<INotificationCenterService>().Object, tz.Object);
 
+            var notifications = new Mock<IAdvancedNotificationService>();
+
             var service = new PlacementExamManagementService(
                 db,
                 generator,
                 new PlacementExamScopeGuard(),
                 tz.Object,
                 new MemoryCache(new MemoryCacheOptions()),
-                NullLogger<PlacementExamManagementService>.Instance);
+                NullLogger<PlacementExamManagementService>.Instance,
+                notifications.Object);
 
-            return new Harness { Db = db, Service = service, Factory = factory };
+            return new Harness { Db = db, Service = service, Factory = factory, Notifications = notifications };
         }
 
         private static Student NewStudent(int id, int branchId, bool active = true) => new()
@@ -177,6 +181,7 @@ namespace QdratNew.Tests.PartnerPlacement
             Title = "سؤال",
             ReferenceNumber = id.ToString(),
             CorrectAnswer = "أ",
+            CurriculumId = 60,
             LessonId = lessonId,
             SectionId = sectionId,
             Difficulty = DifficultyLevel.Medium,
@@ -405,7 +410,48 @@ namespace QdratNew.Tests.PartnerPlacement
             Assert.False((await h.Service.SendToNewStudentsAsync(ScopeA, ExamOfA, BatchA)).Succeeded);
             Assert.False((await h.Service.ResendToStudentAsync(ScopeA, ExamOfA, StudentA)).Succeeded);
 
+            // PPL-S7.1: الفحص داخل الخدمة أيضًا، لا يكفي فلتر الـ Controller
+            Assert.False((await h.Service.HideAsync(ScopeA, ExamOfA)).Succeeded);
+            Assert.False((await h.Service.RestoreAsync(ScopeA, ExamOfA)).Succeeded);
+            Assert.False((await h.Service.DeletePermanentlyAsync(ScopeA, ExamOfA, BatchA)).Succeeded);
+            Assert.True(await h.Db.Exams.AsNoTracking().AnyAsync(e => e.Id == ExamOfA && e.IsActive));
+
             Assert.NotNull(await h.Service.GetBatchExamsAsync(ScopeA, BatchA));
+        }
+
+        [Fact]
+        public async Task Partner_Details_DoesNotListStudentWhoMovedToAnotherPartner()
+        {
+            var h = Seed();
+            h.Db.ExamStudentStatuses.Add(new ExamStudentStatus { ExamId = ExamOfA, StudentId = StudentB, AssignedAt = DateTime.UtcNow, Status = ExamStatus.Completed });
+            await h.Db.SaveChangesAsync();
+
+            var details = await h.Service.GetPlacementDetailsAsync(ScopeA, ExamOfA);
+
+            Assert.NotNull(details);
+            Assert.DoesNotContain(details!.StudentStatuses, s => s.StudentId == StudentB);
+        }
+
+        [Fact]
+        public async Task Partner_CreateFromModel_RejectsOutOfRangeDuration()
+        {
+            var h = Seed();
+            var examsBefore = await h.Db.Exams.CountAsync();
+
+            foreach (var duration in new[] { 1, 301, int.MaxValue })
+            {
+                var result = await h.Service.CreateFromProfessionalModelAsync(ScopeA, new PlacementExamFromModelVm
+                {
+                    SelectedModelId = 1,
+                    SelectedBatchId = BatchA,
+                    SelectedCourseId = CourseA,
+                    DurationMinutes = duration
+                });
+
+                Assert.False(result.Succeeded);
+            }
+
+            Assert.Equal(examsBefore, await h.Db.Exams.CountAsync());
         }
 
         [Fact]
@@ -436,6 +482,189 @@ namespace QdratNew.Tests.PartnerPlacement
 
             Assert.Equal(PlacementOperationOutcome.NotFound, result.Outcome);
             Assert.False(await h.Db.ExamAssignments.AnyAsync(a => a.ExamId == ExamOfA && a.StudentId == studentId));
+        }
+
+        // =====================================================
+        // PPL-S5
+        // =====================================================
+        private static async Task MarkExamOfASentAsync(Harness h)
+        {
+            var link = await h.Db.ExamAssignmentsToBatches.SingleAsync(x => x.ExamId == ExamOfA);
+            link.IsSentToStudents = true;
+            await h.Db.SaveChangesAsync();
+        }
+
+        [Fact]
+        public async Task Partner_SendToNew_OnDraft_DoesNotDeliver()
+        {
+            var h = Seed();
+
+            var result = await h.Service.SendToNewStudentsAsync(ScopeA, ExamOfA, BatchA);
+
+            Assert.False(result.Succeeded);
+            Assert.Contains("لم يُرسل", result.Message);
+            Assert.False(await h.Db.ExamAssignments.AnyAsync(a => a.ExamId == ExamOfA));
+        }
+
+        [Fact]
+        public async Task Partner_Resend_OnDraft_DoesNotDeliver()
+        {
+            var h = Seed();
+
+            var result = await h.Service.ResendToStudentAsync(ScopeA, ExamOfA, StudentA);
+
+            Assert.False(result.Succeeded);
+            Assert.False(await h.Db.ExamAssignments.AnyAsync(a => a.ExamId == ExamOfA));
+        }
+
+        [Fact]
+        public async Task Partner_Resend_ReplacesAssignment_ClearsAttempts_AndNotifies()
+        {
+            var h = Seed();
+            await MarkExamOfASentAsync(h);
+
+            var old = new ExamAssignment { ExamId = ExamOfA, StudentId = StudentA, AssignedAt = DateTime.UtcNow.AddDays(-1) };
+            h.Db.ExamAssignments.Add(old);
+            h.Db.ExamStudentStatuses.Add(new ExamStudentStatus { ExamId = ExamOfA, StudentId = StudentA, IsSubmitted = true, Status = ExamStatus.Completed });
+            h.Db.QuestionAttemptNew.Add(new QuestionAttemptNew { ExamId = ExamOfA, StudentId = StudentA, QuestionId = QuestionInExam, SelectedAnswer = "أ" });
+            await h.Db.SaveChangesAsync();
+            var oldId = old.Id;
+            h.Db.ChangeTracker.Clear();
+
+            var result = await h.Service.ResendToStudentAsync(ScopeA, ExamOfA, StudentA);
+
+            Assert.True(result.Succeeded, result.Message);
+            Assert.Equal(BatchA, result.BatchId);
+
+            var assignment = await h.Db.ExamAssignments.AsNoTracking().SingleAsync(a => a.ExamId == ExamOfA && a.StudentId == StudentA);
+            Assert.NotEqual(oldId, assignment.Id);
+
+            var status = await h.Db.ExamStudentStatuses.AsNoTracking().SingleAsync(s => s.ExamId == ExamOfA && s.StudentId == StudentA);
+            Assert.False(status.IsSubmitted);
+            Assert.Equal(ExamStatus.Pending, status.Status);
+            Assert.False(await h.Db.QuestionAttemptNew.AnyAsync(a => a.ExamId == ExamOfA && a.StudentId == StudentA));
+
+            h.Notifications.Verify(n => n.SendToStudentsAsync(
+                It.Is<List<int>>(ids => ids.Count == 1 && ids[0] == StudentA),
+                It.IsAny<string>(),
+                NotificationCategory.Exam,
+                "/Students/PlacementExams/PlacementExamDashboard",
+                null), Times.Once);
+        }
+
+        [Fact]
+        public async Task Partner_Resend_NotificationFailure_DoesNotFailTheResend()
+        {
+            var h = Seed();
+            await MarkExamOfASentAsync(h);
+            h.Notifications
+                .Setup(n => n.SendToStudentsAsync(It.IsAny<List<int>>(), It.IsAny<string>(), It.IsAny<NotificationCategory>(), It.IsAny<string?>(), It.IsAny<int?>()))
+                .ThrowsAsync(new InvalidOperationException("boom"));
+
+            var result = await h.Service.ResendToStudentAsync(ScopeA, ExamOfA, StudentA);
+
+            Assert.True(result.Succeeded, result.Message);
+        }
+
+        [Fact]
+        public async Task Partner_Resend_HiddenExam_IsRejected()
+        {
+            var h = Seed();
+            await MarkExamOfASentAsync(h);
+            await h.Service.HideAsync(ScopeA, ExamOfA);
+
+            var result = await h.Service.ResendToStudentAsync(ScopeA, ExamOfA, StudentA);
+
+            Assert.False(result.Succeeded);
+            Assert.Contains("مخفي", result.Message);
+        }
+
+        [Fact]
+        public async Task Partner_Resend_SingleStudentExam_OnlyForStudentWhoReceivedIt()
+        {
+            var h = Seed();
+            const int singleExam = 503;
+            h.Db.Exams.Add(NewExam(singleExam, PartnerA));
+            h.Db.ExamQuestions.Add(new ExamQuestion { ExamId = singleExam, QuestionId = QuestionInExam, Order = 1 });
+            h.Db.ExamAssignments.Add(new ExamAssignment { ExamId = singleExam, StudentId = StudentA, AssignedAt = DateTime.UtcNow });
+            await h.Db.SaveChangesAsync();
+            h.Db.ChangeTracker.Clear();
+
+            Assert.True((await h.Service.ResendToStudentAsync(ScopeA, singleExam, StudentA)).Succeeded);
+            Assert.Equal(PlacementOperationOutcome.NotFound, (await h.Service.ResendToStudentAsync(ScopeA, singleExam, StudentAArchived)).Outcome);
+            Assert.Equal(1, await h.Db.ExamAssignments.CountAsync(a => a.ExamId == singleExam));
+        }
+
+        [Fact]
+        public async Task Admin_Resend_KeepsOldAssignment_AndSendsNoNotification()
+        {
+            var h = Seed();
+            h.Db.ExamAssignments.Add(new ExamAssignment { ExamId = ExamInstitute, StudentId = StudentInstitute, AssignedAt = DateTime.UtcNow });
+            await h.Db.SaveChangesAsync();
+            h.Db.ChangeTracker.Clear();
+
+            Assert.True((await h.Service.ResendToStudentAsync(Admin, ExamInstitute, StudentInstitute)).Succeeded);
+
+            Assert.Equal(2, await h.Db.ExamAssignments.CountAsync(a => a.ExamId == ExamInstitute && a.StudentId == StudentInstitute));
+            h.Notifications.VerifyNoOtherCalls();
+        }
+
+        [Fact]
+        public async Task SendSummary_CountsOwnActiveStudents_AndIsOwnerOnly()
+        {
+            var h = Seed();
+
+            var summary = await h.Service.GetSendSummaryAsync(ScopeA, ExamOfA);
+
+            Assert.NotNull(summary);
+            Assert.True(summary!.IsDraft);
+            Assert.Equal(1, summary.TotalStudents); // StudentA بلا المؤرشف
+            Assert.Equal(1, summary.TotalQuestions);
+            Assert.Equal(1, Assert.Single(summary.Batches).StudentCount);
+
+            Assert.Null(await h.Service.GetSendSummaryAsync(ScopeA, ExamOfB));
+            Assert.Null(await h.Service.GetSendSummaryAsync(ScopeA, ExamInstitute));
+        }
+
+        [Fact]
+        public async Task Details_OfferResend_OnlyToActiveStudentWhoReceivedTheExam()
+        {
+            var h = Seed();
+            await MarkExamOfASentAsync(h);
+            h.Db.ExamStudentStatuses.AddRange(
+                new ExamStudentStatus { ExamId = ExamOfA, StudentId = StudentA, Status = ExamStatus.Pending },
+                new ExamStudentStatus { ExamId = ExamOfA, StudentId = StudentAArchived, Status = ExamStatus.Completed, IsSubmitted = true });
+            await h.Db.SaveChangesAsync();
+            h.Db.ChangeTracker.Clear();
+
+            var details = await h.Service.GetPlacementDetailsAsync(ScopeA, ExamOfA);
+
+            Assert.True(details!.StudentStatuses.Single(s => s.StudentId == StudentA).CanResend);
+            Assert.False(details.StudentStatuses.Single(s => s.StudentId == StudentAArchived).CanResend);
+        }
+
+        // Auto-close عام: يغلق اختبار الشريك الذي انتهى وقته مثل اختبار المعهد
+        [Fact]
+        public async Task AutoClose_ClosesExpiredPartnerExam()
+        {
+            var h = Seed();
+            h.Db.ExamStudentStatuses.Add(new ExamStudentStatus
+            {
+                ExamId = ExamOfA,
+                StudentId = StudentA,
+                Status = ExamStatus.InProgress,
+                StartedAt = DateTime.UtcNow.AddHours(-2),
+                EndAt = DateTime.UtcNow.AddHours(-1)
+            });
+            await h.Db.SaveChangesAsync();
+            h.Db.ChangeTracker.Clear();
+
+            var closed = await new QdratNew.Services.Implementations.PlacementExamAutoCloseService(h.Factory).CloseExpiredExamsAsync();
+
+            Assert.Equal(1, closed);
+            var status = await h.Db.ExamStudentStatuses.AsNoTracking().SingleAsync(s => s.ExamId == ExamOfA);
+            Assert.True(status.IsSubmitted);
+            Assert.Equal(ExamStatus.Completed, status.Status);
         }
 
         [Fact]
@@ -491,6 +720,206 @@ namespace QdratNew.Tests.PartnerPlacement
             await h.Db.SaveChangesAsync();
 
             Assert.Empty((await h.Service.GetCreateFromModelAsync(ScopeA)).AvailableModels);
+        }
+
+        // =========================================
+        // PPL-S4: مسارات صفحات الشريك
+        // =========================================
+        [Fact]
+        public async Task Partner_BatchDraft_DoesNotReachAnyStudentBeforeSend()
+        {
+            var h = Seed();
+
+            var result = await h.Service.CreateAdvancedAsync(ScopeA, NewCreateModel(CourseA, batchId: BatchA));
+
+            Assert.True(result.Succeeded, result.Message);
+            using var db = h.Factory.CreateDbContext();
+            Assert.False(await db.ExamAssignments.AnyAsync(a => a.ExamId == result.ExamId));
+            Assert.False(await db.ExamStudentStatuses.AnyAsync(s => s.ExamId == result.ExamId));
+        }
+
+        [Fact]
+        public async Task Admin_BatchDraft_DoesNotReachAnyStudentBeforeSend()
+        {
+            var h = Seed();
+
+            var result = await h.Service.CreateAdvancedAsync(Admin, NewCreateModel(CourseA, batchId: BatchInstitute));
+
+            Assert.True(result.Succeeded, result.Message);
+            using var db = h.Factory.CreateDbContext();
+            Assert.False(await db.ExamAssignments.AnyAsync(a => a.ExamId == result.ExamId));
+            Assert.False(await db.ExamStudentStatuses.AnyAsync(s => s.ExamId == result.ExamId));
+        }
+
+        [Fact]
+        public async Task Partner_Index_KeepsBatchWhenAllItsExamsAreHidden()
+        {
+            var h = Seed();
+            (await h.Db.Exams.SingleAsync(e => e.Id == ExamOfA)).IsActive = false;
+            await h.Db.SaveChangesAsync();
+            h.Db.ChangeTracker.Clear();
+
+            Assert.Contains((await h.Service.GetIndexAsync(ScopeA)).ActiveBatches, b => b.BatchId == BatchA);
+        }
+
+        [Fact]
+        public async Task Partner_SingleStudentExams_ListsOwnUnlinkedExamsOnly()
+        {
+            var h = Seed();
+            var own = await h.Service.CreateAdvancedAsync(ScopeA, NewCreateModel(CourseA, studentId: StudentA));
+            Assert.True(own.Succeeded, own.Message);
+
+            var list = await h.Service.GetSingleStudentExamsAsync(ScopeA);
+            var item = Assert.Single(list);
+            Assert.Equal(own.ExamId, item.ExamId);
+            Assert.Equal($"طالب {StudentA}", item.StudentName);
+
+            Assert.Empty(await h.Service.GetSingleStudentExamsAsync(ScopeB));
+        }
+
+        [Fact]
+        public async Task Partner_SingleStudentExam_IsDeliveredAndLockedForEditing()
+        {
+            var h = Seed();
+
+            var result = await h.Service.CreateAdvancedAsync(ScopeA, NewCreateModel(CourseA, studentId: StudentA));
+
+            Assert.True(result.Succeeded, result.Message);
+            Assert.DoesNotContain("مسودة", result.Message);
+
+            using var db = h.Factory.CreateDbContext();
+            Assert.True(await db.ExamAssignments.AnyAsync(a => a.ExamId == result.ExamId && a.StudentId == StudentA));
+
+            var examId = result.ExamId!.Value;
+            var inExam = await db.ExamQuestions.Where(q => q.ExamId == examId).Select(q => q.QuestionId).FirstAsync();
+
+            Assert.False((await h.Service.GetReviewAsync(ScopeA, examId))!.CanEditQuestions);
+            Assert.Null(await h.Service.GetReplaceQuestionAsync(ScopeA, examId, inExam));
+            Assert.Equal(PlacementOperationOutcome.BadRequest,
+                (await h.Service.AddQuestionFromBankAsync(ScopeA, examId, SectionOfCourseA, QuestionCandidate)).Outcome);
+        }
+
+        [Fact]
+        public async Task Partner_CreateAdvanced_RejectsEndBeforeStart()
+        {
+            var h = Seed();
+            var model = NewCreateModel(CourseA, studentId: StudentA);
+            model.StartDate = DateTime.Today.AddDays(1);
+            model.EndDate = DateTime.Today;
+
+            var result = await h.Service.CreateAdvancedAsync(ScopeA, model);
+
+            Assert.False(result.Succeeded);
+            Assert.False(await h.Db.Exams.AnyAsync(e => e.OwnerPartnerId == PartnerA && e.Id != ExamOfA));
+        }
+
+        [Fact]
+        public async Task Partner_Review_CanEditOnlyDraftWithBankCourse()
+        {
+            var h = Seed();
+            Assert.True((await h.Service.GetReviewAsync(ScopeA, ExamOfA))!.CanEditQuestions);
+
+            var link = await h.Db.ExamAssignmentsToBatches.SingleAsync(x => x.ExamId == ExamOfA);
+            link.IsSentToStudents = true;
+            await h.Db.SaveChangesAsync();
+            Assert.False((await h.Service.GetReviewAsync(ScopeA, ExamOfA))!.CanEditQuestions);
+
+            link.IsSentToStudents = false;
+            var exam = await h.Db.Exams.SingleAsync(e => e.Id == ExamOfA);
+            exam.CourseId = CourseNoBank;
+            await h.Db.SaveChangesAsync();
+            h.Db.ChangeTracker.Clear();
+            Assert.False((await h.Service.GetReviewAsync(ScopeA, ExamOfA))!.CanEditQuestions);
+        }
+
+        [Fact]
+        public async Task Partner_ReplaceQuestion_RejectedAfterSend()
+        {
+            var h = Seed();
+            var link = await h.Db.ExamAssignmentsToBatches.SingleAsync(x => x.ExamId == ExamOfA);
+            link.IsSentToStudents = true;
+            await h.Db.SaveChangesAsync();
+
+            var result = await h.Service.ReplaceQuestionAsync(ScopeA, ExamOfA, QuestionInExam, QuestionCandidate);
+
+            Assert.Equal(PlacementOperationOutcome.BadRequest, result.Outcome);
+            Assert.Null(await h.Service.GetReplaceQuestionAsync(ScopeA, ExamOfA, QuestionInExam));
+        }
+
+        [Fact]
+        public async Task Partner_AddQuestion_KeepsTotalsInSync()
+        {
+            var h = Seed();
+
+            var result = await h.Service.AddQuestionFromBankAsync(ScopeA, ExamOfA, SectionOfCourseA, QuestionCandidate);
+
+            Assert.True(result.Succeeded, result.Message);
+            h.Db.ChangeTracker.Clear();
+            Assert.Equal(2, (await h.Db.Exams.SingleAsync(e => e.Id == ExamOfA)).TotalQuestions);
+            Assert.Equal(2, (await h.Db.ExamAssignmentsToBatches.SingleAsync(x => x.ExamId == ExamOfA)).TotalQuestions);
+        }
+
+        [Fact]
+        public async Task Partner_BatchesByCourse_OnlyOwnBatchesInContractCourse()
+        {
+            var h = Seed();
+
+            var own = await h.Service.GetBatchesByCourseAsync(ScopeA, CourseA);
+            Assert.Equal(new[] { BatchA }, own.Select(b => b.BatchId));
+
+            Assert.Empty(await h.Service.GetBatchesByCourseAsync(ScopeA, CourseOutsideContract));
+            Assert.Empty(await h.Service.GetBatchesByCourseAsync(ScopeB, CourseA)); // B بلا عقد
+        }
+
+        [Fact]
+        public async Task Partner_QuestionPreview_LimitedToExamAndItsBank()
+        {
+            var h = Seed();
+
+            Assert.NotNull(await h.Service.GetQuestionPreviewAsync(ScopeA, ExamOfA, QuestionInExam));
+            Assert.NotNull(await h.Service.GetQuestionPreviewAsync(ScopeA, ExamOfA, QuestionCandidate));
+
+            // سؤال من دورة أخرى، واختبار شريك آخر، وسؤال غير موجود
+            Assert.Null(await h.Service.GetQuestionPreviewAsync(ScopeA, ExamOfA, QuestionOtherLesson));
+            Assert.Null(await h.Service.GetQuestionPreviewAsync(ScopeA, ExamOfB, QuestionInExam));
+            Assert.Null(await h.Service.GetQuestionPreviewAsync(ScopeA, ExamOfA, Guid.NewGuid()));
+        }
+
+        [Fact]
+        public async Task Partner_QuestionPreview_WithoutBank_OnlyQuestionsInExam()
+        {
+            var h = Seed();
+            var exam = await h.Db.Exams.SingleAsync(e => e.Id == ExamOfA);
+            exam.CourseId = CourseNoBank;
+            await h.Db.SaveChangesAsync();
+            h.Db.ChangeTracker.Clear();
+
+            Assert.NotNull(await h.Service.GetQuestionPreviewAsync(ScopeA, ExamOfA, QuestionInExam));
+            Assert.Null(await h.Service.GetQuestionPreviewAsync(ScopeA, ExamOfA, QuestionCandidate));
+        }
+
+        [Fact]
+        public async Task Partner_ModelSummary_FollowsAvailability()
+        {
+            var h = Seed();
+            h.Db.ProfessionalModels.AddRange(
+                new ProfessionalModel { Id = 900, Title = "عام", Description = "-", CreatedBy = "-", IsGlobal = true },
+                new ProfessionalModel { Id = 901, Title = "خاص", Description = "-", CreatedBy = "-" });
+            await h.Db.SaveChangesAsync();
+
+            Assert.Equal("عام", (await h.Service.GetModelSummaryAsync(ScopeA, 900))!.Title);
+            Assert.Null(await h.Service.GetModelSummaryAsync(ScopeA, 901));
+        }
+
+        [Fact]
+        public async Task Partner_ContractSummary_ActiveOnly()
+        {
+            var active = await Seed().Service.GetContractSummaryAsync(ScopeA);
+            Assert.NotNull(active);
+            Assert.True(active!.CanUseProfessionalModels);
+
+            Assert.Null(await Seed(partnerAContractActive: false).Service.GetContractSummaryAsync(ScopeA));
+            Assert.Null(await Seed().Service.GetContractSummaryAsync(Admin));
         }
 
         // =========================================

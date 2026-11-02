@@ -14,6 +14,7 @@ namespace QdratNew.Tests.Integration
     // Overlay غير القابل للإغلاق، تعطّل عناصر التفاعل، ووصول طلب POST فعلي إلى
     // /Students/IntegrityGuard/ReportViolation. المسارات الخمسة الباقية تُختبَر يدويًا (QG-F1)
     // تفاديًا لتكرار غير ضروري لنفس آلية translation-guard.js المشتركة.
+    [Collection(RemedialTrackSharedTestDbCollection.Name)]
     public class TranslationGuardBrowserTests : IAsyncLifetime
     {
         private const string StudentUserName = "tg-e2e-student";

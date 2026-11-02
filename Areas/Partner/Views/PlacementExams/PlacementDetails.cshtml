@@ -1,0 +1,310 @@
+@model QdratNew.ViewModels.Exam.PlacementExamDetailsViewModel
+@using QdratNew.Enums
+
+@functions {
+    (string Key, string Css, string Label) StudentState(QdratNew.ViewModels.Exam.PlacementExamStudentViewModel student)
+    {
+        if (!student.HasStatus) return ("notstarted", "pp-badge-muted", "لم يُرسل بعد");
+        if (student.Status == ExamStatus.Completed) return ("completed", "pp-badge-ok", "تم الحل");
+        if (student.Status == ExamStatus.Pending) return ("pending", "pp-badge-warn", "قيد الانتظار");
+        if (student.Status == ExamStatus.InProgress) return ("pending", "pp-badge-main", "قيد الحل");
+        return ("other", "pp-badge-muted", student.Status.ToString());
+    }
+
+    (string Text, string Css) Difficulty(DifficultyLevel level)
+    {
+        if (level == DifficultyLevel.Easy) return ("سهل", "pp-badge-ok");
+        if (level == DifficultyLevel.Medium) return ("متوسط", "pp-badge-warn");
+        return ("صعب", "pp-badge-bad");
+    }
+}
+
+@{
+    ViewData["Title"] = "تفاصيل اختبار تحديد المستوى";
+
+    var completedCount = Model.StudentStatuses.Count(s => s.HasStatus && s.Status == ExamStatus.Completed);
+    var pendingCount = Model.StudentStatuses.Count(s => StudentState(s).Key == "pending");
+    var notStartedCount = Model.StudentStatuses.Count(s => !s.HasStatus);
+    var totalStudents = Model.StudentStatuses.Count;
+    var completionPct = totalStudents > 0 ? (int)Math.Round((double)completedCount / totalStudents * 100) : 0;
+}
+
+<div class="pp-page">
+    <partial name="_PlacementAlerts" />
+
+    <div class="pp-head">
+        <div>
+            <h1><i class="fa-solid fa-circle-info" aria-hidden="true"></i> @Model.Title</h1>
+            <p>
+                @Model.CreatedAt.ToString("yyyy/MM/dd HH:mm") · @(Model.IsInLab ? "حضوري" : "أونلاين")
+            </p>
+        </div>
+
+        <div class="pp-head-actions">
+            @if (Model.AssignedBatches.Any() && !Model.AssignedBatches.Any(b => b.IsSentToStudents))
+            {
+                <a asp-action="ConfirmSend" asp-route-examId="@Model.ExamId" class="pp-btn pp-btn-primary">
+                    <i class="fa-solid fa-paper-plane" aria-hidden="true"></i>
+                    إرسال للطلاب
+                </a>
+            }
+
+            <a asp-action="Review" asp-route-examId="@Model.ExamId" class="pp-btn pp-btn-light">
+                <i class="fa-solid fa-clipboard-check" aria-hidden="true"></i>
+                مراجعة الأسئلة
+            </a>
+            <a asp-action="Index" class="pp-btn pp-btn-light">
+                <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                العودة للقائمة
+            </a>
+        </div>
+    </div>
+
+    <div class="pp-stats">
+        <div class="pp-stat"><b>@Model.TotalQuestions</b><span>إجمالي الأسئلة</span></div>
+        <div class="pp-stat"><b>@Model.DurationMinutes</b><span>المدة (دقيقة)</span></div>
+        <div class="pp-stat"><b>@totalStudents</b><span>إجمالي الطلاب</span></div>
+        <div class="pp-stat"><b>@completionPct%</b><span>نسبة الإنجاز</span></div>
+    </div>
+
+    @if (Model.IsInLab)
+    {
+        <div class="pp-card">
+            <h2 class="pp-card-title"><i class="fa-solid fa-key" aria-hidden="true"></i> الكود المرجعي لفتح الاختبار</h2>
+            <div class="pp-code">@Model.ReferenceCode</div>
+        </div>
+    }
+
+    <div class="pp-card">
+        <h2 class="pp-card-title"><i class="fa-solid fa-users" aria-hidden="true"></i> الدفعات المرتبطة</h2>
+
+        @if (!Model.AssignedBatches.Any())
+        {
+            <div class="pp-state">هذا الاختبار غير مرتبط بدفعة، فهو اختبار لطالب واحد.</div>
+        }
+        else
+        {
+            <div class="pp-table-wrap">
+                <table class="pp-table pp-table-cards">
+                    <thead>
+                        <tr>
+                            <th>الدفعة</th>
+                            <th>عدد الطلاب</th>
+                            <th>حالة الإرسال</th>
+                            <th>الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var batch in Model.AssignedBatches)
+                        {
+                            <tr>
+                                <td data-label="الدفعة">
+                                    <a asp-action="BatchExams" asp-route-batchId="@batch.BatchId">@batch.BatchName</a>
+                                </td>
+                                <td data-label="عدد الطلاب">@batch.StudentCount</td>
+                                <td data-label="حالة الإرسال">
+                                    @if (batch.IsSentToStudents)
+                                    {
+                                        <span class="pp-badge pp-badge-ok">مُرسل</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="pp-badge pp-badge-warn">مسودة</span>
+                                    }
+                                </td>
+                                <td data-label="الإجراءات">
+                                    @if (batch.IsSentToStudents)
+                                    {
+                                        <div class="pp-actions">
+                                            <a asp-action="BatchStudents" asp-route-examId="@Model.ExamId" asp-route-batchId="@batch.BatchId" class="pp-btn pp-btn-light pp-btn-sm">
+                                                <i class="fa-solid fa-chart-column" aria-hidden="true"></i>
+                                                النتائج
+                                            </a>
+
+                                            <form asp-action="SendExamToNewStudents" method="post"
+                                                  data-confirm="سيصل الاختبار لأي طالب انضم للدفعة «@batch.BatchName» بعد الإرسال الأول فقط."
+                                                  data-confirm-text="نعم، إرسال">
+                                                <input type="hidden" name="examId" value="@Model.ExamId" />
+                                                <input type="hidden" name="batchId" value="@batch.BatchId" />
+                                                <button type="submit" class="pp-btn pp-btn-ok pp-btn-sm">
+                                                    <i class="fa-solid fa-user-plus" aria-hidden="true"></i>
+                                                    إرسال للطلاب الجدد
+                                                </button>
+                                            </form>
+
+                                            <form asp-action="BackfillMissingAssignments" method="post"
+                                                  data-confirm="سيتم إصلاح بيانات أي طالب أنهى الاختبار فعليًا لكن بلا سجل تعيين، حتى تظهر نتيجته."
+                                                  data-confirm-text="نعم، إصلاح">
+                                                <input type="hidden" name="examId" value="@Model.ExamId" />
+                                                <input type="hidden" name="batchId" value="@batch.BatchId" />
+                                                <button type="submit" class="pp-btn pp-btn-light pp-btn-sm">
+                                                    <i class="fa-solid fa-screwdriver-wrench" aria-hidden="true"></i>
+                                                    إصلاح البيانات
+                                                </button>
+                                            </form>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span>—</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+
+    <div class="pp-card">
+        <h2 class="pp-card-title"><i class="fa-solid fa-diagram-project" aria-hidden="true"></i> أسئلة الاختبار</h2>
+        <p class="pp-card-sub">@Model.Sections.Count محور</p>
+
+        @if (!Model.Sections.Any())
+        {
+            <div class="pp-state">لا توجد أسئلة مرتبطة بهذا الاختبار.</div>
+        }
+
+        @foreach (var sec in Model.Sections)
+        {
+            <details class="pp-section">
+                <summary>
+                    <span>@sec.SectionTitle</span>
+                    <span class="pp-badge pp-badge-main">@sec.Questions.Count سؤال</span>
+                </summary>
+                <div class="pp-table-wrap">
+                    <table class="pp-table pp-table-cards">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>نص السؤال</th>
+                                <th>المؤشر</th>
+                                <th>الصعوبة</th>
+                                <th>الإجابة الصحيحة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var question in sec.Questions.OrderBy(x => x.Order))
+                            {
+                                var difficulty = Difficulty(question.Difficulty);
+
+                                <tr>
+                                    <td data-label="#">@question.Order</td>
+                                    <td data-label="نص السؤال">@Html.Raw(NumberHelper.ToIndicNumbersSafe(question.Title))</td>
+                                    <td data-label="المؤشر">@(string.IsNullOrEmpty(question.LessonTitle) ? "—" : question.LessonTitle)</td>
+                                    <td data-label="الصعوبة"><span class="pp-badge @difficulty.Css">@difficulty.Text</span></td>
+                                    <td data-label="الإجابة الصحيحة">@Html.Raw(NumberHelper.ToIndicNumbersSafe(question.CorrectAnswer ?? "—"))</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+        }
+    </div>
+
+    <div class="pp-card">
+        <h2 class="pp-card-title"><i class="fa-solid fa-user-graduate" aria-hidden="true"></i> حالة الطلاب</h2>
+
+        @if (!Model.StudentStatuses.Any())
+        {
+            <div class="pp-empty">
+                <i class="fa-solid fa-users-slash" aria-hidden="true"></i>
+                <h2>لا يوجد طلاب مرتبطون بهذا الاختبار</h2>
+            </div>
+        }
+        else
+        {
+            <div class="pp-tabs" role="group" aria-label="تصفية الطلاب حسب الحالة">
+                <button type="button" class="pp-tab is-active" data-filter="all">الكل (@totalStudents)</button>
+                <button type="button" class="pp-tab" data-filter="completed">تم الحل (@completedCount)</button>
+                <button type="button" class="pp-tab" data-filter="pending">قيد الانتظار (@pendingCount)</button>
+                <button type="button" class="pp-tab" data-filter="notstarted">لم يُرسل بعد (@notStartedCount)</button>
+            </div>
+
+            <div class="pp-table-wrap">
+                <table class="pp-table pp-table-cards">
+                    <thead>
+                        <tr>
+                            <th>الطالب</th>
+                            <th>الدفعة</th>
+                            <th>الحالة</th>
+                            <th>تاريخ الإسناد</th>
+                            <th>تاريخ التسليم</th>
+                            <th>الدرجة</th>
+                            <th>الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="studentsBody">
+                        @foreach (var student in Model.StudentStatuses)
+                        {
+                            var state = StudentState(student);
+
+                            <tr data-status="@state.Key">
+                                <td data-label="الطالب">@student.StudentName</td>
+                                <td data-label="الدفعة">@(string.IsNullOrEmpty(student.BatchName) ? "—" : student.BatchName)</td>
+                                <td data-label="الحالة"><span class="pp-badge @state.Css">@state.Label</span></td>
+                                <td data-label="تاريخ الإسناد">@(student.HasStatus ? student.AssignedAt.ToString("yyyy/MM/dd HH:mm") : "—")</td>
+                                <td data-label="تاريخ التسليم">@(student.SubmittedAt?.ToString("yyyy/MM/dd HH:mm") ?? "—")</td>
+                                <td data-label="الدرجة">@(student.Score.HasValue ? $"{student.Score}/100" : "—")</td>
+                                <td data-label="الإجراءات">
+                                    <div class="pp-actions">
+                                        @if (student.HasStatus && student.Status != ExamStatus.Pending)
+                                        {
+                                            <a asp-action="StudentPlacementReport" asp-route-studentId="@student.StudentId" asp-route-examId="@Model.ExamId" class="pp-btn pp-btn-light pp-btn-sm">
+                                                <i class="fa-solid fa-chart-pie" aria-hidden="true"></i>
+                                                التقرير
+                                            </a>
+                                        }
+
+                                        @if (student.CanResend)
+                                        {
+                                            <form asp-action="ResendExamToStudent" method="post"
+                                                  data-confirm="سيُعاد الاختبار للطالب «@student.StudentName» وتُحذف إجاباته ونتيجته السابقة نهائيًا."
+                                                  data-confirm-text="نعم، إعادة الإرسال">
+                                                <input type="hidden" name="examId" value="@Model.ExamId" />
+                                                <input type="hidden" name="studentId" value="@student.StudentId" />
+                                                <button type="submit" class="pp-btn pp-btn-light pp-btn-sm">
+                                                    <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
+                                                    إعادة الإرسال
+                                                </button>
+                                            </form>
+                                        }
+                                        else if (!student.HasStatus || student.Status == ExamStatus.Pending)
+                                        {
+                                            <span>—</span>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="~/js/partner-placement.js" asp-append-version="true"></script>
+
+    <script>
+        (function () {
+            const tabs = document.querySelectorAll(".pp-tab");
+            const rows = document.querySelectorAll("#studentsBody tr");
+
+            tabs.forEach(function (tab) {
+                tab.addEventListener("click", function () {
+                    const filter = tab.dataset.filter;
+
+                    tabs.forEach(function (other) { other.classList.toggle("is-active", other === tab); });
+                    rows.forEach(function (row) {
+                        row.style.display = filter === "all" || row.dataset.status === filter ? "" : "none";
+                    });
+                });
+            });
+        })();
+    </script>
+}

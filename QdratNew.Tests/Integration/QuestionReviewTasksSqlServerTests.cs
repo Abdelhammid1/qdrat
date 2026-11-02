@@ -33,10 +33,9 @@ namespace QdratNew.Tests.Integration
     }
 
     // مجموعة واحدة متسلسلة مع E2E: كلاهما يكتب في قاعدة الاختبار نفسها ويحذف بالعلامة (تجنّب Timeout من التوازي)
-    [CollectionDefinition(Name)]
     public sealed class QrtSharedTestDbCollection
     {
-        public const string Name = "QRT shared SQL test database";
+        public const string Name = RemedialTrackSharedTestDbCollection.Name;
     }
 
     [Collection(QrtSharedTestDbCollection.Name)]

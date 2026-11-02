@@ -1,0 +1,200 @@
+@model QdratNew.ViewModels.Partner.PartnerPlacementReportPageVm<QdratNew.Services.Exams.Placement.PlacementBatchStudentsData>
+@using QdratNew.Enums
+
+@{
+    ViewData["Title"] = "طلاب الاختبار";
+
+    var students = Model.Report.Students;
+    var submittedCount = students.Count(s => s.IsSubmitted);
+    var inProgressCount = students.Count(s => !s.IsSubmitted && s.ExamStatus == ExamStatus.InProgress);
+    var withScore = students.Where(s => s.Score > 0).ToList();
+    var average = withScore.Any() ? Math.Round(withScore.Average(s => s.Score), 1) : 0;
+}
+
+<div class="pp-page">
+    <partial name="_PlacementAlerts" />
+
+    <div class="pp-head">
+        <div>
+            <h1><i class="fa-solid fa-user-graduate" aria-hidden="true"></i> @Model.Report.ExamTitle</h1>
+            <p>نتائج طلاب الدفعة: @(Model.Report.BatchName ?? "—")</p>
+        </div>
+
+        <div class="pp-head-actions no-print">
+            <a asp-action="BatchPerformanceReport" asp-route-examId="@Model.ExamId" asp-route-batchId="@Model.BatchId" class="pp-btn pp-btn-light">
+                <i class="fa-solid fa-chart-column" aria-hidden="true"></i>
+                أداء الدفعة
+            </a>
+
+            @if (Model.IsReadOnly)
+            {
+                <a asp-controller="Reports" asp-action="BatchPlacementExams" asp-route-batchId="@Model.BatchId" class="pp-btn pp-btn-light">
+                    <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                    اختبارات الدفعة
+                </a>
+            }
+            else
+            {
+                <a asp-action="BatchExams" asp-route-batchId="@Model.BatchId" class="pp-btn pp-btn-light">
+                    <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                    اختبارات الدفعة
+                </a>
+            }
+        </div>
+    </div>
+
+    @if (Model.IsReadOnly)
+    {
+        <div class="pp-alert pp-alert-warn" role="status">
+            <i class="fa-solid fa-lock" aria-hidden="true"></i>
+            <span>انتهى عقدكم، والتقارير متاحة للاطلاع فقط حتى نهاية فترة الوصول.</span>
+        </div>
+    }
+
+    <div class="pp-stats">
+        <div class="pp-stat"><b>@students.Count</b><span>إجمالي الطلاب</span></div>
+        <div class="pp-stat"><b>@submittedCount</b><span>أكملوا الاختبار</span></div>
+        <div class="pp-stat"><b>@inProgressCount</b><span>قيد الحل</span></div>
+        <div class="pp-stat"><b>@average%</b><span>متوسط الدرجات</span></div>
+    </div>
+
+    <div class="pp-card">
+        @if (!students.Any())
+        {
+            <div class="pp-empty">
+                <i class="fa-solid fa-users-slash" aria-hidden="true"></i>
+                <h2>لا يوجد طلاب في هذه الدفعة</h2>
+                <p>تظهر النتائج هنا بعد انضمام الطلاب للدفعة وإرسال الاختبار إليهم.</p>
+            </div>
+        }
+        else
+        {
+            <div class="pp-toolbar">
+                <h2 class="pp-card-title"><i class="fa-solid fa-table-list" aria-hidden="true"></i> الطلاب</h2>
+                <input type="search"
+                       class="pp-search"
+                       placeholder="ابحث باسم الطالب..."
+                       aria-label="ابحث باسم الطالب"
+                       data-search-target=".pp-student-row" />
+            </div>
+
+            <div class="pp-table-wrap">
+                <table class="pp-table pp-table-cards">
+                    <thead>
+                        <tr>
+                            <th>الطالب</th>
+                            <th>الحالة</th>
+                            <th>النسبة</th>
+                            <th>الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var student in students)
+                        {
+                            var hasResults = student.IsSubmitted || student.ExamStatus == ExamStatus.InProgress || student.Score > 0;
+                            var scoreCss = student.Score >= 85 ? "is-good" : student.Score >= 60 ? "is-mid" : "is-low";
+
+                            <tr class="pp-student-row" data-search="@student.StudentName">
+                                <td data-label="الطالب">
+                                    @student.StudentName
+                                    @if (student.IsIntegrityBlocked)
+                                    {
+                                        <span class="pp-badge pp-badge-bad">موقوف (ترجمة المتصفح)</span>
+                                    }
+                                </td>
+                                <td data-label="الحالة">
+                                    @if (student.IsSubmitted)
+                                    {
+                                        <span class="pp-badge pp-badge-ok"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> تم الحل</span>
+                                    }
+                                    else if (student.ExamStatus == ExamStatus.InProgress)
+                                    {
+                                        <span class="pp-badge pp-badge-main"><i class="fa-solid fa-pen" aria-hidden="true"></i> قيد الحل</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="pp-badge pp-badge-muted"><i class="fa-solid fa-hourglass-half" aria-hidden="true"></i> لم يبدأ بعد</span>
+                                    }
+                                </td>
+                                <td data-label="النسبة">
+                                    @if (student.Score > 0)
+                                    {
+                                        <div class="pp-score">
+                                            <div class="pp-bar"><span class="@scoreCss" style="width:@((int)Math.Min(student.Score, 100))%"></span></div>
+                                            <b>@student.Score.ToString("0.0")%</b>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span>—</span>
+                                    }
+                                </td>
+                                <td data-label="الإجراءات">
+                                    <div class="pp-actions">
+                                        @if (hasResults)
+                                        {
+                                            <a asp-action="StudentPlacementReport"
+                                               asp-route-studentId="@student.StudentId"
+                                               asp-route-examId="@Model.ExamId"
+                                               asp-route-assignmentId="@student.AssignmentId"
+                                               asp-route-batchId="@Model.BatchId"
+                                               class="pp-btn pp-btn-light pp-btn-sm">
+                                                <i class="fa-solid fa-chart-pie" aria-hidden="true"></i>
+                                                تقرير الطالب
+                                            </a>
+
+                                            @if (student.AssignmentId > 0)
+                                            {
+                                                <a asp-action="ExamSectionAnalysis"
+                                                   asp-route-assignmentId="@student.AssignmentId"
+                                                   asp-route-studentId="@student.StudentId"
+                                                   asp-route-batchId="@Model.BatchId"
+                                                   class="pp-btn pp-btn-light pp-btn-sm">
+                                                    <i class="fa-solid fa-diagram-project" aria-hidden="true"></i>
+                                                    تقرير المحاور
+                                                </a>
+                                            }
+
+                                            <a asp-action="StudentExamDetails"
+                                               asp-route-examId="@Model.ExamId"
+                                               asp-route-studentId="@student.StudentId"
+                                               asp-route-batchId="@Model.BatchId"
+                                               class="pp-btn pp-btn-light pp-btn-sm">
+                                                <i class="fa-solid fa-list-check" aria-hidden="true"></i>
+                                                الإجابات
+                                            </a>
+                                        }
+
+                                        @if (!Model.IsReadOnly && student.AssignmentId > 0)
+                                        {
+                                            <form asp-action="ResendExamToStudent" method="post"
+                                                  data-confirm="سيُعاد الاختبار للطالب «@student.StudentName» وتُحذف إجاباته ونتيجته السابقة نهائيًا."
+                                                  data-confirm-text="نعم، إعادة الإرسال">
+                                                <input type="hidden" name="examId" value="@Model.ExamId" />
+                                                <input type="hidden" name="studentId" value="@student.StudentId" />
+                                                <button type="submit" class="pp-btn pp-btn-light pp-btn-sm">
+                                                    <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
+                                                    إعادة الإرسال
+                                                </button>
+                                            </form>
+                                        }
+
+                                        @if (!hasResults && (Model.IsReadOnly || student.AssignmentId <= 0))
+                                        {
+                                            <span>—</span>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="~/js/partner-placement.js" asp-append-version="true"></script>
+}

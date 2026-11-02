@@ -27,6 +27,9 @@ namespace QdratNew.ViewModels.Exam
         public bool IsActive { get; set; }
         public string? ReferenceCode { get; set; }
 
+        // PPL-S4: false = مسودة لم تُرسل لطلاب الدفعة
+        public bool IsSentToStudents { get; set; }
+
         // ✅ عدد الطلاب الذين قاموا فعلاً باختبار هذا الاختبار ضمن الدفعة
         public int TestedCount { get; set; }
 

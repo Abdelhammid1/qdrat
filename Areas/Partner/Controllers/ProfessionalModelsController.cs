@@ -70,12 +70,15 @@ namespace QdratNew.Areas.Partner.Controllers
         // =========================================
         // 👁️ معاينة النموذج
         // =========================================
-        public IActionResult Preview(int id)
+        public async Task<IActionResult> Preview(int id)
         {
-            var model = _context.ProfessionalModels
+            if (!await IsModelAvailableForPartnerAsync(id))
+                return NotFound();
+
+            var model = await _context.ProfessionalModels
                 .Include(m => m.Questions)
                 .ThenInclude(q => q.Question)
-                .FirstOrDefault(m => m.Id == id && !m.IsArchived);
+                .FirstOrDefaultAsync(m => m.Id == id && !m.IsArchived);
 
             if (model == null)
                 return NotFound();

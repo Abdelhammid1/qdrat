@@ -1,0 +1,136 @@
+@model QdratNew.ViewModels.Partner.PartnerPlacementReportPageVm<QdratNew.ViewModels.Reports.BatchLessonQuestionsReportViewModel>
+@using QdratNew.Enums
+
+@{
+    ViewData["Title"] = "تقرير أسئلة المؤشر";
+
+    var report = Model.Report;
+
+    string FormatSeconds(double seconds)
+    {
+        if (seconds <= 0) return "—";
+        if (seconds < 60) return $"{(int)seconds} ث";
+        return $"{(int)seconds / 60}:{(int)seconds % 60:D2} د";
+    }
+}
+
+<div class="pp-page">
+    <partial name="_PlacementAlerts" />
+
+    <div class="pp-head">
+        <div>
+            <h1><i class="fa-solid fa-puzzle-piece" aria-hidden="true"></i> تقرير أسئلة المؤشر: @report.LessonTitle</h1>
+            <p>@report.SectionTitle · @report.ExamTitle</p>
+        </div>
+
+        <div class="pp-head-actions no-print">
+            @if (Model.BatchId > 0)
+            {
+                <a asp-action="BatchPerformanceReport" asp-route-examId="@Model.ExamId" asp-route-batchId="@Model.BatchId" class="pp-btn pp-btn-light">
+                    <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                    أداء الدفعة
+                </a>
+            }
+            else
+            {
+                <a href="javascript:history.back()" class="pp-btn pp-btn-light">
+                    <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                    عودة
+                </a>
+            }
+        </div>
+    </div>
+
+    <div class="pp-stats">
+        <div class="pp-stat"><b>@report.TotalQuestions</b><span>إجمالي الأسئلة</span></div>
+        <div class="pp-stat"><b>@report.TotalCorrect</b><span>إجابات صحيحة</span></div>
+        <div class="pp-stat"><b>@report.TotalWrong</b><span>إجابات خاطئة</span></div>
+        <div class="pp-stat"><b>@Math.Round(report.OverallPercent, 1)%</b><span>النسبة العامة</span></div>
+    </div>
+
+    <div class="pp-card">
+        @for (var i = 0; i < report.Questions.Count; i++)
+        {
+            var question = report.Questions[i];
+            var isCompare = question.Template == QuestionTemplate.CompareValues || question.Template == QuestionTemplate.CompareWithImage;
+            var percentCss = question.Percent >= 70 ? "pp-badge-ok" : question.Percent >= 40 ? "pp-badge-warn" : "pp-badge-bad";
+
+            <div class="pp-question">
+                <div class="pp-question-head">
+                    <span class="pp-qnum">@(i + 1)</span>
+                    <span class="pp-badge @percentCss"><i class="fa-solid fa-chart-simple" aria-hidden="true"></i> @Math.Round(question.Percent, 1)%</span>
+                    <span class="pp-badge pp-badge-ok">@question.CorrectAnswers صحيح</span>
+                    <span class="pp-badge pp-badge-bad">@question.WrongAnswers خطأ</span>
+                    <span class="pp-badge pp-badge-muted">@question.SkippedCount لم يُجب</span>
+                    @if (question.TotalAnswers > 0)
+                    {
+                        <span class="pp-badge pp-badge-muted"><i class="fa-solid fa-clock" aria-hidden="true"></i> @FormatSeconds(question.AvgTimeTakenSeconds)</span>
+                    }
+                </div>
+
+                @if (question.HasVerbalPassage)
+                {
+                    if (question.VerbalPassageType == PassageType.Audio && !string.IsNullOrWhiteSpace(question.VerbalPassageMediaUrl))
+                    {
+                        <div class="pp-passage">
+                            <b>@(question.VerbalPassageTitle ?? "قطعة صوتية")</b>
+                            <audio controls preload="none" src="@question.VerbalPassageMediaUrl">متصفحك لا يدعم تشغيل الصوت.</audio>
+                        </div>
+                    }
+                    else if (!string.IsNullOrWhiteSpace(question.VerbalPassageContent))
+                    {
+                        <div class="pp-passage">
+                            <b>@(question.VerbalPassageTitle ?? "قطعة لفظية")</b>
+                            <div>@Html.Raw(question.VerbalPassageContent)</div>
+                        </div>
+                    }
+                }
+
+                @if (isCompare && (!string.IsNullOrWhiteSpace(question.ValueA) || !string.IsNullOrWhiteSpace(question.ValueB)))
+                {
+                    <div class="pp-compare">
+                        <div>@Html.Raw(NumberHelper.ToIndicNumbersSafe(question.ValueA ?? "—"))</div>
+                        <span>مقارنة</span>
+                        <div>@Html.Raw(NumberHelper.ToIndicNumbersSafe(question.ValueB ?? "—"))</div>
+                    </div>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(question.ImageUrl))
+                {
+                    <img src="@question.ImageUrl" alt="صورة السؤال" class="pp-question-img" loading="lazy" />
+                }
+
+                <div class="pp-question-title">@Html.Raw(NumberHelper.ToIndicNumbersSafe(question.QuestionTitle ?? string.Empty))</div>
+
+                @if (question.Options.Any())
+                {
+                    <div class="pp-options">
+                        @foreach (var option in question.Options)
+                        {
+                            <div class="pp-option @(option.IsCorrect ? "is-correct" : string.Empty)">
+                                <span class="pp-option-label">@option.Label</span>
+                                <div class="pp-option-body">
+                                    @if (!string.IsNullOrWhiteSpace(option.ImageUrl))
+                                    {
+                                        <img src="@option.ImageUrl" alt="صورة الاختيار" loading="lazy" />
+                                    }
+                                    @Html.Raw(NumberHelper.ToIndicNumbersSafe(option.Text ?? string.Empty))
+                                    <div class="pp-bar"><span class="@(option.IsCorrect ? "is-good" : "is-mid")" style="width:@((int)Math.Min(option.SelectionPercent, 100))%"></span></div>
+                                </div>
+                                <span class="pp-badge pp-badge-muted">@option.SelectedCount (@option.SelectionPercent%)</span>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+
+        @if (!report.Questions.Any())
+        {
+            <div class="pp-empty">
+                <i class="fa-solid fa-inbox" aria-hidden="true"></i>
+                <h2>لا توجد أسئلة لهذا المؤشر</h2>
+            </div>
+        }
+    </div>
+</div>

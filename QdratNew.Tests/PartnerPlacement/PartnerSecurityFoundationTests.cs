@@ -226,7 +226,7 @@ namespace QdratNew.Tests.PartnerPlacement
         public void Filter_ExpiredContractWithinAccessWindow_AllowsReportsOnly()
         {
             var service = new Mock<IPartnerSubscriptionService>();
-            service.Setup(s => s.HasDataAccess(PartnerId)).Returns(true);
+            service.Setup(s => s.CanReadFeatureAfterExpiry(PartnerId, PartnerFeatureType.Exams)).Returns(true);
 
             var report = CreateFilterContext(CreateHttpContext(PartnerId), new object(),
                 metadata: new PartnerFeatureAttribute(PartnerFeatureType.Exams) { AllowReadAfterExpiry = true });
@@ -245,7 +245,7 @@ namespace QdratNew.Tests.PartnerPlacement
         public void Filter_ExpiredContractPastAccessWindow_BlocksReports()
         {
             var service = new Mock<IPartnerSubscriptionService>();
-            service.Setup(s => s.HasDataAccess(PartnerId)).Returns(false);
+            service.Setup(s => s.CanReadFeatureAfterExpiry(PartnerId, PartnerFeatureType.Exams)).Returns(false);
             var context = CreateFilterContext(CreateHttpContext(PartnerId), new object(),
                 metadata: new PartnerFeatureAttribute(PartnerFeatureType.Exams) { AllowReadAfterExpiry = true });
 
@@ -259,13 +259,62 @@ namespace QdratNew.Tests.PartnerPlacement
         {
             var service = new Mock<IPartnerSubscriptionService>();
             service.Setup(s => s.GetActiveSubscription(PartnerId)).Returns(new PartnerSubscription { PartnerId = PartnerId });
-            service.Setup(s => s.HasDataAccess(PartnerId)).Returns(true);
+            service.Setup(s => s.CanReadFeatureAfterExpiry(PartnerId, PartnerFeatureType.Exams)).Returns(true);
             var context = CreateFilterContext(CreateHttpContext(PartnerId), new object(),
                 metadata: new PartnerFeatureAttribute(PartnerFeatureType.Exams) { AllowReadAfterExpiry = true });
 
             new PartnerFeatureFilter(service.Object).OnActionExecuting(context);
 
             Assert.IsType<ViewResult>(context.Result);
+        }
+
+        // PPL-S6
+        [Theory]
+        [InlineData(true, 5, true)]    // العقد المنتهي شمل الميزة وداخل فترة الوصول
+        [InlineData(false, 5, false)]  // لم يشملها: لا قراءة رغم فترة الوصول
+        [InlineData(true, -1, false)]  // شملها لكن فترة الوصول انتهت
+        public void SubscriptionService_ReadAfterExpiry_RequiresFeatureOnLastContract(bool included, int accessDays, bool expected)
+        {
+            using var db = TestDbContextFactory.CreateFreshContext(out _);
+            db.PartnerSubscriptions.Add(new PartnerSubscription
+            {
+                PartnerId = PartnerId,
+                StartDate = DateTime.Today.AddDays(-60),
+                EndDate = DateTime.Today.AddDays(-5),
+                AccessUntilDate = DateTime.Today.AddDays(accessDays),
+                CanUsePlacementExams = included
+            });
+            db.SaveChanges();
+
+            var service = new QdratNew.Implementations.PartnerSubscriptionService(db);
+
+            Assert.Equal(expected, service.CanReadFeatureAfterExpiry(PartnerId, PartnerFeatureType.PlacementExams));
+            Assert.Equal(expected, service.CanReadPlacementReports(PartnerId));
+        }
+
+        [Fact]
+        public void SubscriptionService_ReadAfterExpiry_IgnoresContractThatHasNotStarted()
+        {
+            using var db = TestDbContextFactory.CreateFreshContext(out _);
+            db.PartnerSubscriptions.AddRange(
+                new PartnerSubscription
+                {
+                    PartnerId = PartnerId,
+                    StartDate = DateTime.Today.AddDays(-60),
+                    EndDate = DateTime.Today.AddDays(-5),
+                    AccessUntilDate = DateTime.Today.AddDays(5),
+                    CanUsePlacementExams = true
+                },
+                new PartnerSubscription
+                {
+                    PartnerId = PartnerId,
+                    StartDate = DateTime.Today.AddDays(10),
+                    EndDate = DateTime.Today.AddDays(100)
+                });
+            db.SaveChanges();
+
+            Assert.True(new QdratNew.Implementations.PartnerSubscriptionService(db)
+                .CanReadFeatureAfterExpiry(PartnerId, PartnerFeatureType.PlacementExams));
         }
 
         [Fact]
@@ -400,6 +449,23 @@ namespace QdratNew.Tests.PartnerPlacement
             Assert.IsType<NotFoundResult>(await controller.SendCustomized(1, new List<Guid> { Guid.NewGuid() }));
 
             Assert.Empty(assignment.Invocations);
+        }
+
+        [Fact]
+        public async Task PreviewModel_FollowsPartnerAvailability()
+        {
+            using var db = TestDbContextFactory.CreateFreshContext(out _);
+            db.ProfessionalModels.AddRange(NewModel(1), NewModel(2), NewModel(3, isGlobal: true));
+            db.ProfessionalModelPartners.AddRange(
+                new ProfessionalModelPartner { ProfessionalModelId = 1, PartnerId = PartnerId + 1 },
+                new ProfessionalModelPartner { ProfessionalModelId = 2, PartnerId = PartnerId });
+            db.SaveChanges();
+
+            var (controller, _) = CreateModelsController(db, CreateHttpContext(PartnerId));
+
+            Assert.IsType<NotFoundResult>(await controller.Preview(1));
+            Assert.IsType<ViewResult>(await controller.Preview(2));
+            Assert.IsType<ViewResult>(await controller.Preview(3));
         }
 
         [Fact]

@@ -934,6 +934,8 @@ builder.Services.AddScoped<IPlacementExamGeneratorService, PlacementExamGenerato
 // PPL-S2: خدمة إدارة اختبارات تحديد المستوى المشتركة بين الأدمن والشريك + حارس النطاق
 builder.Services.AddScoped<QdratNew.Services.Exams.Placement.IPlacementExamScopeGuard, QdratNew.Services.Exams.Placement.PlacementExamScopeGuard>();
 builder.Services.AddScoped<QdratNew.Services.Exams.Placement.IPlacementExamManagementService, QdratNew.Services.Exams.Placement.PlacementExamManagementService>();
+// PPL-S3: خدمة تقارير اختبارات تحديد المستوى المشتركة
+builder.Services.AddScoped<QdratNew.Services.Exams.Placement.IPlacementExamReportService, QdratNew.Services.Exams.Placement.PlacementExamReportService>();
 builder.Services.AddScoped<ITimeZoneService, TimeZoneService>();
 builder.Services.AddScoped<IStudentExamStatisticsService, StudentExamStatisticsService>();
 builder.Services.AddScoped<IExamRecommendationService, ExamRecommendationService>();
@@ -1204,6 +1206,15 @@ builder.Services.AddRateLimiter(o =>
         _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
         {
             PermitLimit = 60,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        }));
+    // PPL-S7.1: PDF تقارير الشريك — 30 طلبًا / دقيقة لكل مستخدم
+    o.AddPolicy("ppl-report-pdf", ctx => System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+        ctx.User?.Identity?.Name ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "anon",
+        _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 30,
             Window = TimeSpan.FromMinutes(1),
             QueueLimit = 0
         }));

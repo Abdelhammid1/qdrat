@@ -1,0 +1,222 @@
+@model QdratNew.ViewModels.Exam.PlacementExamReviewVm
+@using QdratNew.Enums
+
+@functions {
+    string Fmt(string? value) => NumberHelper.ToIndicNumbersSafe(value ?? string.Empty);
+
+    (string Text, string Css) Difficulty(DifficultyLevel level)
+    {
+        if (level == DifficultyLevel.Easy) return ("سهل", "pp-badge-ok");
+        if (level == DifficultyLevel.Medium) return ("متوسط", "pp-badge-warn");
+        return ("صعب", "pp-badge-bad");
+    }
+}
+
+@{
+    ViewData["Title"] = "مراجعة اختبار تحديد المستوى";
+}
+
+<div class="pp-page">
+    <partial name="_PlacementAlerts" />
+
+    <div class="pp-head">
+        <div>
+            <h1><i class="fa-solid fa-clipboard-check" aria-hidden="true"></i> مراجعة اختبار تحديد المستوى</h1>
+            <p>@Model.ExamTitle</p>
+        </div>
+
+        <div class="pp-head-actions">
+            @if (Model.CanSend)
+            {
+                <a asp-action="ConfirmSend" asp-route-examId="@Model.ExamId" class="pp-btn pp-btn-primary">
+                    <i class="fa-solid fa-paper-plane" aria-hidden="true"></i>
+                    إرسال للطلاب
+                </a>
+            }
+
+            <a asp-action="Index" class="pp-btn pp-btn-light">
+                <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                العودة للقائمة
+            </a>
+        </div>
+    </div>
+
+    <div class="pp-stats">
+        <div class="pp-stat"><b>@Fmt(Model.TotalQuestions.ToString())</b><span>إجمالي الأسئلة</span></div>
+        <div class="pp-stat"><b>@Fmt(Model.Sections.Count.ToString())</b><span>عدد المحاور</span></div>
+        <div class="pp-stat"><b>@Fmt(Model.DurationMinutes.ToString())</b><span>الزمن (دقيقة)</span></div>
+        <div class="pp-stat"><b>@(Model.IsInLab ? "حضوري" : "أونلاين")</b><span>طريقة الاختبار</span></div>
+    </div>
+
+    @if (Model.CanEditQuestions)
+    {
+        <div class="pp-alert pp-alert-info" role="status">
+            <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+            <span>هذا الاختبار مسودة لم تصل للطلاب بعد. راجع الأسئلة، ويمكنك استبدال سؤال أو إضافة سؤال من البنك.</span>
+        </div>
+    }
+    else
+    {
+        <div class="pp-alert pp-alert-warn" role="status">
+            <i class="fa-solid fa-lock" aria-hidden="true"></i>
+            <span>تعديل الأسئلة غير متاح: الاختبار أُرسل للطلاب، أو أن بنك أسئلة هذه الدورة غير مشمول في عقدكم.</span>
+        </div>
+    }
+
+    @if (Model.IsInLab)
+    {
+        <div class="pp-card">
+            <h2 class="pp-card-title"><i class="fa-solid fa-key" aria-hidden="true"></i> الكود المرجعي لفتح الاختبار</h2>
+            <p class="pp-card-sub">يُعطى للطلاب قبل بداية الاختبار الحضوري.</p>
+            <div class="pp-code">@Model.ReferenceCode</div>
+        </div>
+    }
+
+    <div class="pp-card">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div>
+                <h2 class="pp-card-title"><i class="fa-solid fa-circle-question" aria-hidden="true"></i> خيار «لا أعرف الإجابة»</h2>
+                <p class="pp-card-sub mb-0">
+                    عند التفعيل يظهر للطالب اختيار خامس في كل أسئلة هذا الاختبار، ويُحتسب إجابة خاطئة في النتيجة.
+                </p>
+            </div>
+
+            <div class="form-check form-switch fs-4 mb-0">
+                @Html.AntiForgeryToken()
+                <input class="form-check-input" type="checkbox" role="switch"
+                       id="allowDontKnowSwitch"
+                       aria-label="تفعيل خيار لا أعرف الإجابة"
+                       checked="@Model.AllowDontKnowOption" />
+            </div>
+        </div>
+    </div>
+
+    @if (!Model.Sections.Any())
+    {
+        <div class="pp-card">
+            <div class="pp-empty">
+                <i class="fa-solid fa-inbox" aria-hidden="true"></i>
+                <h2>لا توجد أسئلة مرتبطة بهذا الاختبار</h2>
+            </div>
+        </div>
+    }
+
+    @foreach (var sec in Model.Sections)
+    {
+        <div class="pp-card">
+            <div class="pp-toolbar">
+                <h2 class="pp-card-title">
+                    <i class="fa-solid fa-diagram-project" aria-hidden="true"></i>
+                    @sec.SectionTitle
+                    <span class="pp-badge pp-badge-main">@Fmt(sec.Questions.Count.ToString()) سؤال</span>
+                </h2>
+
+                @if (Model.CanEditQuestions)
+                {
+                    <a asp-action="AddQuestionFromBank"
+                       asp-route-examId="@Model.ExamId"
+                       asp-route-sectionId="@sec.SectionId"
+                       class="pp-btn pp-btn-light pp-btn-sm">
+                        <i class="fa-solid fa-plus" aria-hidden="true"></i>
+                        إضافة سؤال من البنك
+                    </a>
+                }
+            </div>
+
+            @foreach (var question in sec.Questions.OrderBy(q => q.Order))
+            {
+                var difficulty = Difficulty(question.Difficulty);
+
+                <div class="pp-question">
+                    <div class="pp-question-head">
+                        <span class="pp-qnum">@Fmt(question.Order.ToString())</span>
+                        <span class="pp-badge @difficulty.Css">@difficulty.Text</span>
+                        <span class="pp-badge pp-badge-muted">@question.LessonTitle</span>
+                    </div>
+
+                    <div class="pp-question-title">
+                        @Html.Raw(Fmt(question.Title))
+                    </div>
+
+                    <div class="pp-answer">
+                        <div class="pp-answer-label">الإجابة الصحيحة</div>
+                        @Html.Raw(Fmt(question.CorrectAnswer))
+                    </div>
+
+                    <div class="pp-actions">
+                        <button type="button"
+                                class="pp-btn pp-btn-light pp-btn-sm"
+                                data-preview-url="@Url.Action("PreviewQuestion", new { examId = Model.ExamId, questionId = question.QuestionId })">
+                            <i class="fa-solid fa-eye" aria-hidden="true"></i>
+                            معاينة
+                        </button>
+
+                        @if (Model.CanEditQuestions)
+                        {
+                            <a asp-action="ReplaceQuestion"
+                               asp-route-examId="@Model.ExamId"
+                               asp-route-questionId="@question.QuestionId"
+                               class="pp-btn pp-btn-light pp-btn-sm">
+                                <i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>
+                                استبدال
+                            </a>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<partial name="_QuestionPreviewModal" />
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="~/js/partner-placement.js" asp-append-version="true"></script>
+
+    <script>
+        (function () {
+            const checkbox = document.getElementById("allowDontKnowSwitch");
+
+            checkbox.addEventListener("change", function () {
+                const enabled = checkbox.checked;
+                const body = new FormData();
+                body.append("examId", "@Model.ExamId");
+                body.append("enabled", enabled);
+
+                checkbox.disabled = true;
+
+                fetch("@Url.Action("ToggleDontKnowOption")", {
+                    method: "POST",
+                    headers: {
+                        "RequestVerificationToken": document.querySelector('input[name="__RequestVerificationToken"]').value
+                    },
+                    body: body
+                })
+                    .then(function (response) {
+                        if (!response.ok) {
+                            throw new Error("request failed");
+                        }
+
+                        return response.json();
+                    })
+                    .then(function (data) {
+                        if (!data.success) {
+                            checkbox.checked = !enabled;
+                            Swal.fire({ icon: "error", title: "تعذّر الحفظ", text: data.message });
+                            return;
+                        }
+
+                        Swal.fire({ icon: "success", title: data.message, timer: 1800, showConfirmButton: false });
+                    })
+                    .catch(function () {
+                        checkbox.checked = !enabled;
+                        Swal.fire({ icon: "error", title: "تعذّر الاتصال بالخادم، حاول مرة أخرى." });
+                    })
+                    .finally(function () {
+                        checkbox.disabled = false;
+                    });
+            });
+        })();
+    </script>
+}

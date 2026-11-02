@@ -5,9 +5,11 @@ using Microsoft.Extensions.Caching.Memory;
 using QdratNew.Data;
 using QdratNew.Entities;
 using QdratNew.Enums;
+using QdratNew.Helpers;
 using QdratNew.Services.Exams.Generators;
 using QdratNew.Services.Interfaces;
 using QdratNew.ViewModels.Exam;
+using QdratNew.ViewModels.Question;
 
 namespace QdratNew.Services.Exams.Placement
 {
@@ -17,6 +19,7 @@ namespace QdratNew.Services.Exams.Placement
     {
         private const string NotInContractMessage = "هذه الخدمة غير مشمولة في عقدكم الحالي أو أن العقد غير نشط.";
         private const string PartnerUnexpectedErrorMessage = "تعذر تنفيذ العملية، حاول مرة أخرى.";
+        private const string StudentPlacementDashboardUrl = "/Students/PlacementExams/PlacementExamDashboard"; // PPL-S5.2
 
         private readonly ApplicationDbContext _context;
         private readonly IPlacementExamGeneratorService _placementExamService;
@@ -24,6 +27,7 @@ namespace QdratNew.Services.Exams.Placement
         private readonly ITimeZoneService _timeZoneService;
         private readonly IMemoryCache _cache;
         private readonly ILogger<PlacementExamManagementService> _logger;
+        private readonly IAdvancedNotificationService _notificationService;
 
         public PlacementExamManagementService(
             ApplicationDbContext context,
@@ -31,7 +35,8 @@ namespace QdratNew.Services.Exams.Placement
             IPlacementExamScopeGuard guard,
             ITimeZoneService timeZoneService,
             IMemoryCache cache,
-            ILogger<PlacementExamManagementService> logger)
+            ILogger<PlacementExamManagementService> logger,
+            IAdvancedNotificationService notificationService)
         {
             _context = context;
             _placementExamService = placementExamService;
@@ -39,6 +44,7 @@ namespace QdratNew.Services.Exams.Placement
             _timeZoneService = timeZoneService;
             _cache = cache;
             _logger = logger;
+            _notificationService = notificationService;
         }
 
         // خطأ عمل متوقع رسالته آمنة للعرض (يُرمى داخل ExecutionStrategy لإلغاء الـ Transaction)
@@ -54,26 +60,28 @@ namespace QdratNew.Services.Exams.Placement
         {
             var query = _context.ExamAssignmentsToBatches
                 .AsNoTracking()
-                .Include(x => x.Batch)
-                .Include(x => x.Exam)
-                .Where(x => x.Exam != null && x.Exam.Type == ExamType.LevelAssessment && x.Exam.IsActive);
+                .Where(x => x.Exam != null && x.Exam.Type == ExamType.LevelAssessment);
 
             if (scope.IsPartner)
             {
+                // الاختبارات المخفية تُحسب حتى تبقى دفعتها ظاهرة ويمكن استرجاعها
                 var partnerId = scope.PartnerId!.Value;
                 query = query.Where(x => x.Exam.OwnerPartnerId == partnerId && x.Batch.Branch.PartnerId == partnerId);
             }
             else
             {
-                query = query.Where(x => x.Exam.OwnerPartnerId == null);
+                query = query.Where(x => x.Exam.IsActive && x.Exam.OwnerPartnerId == null);
             }
 
             // الدفعات النشطة (غير مؤرشفة): على الأقل اختبار واحد غير مؤرشف
-            var allAssignments = await query.ToListAsync(ct);
+            // PPL-S7.2: الأعمدة المطلوبة فقط بدل تحميل الاختبار والدفعة كاملين لكل صف
+            var allAssignments = await query
+                .Select(x => new { x.BatchId, x.Batch.Name, x.IsArchived, x.CreatedAt })
+                .ToListAsync(ct);
 
             var activeBatches = allAssignments
                 .Where(x => !x.IsArchived)
-                .GroupBy(x => new { x.BatchId, x.Batch?.Name })
+                .GroupBy(x => new { x.BatchId, x.Name })
                 .Select(g => new PlacementBatchExamVm
                 {
                     BatchId = g.Key.BatchId,
@@ -136,7 +144,8 @@ namespace QdratNew.Services.Exams.Placement
                             && s.ExamAssignment.BatchId == batchId
                             && s.IsSubmitted),
                     IsActive = e.IsActive,
-                    ReferenceCode = e.ReferenceCode
+                    ReferenceCode = e.ReferenceCode,
+                    IsSentToStudents = eab.IsSentToStudents
                 }
             )
             .OrderByDescending(x => x.CreatedAt)
@@ -262,6 +271,10 @@ namespace QdratNew.Services.Exams.Placement
                     );
 
                     await ApplyPlacementExamDeliveryModeAsync(examId, model.IsInLab, model.IsRandomized, ct);
+
+                    // PPL-S4: اختبار الطالب الفردي يصله فور إنشائه، فلا يوصف للشريك بأنه مسودة
+                    if (scope.IsPartner)
+                        return PlacementOperationResult.Ok("✅ تم إنشاء الاختبار وإرساله للطالب.", examId);
                 }
                 else if (model.BatchId.HasValue && model.BatchId > 0)
                 {
@@ -283,7 +296,8 @@ namespace QdratNew.Services.Exams.Placement
                         model.DurationMinutes,
                         model.StartDate,
                         model.EndDate,
-                        scope.PartnerId
+                        scope.PartnerId,
+                        assignToStudent: false // المسودة لا تصل لأي طالب قبل الإرسال
                     );
 
                     await ApplyPlacementExamDeliveryModeAsync(examId, model.IsInLab, model.IsRandomized, ct);
@@ -330,6 +344,9 @@ namespace QdratNew.Services.Exams.Placement
 
             if (!await BankCoursesInScope(scope).AnyAsync(c => c.Id == model.CourseId, ct))
                 return PlacementOperationResult.Fail("هذه الدورة غير متاحة في عقدكم.");
+
+            if (model.StartDate.HasValue && model.EndDate.HasValue && model.EndDate <= model.StartDate)
+                return PlacementOperationResult.Fail("⚠️ يجب أن يكون وقت الانتهاء بعد وقت البدء.");
 
             if (model.StudentId.HasValue && model.StudentId > 0)
             {
@@ -397,6 +414,8 @@ namespace QdratNew.Services.Exams.Placement
         public async Task<PlacementOperationResult> CreateFromProfessionalModelAsync(PlacementScope scope, PlacementExamFromModelVm vm, CancellationToken ct = default)
         {
             var strategy = _context.Database.CreateExecutionStrategy();
+            string examTitle = string.Empty;
+            var recipients = new List<int>();
 
             try
             {
@@ -417,6 +436,13 @@ namespace QdratNew.Services.Exams.Placement
                     {
                         if (!await HasActivePlacementContractAsync(scope, ct))
                             throw new PlacementRuleException(NotInContractMessage);
+
+                        if (vm.SelectedCourseId <= 0)
+                            throw new PlacementRuleException("⚠️ يجب اختيار دورة.");
+
+                        // PPL-S7.1: نفس حدود الإنشاء المتقدم؛ هذا النموذج بلا Validation Attributes
+                        if (vm.DurationMinutes < 5 || vm.DurationMinutes > 300)
+                            throw new PlacementRuleException("⚠️ مدة الاختبار يجب أن تكون بين 5 و 300 دقيقة.");
 
                         // الدفعة والدورة يجب أن تكونا للشريك ومتوافقتين
                         var batchMatchesCourse = await _guard.Batches(_context, scope)
@@ -530,7 +556,16 @@ namespace QdratNew.Services.Exams.Placement
                     await _context.BulkInsertAsync(statuses);
 
                     await transaction.CommitAsync(ct);
+
+                    examTitle = exam.Title;
+                    recipients = studentIds;
                 });
+
+                // PPL-S7.2: هذا المسار يرسل فعليًا، فيُمسح كاش لوحة الطالب ويصله الإشعار كبقية مسارات الإرسال
+                foreach (var stId in recipients)
+                    _cache.Remove($"PlacementExamDashboard_{stId}");
+
+                await NotifyPartnerStudentsAsync(scope, recipients, $"📘 تم إرسال اختبار تحديد المستوى «{examTitle}» إليك. يمكنك الدخول وبدء الحل.", ct);
 
                 return PlacementOperationResult.Ok("✅ تم إنشاء وإرسال الاختبار بنجاح.");
             }
@@ -569,6 +604,10 @@ namespace QdratNew.Services.Exams.Placement
                 IsInLab = !string.IsNullOrWhiteSpace(exam.ReferenceCode),
                 ReferenceCode = exam.ReferenceCode,
                 AllowDontKnowOption = exam.AllowDontKnowOption,
+                CanEditQuestions = scope.IsPartner &&
+                    !await IsExamLockedForPartnerAsync(examId, ct) &&
+                    await CanUseBankForExamCourseAsync(scope, exam.CourseId, ct),
+                CanSend = scope.IsPartner && exam.IsActive && !await IsExamLockedForPartnerAsync(examId, ct),
                 Sections = exam.Questions
                     .GroupBy(q => q.Question.Lesson.Section)
                     .Select(g => new PlacementExamReviewSectionVm
@@ -620,7 +659,8 @@ namespace QdratNew.Services.Exams.Placement
             if (exam == null)
                 return null;
 
-            if (scope.IsPartner && !await CanUseBankForExamCourseAsync(scope, exam.CourseId, ct))
+            if (scope.IsPartner &&
+                (!await CanUseBankForExamCourseAsync(scope, exam.CourseId, ct) || await IsExamLockedForPartnerAsync(examId, ct)))
                 return null;
 
             // 1️⃣ السؤال الحالي داخل الاختبار
@@ -689,7 +729,7 @@ namespace QdratNew.Services.Exams.Placement
                 if (!await CanModifyInScopeAsync(scope, ct) || !await CanUseBankForExamCourseAsync(scope, exam.CourseId, ct))
                     return PlacementOperationResult.Fail(NotInContractMessage);
 
-                if (await IsExamSentAsync(examId, ct))
+                if (await IsExamLockedForPartnerAsync(examId, ct))
                     return PlacementOperationResult.BadRequest("لا يمكن تعديل اختبار تم إرساله.");
 
                 // البديل من نفس المؤشر والصعوبة، كما تعرضه صفحة الاختيار
@@ -742,24 +782,24 @@ namespace QdratNew.Services.Exams.Placement
             if (await IsExamSentAsync(examId, ct))
                 return (PlacementOperationResult.BadRequest("لا يمكن تعديل اختبار تم إرساله."), null);
 
+            if (scope.IsPartner && await IsExamLockedForPartnerAsync(examId, ct))
+                return (PlacementOperationResult.BadRequest("لا يمكن تعديل اختبار تم إرساله."), null);
+
             if (scope.IsPartner &&
                 (!await CanUseBankForExamCourseAsync(scope, exam.CourseId, ct) ||
                  !await IsSectionInCourseAsync(sectionId, exam.CourseId, ct)))
                 return (PlacementOperationResult.NotFound(), null);
 
-            // الأسئلة الموجودة بالفعل في الاختبار
-            var existingQuestionIds = await _context.ExamQuestions
-                .Where(eq => eq.ExamId == examId)
-                .Select(eq => eq.QuestionId)
-                .ToListAsync(ct);
-
             // أسئلة البنك (نفس المحور + غير مستخدمة)
+            // PPL-S7.2: الاستبعاد داخل SQL بدل تحميل كل أسئلة المحور ثم فلترتها في الذاكرة
             var questions = await _context.Questions
+                .AsNoTracking()
                 .Where(q =>
                     q.SectionId == sectionId &&
                     q.IsReviewed &&
                     q.IsComplete &&
-                    !q.IsRejected)
+                    !q.IsRejected &&
+                    !_context.ExamQuestions.Any(eq => eq.ExamId == examId && eq.QuestionId == q.Id))
                 .OrderByDescending(q => q.CreatedAt)
                 .Select(q => new AddQuestionFromBankItemVm
                 {
@@ -769,11 +809,6 @@ namespace QdratNew.Services.Exams.Placement
                     IsAlreadyAdded = false
                 })
                 .ToListAsync(ct);
-
-            // فلترة داخل الذاكرة (توافق SQL 2014)
-            questions = questions
-                .Where(q => !existingQuestionIds.Contains(q.QuestionId))
-                .ToList();
 
             var model = new AddQuestionFromBankVm
             {
@@ -808,6 +843,9 @@ namespace QdratNew.Services.Exams.Placement
                 if (!await CanModifyInScopeAsync(scope, ct) || !await CanUseBankForExamCourseAsync(scope, exam.CourseId, ct))
                     return PlacementOperationResult.Fail(NotInContractMessage);
 
+                if (await IsExamLockedForPartnerAsync(examId, ct))
+                    return PlacementOperationResult.BadRequest("لا يمكن تعديل اختبار تم إرساله.");
+
                 var isValidQuestion = await IsSectionInCourseAsync(sectionId, exam.CourseId, ct) &&
                     await _context.Questions.AnyAsync(q =>
                         q.Id == questionId &&
@@ -841,6 +879,18 @@ namespace QdratNew.Services.Exams.Placement
                 IsManuallySelected = true
             });
 
+            // PPL-S4: صفحات الشريك تعرض إجمالي الأسئلة، فيبقى مطابقًا لما أضافه
+            if (scope.IsPartner)
+            {
+                var questionsCount = await _context.ExamQuestions.CountAsync(eq => eq.ExamId == examId, ct) + 1;
+                var examEntity = await _context.Exams.FirstAsync(e => e.Id == examId, ct);
+                examEntity.TotalQuestions = questionsCount;
+
+                var batchLinks = await _context.ExamAssignmentsToBatches.Where(x => x.ExamId == examId).ToListAsync(ct);
+                foreach (var link in batchLinks)
+                    link.TotalQuestions = questionsCount;
+            }
+
             await _context.SaveChangesAsync(ct);
 
             return PlacementOperationResult.Ok("تمت إضافة السؤال إلى الاختبار.", examId);
@@ -852,6 +902,8 @@ namespace QdratNew.Services.Exams.Placement
         public async Task<PlacementOperationResult> SendToStudentsAsync(PlacementScope scope, int examId, CancellationToken ct = default)
         {
             var strategy = _context.Database.CreateExecutionStrategy();
+            string examTitle = string.Empty;
+            var recipients = new List<int>();
 
             try
             {
@@ -871,6 +923,10 @@ namespace QdratNew.Services.Exams.Placement
 
                     if (exam == null)
                         throw new PlacementRuleException("❌ الاختبار غير موجود.");
+
+                    var blocked = await GetPartnerDeliveryBlockAsync(scope, exam.Id, exam.IsActive, ct);
+                    if (blocked != null)
+                        throw new PlacementRuleException(blocked);
 
                     // =========================================
                     // 2️⃣ تحميل ربط الدفعات
@@ -904,6 +960,17 @@ namespace QdratNew.Services.Exams.Placement
 
                     var nowUtc = DateTime.UtcNow;
 
+                    // المسودات القديمة فيها تعيين وحالة لأول طالب من وقت الإنشاء؛ لا يتكرران عند الإرسال
+                    var assignedStudentIds = (await _context.ExamAssignments
+                        .Where(a => a.ExamId == examId)
+                        .Select(a => a.StudentId)
+                        .ToListAsync(ct)).ToHashSet();
+
+                    var studentsWithStatus = (await _context.ExamStudentStatuses
+                        .Where(s => s.ExamId == examId)
+                        .Select(s => s.StudentId)
+                        .ToListAsync(ct)).ToHashSet();
+
                     // =========================================
                     // 4️⃣ تجهيز البيانات
                     // =========================================
@@ -912,36 +979,45 @@ namespace QdratNew.Services.Exams.Placement
 
                     foreach (var stId in students)
                     {
-                        assignments.Add(new ExamAssignment
+                        if (!assignedStudentIds.Contains(stId))
                         {
-                            ExamId = examId,
-                            StudentId = stId,
-                            AssignedAt = nowUtc,
-                            DueDate = nowUtc.AddMinutes(exam.DurationMinutes)
-                        });
+                            assignments.Add(new ExamAssignment
+                            {
+                                ExamId = examId,
+                                StudentId = stId,
+                                AssignedAt = nowUtc,
+                                DueDate = nowUtc.AddMinutes(exam.DurationMinutes)
+                            });
+                        }
 
-                        statuses.Add(new ExamStudentStatus
+                        if (!studentsWithStatus.Contains(stId))
                         {
-                            StudentId = stId,
-                            ExamId = examId,
-                            AssignedAt = nowUtc,
-                            Status = ExamStatus.Pending
-                        });
+                            statuses.Add(new ExamStudentStatus
+                            {
+                                StudentId = stId,
+                                ExamId = examId,
+                                AssignedAt = nowUtc,
+                                Status = ExamStatus.Pending
+                            });
+                        }
                     }
 
                     // =========================================
-                    // 5️⃣ Bulk Insert
+                    // 5️⃣ تحديث الحالة
+                    // PPL-S5: التحديث الشرطي يحجز الصفوف حتى الـ Commit، فالطلب المتزامن الثاني ينتظر ثم لا يجد ما يرسله
+                    // =========================================
+                    var claimed = await _context.ExamAssignmentsToBatches
+                        .Where(x => x.ExamId == examId && !x.IsSentToStudents)
+                        .ExecuteUpdateAsync(u => u.SetProperty(x => x.IsSentToStudents, true), ct);
+
+                    if (claimed == 0)
+                        throw new PlacementRuleException("⚠️ تم الإرسال مسبقًا.");
+
+                    // =========================================
+                    // 6️⃣ Bulk Insert
                     // =========================================
                     await _context.BulkInsertAsync(assignments);
                     await _context.BulkInsertAsync(statuses);
-
-                    // =========================================
-                    // 6️⃣ تحديث الحالة
-                    // =========================================
-                    foreach (var a in batchAssignments)
-                        a.IsSentToStudents = true;
-
-                    await _context.SaveChangesAsync(ct);
 
                     // =========================================
                     // 7️⃣ تنظيف الكاش
@@ -950,7 +1026,12 @@ namespace QdratNew.Services.Exams.Placement
                         _cache.Remove($"PlacementExamDashboard_{stId}");
 
                     await transaction.CommitAsync(ct);
+
+                    examTitle = exam.Title;
+                    recipients = students;
                 });
+
+                await NotifyPartnerStudentsAsync(scope, recipients, $"📘 تم إرسال اختبار تحديد المستوى «{examTitle}» إليك. يمكنك الدخول وبدء الحل.", ct);
 
                 return PlacementOperationResult.Ok("✅ تم إرسال الاختبار بنجاح.", examId);
             }
@@ -972,9 +1053,14 @@ namespace QdratNew.Services.Exams.Placement
             if (exam == null)
                 return PlacementOperationResult.Fail("❌ الاختبار غير موجود.");
 
-            var denied = await ValidatePartnerExamBatchAsync(scope, examId, batchId, ct);
+            var denied = await ValidatePartnerExamBatchAsync(scope, examId, batchId, ct)
+                ?? await ValidatePartnerBatchSentAsync(scope, examId, batchId, ct);
             if (denied != null)
                 return denied;
+
+            var blocked = await GetPartnerDeliveryBlockAsync(scope, examId, exam.IsActive, ct);
+            if (blocked != null)
+                return PlacementOperationResult.Fail(blocked);
 
             var batchStudentIds = await EnrollmentsInScope(scope)
                 .Where(s => s.BatchId == batchId)
@@ -982,16 +1068,21 @@ namespace QdratNew.Services.Exams.Placement
                 .Distinct()
                 .ToListAsync(ct);
 
-            var alreadyAssignedIds = await _context.ExamAssignments
-                .Where(a => a.ExamId == examId && batchStudentIds.Contains(a.StudentId))
+            var alreadyAssignedIds = (await _context.ExamAssignments
+                .Where(a => a.ExamId == examId)
                 .Select(a => a.StudentId)
-                .Distinct()
-                .ToListAsync(ct);
+                .ToListAsync(ct)).ToHashSet();
 
-            var newStudentIds = batchStudentIds.Except(alreadyAssignedIds).ToList();
+            var newStudentIds = batchStudentIds.Where(id => !alreadyAssignedIds.Contains(id)).ToList();
 
             if (!newStudentIds.Any())
                 return PlacementOperationResult.Info("لا يوجد طلاب جدد بحاجة لإرسال الاختبار.");
+
+            // PPL-S5: الطالب الذي له حالة بلا تعيين (محاولات قديمة) يحتفظ بحالته ولا تتكرر
+            var studentsWithStatus = (await _context.ExamStudentStatuses
+                .Where(s => s.ExamId == examId)
+                .Select(s => s.StudentId)
+                .ToListAsync(ct)).ToHashSet();
 
             var nowUtc = DateTime.UtcNow;
             var assignments = new List<ExamAssignment>(newStudentIds.Count);
@@ -1007,20 +1098,34 @@ namespace QdratNew.Services.Exams.Placement
                     DueDate = nowUtc.AddMinutes(exam.DurationMinutes)
                 });
 
-                statuses.Add(new ExamStudentStatus
+                if (!studentsWithStatus.Contains(stId))
                 {
-                    StudentId = stId,
-                    ExamId = examId,
-                    AssignedAt = nowUtc,
-                    Status = ExamStatus.Pending
-                });
+                    statuses.Add(new ExamStudentStatus
+                    {
+                        StudentId = stId,
+                        ExamId = examId,
+                        AssignedAt = nowUtc,
+                        Status = ExamStatus.Pending
+                    });
+                }
             }
 
-            await _context.BulkInsertAsync(assignments);
-            await _context.BulkInsertAsync(statuses);
+            // PPL-S5: التعيين والحالة معًا أو لا شيء
+            var strategy = _context.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
+            {
+                using var transaction = await _context.Database.BeginTransactionAsync(ct);
+
+                await _context.BulkInsertAsync(assignments);
+                await _context.BulkInsertAsync(statuses);
+
+                await transaction.CommitAsync(ct);
+            });
 
             foreach (var stId in newStudentIds)
                 _cache.Remove($"PlacementExamDashboard_{stId}");
+
+            await NotifyPartnerStudentsAsync(scope, newStudentIds, $"📘 تم إرسال اختبار تحديد المستوى «{exam.Title}» إليك. يمكنك الدخول وبدء الحل.", ct);
 
             return PlacementOperationResult.Ok($"✅ تم إرسال الاختبار لـ {newStudentIds.Count} طالب جديد انضم للدفعة.", examId, batchId);
         }
@@ -1038,16 +1143,12 @@ namespace QdratNew.Services.Exams.Placement
             if (denied != null)
                 return denied;
 
-            var batchStudentIds = await EnrollmentsInScope(scope)
-                .Where(s => s.BatchId == batchId)
-                .Select(s => s.StudentID)
-                .Distinct()
-                .ToListAsync(ct);
+            var batchEnrollments = EnrollmentsInScope(scope).Where(s => s.BatchId == batchId);
 
             // الطلاب اللي عندهم محاولات فعلية على هذا الاختبار
             var studentsWithAttempts = await (
                 from a in _context.QuestionAttemptNew
-                where a.ExamId == examId && batchStudentIds.Contains(a.StudentId)
+                where a.ExamId == examId && batchEnrollments.Any(s => s.StudentID == a.StudentId)
                 group a by a.StudentId into g
                 select new
                 {
@@ -1057,11 +1158,10 @@ namespace QdratNew.Services.Exams.Placement
                 }
             ).ToListAsync(ct);
 
-            var alreadyAssignedIds = await _context.ExamAssignments
+            var alreadyAssignedIds = (await _context.ExamAssignments
                 .Where(a => a.ExamId == examId)
                 .Select(a => a.StudentId)
-                .Distinct()
-                .ToListAsync(ct);
+                .ToListAsync(ct)).ToHashSet();
 
             var toFix = studentsWithAttempts
                 .Where(s => !alreadyAssignedIds.Contains(s.StudentId))
@@ -1070,62 +1170,69 @@ namespace QdratNew.Services.Exams.Placement
             if (!toFix.Any())
                 return PlacementOperationResult.Info("لا يوجد طلاب بحاجة لإصلاح — كل من أنهى الاختبار لديه سجل تعيين بالفعل.");
 
-            // 1) إنشاء سجل تعيين لكل طالب ناقص
-            var newAssignments = new List<ExamAssignment>();
-            foreach (var s in toFix)
+            // PPL-S5: كل الخطوات معًا، وإلا يبقى طالب بتعيين بلا حالة ولا يعود قابلًا للإصلاح
+            var strategy = _context.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
             {
-                var assignment = new ExamAssignment
+                using var transaction = await _context.Database.BeginTransactionAsync(ct);
+
+                // 1) إنشاء سجل تعيين لكل طالب ناقص
+                var newAssignments = toFix.Select(s => new ExamAssignment
                 {
                     ExamId = examId,
                     StudentId = s.StudentId,
                     AssignedAt = s.FirstAttemptAt,
                     DueDate = s.LastAttemptAt
-                };
-                _context.ExamAssignments.Add(assignment);
-                newAssignments.Add(assignment);
-            }
+                }).ToList();
 
-            await _context.SaveChangesAsync(ct);
+                _context.ExamAssignments.AddRange(newAssignments);
+                await _context.SaveChangesAsync(ct);
 
-            // 2) إنشاء/تحديث سجل الحالة، وربط المحاولات القديمة برقم التعيين الجديد
-            foreach (var assignment in newAssignments)
-            {
-                var info = toFix.First(x => x.StudentId == assignment.StudentId);
+                // 2) إنشاء/تحديث سجل الحالة، وربط المحاولات القديمة برقم التعيين الجديد
+                var existingStatuses = (await _context.ExamStudentStatuses
+                    .Where(st => st.ExamId == examId)
+                    .ToListAsync(ct))
+                    .GroupBy(st => st.StudentId)
+                    .ToDictionary(g => g.Key, g => g.First());
 
-                var status = await _context.ExamStudentStatuses
-                    .FirstOrDefaultAsync(st => st.StudentId == assignment.StudentId && st.ExamId == examId, ct);
+                var unlinkedAttempts = (await _context.QuestionAttemptNew
+                    .Where(a => a.ExamId == examId && a.ExamAssignmentId == null)
+                    .ToListAsync(ct))
+                    .ToLookup(a => a.StudentId);
 
-                if (status == null)
+                var attemptInfoByStudent = toFix.ToDictionary(x => x.StudentId); // PPL-S7.2
+
+                foreach (var assignment in newAssignments)
                 {
-                    _context.ExamStudentStatuses.Add(new ExamStudentStatus
+                    var info = attemptInfoByStudent[assignment.StudentId];
+
+                    if (existingStatuses.TryGetValue(assignment.StudentId, out var status))
                     {
-                        StudentId = assignment.StudentId,
-                        ExamId = examId,
-                        AssignedAt = info.FirstAttemptAt,
-                        StartedAt = info.FirstAttemptAt,
-                        SubmittedAt = info.LastAttemptAt,
-                        IsSubmitted = true,
-                        Status = ExamStatus.Completed
-                    });
+                        status.IsSubmitted = true;
+                        status.Status = ExamStatus.Completed;
+                        status.SubmittedAt ??= info.LastAttemptAt;
+                    }
+                    else
+                    {
+                        _context.ExamStudentStatuses.Add(new ExamStudentStatus
+                        {
+                            StudentId = assignment.StudentId,
+                            ExamId = examId,
+                            AssignedAt = info.FirstAttemptAt,
+                            StartedAt = info.FirstAttemptAt,
+                            SubmittedAt = info.LastAttemptAt,
+                            IsSubmitted = true,
+                            Status = ExamStatus.Completed
+                        });
+                    }
+
+                    foreach (var att in unlinkedAttempts[assignment.StudentId])
+                        att.ExamAssignmentId = assignment.Id;
                 }
-                else
-                {
-                    status.IsSubmitted = true;
-                    status.Status = ExamStatus.Completed;
-                    status.SubmittedAt ??= info.LastAttemptAt;
-                }
 
-                var attemptsToLink = await _context.QuestionAttemptNew
-                    .Where(a => a.StudentId == assignment.StudentId &&
-                                a.ExamId == examId &&
-                                a.ExamAssignmentId == null)
-                    .ToListAsync(ct);
-
-                foreach (var att in attemptsToLink)
-                    att.ExamAssignmentId = assignment.Id;
-            }
-
-            await _context.SaveChangesAsync(ct);
+                await _context.SaveChangesAsync(ct);
+                await transaction.CommitAsync(ct);
+            });
 
             return PlacementOperationResult.Ok($"✅ تم إصلاح بيانات {toFix.Count} طالب. أصبح بإمكانك الآن عرض وطباعة تقاريرهم.", examId, batchId);
         }
@@ -1136,25 +1243,46 @@ namespace QdratNew.Services.Exams.Placement
             var scopedExams = _guard.ExamsInScope(_context, scope);
 
             // 1️⃣ جلب الدفعة المرتبطة بالاختبار
-            var examBatch = await _context.ExamAssignmentsToBatches
+            var examBatchLink = await _context.ExamAssignmentsToBatches
                 .Where(x => x.ExamId == examId && scopedExams.Any(e => e.Id == x.ExamId))
-                .Select(x => x.BatchId)
+                .Select(x => (int?)x.BatchId)
                 .FirstOrDefaultAsync(ct);
 
-            if (examBatch == 0)
-                return PlacementOperationResult.Fail("❌ لا يمكن تحديد الدفعة المرتبطة بالاختبار.");
+            string examTitle = string.Empty;
 
             if (scope.IsPartner)
             {
                 if (!await CanModifyInScopeAsync(scope, ct))
                     return PlacementOperationResult.Fail(NotInContractMessage);
 
-                var eligibleStudent = await EnrollmentsInScope(scope).AnyAsync(s =>
-                    s.StudentID == studentId &&
-                    _context.ExamAssignmentsToBatches.Any(x => x.ExamId == examId && x.BatchId == s.BatchId), ct);
+                var exam = await scopedExams
+                    .AsNoTracking()
+                    .Where(e => e.Id == examId)
+                    .Select(e => new { e.Id, e.Title, e.IsActive })
+                    .FirstOrDefaultAsync(ct);
 
-                if (!eligibleStudent)
+                if (exam == null || !await IsResendEligibleAsync(scope, examId, studentId, examBatchLink.HasValue, ct))
                     return PlacementOperationResult.NotFound();
+
+                if (examBatchLink.HasValue && !await IsExamSentAsync(examId, ct))
+                    return PlacementOperationResult.Fail("⚠️ لم يُرسل هذا الاختبار بعد، أرسله للدفعة أولًا.");
+
+                var blocked = await GetPartnerDeliveryBlockAsync(scope, examId, exam.IsActive, ct);
+                if (blocked != null)
+                    return PlacementOperationResult.Fail(blocked);
+
+                examTitle = exam.Title;
+
+                // PPL-S5: تعيين واحد لكل طالب؛ التعيين القديم يكرر الاختبار في لوحة الطالب
+                var oldAssignments = await _context.ExamAssignments
+                    .Where(a => a.ExamId == examId && a.StudentId == studentId)
+                    .ToListAsync(ct);
+
+                _context.ExamAssignments.RemoveRange(oldAssignments);
+            }
+            else if (!examBatchLink.HasValue || examBatchLink.Value == 0)
+            {
+                return PlacementOperationResult.Fail("❌ لا يمكن تحديد الدفعة المرتبطة بالاختبار.");
             }
 
             // 2️⃣ إعادة إنشاء Assignment
@@ -1198,11 +1326,19 @@ namespace QdratNew.Services.Exams.Placement
 
             await _context.SaveChangesAsync(ct);
 
-            return PlacementOperationResult.Ok("✅ تم إعادة إرسال الاختبار للطالب بنجاح.", examId, examBatch);
+            _cache.Remove($"PlacementExamDashboard_{studentId}");
+
+            await NotifyPartnerStudentsAsync(scope, new List<int> { studentId }, $"📘 أُعيد إرسال اختبار تحديد المستوى «{examTitle}» إليك. يمكنك الدخول وحله من جديد.", ct);
+
+            return PlacementOperationResult.Ok("✅ تم إعادة إرسال الاختبار للطالب بنجاح.", examId, examBatchLink);
         }
 
         public async Task<PlacementOperationResult> ConfirmSendAsync(PlacementScope scope, int examId, CancellationToken ct = default)
         {
+            // PPL-S5: مسار الأدمن يعلّم «مُرسل» بلا تعيينات؛ عند الشريك يعني ذلك اختبارًا مقفلًا لم يصل لأحد
+            if (scope.IsPartner)
+                return await SendToStudentsAsync(scope, examId, ct);
+
             if (!await CanModifyInScopeAsync(scope, ct))
                 return PlacementOperationResult.Fail(NotInContractMessage);
 
@@ -1239,12 +1375,57 @@ namespace QdratNew.Services.Exams.Placement
             }
         }
 
+        // PPL-S5: ملخص صفحة تأكيد إرسال الشريك
+        public async Task<PlacementSendSummary?> GetSendSummaryAsync(PlacementScope scope, int examId, CancellationToken ct = default)
+        {
+            var exam = await _guard.PlacementExams(_context, scope)
+                .AsNoTracking()
+                .Where(e => e.Id == examId)
+                .Select(e => new { e.Id, e.Title, e.DurationMinutes, e.ReferenceCode, e.IsActive })
+                .FirstOrDefaultAsync(ct);
+
+            if (exam == null)
+                return null;
+
+            var links = await _context.ExamAssignmentsToBatches
+                .AsNoTracking()
+                .Where(x => x.ExamId == examId)
+                .Select(x => new { x.BatchId, BatchName = x.Batch.Name, x.IsSentToStudents })
+                .ToListAsync(ct);
+
+            var students = await (
+                from enrollment in EnrollmentsInScope(scope).AsNoTracking()
+                join link in _context.ExamAssignmentsToBatches.AsNoTracking() on enrollment.BatchId equals link.BatchId
+                where link.ExamId == examId
+                select new { enrollment.BatchId, enrollment.StudentID })
+                .Distinct()
+                .ToListAsync(ct);
+
+            return new PlacementSendSummary
+            {
+                ExamId = exam.Id,
+                Title = exam.Title,
+                TotalQuestions = await _context.ExamQuestions.CountAsync(q => q.ExamId == examId, ct),
+                DurationMinutes = exam.DurationMinutes,
+                ReferenceCode = exam.ReferenceCode,
+                IsActive = exam.IsActive,
+                IsDraft = links.Any() && !links.Any(x => x.IsSentToStudents),
+                TotalStudents = students.Select(x => x.StudentID).Distinct().Count(),
+                Batches = links
+                    .Select(x => new PlacementSendBatchSummary(x.BatchId, x.BatchName, students.Count(s => s.BatchId == x.BatchId)))
+                    .ToList()
+            };
+        }
+
         // =====================================================
         // Hide / Restore / Delete
         // =====================================================
         public async Task<PlacementOperationResult> HideAsync(PlacementScope scope, int examId, CancellationToken ct = default)
         {
             var userName = scope.UserName ?? "Unknown";
+
+            if (!await CanModifyInScopeAsync(scope, ct)) // PPL-S7.1: لا يكفي فلتر الـ Controller
+                return PlacementOperationResult.Fail(NotInContractMessage);
 
             var exam = await _guard.ExamsInScope(_context, scope).FirstOrDefaultAsync(e => e.Id == examId, ct);
             if (exam == null)
@@ -1274,6 +1455,9 @@ namespace QdratNew.Services.Exams.Placement
         public async Task<PlacementOperationResult> RestoreAsync(PlacementScope scope, int examId, CancellationToken ct = default)
         {
             var userName = scope.UserName ?? "Unknown";
+
+            if (!await CanModifyInScopeAsync(scope, ct)) // PPL-S7.1
+                return PlacementOperationResult.Fail(NotInContractMessage);
 
             var exam = await _guard.ExamsInScope(_context, scope).FirstOrDefaultAsync(e => e.Id == examId, ct);
             if (exam == null)
@@ -1305,6 +1489,9 @@ namespace QdratNew.Services.Exams.Placement
 
             try
             {
+                if (!await CanModifyInScopeAsync(scope, ct)) // PPL-S7.1
+                    return PlacementOperationResult.Fail(NotInContractMessage);
+
                 var exam = await _guard.PlacementExams(_context, scope)
                     .FirstOrDefaultAsync(e => e.Id == examId, ct);
 
@@ -1330,6 +1517,7 @@ namespace QdratNew.Services.Exams.Placement
                 var statuses = await _context.ExamStudentStatuses
                     .Where(s => s.ExamId == examId)
                     .ToListAsync(ct);
+                var affectedStudentIds = statuses.Select(s => s.StudentId).Distinct().ToList(); // PPL-S4
                 _context.ExamStudentStatuses.RemoveRange(statuses);
 
                 // ✅ حذف الأسئلة المرتبطة
@@ -1376,6 +1564,10 @@ namespace QdratNew.Services.Exams.Placement
                 });
                 await _context.SaveChangesAsync(ct);
 
+                // PPL-S4
+                foreach (var stId in affectedStudentIds)
+                    _cache.Remove($"PlacementExamDashboard_{stId}");
+
                 return PlacementOperationResult.Ok("🗑️ تم حذف الاختبار نهائياً من قاعدة البيانات.", examId, batchId);
             }
             catch (Exception ex)
@@ -1392,11 +1584,14 @@ namespace QdratNew.Services.Exams.Placement
             if (scope.IsPartner && !await BankCoursesInScope(scope).AnyAsync(c => c.Id == courseId, ct))
                 return new List<PlacementSectionOptionDto>();
 
-            var data = await (
+            // فلترة المحاور التي تحتوي على دروس وأسئلة
+            // PPL-S7.2: داخل نفس الاستعلام؛ كانت استعلامين متزامنين لكل محور في الذاكرة
+            return await (
                 from cc in _context.CourseCurriculums
                 join c in _context.Curriculums on cc.CurriculumId equals c.Id
                 join s in _context.Sections on c.Id equals s.CurriculumId
-                where cc.CourseId == courseId
+                where cc.CourseId == courseId &&
+                      _context.Questions.Any(q => _context.Lessons.Any(l => l.Id == q.LessonId && l.SectionId == s.Id))
                 select new PlacementSectionOptionDto
                 {
                     CurriculumId = c.Id,
@@ -1405,16 +1600,6 @@ namespace QdratNew.Services.Exams.Placement
                     SectionTitle = s.Title
                 }
             ).ToListAsync(ct);
-
-            // فلترة المحاور التي تحتوي على دروس وأسئلة
-            data = data
-                .Where(d =>
-                    _context.Lessons.Any(l => l.SectionId == d.SectionId) &&
-                    _context.Questions.Any(q => _context.Lessons.Any(l => l.Id == q.LessonId && l.SectionId == d.SectionId))
-                )
-                .ToList();
-
-            return data;
         }
 
         public async Task<PlacementExamDetailsViewModel?> GetPlacementDetailsAsync(PlacementScope scope, int examId, CancellationToken ct = default)
@@ -1447,9 +1632,10 @@ namespace QdratNew.Services.Exams.Placement
                 .ToListAsync(ct);
 
             // الطلاب الذين بدأوا/أتمّوا الاختبار فعلاً
+            // PPL-S7.1: طالب انتقل لشريك آخر لا يظهر اسمه للشريك السابق
             var existingStatuses = await (
                 from status in _context.ExamStudentStatuses.AsNoTracking()
-                join student in _context.Students.AsNoTracking() on status.StudentId equals student.StudentID
+                join student in _guard.StudentsWithResults(_context, scope).AsNoTracking() on status.StudentId equals student.StudentID
                 where status.ExamId == exam.Id
                 select new PlacementExamStudentViewModel
                 {
@@ -1504,6 +1690,31 @@ namespace QdratNew.Services.Exams.Placement
                 .ThenBy(s => s.StudentName)
                 .ToList();
 
+            // PPL-S5: إعادة الإرسال لمن وصله الاختبار وما زال ضمن طلاب الشريك النشطين
+            if (scope.IsPartner)
+            {
+                var sent = batchAssignments.Any(x => x.IsSentToStudents);
+                var eligibleIds = batchAssignments.Any()
+                    ? (sent ? allBatchStudents.Select(s => s.StudentID).ToHashSet() : new HashSet<int>())
+                    : (await (
+                        from a in _context.ExamAssignments.AsNoTracking()
+                        join st in _guard.Students(_context, scope) on a.StudentId equals st.StudentID
+                        where a.ExamId == exam.Id
+                        select st.StudentID).ToListAsync(ct)).ToHashSet();
+
+                var batchNames = allBatchStudents
+                    .GroupBy(s => s.StudentID)
+                    .ToDictionary(g => g.Key, g => g.First().BatchName);
+
+                foreach (var student in allStudents)
+                {
+                    student.CanResend = student.HasStatus && eligibleIds.Contains(student.StudentId);
+
+                    if (string.IsNullOrEmpty(student.BatchName) && batchNames.TryGetValue(student.StudentId, out var batchName))
+                        student.BatchName = batchName;
+                }
+            }
+
             var assignedBatches = batchAssignments
                 .GroupBy(x => new { x.BatchId, BatchName = x.Batch?.Name ?? string.Empty })
                 .Select(g => new PlacementExamBatchInfo
@@ -1544,6 +1755,129 @@ namespace QdratNew.Services.Exams.Placement
                     }).ToList(),
                 StudentStatuses = allStudents
             };
+        }
+
+        // =====================================================
+        // PPL-S4: قوائم ومعاينات صفحات الشريك
+        // =====================================================
+        public async Task<List<PlacementBatchOptionDto>> GetBatchesByCourseAsync(PlacementScope scope, int courseId, CancellationToken ct = default)
+        {
+            if (!await CoursesInScope(scope).AnyAsync(c => c.Id == courseId, ct))
+                return new List<PlacementBatchOptionDto>();
+
+            return await _guard.Batches(_context, scope)
+                .AsNoTracking()
+                .Where(b => b.CourseId == courseId)
+                .OrderBy(b => b.Name)
+                .Select(b => new PlacementBatchOptionDto { BatchId = b.Id, BatchName = b.Name })
+                .ToListAsync(ct);
+        }
+
+        public async Task<List<PlacementExamListVm>> GetSingleStudentExamsAsync(PlacementScope scope, CancellationToken ct = default)
+        {
+            var batchLinks = _context.ExamAssignmentsToBatches;
+
+            return await _guard.PlacementExams(_context, scope)
+                .AsNoTracking()
+                .Where(e => !batchLinks.Any(l => l.ExamId == e.Id))
+                .OrderByDescending(e => e.CreatedAt)
+                .Select(e => new PlacementExamListVm
+                {
+                    ExamId = e.Id,
+                    Title = e.Title,
+                    TotalQuestions = e.TotalQuestions,
+                    CreatedAt = e.CreatedAt,
+                    IsActive = e.IsActive,
+                    ReferenceCode = e.ReferenceCode,
+                    IsSentToStudents = true,
+                    StudentName = (
+                        from a in _context.ExamAssignments
+                        join s in _context.Students on a.StudentId equals s.StudentID
+                        where a.ExamId == e.Id
+                        select s.FullName).FirstOrDefault()
+                })
+                .ToListAsync(ct);
+        }
+
+        public async Task<PlacementContractSummary?> GetContractSummaryAsync(PlacementScope scope, CancellationToken ct = default)
+        {
+            if (!scope.IsPartner)
+                return null;
+
+            return await ActiveContracts(scope)
+                .AsNoTracking()
+                .OrderByDescending(s => s.EndDate)
+                .Select(s => new PlacementContractSummary(s.EndDate, s.CanUseProfessionalModels))
+                .FirstOrDefaultAsync(ct);
+        }
+
+        public Task<PlacementModelSummaryDto?> GetModelSummaryAsync(PlacementScope scope, int modelId, CancellationToken ct = default)
+            => ModelsInScope(scope)
+                .AsNoTracking()
+                .Where(m => m.Id == modelId)
+                .Select(m => new PlacementModelSummaryDto
+                {
+                    Id = m.Id,
+                    Title = m.Title,
+                    QuestionsCount = m.Questions.Count
+                })
+                .FirstOrDefaultAsync(ct);
+
+        public async Task<QuestionDisplayViewModel?> GetQuestionPreviewAsync(PlacementScope scope, int examId, Guid questionId, CancellationToken ct = default)
+        {
+            var exam = await _guard.ExamsInScope(_context, scope)
+                .Where(e => e.Id == examId)
+                .Select(e => new { e.CourseId })
+                .FirstOrDefaultAsync(ct);
+
+            if (exam == null)
+                return null;
+
+            var isInExam = await _context.ExamQuestions
+                .AnyAsync(eq => eq.ExamId == examId && eq.QuestionId == questionId, ct);
+
+            // سؤال خارج الاختبار يُعاين فقط كبديل من بنك دورة الاختبار المتاح في العقد
+            if (!isInExam && !await IsBankQuestionOfCourseAsync(scope, questionId, exam.CourseId, ct))
+                return null;
+
+            var question = await _context.Questions
+                .AsNoTracking()
+                .Include(q => q.Options)
+                .Include(q => q.VerbalPassage)
+                .Include(q => q.Curriculum)
+                .FirstOrDefaultAsync(q => q.Id == questionId, ct);
+
+            if (question == null)
+                return null;
+
+            var model = question.ToDisplayModel();
+            model.VerbalPassageContent = question.VerbalPassage?.Content;
+            model.VerbalPassageMediaUrl = question.VerbalPassage?.MediaUrl;
+            model.VerbalPassageType = question.VerbalPassage?.Type;
+            model.VerbalPassageDuration = question.VerbalPassage?.DurationSeconds;
+            model.IsRTL = question.Curriculum?.IsRTL ?? true;
+
+            while (model.Options.Count < 4)
+                model.Options.Add(new QuestionOptionDisplayViewModel());
+
+            return model;
+        }
+
+        private async Task<bool> IsBankQuestionOfCourseAsync(PlacementScope scope, Guid questionId, int? courseId, CancellationToken ct)
+        {
+            if (!await CanUseBankForExamCourseAsync(scope, courseId, ct))
+                return false;
+
+            return await (
+                from q in _context.Questions
+                join l in _context.Lessons on q.LessonId equals l.Id
+                join s in _context.Sections on l.SectionId equals s.Id
+                join cc in _context.CourseCurriculums on s.CurriculumId equals cc.CurriculumId
+                where q.Id == questionId &&
+                      cc.CourseId == courseId!.Value &&
+                      q.IsReviewed && q.IsComplete && !q.IsRejected
+                select q.Id
+            ).AnyAsync(ct);
         }
 
         // =====================================================
@@ -1643,8 +1977,71 @@ namespace QdratNew.Services.Exams.Placement
             ).AnyAsync(ct);
         }
 
+        // PPL-S5: الدفعة مرتبطة بالاختبار لكن لم تستلمه بعد: الإرسال الكامل هو الذي يبدأ التوصيل
+        private async Task<PlacementOperationResult?> ValidatePartnerBatchSentAsync(PlacementScope scope, int examId, int batchId, CancellationToken ct)
+        {
+            if (!scope.IsPartner)
+                return null;
+
+            var sent = await _context.ExamAssignmentsToBatches
+                .AnyAsync(x => x.ExamId == examId && x.BatchId == batchId && x.IsSentToStudents, ct);
+
+            return sent ? null : PlacementOperationResult.Fail("⚠️ لم يُرسل هذا الاختبار بعد، أرسله للدفعة أولًا.");
+        }
+
+        // PPL-S5: null = يمكن التوصيل. الأدمن بلا قيد (كما كانت الـ Actions).
+        private async Task<string?> GetPartnerDeliveryBlockAsync(PlacementScope scope, int examId, bool isActive, CancellationToken ct)
+        {
+            if (!scope.IsPartner)
+                return null;
+
+            if (!isActive)
+                return "⚠️ هذا الاختبار مخفي، استرجعه أولًا قبل الإرسال.";
+
+            return await _context.ExamQuestions.AnyAsync(q => q.ExamId == examId, ct)
+                ? null
+                : "⚠️ لا توجد أسئلة في هذا الاختبار.";
+        }
+
+        // PPL-S5: طالب الدفعة النشط، أو في الاختبار الفردي الطالب الذي وصله الاختبار
+        private async Task<bool> IsResendEligibleAsync(PlacementScope scope, int examId, int studentId, bool hasBatchLink, CancellationToken ct)
+        {
+            if (hasBatchLink)
+            {
+                return await EnrollmentsInScope(scope).AnyAsync(s =>
+                    s.StudentID == studentId &&
+                    _context.ExamAssignmentsToBatches.Any(x => x.ExamId == examId && x.BatchId == s.BatchId), ct);
+            }
+
+            return await _guard.CanAccessStudentAsync(_context, scope, studentId, ct) &&
+                   await _context.ExamAssignments.AnyAsync(a => a.ExamId == examId && a.StudentId == studentId, ct);
+        }
+
+        // PPL-S5.2: الإرسال نجح فعليًا؛ تعثر الإشعار يُسجَّل ولا يقلب النتيجة إلى فشل
+        private async Task NotifyPartnerStudentsAsync(PlacementScope scope, List<int> studentIds, string message, CancellationToken ct)
+        {
+            if (!scope.IsPartner || !studentIds.Any())
+                return;
+
+            try
+            {
+                await _notificationService.SendToStudentsAsync(studentIds, message, NotificationCategory.Exam, StudentPlacementDashboardUrl);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "PPL notification failed for partner {PartnerId}, {Count} students", scope.PartnerId, studentIds.Count);
+            }
+        }
+
         private Task<bool> IsExamSentAsync(int examId, CancellationToken ct)
             => _context.ExamAssignmentsToBatches.AnyAsync(x => x.ExamId == examId && x.IsSentToStudents, ct);
+
+        // PPL-S4: الاختبار بلا ربط دفعة هو اختبار طالب فردي، وقد وصل الطالب فور إنشائه
+        private async Task<bool> IsExamLockedForPartnerAsync(int examId, CancellationToken ct)
+        {
+            var links = _context.ExamAssignmentsToBatches.Where(x => x.ExamId == examId);
+            return !await links.AnyAsync(ct) || await links.AnyAsync(x => x.IsSentToStudents, ct);
+        }
 
         // الشريك: عقد نشط + دفعته + الاختبار مرتبط بها. الأدمن بلا قيد (كما كانت الـ Actions).
         private async Task<PlacementOperationResult?> ValidatePartnerExamBatchAsync(PlacementScope scope, int examId, int batchId, CancellationToken ct)

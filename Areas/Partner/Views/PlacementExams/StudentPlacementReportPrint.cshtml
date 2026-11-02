@@ -1,0 +1,112 @@
+@model QdratNew.ViewModels.Partner.PartnerPlacementReportPageVm<QdratNew.ViewModels.Reports.AdminPlacementReportViewModel>
+
+@{
+    Layout = null;
+
+    var report = Model.Report;
+    var percent = report.OverallPercent;
+    var grade = percent >= 80 ? "ممتاز" : percent >= 60 ? "متوسط" : "قيد التطوير";
+    var hasQuant = report.QuantLabels?.Any() == true;
+    var hasVerbal = report.VerbalLabels?.Any() == true;
+}
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>تقرير @report.StudentName - @report.ExamTitle</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+    <link href="~/css/partner-placement.css" rel="stylesheet" asp-append-version="true" />
+</head>
+<body class="pp-print-body">
+    <div class="pp-page pp-print-page">
+        <div class="pp-card pp-report-top">
+            <partial name="_PartnerReportHeader" model="Model.Branding" />
+
+            <div class="pp-head-actions no-print">
+                <button type="button" class="pp-btn pp-btn-primary" onclick="window.print()">
+                    <i class="fa-solid fa-print" aria-hidden="true"></i>
+                    طباعة
+                </button>
+                <a asp-action="DownloadStudentReport" asp-route-examId="@Model.ExamId" asp-route-studentId="@Model.StudentId" class="pp-btn pp-btn-light">
+                    <i class="fa-solid fa-file-pdf" aria-hidden="true"></i>
+                    تحميل PDF
+                </a>
+                <a href="javascript:history.back()" class="pp-btn pp-btn-light">
+                    <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                    عودة
+                </a>
+            </div>
+        </div>
+
+        <div class="pp-card">
+            <h1 class="pp-card-title">تقرير أداء الطالب في اختبار تحديد المستوى</h1>
+            <p class="pp-card-sub">
+                الطالب: @report.StudentName · الاختبار: @report.ExamTitle · @report.ExamDate.ToString("yyyy/MM/dd")
+            </p>
+
+            <div class="pp-stats">
+                <div class="pp-stat"><b>@percent%</b><span>النسبة الكلية · @grade</span></div>
+                <div class="pp-stat"><b>@report.AverageSolveMinutes</b><span>زمن الحل (دقيقة)</span></div>
+                @if (report.DontKnowAnswers > 0)
+                {
+                    <div class="pp-stat"><b>@report.DontKnowAnswers</b><span>لا أعرف الإجابة</span></div>
+                }
+            </div>
+        </div>
+
+        <div class="pp-charts">
+            @if (hasQuant)
+            {
+                <div class="pp-card">
+                    <h2 class="pp-card-title">تحليل المحاور الكمية</h2>
+                    <canvas id="quantChart" height="200" role="img" aria-label="نسب المحاور الكمية"></canvas>
+                </div>
+            }
+
+            @if (hasVerbal)
+            {
+                <div class="pp-card">
+                    <h2 class="pp-card-title">تحليل المحاور اللفظية</h2>
+                    <canvas id="verbalChart" height="200" role="img" aria-label="نسب المحاور اللفظية"></canvas>
+                </div>
+            }
+        </div>
+
+        <div class="pp-card">
+            <h2 class="pp-card-title"><i class="fa-solid fa-lightbulb" aria-hidden="true"></i> التوصيات</h2>
+            <p><b>ملاحظة تحليلية:</b> @report.RecommendationText</p>
+            <p class="mb-0"><b>قرار مقترح:</b> @report.AdminDecisionTip</p>
+        </div>
+
+        <div class="pp-report-foot">صادر من @Model.Branding?.PartnerName بالتعاون مع معهد القدرات</div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        (function () {
+            if (!window.Chart) {
+                return; // النسبة والتوصيات تبقى ظاهرة
+            }
+
+            function bars(id, labels, data, color) {
+                var canvas = document.getElementById(id);
+                if (!canvas) {
+                    return;
+                }
+
+                new Chart(canvas, {
+                    type: "bar",
+                    data: { labels: labels, datasets: [{ data: data, backgroundColor: color, borderRadius: 8 }] },
+                    options: { animation: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, max: 100 } } }
+                });
+            }
+
+            bars("quantChart", @Html.Raw(Json.Serialize(report.QuantLabels)), @Html.Raw(Json.Serialize(report.QuantScores)), "#da784d");
+            bars("verbalChart", @Html.Raw(Json.Serialize(report.VerbalLabels)), @Html.Raw(Json.Serialize(report.VerbalScores)), "#9a4a26");
+        })();
+    </script>
+</body>
+</html>

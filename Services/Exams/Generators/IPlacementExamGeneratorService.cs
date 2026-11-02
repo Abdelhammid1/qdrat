@@ -41,7 +41,8 @@ namespace QdratNew.Services.Exams.Generators
             int durationMinutes,
             DateTime? startDate = null,
             DateTime? endDate = null,
-            int? ownerPartnerId = null); // PPL-S2
+            int? ownerPartnerId = null, // PPL-S2
+            bool assignToStudent = true); // PPL-S4: false = مسودة دفعة بلا تعيين أو إشعار لأي طالب
 
     }
 }

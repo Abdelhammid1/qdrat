@@ -1,0 +1,168 @@
+@model QdratNew.ViewModels.Partner.PartnerPlacementBatchExamsVm
+
+@{
+    ViewData["Title"] = "اختبارات الدفعة";
+
+    var draftsCount = Model.Exams.Count(e => !e.IsSentToStudents);
+    var hiddenCount = Model.Exams.Count(e => !e.IsActive);
+}
+
+<div class="pp-page">
+    <partial name="_PlacementAlerts" />
+
+    <div class="pp-head">
+        <div>
+            <h1><i class="fa-solid fa-users" aria-hidden="true"></i> اختبارات الدفعة: @Model.BatchName</h1>
+            <p>راجع مسودات الاختبارات قبل الإرسال وتابع الاختبارات الحالية لهذه الدفعة.</p>
+        </div>
+
+        <div class="pp-head-actions">
+            <a asp-action="Index" class="pp-btn pp-btn-light">
+                <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                كل الدفعات
+            </a>
+        </div>
+    </div>
+
+    <div class="pp-stats">
+        <div class="pp-stat"><b>@Model.Exams.Count</b><span>إجمالي الاختبارات</span></div>
+        <div class="pp-stat"><b>@draftsCount</b><span>مسودات لم تُرسل</span></div>
+        <div class="pp-stat"><b>@hiddenCount</b><span>اختبارات مخفية</span></div>
+    </div>
+
+    <div class="pp-card">
+        @if (!Model.Exams.Any())
+        {
+            <div class="pp-empty">
+                <i class="fa-solid fa-inbox" aria-hidden="true"></i>
+                <h2>لا توجد اختبارات لهذه الدفعة</h2>
+                <a asp-action="Index" class="pp-btn pp-btn-primary">العودة للدفعات</a>
+            </div>
+        }
+        else
+        {
+            <div class="pp-toolbar">
+                <h2 class="pp-card-title"><i class="fa-solid fa-table-list" aria-hidden="true"></i> الاختبارات</h2>
+                <input type="search"
+                       class="pp-search"
+                       placeholder="ابحث في عنوان الاختبار..."
+                       aria-label="ابحث في عنوان الاختبار"
+                       data-search-target=".pp-exam-row" />
+            </div>
+
+            <div class="pp-table-wrap">
+                <table class="pp-table pp-table-cards">
+                    <thead>
+                        <tr>
+                            <th>العنوان</th>
+                            <th>الأسئلة</th>
+                            <th>الطلاب</th>
+                            <th>تاريخ الإنشاء</th>
+                            <th>الحالة</th>
+                            <th>الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var exam in Model.Exams)
+                        {
+                            <tr class="pp-exam-row" data-search="@exam.Title">
+                                <td data-label="العنوان">@exam.Title</td>
+                                <td data-label="الأسئلة">@exam.TotalQuestions</td>
+                                <td data-label="الطلاب">@exam.StudentCount</td>
+                                <td data-label="تاريخ الإنشاء">@exam.CreatedAt.ToString("yyyy/MM/dd HH:mm")</td>
+                                <td data-label="الحالة">
+                                    @if (!exam.IsActive)
+                                    {
+                                        <span class="pp-badge pp-badge-muted"><i class="fa-solid fa-eye-slash" aria-hidden="true"></i> مخفي</span>
+                                    }
+                                    else if (exam.IsSentToStudents)
+                                    {
+                                        <span class="pp-badge pp-badge-ok"><i class="fa-solid fa-circle-check" aria-hidden="true"></i> مُرسل</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="pp-badge pp-badge-warn"><i class="fa-solid fa-pen" aria-hidden="true"></i> مسودة</span>
+                                    }
+                                </td>
+                                <td data-label="الإجراءات">
+                                    <div class="pp-actions">
+                                        <a asp-action="Review" asp-route-examId="@exam.ExamId" class="pp-btn pp-btn-light pp-btn-sm">
+                                            <i class="fa-solid fa-clipboard-check" aria-hidden="true"></i>
+                                            مراجعة
+                                        </a>
+
+                                        @if (exam.IsSentToStudents)
+                                        {
+                                            <a asp-action="BatchStudents" asp-route-examId="@exam.ExamId" asp-route-batchId="@Model.BatchId" class="pp-btn pp-btn-light pp-btn-sm">
+                                                <i class="fa-solid fa-chart-column" aria-hidden="true"></i>
+                                                النتائج
+                                            </a>
+                                        }
+
+                                        @if (exam.IsActive && !exam.IsSentToStudents)
+                                        {
+                                            <a asp-action="ConfirmSend" asp-route-examId="@exam.ExamId" class="pp-btn pp-btn-ok pp-btn-sm">
+                                                <i class="fa-solid fa-paper-plane" aria-hidden="true"></i>
+                                                إرسال
+                                            </a>
+                                        }
+
+                                        @if (exam.IsActive)
+                                        {
+                                            <a asp-action="PlacementDetails" asp-route-id="@exam.ExamId" class="pp-btn pp-btn-light pp-btn-sm">
+                                                <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+                                                التفاصيل
+                                            </a>
+
+                                            <form asp-action="HideExam" method="post"
+                                                  data-confirm="@(exam.TestedCount > 0
+                                                      ? $"سيتم إخفاء الاختبار «{exam.Title}» عن الطلاب، ومنهم {exam.TestedCount} طالب أدّوه بالفعل. يمكن استرجاعه لاحقًا."
+                                                      : $"سيتم إخفاء الاختبار «{exam.Title}» عن الطلاب. يمكن استرجاعه لاحقًا.")"
+                                                  data-confirm-text="نعم، إخفاء">
+                                                <input type="hidden" name="id" value="@exam.ExamId" />
+                                                <input type="hidden" name="batchId" value="@Model.BatchId" />
+                                                <button type="submit" class="pp-btn pp-btn-light pp-btn-sm">
+                                                    <i class="fa-solid fa-eye-slash" aria-hidden="true"></i>
+                                                    إخفاء
+                                                </button>
+                                            </form>
+                                        }
+                                        else
+                                        {
+                                            <form asp-action="RestoreExam" method="post" data-busy="1">
+                                                <input type="hidden" name="id" value="@exam.ExamId" />
+                                                <input type="hidden" name="batchId" value="@Model.BatchId" />
+                                                <button type="submit" class="pp-btn pp-btn-ok pp-btn-sm">
+                                                    <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>
+                                                    استرجاع
+                                                </button>
+                                            </form>
+                                        }
+
+                                        <form asp-action="DeleteExamPermanently" method="post"
+                                              data-confirm="@(exam.TestedCount > 0
+                                                  ? $"سيُحذف الاختبار «{exam.Title}» نهائيًا مع نتائج {exam.TestedCount} طالب أدّوه، ولا يمكن التراجع."
+                                                  : $"سيُحذف الاختبار «{exam.Title}» نهائيًا ولا يمكن التراجع.")"
+                                              data-confirm-text="نعم، احذف نهائيًا">
+                                            <input type="hidden" name="examId" value="@exam.ExamId" />
+                                            <input type="hidden" name="batchId" value="@Model.BatchId" />
+                                            <button type="submit" class="pp-btn pp-btn-danger pp-btn-sm">
+                                                <i class="fa-solid fa-trash" aria-hidden="true"></i>
+                                                حذف نهائي
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="~/js/partner-placement.js" asp-append-version="true"></script>
+}

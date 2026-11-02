@@ -1,0 +1,323 @@
+@model QdratNew.ViewModels.Exam.PlacementExamCreateAdvancedViewModel
+
+@{
+    ViewData["Title"] = "إنشاء اختبار تحديد المستوى";
+
+    var previousCounts = Model.SectionSelections
+        .Where(x => x != null && x.QuestionCount > 0)
+        .GroupBy(x => x.SectionId)
+        .ToDictionary(g => g.Key.ToString(), g => g.First().QuestionCount);
+}
+
+<div class="pp-page">
+    <partial name="_PlacementAlerts" />
+
+    <div class="pp-head">
+        <div>
+            <h1><i class="fa-solid fa-sliders" aria-hidden="true"></i> إنشاء اختبار تحديد المستوى</h1>
+            <p>اختر الدورة ثم الدفعة أو الطالب، وحدد المحاور وعدد الأسئلة من بنك أسئلة المعهد.</p>
+        </div>
+
+        <div class="pp-head-actions">
+            <a asp-action="Index" class="pp-btn pp-btn-light">
+                <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                العودة للقائمة
+            </a>
+        </div>
+    </div>
+
+    @if (!Model.Courses.Any())
+    {
+        <div class="pp-card">
+            <div class="pp-empty">
+                <i class="fa-solid fa-book-open" aria-hidden="true"></i>
+                <h2>لا توجد دورات متاحة</h2>
+                <p>لا يشمل عقدكم بنك أسئلة المعهد لأي دورة. تواصلوا مع المعهد لتحديث العقد.</p>
+                <a asp-action="Index" class="pp-btn pp-btn-primary">العودة للقائمة</a>
+            </div>
+        </div>
+    }
+    else
+    {
+        <form asp-action="CreateAdvancedPost" method="post" id="mainForm" data-busy="1">
+            <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+            <div class="pp-card">
+                <h2 class="pp-card-title"><i class="fa-solid fa-link" aria-hidden="true"></i> بيانات الربط</h2>
+                <p class="pp-card-sub">اختر دفعة لإنشاء مسودة تراجعها قبل الإرسال، أو طالبًا واحدًا ليصله الاختبار مباشرة بعد الإنشاء.</p>
+
+                <div class="row g-3">
+                    <div class="col-lg-4 col-md-6">
+                        <label asp-for="CourseId" class="form-label"></label>
+                        <select asp-for="CourseId" asp-items="Model.Courses" class="form-select" id="courseSelect">
+                            <option value="">-- اختر الدورة --</option>
+                        </select>
+                        <span asp-validation-for="CourseId" class="text-danger small"></span>
+                    </div>
+
+                    <div class="col-lg-4 col-md-6">
+                        <label asp-for="BatchId" class="form-label"></label>
+                        <select asp-for="BatchId" asp-items="Model.Batches" class="form-select" id="batchSelect">
+                            <option value="">-- اختر الدفعة --</option>
+                        </select>
+                        <span asp-validation-for="BatchId" class="text-danger small"></span>
+                        <div class="form-text" id="batchHint"></div>
+                    </div>
+
+                    <div class="col-lg-4 col-md-6">
+                        <label asp-for="StudentId" class="form-label"></label>
+                        <select asp-for="StudentId" asp-items="Model.Students" class="form-select" id="studentSelect">
+                            <option value="">-- اختر الطالب --</option>
+                        </select>
+                        <span asp-validation-for="StudentId" class="text-danger small"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pp-card">
+                <h2 class="pp-card-title"><i class="fa-solid fa-list-check" aria-hidden="true"></i> المحاور وعدد الأسئلة</h2>
+                <p class="pp-card-sub">المحور الذي عدد أسئلته 0 لن يدخل في الاختبار.</p>
+
+                <div class="pp-table-wrap">
+                    <table class="pp-table" id="sectionsTable">
+                        <thead>
+                            <tr>
+                                <th>المنهج</th>
+                                <th>المحور</th>
+                                <th style="width:150px">عدد الأسئلة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td colspan="3"><div class="pp-state">يرجى اختيار دورة لعرض المحاور.</div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="pp-total" id="sectionsTotal" aria-live="polite"></div>
+            </div>
+
+            <div class="pp-card">
+                <h2 class="pp-card-title"><i class="fa-solid fa-gear" aria-hidden="true"></i> إعدادات الاختبار</h2>
+                <p class="pp-card-sub">يجب أن يساوي مجموع أسئلة المحاور إجمالي عدد الأسئلة. يبدأ وقت الاختبار عند دخول الطالب إليه.</p>
+
+                <div class="row g-3">
+                    <div class="col-lg-4 col-md-6">
+                        <label asp-for="TotalQuestions" class="form-label"></label>
+                        <input asp-for="TotalQuestions" class="form-control" type="number" min="1" max="500" id="totalQuestions" />
+                        <span asp-validation-for="TotalQuestions" class="text-danger small"></span>
+                    </div>
+
+                    <div class="col-lg-4 col-md-6">
+                        <label asp-for="DurationMinutes" class="form-label"></label>
+                        <input asp-for="DurationMinutes" class="form-control" type="number" min="5" max="300" />
+                        <span asp-validation-for="DurationMinutes" class="text-danger small"></span>
+                    </div>
+
+                    <div class="col-lg-4 col-md-6">
+                        <label asp-for="PassingScore" class="form-label"></label>
+                        <input asp-for="PassingScore" class="form-control" type="number" min="1" max="100" />
+                        <span asp-validation-for="PassingScore" class="text-danger small"></span>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="form-check form-switch">
+                            <input asp-for="IsRandomized" class="form-check-input" type="checkbox" />
+                            <label asp-for="IsRandomized" class="form-check-label"></label>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="form-check form-switch">
+                            <input asp-for="IsInLab" class="form-check-input" type="checkbox" />
+                            <label asp-for="IsInLab" class="form-check-label"></label>
+                        </div>
+                        <div class="form-text">يولّد كودًا من 6 أرقام يظهر في صفحة المراجعة ويفتح به الطلاب الاختبار.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pp-form-actions">
+                <a asp-action="Index" class="pp-btn pp-btn-light">
+                    <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                    إلغاء
+                </a>
+                <button type="submit" class="pp-btn pp-btn-primary">
+                    <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
+                    إنشاء الاختبار
+                </button>
+            </div>
+        </form>
+    }
+</div>
+
+@section Scripts {
+    <script src="~/js/partner-placement.js" asp-append-version="true"></script>
+
+    <script>
+        (function () {
+            const courseSelect = document.getElementById("courseSelect");
+            if (!courseSelect) {
+                return;
+            }
+
+            const sectionsUrl = "@Url.Action("GetSectionsByCourse")";
+            const batchesUrl = "@Url.Action("GetBatchesByCourse")";
+            const previousCounts = @Json.Serialize(previousCounts);
+
+            const tbody = document.querySelector("#sectionsTable tbody");
+            const batchSelect = document.getElementById("batchSelect");
+            const batchHint = document.getElementById("batchHint");
+            const studentSelect = document.getElementById("studentSelect");
+            const totalInput = document.getElementById("totalQuestions");
+            const totalBox = document.getElementById("sectionsTotal");
+            let requestNumber = 0;
+
+            function escapeHtml(value) {
+                return String(value === null || value === undefined ? "" : value)
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;");
+            }
+
+            function stateRow(cssClass, message) {
+                return `<tr><td colspan="3"><div class="pp-state ${cssClass}">${escapeHtml(message)}</div></td></tr>`;
+            }
+
+            function updateTotal() {
+                const inputs = tbody.querySelectorAll("input[type=number]");
+                if (!inputs.length) {
+                    totalBox.textContent = "";
+                    return;
+                }
+
+                let sum = 0;
+                inputs.forEach(function (input) { sum += parseInt(input.value, 10) || 0; });
+
+                const expected = parseInt(totalInput.value, 10) || 0;
+                totalBox.textContent = `مجموع الأسئلة: ${sum} من ${expected}`;
+                totalBox.classList.toggle("is-match", sum === expected);
+                totalBox.classList.toggle("is-mismatch", sum !== expected);
+            }
+
+            function fillBatches(batches, selectedValue) {
+                batchSelect.innerHTML = '<option value="">-- اختر الدفعة --</option>';
+
+                batches.forEach(function (batch) {
+                    const option = document.createElement("option");
+                    option.value = batch.batchId;
+                    option.textContent = batch.batchName;
+                    option.selected = String(batch.batchId) === String(selectedValue);
+                    batchSelect.appendChild(option);
+                });
+
+                batchHint.textContent = batches.length ? "" : "لا توجد دفعات لهذه الدورة.";
+            }
+
+            function loadCourse() {
+                const courseId = courseSelect.value;
+                const selectedBatch = batchSelect.value;
+                const current = ++requestNumber;
+
+                if (!courseId) {
+                    tbody.innerHTML = stateRow("", "يرجى اختيار دورة لعرض المحاور.");
+                    fillBatches([], "");
+                    batchHint.textContent = "اختر الدورة أولًا.";
+                    updateTotal();
+                    return;
+                }
+
+                tbody.innerHTML = stateRow("", "جارٍ تحميل المحاور...");
+                batchSelect.disabled = true;
+
+                const query = `?courseId=${encodeURIComponent(courseId)}`;
+                const getJson = function (url) {
+                    return fetch(url + query, { headers: { "Accept": "application/json" } })
+                        .then(function (response) {
+                            if (!response.ok) {
+                                throw new Error("request failed");
+                            }
+
+                            return response.json();
+                        });
+                };
+
+                Promise.all([getJson(sectionsUrl), getJson(batchesUrl)])
+                    .then(function (results) {
+                        if (current !== requestNumber) {
+                            return;
+                        }
+
+                        const sections = results[0];
+                        fillBatches(results[1], selectedBatch);
+
+                        if (!sections.length) {
+                            tbody.innerHTML = stateRow("pp-state-error", "لا توجد محاور بها أسئلة لهذه الدورة.");
+                            updateTotal();
+                            return;
+                        }
+
+                        tbody.innerHTML = sections.map(function (item, index) {
+                            const count = previousCounts[item.sectionId] || 0;
+                            return `
+                                <tr>
+                                    <td>
+                                        ${escapeHtml(item.curriculumTitle)}
+                                        <input type="hidden" name="SectionSelections.Index" value="${index}" />
+                                        <input type="hidden" name="SectionSelections[${index}].SectionId" value="${escapeHtml(item.sectionId)}" />
+                                        <input type="hidden" name="SectionSelections[${index}].CurriculumId" value="${escapeHtml(item.curriculumId)}" />
+                                        <input type="hidden" name="SectionSelections[${index}].SectionTitle" value="${escapeHtml(item.sectionTitle)}" />
+                                        <input type="hidden" name="SectionSelections[${index}].CurriculumTitle" value="${escapeHtml(item.curriculumTitle)}" />
+                                    </td>
+                                    <td>${escapeHtml(item.sectionTitle)}</td>
+                                    <td>
+                                        <input type="number" class="form-control text-center" min="0"
+                                               name="SectionSelections[${index}].QuestionCount"
+                                               aria-label="عدد أسئلة ${escapeHtml(item.sectionTitle)}"
+                                               value="${count}" />
+                                    </td>
+                                </tr>`;
+                        }).join("");
+
+                        updateTotal();
+                    })
+                    .catch(function () {
+                        if (current !== requestNumber) {
+                            return;
+                        }
+
+                        tbody.innerHTML = stateRow("pp-state-error", "حدث خطأ أثناء تحميل المحاور، حاول مرة أخرى.");
+                        updateTotal();
+                    })
+                    .finally(function () {
+                        if (current === requestNumber) {
+                            batchSelect.disabled = false;
+                        }
+                    });
+            }
+
+            courseSelect.addEventListener("change", function () {
+                batchSelect.value = "";
+                loadCourse();
+            });
+
+            batchSelect.addEventListener("change", function () {
+                if (batchSelect.value) {
+                    studentSelect.value = "";
+                }
+            });
+
+            studentSelect.addEventListener("change", function () {
+                if (studentSelect.value) {
+                    batchSelect.value = "";
+                }
+            });
+
+            tbody.addEventListener("input", updateTotal);
+            totalInput.addEventListener("input", updateTotal);
+
+            loadCourse();
+        })();
+    </script>
+}

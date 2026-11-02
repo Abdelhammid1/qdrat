@@ -83,6 +83,7 @@ namespace QdratNew.Services.Reports.Implementations
                 where ea.BatchId == batchId
                       && es.StudentId == studentId
                       && ea.IsSentToStudents
+                      && ea.Exam.OwnerPartnerId == null // PPL-S6: لها قسم مستقل في الصفحة
                 select new
                 {
                     ea.Id,

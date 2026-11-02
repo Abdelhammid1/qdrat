@@ -182,18 +182,42 @@
             /* ========== التنقل بين الأسئلة ========== */
             async function loadNextQuestion(formData) {
                 $("#loadingOverlay").fadeIn(200);
-                const res = await fetch("/Students/PlacementExams/SubmitAnswerFetch", {
-                    method: "POST",
-                    body: formData,
-                    credentials: "include"
-                });
-                const html = await res.text();
-                $("#loadingOverlay").fadeOut(200);
-                if (html.trim().startsWith("<")) {
-                    container.innerHTML = html;
-                    window.scrollTo({ top: 0, behavior: "smooth" });
-                    attachNavEvents(); // إعادة تفعيل الأزرار بعد التحديث
+                try {
+                    const res = await fetch("/Students/PlacementExams/SubmitAnswerFetch", {
+                        method: "POST",
+                        body: formData,
+                        credentials: "include"
+                    });
+                    const html = await res.text();
+                    if (res.ok && html.trim().startsWith("<")) {
+                        container.innerHTML = html;
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                        attachNavEvents(); // إعادة تفعيل الأزرار بعد التحديث
+                        return;
+                    }
+                    // PPL-S7.1: الرفض يصل JSON؛ لا يبقى الطالب أمام صفحة لا تستجيب بلا رسالة
+                    showAnswerRejected(res.ok ? JSON.parse(html) : null);
+                } catch (ex) {
+                    showAnswerRejected(null);
+                } finally {
+                    $("#loadingOverlay").fadeOut(200);
                 }
+            }
+
+            function showAnswerRejected(result) {
+                Swal.fire({
+                    icon: "warning",
+                    title: "⚠️",
+                    text: (result && result.message) || "تعذر حفظ الإجابة، تحقق من الاتصال وحاول مرة أخرى."
+                }).then(() => {
+                    if (result && result.redirectUrl) window.location.href = result.redirectUrl;
+                });
+            }
+
+            // PPL-S7.1: توكن النموذج داخل السؤال المعروض حاليًا
+            function antiForgeryHeaders() {
+                const token = document.querySelector('#question-container input[name="__RequestVerificationToken"]');
+                return { "Accept": "application/json", "RequestVerificationToken": token ? token.value : "" };
             }
 
             function attachNavEvents() {
@@ -228,7 +252,7 @@
             try {
                 const res = await fetch(`/Students/PlacementExams/SubmitFinal?id=${examAssignmentId}`, {
                     method: "POST",
-                    headers: { "Accept": "application/json" }
+                    headers: antiForgeryHeaders()
                 });
                 const result = await res.json();
 
@@ -265,12 +289,20 @@
         });
 
                  async function handleForceSubmit(id) {
-            const res = await fetch(`/Students/PlacementExams/SubmitFinal?id=${id}&forceSubmit=true`, {
-                method: "POST",
-                headers: { "Accept": "application/json" }
-            });
-            const result = await res.json();
-            if (result.redirectUrl) window.location.href = result.redirectUrl;
+            try {
+                const res = await fetch(`/Students/PlacementExams/SubmitFinal?id=${id}&forceSubmit=true`, {
+                    method: "POST",
+                    headers: antiForgeryHeaders()
+                });
+                const result = await res.json();
+                if (result.redirectUrl) {
+                    window.location.href = result.redirectUrl;
+                    return;
+                }
+                showAnswerRejected(result);
+            } catch (ex) {
+                Swal.fire({ icon: "error", title: "حدث خطأ", text: "تعذر تسليم الاختبار، حاول مرة أخرى." });
+            }
         }
 
 

@@ -17,6 +17,12 @@ namespace QdratNew.ViewModels.Exam
 
         // 🆕 هل مفعّل خيار "لا أعرف الإجابة" لهذا الاختبار
         public bool AllowDontKnowOption { get; set; }
+
+        // PPL-S4: للشريك فقط — مسودة دفعة وبنك الدورة ضمن عقده
+        public bool CanEditQuestions { get; internal set; }
+
+        // PPL-S5: للشريك فقط — مسودة دفعة نشطة لم تُرسل بعد
+        public bool CanSend { get; internal set; }
     }
 
     public class PlacementExamReviewSectionVm

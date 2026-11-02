@@ -1,0 +1,104 @@
+@model QdratNew.ViewModels.Exam.ReplaceQuestionVm
+
+@functions {
+    string ShortPlainText(string? html, int length = 120)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return "—";
+
+        var plain = System.Net.WebUtility.HtmlDecode(
+            System.Text.RegularExpressions.Regex.Replace(html, "<.*?>", string.Empty)).Trim();
+
+        return plain.Length <= length ? plain : plain.Substring(0, length) + "...";
+    }
+
+    string DifficultyText(string? difficulty) => difficulty switch
+    {
+        "Easy" => "سهل",
+        "Medium" => "متوسط",
+        _ => "صعب"
+    };
+}
+
+@{
+    ViewData["Title"] = "استبدال سؤال";
+}
+
+<div class="pp-page">
+    <partial name="_PlacementAlerts" />
+
+    <div class="pp-head">
+        <div>
+            <h1><i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i> استبدال سؤال</h1>
+            <p>@Model.LessonTitle — الصعوبة: @DifficultyText(Model.Difficulty)</p>
+        </div>
+
+        <div class="pp-head-actions">
+            <a asp-action="Review" asp-route-examId="@Model.ExamId" class="pp-btn pp-btn-light">
+                <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                العودة للمراجعة
+            </a>
+        </div>
+    </div>
+
+    <div class="pp-card">
+        @if (!Model.Candidates.Any())
+        {
+            <div class="pp-empty">
+                <i class="fa-solid fa-inbox" aria-hidden="true"></i>
+                <h2>لا توجد أسئلة بديلة مناسبة</h2>
+                <p>لا توجد في البنك أسئلة أخرى بنفس المؤشر والصعوبة.</p>
+            </div>
+        }
+        else
+        {
+            <p class="pp-card-sub">الأسئلة التالية من نفس المؤشر ونفس مستوى الصعوبة.</p>
+
+            <form asp-action="ReplaceQuestion" method="post">
+                <input type="hidden" name="examId" value="@Model.ExamId" />
+                <input type="hidden" name="oldQuestionId" value="@Model.OldQuestionId" />
+
+                <div class="pp-table-wrap">
+                    <table class="pp-table">
+                        <thead>
+                            <tr>
+                                <th>السؤال</th>
+                                <th>الإجراءات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var candidate in Model.Candidates)
+                            {
+                                <tr>
+                                    <td>@ShortPlainText(candidate.Title)</td>
+                                    <td>
+                                        <div class="pp-actions">
+                                            <button type="button"
+                                                    class="pp-btn pp-btn-light pp-btn-sm"
+                                                    data-preview-url="@Url.Action("PreviewQuestion", new { examId = Model.ExamId, questionId = candidate.QuestionId })">
+                                                <i class="fa-solid fa-eye" aria-hidden="true"></i>
+                                                معاينة
+                                            </button>
+                                            <button type="submit"
+                                                    name="newQuestionId"
+                                                    value="@candidate.QuestionId"
+                                                    class="pp-btn pp-btn-primary pp-btn-sm">
+                                                اختيار
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </form>
+        }
+    </div>
+</div>
+
+<partial name="_QuestionPreviewModal" />
+
+@section Scripts {
+    <script src="~/js/partner-placement.js" asp-append-version="true"></script>
+}

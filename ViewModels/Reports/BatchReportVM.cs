@@ -5,6 +5,9 @@
         public int BatchId { get; set; }
         public string BatchName { get; set; }
 
+        // PPL-S6.3
+        public bool CanViewPlacementExams { get; set; }
+
         public int TotalStudents { get; set; }
 
         public int TotalHomeworkSets { get; set; }

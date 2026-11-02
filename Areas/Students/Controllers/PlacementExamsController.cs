@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -23,6 +24,10 @@ namespace QdratNew.Areas.Students.Controllers
     [Authorize(Roles = "Student")]
     public class PlacementExamsController : Controller
     {
+        private const int AnswerGraceSeconds = 60;     // PPL-S7.1
+        private const int MaxAnswerLength = 4000;      // PPL-S7.1: أطول إجابة حقيقية في البيانات 868 حرفًا
+        private const int MaxReviewLogLength = 20000;  // PPL-S7.1
+
         private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
         private readonly ITimeZoneService _timeZoneService;
         private readonly UserManager<ApplicationUser> _userManager;
@@ -76,6 +81,10 @@ namespace QdratNew.Areas.Students.Controllers
                 return NotFound("❌ لم يتم العثور على هذا الاختبار.");
 
             var exam = assignment.Exam;
+
+            // PPL-S5.3: اختبار الشريك المخفي لا يُفتح (اختبارات المعهد بلا تغيير)
+            if (!exam.IsActive && exam.OwnerPartnerId != null)
+                return NotFound("❌ لم يتم العثور على هذا الاختبار.");
 
             if (!string.IsNullOrWhiteSpace(exam.ReferenceCode))
             {
@@ -270,6 +279,7 @@ Swal.fire({
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [EnableRateLimiting("rtk-code")] // PPL-S7.1: الكود 6 أرقام، بلا حد يمكن تجربته آليًا
         public async Task<IActionResult> VerifyPlacementExamCode(int assignmentId, string code)
         {
             using var _context = _contextFactory.CreateDbContext();
@@ -327,6 +337,7 @@ Swal.fire({
                 join e in _context.Exams.AsNoTracking() on ea.ExamId equals e.Id
                 where ea.StudentId == studentId
                       && e.Type == ExamType.LevelAssessment
+                      && (e.IsActive || e.OwnerPartnerId == null) // PPL-S5.3
                 select new
                 {
                     ea.Id,
@@ -386,7 +397,8 @@ Swal.fire({
                     IsSubmitted = status?.IsSubmitted ?? false,
 
                     // إضافة حالة وسطية
-                    IsInProgress = status != null && !status.IsSubmitted,
+                    // PPL-S7: الإرسال ينشئ حالة Pending، فلا يظهر «استكمال» لاختبار لم يبدأ
+                    IsInProgress = status != null && !status.IsSubmitted && status.StartedAt != null,
 
                     Score = score
                 };
@@ -424,6 +436,7 @@ Swal.fire({
 
 
         [HttpPost]
+        [ValidateAntiForgeryToken] // PPL-S7.1
         public async Task<IActionResult> SubmitAnswerFetch(
         int id, Guid q, string nav, string? SelectedOption, int? timeTakenSeconds = null)
         {
@@ -435,19 +448,11 @@ Swal.fire({
                 if (studentId == null)
                     return Json(new { success = false, message = "❌ لم يتم التعرف على الطالب." });
 
-                // 🟢 جلب ExamId سواء من ExamAssignments أو ExamAssignmentsToBatches
+                // PPL-S5.3: التكليف يخص الطالب الحالي؛ بدون ذلك يقرأ أسئلة أي اختبار ويسجل محاولات عليه
                 var examId = await _context.ExamAssignments
-                    .Where(a => a.Id == id)
+                    .Where(a => a.Id == id && a.StudentId == studentId)
                     .Select(a => a.ExamId)
                     .FirstOrDefaultAsync();
-
-                if (examId == 0)
-                {
-                    examId = await _context.ExamAssignmentsToBatches
-                        .Where(a => a.Id == id)
-                        .Select(a => a.ExamId ?? 0)
-                        .FirstOrDefaultAsync();
-                }
 
                 if (examId == 0)
                     return Json(new { success = false, message = "⚠️ لم يتم العثور على الاختبار." });
@@ -461,7 +466,7 @@ Swal.fire({
                 else
                 {
                     allQuestions = await _context.ExamQuestions
-                        .Where(eq => eq.ExamAssignmentId == id || eq.ExamId == examId)
+                        .Where(eq => eq.ExamId == examId) // PPL-S5.3: ExamQuestion.ExamAssignmentId يشير لربط الدفعة لا لهذا التكليف
                         .OrderBy(eq => eq.Order)
                         .Select(eq => eq.QuestionId)
                         .ToListAsync();
@@ -481,6 +486,21 @@ Swal.fire({
 
                     return Json(new { success = false, message = "⚠️ هذا السؤال لا ينتمي لهذا الاختبار." });
                 }
+
+                // PPL-S7.1: بعد التسليم تظهر الإجابات الصحيحة للطالب، فلا تُقبل إجابة بعده أو بعد انتهاء الوقت
+                var closedMessage = await GetClosedAttemptMessageAsync(_context, studentId.Value, examId);
+                if (closedMessage != null)
+                {
+                    return Json(new
+                    {
+                        success = false,
+                        message = closedMessage,
+                        redirectUrl = Url.Action(nameof(ResultPlacementExam), new { assignmentId = id })
+                    });
+                }
+
+                if (SelectedOption?.Length > MaxAnswerLength)
+                    return Json(new { success = false, message = "⚠️ الإجابة غير صالحة." });
 
                 // كشف التلاعب الزمني
                 int safeTimeTaken = (timeTakenSeconds.HasValue && timeTakenSeconds.Value > 0) ? timeTakenSeconds.Value : 1;
@@ -602,24 +622,73 @@ Swal.fire({
             }
             catch (Exception ex)
             {
-                return Json(new { success = false, message = $"⚠️ خطأ أثناء حفظ الإجابة: {ex.Message}" });
+                _logger.LogError(ex, "PlacementExamsController: تعذر حفظ إجابة التكليف {AssignmentId}", id);
+                return Json(new { success = false, message = "⚠️ تعذر حفظ الإجابة، حاول مرة أخرى." });
             }
         }
 
+        // PPL-S7.1: null = يمكن الإجابة. المهلة للطلب الأخير الذي خرج من المتصفح قبل نهاية العدّاد.
+        private static async Task<string?> GetClosedAttemptMessageAsync(ApplicationDbContext context, int studentId, int examId)
+        {
+            var isHiddenPartnerExam = await context.Exams
+                .AnyAsync(e => e.Id == examId && !e.IsActive && e.OwnerPartnerId != null);
 
+            if (isHiddenPartnerExam)
+                return "⚠️ لم يعد هذا الاختبار متاحًا.";
 
+            var status = await context.ExamStudentStatuses
+                .AsNoTracking()
+                .Where(s => s.StudentId == studentId && s.ExamId == examId)
+                .Select(s => new { s.IsSubmitted, s.Status, s.EndAt })
+                .FirstOrDefaultAsync();
+
+            if (status == null)
+                return null;
+
+            if (status.IsSubmitted || status.Status == ExamStatus.Completed)
+                return "⚠️ تم تسليم هذا الاختبار، ولا يمكن تعديل الإجابات.";
+
+            return status.EndAt.HasValue && DateTime.UtcNow > status.EndAt.Value.AddSeconds(AnswerGraceSeconds)
+                ? "⏰ انتهى وقت الاختبار، ولا يمكن تعديل الإجابات."
+                : null;
+        }
+
+        // PPL-S7.1: النتائج والمراجعة تكشف الإجابات الصحيحة، فلا تُفتح والاختبار ما زال جاريًا
+        private async Task<bool> IsAttemptRunningAsync(ApplicationDbContext context, int studentId, int examId)
+        {
+            var now = DateTime.UtcNow;
+
+            var isRunning = await context.ExamStudentStatuses.AnyAsync(s =>
+                s.StudentId == studentId &&
+                s.ExamId == examId &&
+                !s.IsSubmitted &&
+                s.Status != ExamStatus.Completed &&
+                (s.EndAt == null || s.EndAt >= now));
+
+            if (isRunning)
+                TempData["Error"] = "⚠️ لا يمكن عرض النتيجة قبل تسليم الاختبار.";
+
+            return isRunning;
+        }
+
+        // sendBeacon لا يرسل هيدر AntiForgery؛ الطلب JSON فقط ولا يكتب إلا سجل مراجعة الطالب نفسه
         [HttpPost]
         public async Task<IActionResult> SaveReviewBehavior(
             [FromBody] SaveReviewBehaviorDto dto)
         {
             using var _context = _contextFactory.CreateDbContext();
             var studentId = await GetCurrentStudentIdAsync();
-            if (studentId == null) return Json(new { success = false });
+            if (studentId == null || dto == null || dto.ReviewNavLog?.Length > MaxReviewLogLength)
+                return Json(new { success = false });
+
+            // PPL-S7.1: الحالة تُربط بالاختبار؛ ExamAssignmentId في الحالة فارغ لتكليفات تحديد المستوى
+            var examId = await _context.ExamAssignments
+                .Where(a => a.Id == dto.ExamAssignmentId && a.StudentId == studentId)
+                .Select(a => a.ExamId)
+                .FirstOrDefaultAsync();
 
             var status = await _context.ExamStudentStatuses
-                .FirstOrDefaultAsync(s =>
-                    s.StudentId == studentId &&
-                    (s.ExamAssignmentId == dto.ExamAssignmentId || s.ExamId == dto.ExamAssignmentId));
+                .FirstOrDefaultAsync(s => s.StudentId == studentId && s.ExamId == examId);
 
             if (status != null)
             {
@@ -656,6 +725,9 @@ Swal.fire({
             var exam = assignment.Exam;
             if (exam == null)
                 return Content("<div class='alert alert-warning text-center mt-5'>⚠️ لم يتم العثور على بيانات الاختبار.</div>", "text/html");
+
+            if (await IsAttemptRunningAsync(_context, studentId.Value, exam.Id)) // PPL-S7.1
+                return RedirectToAction(nameof(PlacementExamDashboard));
 
             // ✅ استدعاء الخدمة الموحدة كما في ExamResult
             var summary = await _studentExamStatisticsService.GetExamResultAsync(assignmentId, studentId.Value);
@@ -702,6 +774,9 @@ Swal.fire({
             var exam = assignment.Exam;
             if (exam == null)
                 return NotFound("⚠️ لم يتم العثور على بيانات الاختبار.");
+
+            if (await IsAttemptRunningAsync(_context, studentId.Value, exam.Id)) // PPL-S7.1
+                return RedirectToAction(nameof(PlacementExamDashboard));
 
             // 🔥 جلب الأسئلة مع كل البيانات المطلوبة
             var raw = await (
@@ -876,6 +951,9 @@ Swal.fire({
 
             var examId = assignment.ExamId;
             var exam = assignment.Exam;
+
+            if (await IsAttemptRunningAsync(_context, studentId.Value, examId)) // PPL-S7.1
+                return RedirectToAction(nameof(PlacementExamDashboard));
 
             // 🟢 جلب كل البيانات اللازمة (أسئلة + محاولات + دروس + محاور + مناهج) باستعلام واحد موحد
             var fullData = await (
@@ -1059,6 +1137,9 @@ Swal.fire({
 
             var exam = assignment.Exam;
 
+            if (await IsAttemptRunningAsync(_context, studentId.Value, exam.Id)) // PPL-S7.1
+                return RedirectToAction(nameof(PlacementExamDashboard));
+
             // ✅ استدعاء الخدمة الموحدة لحساب الإحصائيات
             var summary = await _studentExamStatisticsService.GetExamResultAsync(assignmentId, studentId.Value);
 
@@ -1202,6 +1283,7 @@ Swal.fire({
 
         // ✅ تسليم الاختبار
         [HttpPost]
+        [ValidateAntiForgeryToken] // PPL-S7.1
         public async Task<IActionResult> SubmitFinal(int id, bool forceSubmit = false)
         {
             using var _context = _contextFactory.CreateDbContext();
@@ -1222,6 +1304,20 @@ Swal.fire({
 
                 var exam = examAssignment.Exam;
                 var examId = exam.Id;
+
+                var status = await _context.ExamStudentStatuses
+                    .FirstOrDefaultAsync(s => s.StudentId == studentId && s.ExamId == examId);
+
+                // PPL-S7.1: النقر المكرر أو إعادة المحاولة لا يغيّر وقت التسليم الأصلي
+                if (status?.IsSubmitted == true)
+                {
+                    return Json(new
+                    {
+                        success = true,
+                        message = "✅ تم إنهاء الاختبار بنجاح.",
+                        redirectUrl = Url.Action("ResultPlacementExam", "PlacementExams", new { area = "Students", assignmentId = id })
+                    });
+                }
 
                 // 🔹 جلب جميع الأسئلة
                 var questionIds = await _context.ExamQuestions
@@ -1250,9 +1346,6 @@ Swal.fire({
                 }
 
                 // ✅ إنهاء الاختبار رسميًا
-                var status = await _context.ExamStudentStatuses
-                    .FirstOrDefaultAsync(s => s.StudentId == studentId && s.ExamId == examId);
-
                 // ⚠️ قد لا يوجد سجل حالة مسبق (مثلاً دفعة أُنشئت بدون تعيين فردي أو طالب انضم متأخرًا)
                 // بدون إنشائه هنا، يظل الاختبار "لم يبدأ بعد" في لوحة الإدارة رغم أن الطالب أنهاه فعليًا
                 if (status == null)
@@ -1284,7 +1377,8 @@ Swal.fire({
             }
             catch (Exception ex)
             {
-                return Json(new { success = false, message = $"⚠️ حدث خطأ أثناء التسليم: {ex.Message}" });
+                _logger.LogError(ex, "PlacementExamsController: تعذر تسليم التكليف {AssignmentId}", id);
+                return Json(new { success = false, message = "⚠️ تعذر تسليم الاختبار، حاول مرة أخرى." });
             }
         }
 
@@ -1332,7 +1426,7 @@ Swal.fire({
             else
             {
                 allQuestions = await _context.ExamQuestions
-                    .Where(eq => eq.ExamId == examId || eq.ExamAssignmentId == assignmentId)
+                    .Where(eq => eq.ExamId == examId) // PPL-S5.3
                     .OrderBy(eq => eq.Order)
                     .Select(eq => eq.QuestionId)
                     .ToListAsync();

@@ -73,7 +73,8 @@ namespace QdratNew.Areas.Partner.Controllers
                 .Where(x =>
                     x.IsSentToStudents &&
                     x.ExamId.HasValue &&          // ExamId nullable ✔
-                    x.BatchId > 0                 // BatchId int ✔
+                    x.BatchId > 0 &&              // BatchId int ✔
+                    x.Exam.OwnerPartnerId == null // PPL-S5: تحديد المستوى له صفحته
                 )
                 .Select(x => new
                 {

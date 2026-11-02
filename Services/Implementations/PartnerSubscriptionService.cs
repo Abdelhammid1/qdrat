@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using QdratNew.Data;
 using QdratNew.Entities;
+using QdratNew.Enums;
 using QdratNew.Interfaces;
 using QdratNew.ViewModels.Partner;
 
@@ -261,5 +262,47 @@ namespace QdratNew.Implementations
             return sub.AccessUntilDate.HasValue &&
                    today <= sub.AccessUntilDate.Value;
         }
+
+        // PPL-S6: نفس قرار PartnerFeatureFilter مع AllowReadAfterExpiry، لإظهار الروابط
+        public bool CanReadPlacementReports(int partnerId)
+        {
+            var active = GetActiveSubscription(partnerId);
+
+            return active != null
+                ? active.CanUsePlacementExams
+                : CanReadFeatureAfterExpiry(partnerId, PartnerFeatureType.PlacementExams);
+        }
+
+        public bool CanReadFeatureAfterExpiry(int partnerId, PartnerFeatureType feature)
+        {
+            var today = DateTime.Today;
+
+            // عقد لم يبدأ بعد لا يحدد صلاحية القراءة الآن
+            var sub = _context.PartnerSubscriptions
+                .Where(s => s.PartnerId == partnerId && s.StartDate <= today)
+                .OrderByDescending(s => s.EndDate)
+                .FirstOrDefault();
+
+            if (sub == null || !IncludesFeature(sub, feature))
+                return false;
+
+            return sub.IsActive ||
+                   (sub.AccessUntilDate.HasValue && today <= sub.AccessUntilDate.Value);
+        }
+
+        private static bool IncludesFeature(PartnerSubscription sub, PartnerFeatureType feature) => feature switch
+        {
+            PartnerFeatureType.Homework => sub.CanCreateHomework,
+            PartnerFeatureType.Exams => sub.CanCreateExams,
+            PartnerFeatureType.PlacementExams => sub.CanUsePlacementExams,
+            PartnerFeatureType.PerformanceIndicatorExams => sub.CanUsePerformanceIndicatorExams,
+            PartnerFeatureType.ReinforcementSkills => sub.CanUseReinforcementSkills,
+            PartnerFeatureType.RemedialPlans => sub.CanUseRemedialPlans,
+            PartnerFeatureType.RemedialSessions => sub.CanUseRemedialSessions,
+            PartnerFeatureType.EducationalContent => sub.CanAccessEducationalContent,
+            PartnerFeatureType.AIAnalytics => sub.CanUseAIAnalytics,
+            PartnerFeatureType.ProfessionalModels => sub.CanUseProfessionalModels,
+            _ => false
+        };
     }
 }

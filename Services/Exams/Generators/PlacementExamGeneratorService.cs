@@ -225,7 +225,7 @@ namespace QdratNew.Services.Exams.Generators
                     Message = $"📘 تم تعيين اختبار تحديد المستوى الجديد، يبدأ في {_timeZoneService.ConvertToSaudi(assignedAtUtc):yyyy/MM/dd HH:mm} وينتهي في {_timeZoneService.ConvertToSaudi(dueDateUtc):yyyy/MM/dd HH:mm}.",
                     SentAt = nowSaudi,
                     Category = NotificationCategory.Exam,
-                    TargetUrl = $"/Students/Exams/StartExam/{examId}"
+                    TargetUrl = "/Students/PlacementExams/PlacementExamDashboard" // PPL-S5.2: StartExam يتوقع examAssignmentId لا examId
                 });
             }
 
@@ -241,7 +241,8 @@ namespace QdratNew.Services.Exams.Generators
             int durationMinutes,
             DateTime? startDate = null,
             DateTime? endDate = null,
-            int? ownerPartnerId = null) // PPL-S2
+            int? ownerPartnerId = null, // PPL-S2
+            bool assignToStudent = true) // PPL-S4
         {
             using var _context = _contextFactory.CreateDbContext();
 
@@ -379,6 +380,10 @@ namespace QdratNew.Services.Exams.Generators
             _context.ExamQuestions.AddRange(examQuestions);
             await _context.SaveChangesAsync();
 
+            // PPL-S4: مسودة الدفعة لا تصل لأي طالب قبل الإرسال
+            if (!assignToStudent)
+                return exam.Id;
+
             // ✅ ربط الطالب
             var assignedAtUtc = startDate.HasValue ? _timeZoneService.ConvertToUtc(startDate.Value) : nowUtc;
             var dueDateUtc = endDate.HasValue ? _timeZoneService.ConvertToUtc(endDate.Value) : nowUtc.AddMinutes(durationMinutes);
@@ -408,7 +413,7 @@ namespace QdratNew.Services.Exams.Generators
                 Message = $"📘 تم تعيين اختبار تحديد المستوى ({exam.Title})، يبدأ في {_timeZoneService.ConvertToSaudi(assignedAtUtc):yyyy/MM/dd HH:mm} وينتهي في {_timeZoneService.ConvertToSaudi(dueDateUtc):yyyy/MM/dd HH:mm}.",
                 SentAt = nowSaudi,
                 Category = NotificationCategory.Exam,
-                TargetUrl = $"/Students/Exams/StartExam/{exam.Id}"
+                TargetUrl = "/Students/PlacementExams/PlacementExamDashboard" // PPL-S5.2: StartExam يتوقع examAssignmentId لا examId
             });
 
             return exam.Id;

@@ -145,6 +145,47 @@ namespace QdratNew.Tests.PartnerPlacement
         }
 
         [Fact]
+        public async Task PreviewQuestion_RejectsPartnerExamAndUnknownQuestion()
+        {
+            var client = OwnerClient();
+
+            Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/Admin/PlacementExams/PreviewQuestion?examId={_partnerExamId}&questionId={Guid.NewGuid()}")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/Admin/PlacementExams/PreviewQuestion?examId={_instituteExamId}&questionId={Guid.NewGuid()}")).StatusCode);
+        }
+
+        [Fact]
+        public async Task GetModelSummary_ReturnsModel_OrNotFound()
+        {
+            int modelId;
+            using (var scope = _factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                var model = new ProfessionalModel { Title = $"{Marker} نموذج", Description = "-", CreatedBy = "-" };
+                db.ProfessionalModels.Add(model);
+                await db.SaveChangesAsync();
+                modelId = model.Id;
+            }
+
+            try
+            {
+                var client = OwnerClient();
+                var response = await client.GetAsync($"/Admin/PlacementExams/GetModelSummary?modelId={modelId}");
+                using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+
+                Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+                Assert.Equal(modelId, doc.RootElement.GetProperty("id").GetInt32());
+                Assert.Equal(0, doc.RootElement.GetProperty("questionsCount").GetInt32());
+                Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/Admin/PlacementExams/GetModelSummary?modelId=-1")).StatusCode);
+            }
+            finally
+            {
+                using var scope = _factory.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                await db.Database.ExecuteSqlRawAsync("DELETE FROM ProfessionalModels WHERE Id = {0}", modelId);
+            }
+        }
+
+        [Fact]
         public async Task GetSectionsByCourse_KeepsJsonShape()
         {
             using (var scope = _factory.Services.CreateScope())

@@ -5,7 +5,10 @@ using Microsoft.EntityFrameworkCore;
 using QdratNew.Attributes;
 using QdratNew.Data;
 using QdratNew.Enums;
+using QdratNew.Interfaces;
+using QdratNew.Services.Exams.Placement;
 using QdratNew.Services.Reports.Interfaces;
+using QdratNew.ViewModels.Partner;
 using System.Security.Claims;
 
 namespace QdratNew.Areas.Partner.Controllers
@@ -17,6 +20,9 @@ namespace QdratNew.Areas.Partner.Controllers
         private readonly IBatchReportService _batchReportService;
         private readonly IStudentBatchReportService _studentBatchReportService;
         private readonly ApplicationDbContext _context;
+        private readonly IPartnerSubscriptionService _subscriptionService;
+        private readonly IPlacementExamManagementService _placementManagementService;
+        private readonly IPlacementExamReportService _placementReportService;
 
         private int ActivePartnerId =>
             HttpContext.Session.GetInt32("ActivePartnerId") ?? 0;
@@ -24,11 +30,17 @@ namespace QdratNew.Areas.Partner.Controllers
         public ReportsController(
             IBatchReportService batchReportService,
             IStudentBatchReportService studentBatchReportService,
-            ApplicationDbContext context)
+            ApplicationDbContext context,
+            IPartnerSubscriptionService subscriptionService,
+            IPlacementExamManagementService placementManagementService,
+            IPlacementExamReportService placementReportService)
         {
             _batchReportService = batchReportService;
             _studentBatchReportService = studentBatchReportService;
             _context = context;
+            _subscriptionService = subscriptionService;
+            _placementManagementService = placementManagementService;
+            _placementReportService = placementReportService;
         }
 
         // PPL-S1: لا يرث PartnerBaseController حتى تبقى التقارير متاحة بعد انتهاء العقد،
@@ -67,7 +79,31 @@ namespace QdratNew.Areas.Partner.Controllers
             if (model == null)
                 return NotFound();
 
+            model.CanViewPlacementExams = _subscriptionService.CanReadPlacementReports(ActivePartnerId); // PPL-S6.3
+
             return View(model);
+        }
+
+        // =====================================================
+        // PPL-S6.3: اختبارات تحديد المستوى في الدفعة (قراءة فقط، حتى بعد انتهاء العقد)
+        // =====================================================
+        [HttpGet]
+        [PartnerFeature(PartnerFeatureType.PlacementExams, AllowReadAfterExpiry = true)]
+        public async Task<IActionResult> BatchPlacementExams(int batchId)
+        {
+            var ct = HttpContext.RequestAborted;
+            var scope = PlacementScope.Partner(ActivePartnerId, User.FindFirstValue(ClaimTypes.NameIdentifier), User.Identity?.Name);
+
+            var exams = await _placementManagementService.GetBatchExamsAsync(scope, batchId, ct);
+            if (exams == null)
+                return NotFound();
+
+            return View(new PartnerPlacementBatchExamsVm
+            {
+                BatchId = batchId,
+                BatchName = await _placementManagementService.GetBatchNameAsync(scope, batchId, ct) ?? string.Empty,
+                Exams = exams.Where(e => e.IsSentToStudents).ToList()
+            });
         }
 
         // =====================================================
@@ -110,7 +146,7 @@ namespace QdratNew.Areas.Partner.Controllers
         // تقرير طالب داخل دفعة
         // =====================================================
         [HttpGet]
-        public IActionResult Student(int batchId, int studentId)
+        public async Task<IActionResult> Student(int batchId, int studentId)
         {
             if (batchId <= 0 || studentId <= 0)
                 return NotFound();
@@ -120,6 +156,14 @@ namespace QdratNew.Areas.Partner.Controllers
 
             if (model == null)
                 return NotFound();
+
+            // PPL-S6.3
+            model.CanViewPlacementExams = _subscriptionService.CanReadPlacementReports(ActivePartnerId);
+            if (model.CanViewPlacementExams)
+            {
+                var scope = PlacementScope.Partner(ActivePartnerId, User.FindFirstValue(ClaimTypes.NameIdentifier), User.Identity?.Name);
+                model.PlacementExams = await _placementReportService.GetStudentPlacementExamsAsync(scope, studentId, HttpContext.RequestAborted);
+            }
 
             return View(model);
         }

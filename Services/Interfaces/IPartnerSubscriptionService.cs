@@ -66,5 +66,11 @@ namespace QdratNew.Interfaces
         // 🔹 الوصول للبيانات
         // =========================================
         bool HasDataAccess(int partnerId);
+
+        // PPL-S6: عقد نشط يشمل الميزة، أو لا عقد نشط ومازالت القراءة مسموحة حتى AccessUntilDate
+        bool CanReadPlacementReports(int partnerId);
+
+        // PPL-S6: آخر عقد بدأ يشمل الميزة، وما زال نشطًا أو ضمن AccessUntilDate
+        bool CanReadFeatureAfterExpiry(int partnerId, QdratNew.Enums.PartnerFeatureType feature);
     }
 }

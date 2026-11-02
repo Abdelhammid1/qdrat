@@ -100,6 +100,7 @@ namespace QdratNew.Areas.Students.Controllers
                 join batch in _context.ExamAssignmentsToBatches on ea.ExamId equals batch.ExamId
                 where ea.StudentId == studentId
                       && exam.IsActive
+                      && exam.OwnerPartnerId == null // PPL-S5: اختبارات الشريك تُحل من Students/PlacementExams
                       && (batch.ScheduledDate == null
                           || (batch.ScheduledDate <= now
                               && batch.ScheduledDate.Value.AddMinutes(batch.DurationMinutes) >= now))

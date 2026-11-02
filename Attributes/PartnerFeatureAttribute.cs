@@ -9,7 +9,7 @@ namespace QdratNew.Attributes
         public PartnerFeatureType Feature { get; }
 
         /// <summary>
-        /// PPL-S1.4: للتقارير فقط — يسمح بالقراءة بعد انتهاء العقد طالما HasDataAccess
+        /// PPL-S1.4: للتقارير فقط — يسمح بالقراءة بعد انتهاء العقد إذا شمل آخر عقد الميزة
         /// (حتى AccessUntilDate). لا يتجاوز عقدًا نشطًا لا يشمل الميزة.
         /// </summary>
         public bool AllowReadAfterExpiry { get; set; }

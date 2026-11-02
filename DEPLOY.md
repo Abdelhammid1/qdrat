@@ -118,3 +118,45 @@ UPDATE SystemSettings SET [Value] = N'true'  WHERE [Key] = N'RemedialTrack.Enabl
 - بلا قاعدة بيانات: `dotnet test QdratNew.Tests --filter "FullyQualifiedName~RemedialTrack"` (وحدات + حارس أمني + خدمات InMemory).
 - SQL Server حقيقي (S7.2/S7.3): اضبط `QDRAT_TEST_SQL` على قاعدة اسمها يحوي `Test` (مثل `QdratNewDB_IntegrationTests`) — الفهارس الفريدة، RowVersion، ExecuteUpdate تحت CompatibilityLevel(120)، تكامل HTTP، وE2E Playwright (375px).
 - الحمل (اختياري، مكلف): `RTK_LOAD=1` مع `QDRAT_TEST_SQL` — 500 طالب × نبضة/15ث × 5 دقائق؛ يكتب `rtk-load-report.txt` بجوار ملفات الاختبار. لا يُشغَّل أبدًا على قاعدة الإنتاج.
+
+---
+
+## 📋 نشر Epic PPL (اختبار تحديد المستوى في منطقة الشركاء) — PPL-S7.4
+
+⚠ **انشر خارج أوقات الاختبارات:** من فتح صفحة الحل قبل النشر لن يستطيع التسليم بالـ JavaScript القديم (الحفظ والتسليم أصبحا يتطلبان AntiForgery)، ويكفيه تحديث الصفحة.
+
+### 1) قبل النشر (Backup إلزامي)
+```sql
+BACKUP DATABASE [QdratNewDB] TO DISK = N'/var/opt/mssql/backup/QdratNewDB_before_PPL.bak' WITH INIT, COMPRESSION;
+```
+لا تعتمد على `Migrate()` عند الإقلاع. شغّل يدويًا بالترتيب (كلاهما Idempotent وإضافات فقط):
+1. `Migrations/Scripts/PPL_ExamOwnerPartner.sql` — عمود `Exams.OwnerPartnerId` (NULL) + المفتاح الأجنبي + الفهرسان.
+2. `Migrations/Scripts/PPL_Placement_Indexes.sql` — فهارس `ExamStudentStatuses(ExamId)` و`ExamAssignmentsToBatches(ExamId)` و`(BatchId)`. الـ Model يفترض وجودها لكن لا توجد Migration أنشأتها، لذلك لن يضيفها `Migrate()`. شغّله في وقت هادئ تحسبًا لقفل قصير.
+
+### 2) التحقق بعد تشغيل السكربتين
+```sql
+SELECT COL_LENGTH(N'Exams', N'OwnerPartnerId');                                -- المتوقع 4
+SELECT COUNT(*) FROM Exams WHERE OwnerPartnerId IS NOT NULL;                   -- المتوقع 0 قبل أول استخدام
+SELECT COUNT(*) FROM __EFMigrationsHistory WHERE MigrationId = N'20261102004719_PPL_ExamOwnerPartner'; -- المتوقع 1
+SELECT name FROM sys.indexes
+ WHERE name IN (N'IX_Exams_Type_OwnerPartnerId', N'IX_ExamStudentStatuses_ExamId',
+                N'IX_ExamAssignmentsToBatches_ExamId', N'IX_ExamAssignmentsToBatches_BatchId');  -- المتوقع 4 صفوف
+```
+
+### 3) بعد نشر الكود
+- تأكد من `symlink` مجلدي `uploads` و`images/profiles` (القسمان الأوّلان في هذا الملف). شعارات الشركاء في PDF تُقرأ من `wwwroot/uploads/partners`.
+- **لا ميزة تعمل تلقائيًا لأي شريك:** تظهر فقط لمن يحمل عقده `CanUsePlacementExams`. فعّلها أولًا لشريك تجريبي واحد.
+- نفّذ حزمة القبول: `Docs/UAT/PPL_Partner_Placement_UAT.md`.
+- راقب في `Logs/log-*.txt` أي `PPL placement operation failed` و`PlacementExamsController:` خلال أول 24 ساعة، وأي 400 على `SubmitAnswerFetch` أو `SubmitFinal` في Nginx (تعني صفحة حل مفتوحة من قبل النشر).
+- سياسة `ppl-report-pdf` (30/د لكل مستخدم) جديدة، و`VerifyPlacementExamCode` أصبح تحت `rtk-code` (10/10د لكل مستخدم).
+
+### 4) خطة التراجع (بلا حذف بيانات)
+- **إيقاف الميزة لشريك:** ألغِ `CanUsePlacementExams` من عقده في `Admin/PartnerSubscriptions`؛ يختفي الرابط من السايدبار وتُرجع الصفحات «غير مشمولة في عقدكم». اختبارات الشريك التي عند طلابه تبقى، فأخفِها أولًا إن كان يجب إيقافها فورًا.
+- **إيقافها للجميع:**
+```sql
+UPDATE PartnerSubscriptions SET CanUsePlacementExams = 0;   -- سجّل القيم قبل التنفيذ لاسترجاعها
+```
+- **سحب الكود:** رجوع لنسخة سابقة يكفي مع بقاء العمود والفهارس. لا تشغّل `PPL_ExamOwnerPartner_Rollback.sql` إلا بعد سحب الكود، وبعده تظهر اختبارات الشركاء (إن وُجدت) للأدمن كاختبارات المعهد. `PPL_Placement_Indexes_Rollback.sql` آمن في أي وقت.
+
+### 5) الاختبارات
+- `QDRAT_TEST_SQL` على قاعدة اسمها يحوي `Test`، و`QDRAT_E2E_DLL` لبناء Debug منفصل إن كان الـ dll مقفولًا: `dotnet test QdratNew.Tests -c Release --filter "FullyQualifiedName~PartnerPlacement"`.

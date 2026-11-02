@@ -1,0 +1,244 @@
+@model QdratNew.ViewModels.Exam.PlacementExamFromModelVm
+
+@{
+    ViewData["Title"] = "إنشاء اختبار من نموذج احترافي";
+}
+
+<div class="pp-page">
+    <partial name="_PlacementAlerts" />
+
+    <div class="pp-head">
+        <div>
+            <h1><i class="fa-solid fa-layer-group" aria-hidden="true"></i> إنشاء اختبار من نموذج احترافي</h1>
+            <p>اختر نموذجًا متاحًا في عقدكم وحدد الدورة والدفعة.</p>
+        </div>
+
+        <div class="pp-head-actions">
+            <a asp-action="Index" class="pp-btn pp-btn-light">
+                <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                العودة للقائمة
+            </a>
+        </div>
+    </div>
+
+    @if (!Model.AvailableModels.Any())
+    {
+        <div class="pp-card">
+            <div class="pp-empty">
+                <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
+                <h2>لا توجد نماذج متاحة</h2>
+                <p>لا توجد نماذج احترافية متاحة لعقدكم حاليًا. تواصلوا مع المعهد.</p>
+                <a asp-action="Index" class="pp-btn pp-btn-primary">العودة للقائمة</a>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="pp-alert pp-alert-warn" role="status">
+            <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+            <span>يُرسل الاختبار من النموذج إلى كل طلاب الدفعة النشطين فور إنشائه، ولا يمر بمرحلة المسودة.</span>
+        </div>
+
+        <form asp-action="CreateFromProfessionalModel" method="post"
+              data-confirm="سيُرسل الاختبار إلى كل طلاب الدفعة النشطين فور إنشائه. هل تريد المتابعة؟"
+              data-confirm-text="نعم، إنشاء وإرسال">
+            <div class="pp-card">
+                <h2 class="pp-card-title"><i class="fa-solid fa-diagram-project" aria-hidden="true"></i> النموذج والدفعة</h2>
+                <p class="pp-card-sub">الدفعات المعروضة هي دفعاتك المسجلة في الدورة المختارة.</p>
+
+                <div class="row g-3">
+                    <div class="col-lg-4 col-md-6">
+                        <label for="modelSelect" class="form-label">النموذج</label>
+                        <select asp-for="SelectedModelId" asp-items="Model.AvailableModels" class="form-select" id="modelSelect" required>
+                            <option value="">-- اختر نموذجًا --</option>
+                        </select>
+                    </div>
+
+                    <div class="col-lg-4 col-md-6">
+                        <label for="courseSelect" class="form-label">الدورة</label>
+                        <select asp-for="SelectedCourseId" asp-items="Model.AvailableCourses" class="form-select" id="courseSelect" required>
+                            <option value="">-- اختر الدورة --</option>
+                        </select>
+                    </div>
+
+                    <div class="col-lg-4 col-md-6">
+                        <label for="batchSelect" class="form-label">الدفعة</label>
+                        <select asp-for="SelectedBatchId" asp-items="Model.AvailableBatches" class="form-select" id="batchSelect" required>
+                            <option value="">-- اختر الدفعة --</option>
+                        </select>
+                        <div class="form-text" id="batchHint"></div>
+                    </div>
+
+                    <div class="col-lg-4 col-md-6">
+                        <label asp-for="DurationMinutes" class="form-label">المدة (دقيقة)</label>
+                        <input asp-for="DurationMinutes" class="form-control" type="number" min="1" max="300" required />
+                    </div>
+                </div>
+            </div>
+
+            <div class="pp-card">
+                <h2 class="pp-card-title"><i class="fa-solid fa-eye" aria-hidden="true"></i> ملخص النموذج</h2>
+                <div id="modelSummary" aria-live="polite">
+                    <div class="pp-state">اختر نموذجًا لعرض ملخصه.</div>
+                </div>
+            </div>
+
+            <div class="pp-form-actions">
+                <a asp-action="Index" class="pp-btn pp-btn-light">
+                    <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                    إلغاء
+                </a>
+                <button type="submit" class="pp-btn pp-btn-primary">
+                    <i class="fa-solid fa-paper-plane" aria-hidden="true"></i>
+                    إنشاء وإرسال الاختبار
+                </button>
+            </div>
+        </form>
+    }
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="~/js/partner-placement.js" asp-append-version="true"></script>
+
+    <script>
+        (function () {
+            const modelSelect = document.getElementById("modelSelect");
+            if (!modelSelect) {
+                return;
+            }
+
+            const summaryUrl = "@Url.Action("GetModelSummary")";
+            const batchesUrl = "@Url.Action("GetBatchesByCourse")";
+            const modelPreviewUrl = "@Url.Action("Preview", "ProfessionalModels", new { area = "Partner" })";
+
+            const summary = document.getElementById("modelSummary");
+            const courseSelect = document.getElementById("courseSelect");
+            const batchSelect = document.getElementById("batchSelect");
+            const batchHint = document.getElementById("batchHint");
+            let modelRequest = 0;
+            let courseRequest = 0;
+
+            function setSummaryState(cssClass, message) {
+                summary.innerHTML = "";
+                const box = document.createElement("div");
+                box.className = "pp-state " + cssClass;
+                box.textContent = message;
+                summary.appendChild(box);
+            }
+
+            function loadSummary() {
+                const modelId = modelSelect.value;
+                const current = ++modelRequest;
+
+                if (!modelId) {
+                    setSummaryState("", "اختر نموذجًا لعرض ملخصه.");
+                    return;
+                }
+
+                setSummaryState("", "جارٍ تحميل النموذج...");
+
+                fetch(`${summaryUrl}?modelId=${encodeURIComponent(modelId)}`, { headers: { "Accept": "application/json" } })
+                    .then(function (response) {
+                        if (!response.ok) {
+                            throw new Error("request failed");
+                        }
+
+                        return response.json();
+                    })
+                    .then(function (data) {
+                        if (current !== modelRequest) {
+                            return;
+                        }
+
+                        summary.innerHTML = "";
+
+                        const title = document.createElement("div");
+                        title.className = "pp-batch-name mb-2";
+                        title.textContent = data.title;
+
+                        const count = document.createElement("span");
+                        count.className = "pp-badge pp-badge-main me-0 ms-2";
+                        count.textContent = `${data.questionsCount} سؤال`;
+
+                        const link = document.createElement("a");
+                        link.className = "pp-btn pp-btn-light pp-btn-sm";
+                        link.href = `${modelPreviewUrl}/${encodeURIComponent(data.id)}`;
+                        link.target = "_blank";
+                        link.rel = "noopener";
+                        link.textContent = "معاينة أسئلة النموذج";
+
+                        summary.append(title, count, link);
+                    })
+                    .catch(function () {
+                        if (current === modelRequest) {
+                            setSummaryState("pp-state-error", "تعذّر تحميل النموذج، حاول مرة أخرى.");
+                        }
+                    });
+            }
+
+            function fillBatches(batches, selectedValue) {
+                batchSelect.innerHTML = '<option value="">-- اختر الدفعة --</option>';
+
+                batches.forEach(function (batch) {
+                    const option = document.createElement("option");
+                    option.value = batch.batchId;
+                    option.textContent = batch.batchName;
+                    option.selected = String(batch.batchId) === String(selectedValue);
+                    batchSelect.appendChild(option);
+                });
+
+                batchHint.textContent = batches.length ? "" : "لا توجد دفعات لهذه الدورة.";
+            }
+
+            function loadBatches() {
+                const courseId = courseSelect.value;
+                const selectedBatch = batchSelect.value;
+                const current = ++courseRequest;
+
+                if (!courseId) {
+                    fillBatches([], "");
+                    batchHint.textContent = "اختر الدورة أولًا.";
+                    return;
+                }
+
+                batchSelect.disabled = true;
+                batchHint.textContent = "جارٍ تحميل الدفعات...";
+
+                fetch(`${batchesUrl}?courseId=${encodeURIComponent(courseId)}`, { headers: { "Accept": "application/json" } })
+                    .then(function (response) {
+                        if (!response.ok) {
+                            throw new Error("request failed");
+                        }
+
+                        return response.json();
+                    })
+                    .then(function (batches) {
+                        if (current === courseRequest) {
+                            fillBatches(batches, selectedBatch);
+                        }
+                    })
+                    .catch(function () {
+                        if (current === courseRequest) {
+                            fillBatches([], "");
+                            batchHint.textContent = "تعذّر تحميل الدفعات، حاول مرة أخرى.";
+                        }
+                    })
+                    .finally(function () {
+                        if (current === courseRequest) {
+                            batchSelect.disabled = false;
+                        }
+                    });
+            }
+
+            modelSelect.addEventListener("change", loadSummary);
+            courseSelect.addEventListener("change", function () {
+                batchSelect.value = "";
+                loadBatches();
+            });
+
+            loadSummary();
+            loadBatches();
+        })();
+    </script>
+}

@@ -15,7 +15,8 @@ namespace QdratNew.Tests.Integration
     [CollectionDefinition(Name)]
     public sealed class RemedialTrackSharedTestDbCollection
     {
-        public const string Name = "RTK shared SQL test database";
+        // نفس اسم مجموعة اختبارات HTTP: كل ما يكتب في قاعدة الاختبار الحقيقية يعمل متسلسلًا، وإلا تحدث deadlocks بين المجموعات
+        public const string Name = "SharedIntegrationDb";
     }
 
     public sealed record RtkSeedStudent(
