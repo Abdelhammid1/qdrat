@@ -67,6 +67,7 @@ namespace QdratNew.Tests.PartnerPlacement
                 "DELETE FROM Batches WHERE Name LIKE 'PPLS2%'",
                 "DELETE FROM Students WHERE NationalID LIKE 'PPLS2%'",
                 "DELETE FROM AspNetUsers WHERE UserName LIKE 'ppls2-%'",
+                "DELETE FROM PartnerSubscriptionCourses WHERE PartnerSubscriptionId IN (SELECT s.Id FROM PartnerSubscriptions s JOIN Partners p ON p.Id = s.PartnerId WHERE p.Code LIKE 'PPLS2%')",
                 "DELETE FROM PartnerSubscriptions WHERE PartnerId IN (SELECT Id FROM Partners WHERE Code LIKE 'PPLS2%')",
                 "DELETE FROM Branches WHERE Name LIKE 'PPLS2%'",
                 "DELETE FROM Partners WHERE Code LIKE 'PPLS2%'",
@@ -603,6 +604,119 @@ namespace QdratNew.Tests.PartnerPlacement
 
             Assert.Contains("دورة", noCourse.Message);
             Assert.Contains("مدة", badDuration.Message);
+        }
+
+        // نُقل من InMemory: هناك يفشل BeginTransaction قبل فحص المدة فينجح الاختبار لسبب خاطئ
+        [SqlServerFact]
+        public async Task Partner_FromModel_RejectsOutOfRangeDuration()
+        {
+            var seed = await SeedAsync();
+            var scope = PlacementScope.Partner(seed.PartnerId, "u", "شريك");
+
+            await using var db = RtkRealDb.CreateDb();
+            foreach (var duration in new[] { 1, 301, int.MaxValue })
+            {
+                var result = await NewService(db).CreateFromProfessionalModelAsync(scope, new QdratNew.ViewModels.Exam.PlacementExamFromModelVm
+                {
+                    SelectedModelId = 1,
+                    SelectedBatchId = seed.PartnerBatch,
+                    SelectedCourseId = 1,
+                    DurationMinutes = duration
+                });
+
+                Assert.False(result.Succeeded);
+                Assert.Contains("مدة", result.Message);
+            }
+
+            Assert.Equal(0, await db.Exams.CountAsync(e => e.OwnerPartnerId == seed.PartnerId));
+        }
+
+        // PPM-S2: الأدمن يستبعد «الواجب» ويبقي غير المصنّف؛ الشريك «الاختبار» فقط، والبوابة نفسها في الإنشاء
+        private const string ModelNotFoundMessage = "⚠️ النموذج غير موجود أو لا يحتوي على أسئلة.";
+
+        private static async Task<int> AddModelAsync(string title, ProfessionalModelType type)
+        {
+            await using var db = RtkRealDb.CreateDb();
+            var questionIds = await AnyQuestionIdsAsync(db, 2);
+            var model = new ProfessionalModel
+            {
+                Title = $"{Marker} {title}", Description = "-", CreatedBy = "-",
+                IsForPartners = true, IsGlobal = true, ModelType = type,
+                Questions = questionIds.Select((id, i) => new ProfessionalModelQuestion { QuestionId = id, OrderNumber = i + 1 }).ToList()
+            };
+            db.ProfessionalModels.Add(model);
+            await db.SaveChangesAsync();
+            return model.Id;
+        }
+
+        private static async Task<int> AllowPartnerModelsAsync(int partnerId, int batchId)
+        {
+            await using var db = RtkRealDb.CreateDb();
+            var courseId = await db.Batches.Where(b => b.Id == batchId).Select(b => b.CourseId).FirstAsync();
+            var contract = await db.PartnerSubscriptions.FirstAsync(s => s.PartnerId == partnerId);
+            contract.CanUseProfessionalModels = true;
+            db.PartnerSubscriptionCourses.Add(new PartnerSubscriptionCourse { PartnerSubscriptionId = contract.Id, CourseId = courseId });
+            await db.SaveChangesAsync();
+            return courseId;
+        }
+
+        [SqlServerFact]
+        public async Task Admin_FromModel_RejectsHomework_AcceptsUnclassified()
+        {
+            var seed = await SeedAsync();
+            var homework = await AddModelAsync("واجب", ProfessionalModelType.Homework);
+            var unclassified = await AddModelAsync("غير مصنف", 0);
+            int courseId;
+            await using (var pre = RtkRealDb.CreateDb())
+                courseId = await pre.Batches.Where(b => b.Id == seed.InstituteBatch).Select(b => b.CourseId).FirstAsync();
+
+            var admin = PlacementScope.Admin("admin");
+            QdratNew.ViewModels.Exam.PlacementExamFromModelVm Vm(int modelId) => new()
+            {
+                SelectedModelId = modelId, SelectedBatchId = seed.InstituteBatch, SelectedCourseId = courseId, DurationMinutes = 45
+            };
+
+            await using var db = RtkRealDb.CreateDb();
+            var rejected = await NewService(db).CreateFromProfessionalModelAsync(admin, Vm(homework));
+            Assert.False(rejected.Succeeded);
+            Assert.Equal(ModelNotFoundMessage, rejected.Message);
+            Assert.False(await db.Exams.AnyAsync(e => e.Title == $"اختبار تحديد مستوى - {Marker} واجب"));
+
+            var accepted = await NewService(db).CreateFromProfessionalModelAsync(admin, Vm(unclassified));
+            Assert.True(accepted.Succeeded, accepted.Message);
+            Assert.True(await db.Exams.AnyAsync(e => e.Title == $"اختبار تحديد مستوى - {Marker} غير مصنف"));
+        }
+
+        [SqlServerFact]
+        public async Task Partner_FromModel_AcceptsExamOnly()
+        {
+            var seed = await SeedAsync();
+            var exam = await AddModelAsync("اختبار", ProfessionalModelType.Exam);
+            var homework = await AddModelAsync("واجب", ProfessionalModelType.Homework);
+            var unclassified = await AddModelAsync("غير مصنف", 0);
+            var courseId = await AllowPartnerModelsAsync(seed.PartnerId, seed.PartnerBatch);
+
+            var scope = PlacementScope.Partner(seed.PartnerId, "u", "شريك");
+            QdratNew.ViewModels.Exam.PlacementExamFromModelVm Vm(int modelId) => new()
+            {
+                SelectedModelId = modelId, SelectedBatchId = seed.PartnerBatch, SelectedCourseId = courseId, DurationMinutes = 45
+            };
+
+            await using var db = RtkRealDb.CreateDb();
+            foreach (var rejectedId in new[] { homework, unclassified })
+            {
+                var rejected = await NewService(db).CreateFromProfessionalModelAsync(scope, Vm(rejectedId));
+                Assert.False(rejected.Succeeded);
+                Assert.Equal(ModelNotFoundMessage, rejected.Message);
+            }
+
+            Assert.Equal(0, await db.Exams.CountAsync(e => e.OwnerPartnerId == seed.PartnerId));
+
+            var accepted = await NewService(db).CreateFromProfessionalModelAsync(scope, Vm(exam));
+            Assert.True(accepted.Succeeded, accepted.Message);
+
+            var created = await db.Exams.SingleAsync(e => e.OwnerPartnerId == seed.PartnerId);
+            Assert.Equal($"اختبار تحديد مستوى - {Marker} اختبار", created.Title);
         }
 
         // مسودة قديمة فيها تعيين وحالة لأول طالب من وقت الإنشاء: الإرسال لا يكررهما

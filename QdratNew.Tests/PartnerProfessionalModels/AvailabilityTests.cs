@@ -136,6 +136,40 @@ namespace QdratNew.Tests.PartnerProfessionalModels
         }
 
         [Fact]
+        public async Task ClassifyUntyped_ChangesOnlyRequestedActiveUntypedModels()
+        {
+            var (db, service) = Seed();
+            db.ProfessionalModels.AddRange(
+                Model(1, type: 0),
+                Model(2, type: 0),
+                Model(3, type: ProfessionalModelType.Homework),
+                Model(4, type: 0, archived: true));
+            await db.SaveChangesAsync();
+            db.ChangeTracker.Clear();
+
+            var count = await service.ClassifyUntypedModelsAsync(new[] { 1, 3, 4, 999 }, ProfessionalModelType.Exam);
+            db.ChangeTracker.Clear();
+
+            Assert.Equal(1, count);
+            var types = await db.ProfessionalModels.OrderBy(m => m.Id).Select(m => m.ModelType).ToListAsync();
+            Assert.Equal(new[] { ProfessionalModelType.Exam, (ProfessionalModelType)0, ProfessionalModelType.Homework, (ProfessionalModelType)0 }, types);
+            Assert.Equal("M1", (await db.ProfessionalModels.SingleAsync(m => m.Id == 1)).Title);
+        }
+
+        [Fact]
+        public async Task ClassifyUntyped_RejectsUndefinedTypeAndEmptySelection()
+        {
+            var (db, service) = Seed();
+            db.ProfessionalModels.Add(Model(1, type: 0));
+            await db.SaveChangesAsync();
+            db.ChangeTracker.Clear();
+
+            Assert.Equal(0, await service.ClassifyUntypedModelsAsync(new[] { 1 }, (ProfessionalModelType)7));
+            Assert.Equal(0, await service.ClassifyUntypedModelsAsync(Array.Empty<int>(), ProfessionalModelType.Exam));
+            Assert.Equal((ProfessionalModelType)0, (await db.ProfessionalModels.SingleAsync(m => m.Id == 1)).ModelType);
+        }
+
+        [Fact]
         public async Task PartnerOptions_ActivePlusPreviouslySelectedEnded()
         {
             var (db, service) = Seed();

@@ -17,7 +17,8 @@ namespace QdratNew.ViewModels.ProfessionalModel
         public int? CurriculumId { get; set; }
 
         [Required(ErrorMessage = "نوع النموذج مطلوب")]
-        public ProfessionalModelType ModelType { get; set; } = ProfessionalModelType.Exam;
+        // PPM-S2: بلا قيمة افتراضية، حتى لا يُصنَّف نموذج قديم بلا نوع دون اختيار صريح
+        public ProfessionalModelType ModelType { get; set; }
 
         public List<SelectListItem> Curriculums { get; set; } = new();
 

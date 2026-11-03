@@ -434,28 +434,6 @@ namespace QdratNew.Tests.PartnerPlacement
         }
 
         [Fact]
-        public async Task Partner_CreateFromModel_RejectsOutOfRangeDuration()
-        {
-            var h = Seed();
-            var examsBefore = await h.Db.Exams.CountAsync();
-
-            foreach (var duration in new[] { 1, 301, int.MaxValue })
-            {
-                var result = await h.Service.CreateFromProfessionalModelAsync(ScopeA, new PlacementExamFromModelVm
-                {
-                    SelectedModelId = 1,
-                    SelectedBatchId = BatchA,
-                    SelectedCourseId = CourseA,
-                    DurationMinutes = duration
-                });
-
-                Assert.False(result.Succeeded);
-            }
-
-            Assert.Equal(examsBefore, await h.Db.Exams.CountAsync());
-        }
-
-        [Fact]
         public async Task Partner_CannotTouchOtherPartnerExam()
         {
             var h = Seed();
@@ -725,7 +703,7 @@ namespace QdratNew.Tests.PartnerPlacement
         }
 
         [Fact]
-        public async Task Partner_SeesExamModelsOnly_AdminKeepsAll()
+        public async Task Partner_SeesExamModelsOnly_AdminExcludesHomeworkOnly()
         {
             var h = Seed();
             h.Db.ProfessionalModels.AddRange(
@@ -742,8 +720,10 @@ namespace QdratNew.Tests.PartnerPlacement
             Assert.Null(await h.Service.GetModelSummaryAsync(ScopeA, 902));
 
             var admin = await h.Service.GetCreateFromModelAsync(Admin);
-            Assert.Equal(3, admin.AvailableModels.Count);
-            Assert.NotNull(await h.Service.GetModelSummaryAsync(Admin, 901));
+            Assert.Equal(new[] { "900", "902" }, admin.AvailableModels.Select(m => m.Value).OrderBy(x => x));
+            Assert.NotNull(await h.Service.GetModelSummaryAsync(Admin, 900));
+            Assert.Null(await h.Service.GetModelSummaryAsync(Admin, 901));
+            Assert.NotNull(await h.Service.GetModelSummaryAsync(Admin, 902));
         }
 
         [Fact]

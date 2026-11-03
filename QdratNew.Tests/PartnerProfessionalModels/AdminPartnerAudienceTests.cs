@@ -202,6 +202,48 @@ namespace QdratNew.Tests.PartnerProfessionalModels
         }
 
         [Fact]
+        public async Task Edit_UntypedModel_KeepsNoTypeOnGet_AndRejectsSaveWithoutChoice()
+        {
+            using var db = NewDb();
+            SeedModel(db, forPartners: false, global: false);
+            (await db.ProfessionalModels.SingleAsync(m => m.Id == ModelId)).ModelType = 0;
+            await db.SaveChangesAsync();
+
+            var get = Assert.IsType<ViewResult>(await Controller(db, true).Edit(ModelId));
+            Assert.False(Enum.IsDefined(Assert.IsType<ProfessionalModelEditVm>(get.Model).ModelType));
+
+            var vm = EditVm(false, PartnerAudience.All);
+            vm.ModelType = 0;
+            var controller = Controller(db, true);
+            var post = Assert.IsType<ViewResult>(await controller.Edit(ModelId, vm));
+
+            Assert.False(controller.ModelState.IsValid);
+            Assert.Contains("اختر نوع النموذج", controller.ModelState[nameof(vm.ModelType)]!.Errors[0].ErrorMessage);
+            Assert.NotNull(post.Model);
+
+            db.ChangeTracker.Clear();
+            var saved = await db.ProfessionalModels.SingleAsync(m => m.Id == ModelId);
+            Assert.Equal((ProfessionalModelType)0, saved.ModelType);
+            Assert.Equal("M1", saved.Title);
+        }
+
+        [Fact]
+        public async Task Edit_UntypedModel_SavesExplicitType()
+        {
+            using var db = NewDb();
+            SeedModel(db, forPartners: false, global: false);
+            (await db.ProfessionalModels.SingleAsync(m => m.Id == ModelId)).ModelType = 0;
+            await db.SaveChangesAsync();
+
+            var vm = EditVm(false, PartnerAudience.All);
+            vm.ModelType = ProfessionalModelType.Homework;
+            Assert.IsType<RedirectToActionResult>(await Controller(db, true).Edit(ModelId, vm));
+
+            db.ChangeTracker.Clear();
+            Assert.Equal(ProfessionalModelType.Homework, (await db.ProfessionalModels.SingleAsync(m => m.Id == ModelId)).ModelType);
+        }
+
+        [Fact]
         public async Task Edit_Selected_SyncsLinksOnly()
         {
             using var db = NewDb();

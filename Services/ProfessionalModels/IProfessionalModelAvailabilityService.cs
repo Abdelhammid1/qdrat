@@ -25,5 +25,8 @@ namespace QdratNew.Services.ProfessionalModels
 
         // يزامن روابط فترات الاشتراك (الخيار المتقدم في صفحة Visibility فقط)
         Task SyncSubscriptionPeriodsAsync(int modelId, IEnumerable<int> periodIds, CancellationToken ct = default);
+
+        // PPM-S2: يصنّف النماذج النشطة بلا نوع فقط، ويرجع عدد ما صُنِّف
+        Task<int> ClassifyUntypedModelsAsync(IEnumerable<int> modelIds, ProfessionalModelType type, CancellationToken ct = default);
     }
 }

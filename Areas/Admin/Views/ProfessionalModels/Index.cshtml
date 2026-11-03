@@ -11,6 +11,9 @@
     var archivedModelsCount = ViewBag.ArchivedModelsCount as int? ?? modelsList.Count(x => x.IsArchived);
     var selectedCurriculumId = ViewBag.SelectedCurriculumId as int?;
     var selectedModelType = ViewBag.SelectedModelType as ProfessionalModelType?;
+    var untypedOnly = ViewBag.UntypedOnly as bool? ?? false;
+    var untypedModelsCount = ViewBag.UntypedModelsCount as int? ?? 0;
+    const int untypedPanelLimit = 500;
     var curriculums = ViewBag.Curriculums as List<SelectListItem> ?? new List<SelectListItem>();
     var partnerLinkCounts = ViewBag.PartnerLinkCounts as Dictionary<int, int> ?? new Dictionary<int, int>();
     var periodLinkedModelIds = ViewBag.PeriodLinkedModelIds as HashSet<int> ?? new HashSet<int>();
@@ -1125,9 +1128,22 @@
             <i class="fa-solid fa-archive"></i>
             الأرشيف (@archivedModelsCount)
         </a>
+        @if (untypedModelsCount > 0 || untypedOnly)
+        {
+            <a asp-action="Index"
+               asp-route-untyped="true"
+               class="model-tab ppm-untyped-tab @(untypedOnly ? "active" : "")">
+                <i class="fa-solid fa-circle-question"></i>
+                بلا نوع (@untypedModelsCount)
+            </a>
+        }
 
         <form method="get" asp-action="Index" class="curriculum-filter-form">
             <input type="hidden" name="showArchived" value="@showArchived.ToString().ToLower()" />
+            @if (untypedOnly)
+            {
+                <input type="hidden" name="untyped" value="true" />
+            }
             @if (selectedModelType.HasValue)
             {
                 <input type="hidden" name="modelType" value="@((int)selectedModelType.Value)" />
@@ -1287,7 +1303,7 @@
 
     @{
         // هل يوجد فلتر نشط بمنهج أو نوع؟
-        bool isFiltered = selectedCurriculumId.HasValue || selectedModelType.HasValue;
+        bool isFiltered = selectedCurriculumId.HasValue || selectedModelType.HasValue || untypedOnly;
         var unclassified = modelsList.Where(m => m.CurriculumId == null).ToList();
 
         // النماذج المعروضة في الجدول
@@ -1301,7 +1317,12 @@
         // عنوان الجدول
         string tableTitle;
         string tableIcon;
-        if (isFiltered && selectedCurriculumId.HasValue && selectedModelType.HasValue)
+        if (untypedOnly)
+        {
+            tableTitle = "نماذج بلا نوع";
+            tableIcon  = "fa-circle-question";
+        }
+        else if (isFiltered && selectedCurriculumId.HasValue && selectedModelType.HasValue)
         {
             var currName = curriculums.FirstOrDefault(c => c.Value == selectedCurriculumId.ToString())?.Text ?? "المنهج";
             tableTitle = $"نماذج {(selectedModelType == ProfessionalModelType.Homework ? "الواجبات" : "الاختبارات")} — {currName}";
@@ -1372,7 +1393,66 @@
                     </span>
                 }
             }
+            @if (untypedOnly)
+            {
+                <span class="filtered-crumb-sep"><i class="fa fa-chevron-left"></i></span>
+                <span class="filtered-crumb-item">
+                    <i class="fa-solid fa-circle-question"></i> بلا نوع
+                </span>
+            }
             <span class="filtered-results-count">@tableModels.Count نتيجة</span>
+        </div>
+    }
+
+    @if (TempData["ClassifySuccess"] != null)
+    {
+        <div class="ppm-classify-alert ppm-classify-success" role="status">@TempData["ClassifySuccess"]</div>
+    }
+    @if (TempData["ClassifyError"] != null)
+    {
+        <div class="ppm-classify-alert ppm-classify-error" role="alert">@TempData["ClassifyError"]</div>
+    }
+
+    @* PPM-S2: تصنيف جماعي بنمط لوحة الأرشفة، والحد يبقي الطلب دون سقف حقول النموذج (1024) *@
+    @if (untypedOnly && !showArchived && tableModels.Any())
+    {
+        <div class="ppm-classify-panel">
+            <h3 class="ppm-classify-title">تصنيف النماذج بلا نوع</h3>
+            <p class="ppm-classify-hint">
+                النموذج بلا نوع لا يظهر للشركاء. نماذج «الاختبارات» تصبح متاحة لتحديد المستوى، ونماذج «الواجبات» تختفي منه.
+                @if (tableModels.Count > untypedPanelLimit)
+                {
+                    <span>يُعرض أول @untypedPanelLimit نموذج، والباقي يظهر بعد تصنيفها.</span>
+                }
+            </p>
+            <form asp-action="ClassifyUntypedModels" method="post">
+                @Html.AntiForgeryToken()
+                <label class="ppm-classify-all">
+                    <input type="checkbox" id="classifySelectAll" />
+                    <span>تحديد الكل</span>
+                </label>
+                <div class="ppm-classify-list">
+                    @foreach (var item in tableModels.Take(untypedPanelLimit))
+                    {
+                        <label class="archive-model-check">
+                            <input type="checkbox" name="selectedModelIds" value="@item.Id" data-classify-item />
+                            <span>@item.Title</span>
+                        </label>
+                    }
+                </div>
+                <div class="ppm-classify-actions">
+                    <button type="submit" name="modelType" value="@((int)ProfessionalModelType.Exam)" class="archive-submit"
+                            onclick="return confirm('سيتم تصنيف النماذج المحددة كاختبارات. هل تريد المتابعة؟')">
+                        <i class="fa fa-file-alt"></i>
+                        تصنيف كاختبارات
+                    </button>
+                    <button type="submit" name="modelType" value="@((int)ProfessionalModelType.Homework)" class="archive-submit restore"
+                            onclick="return confirm('سيتم تصنيف النماذج المحددة كواجبات. هل تريد المتابعة؟')">
+                        <i class="fa fa-tasks"></i>
+                        تصنيف كواجبات
+                    </button>
+                </div>
+            </form>
         </div>
     }
 
@@ -1471,11 +1551,18 @@
                                             اختبار
                                         </span>
                                     }
-                                    else
+                                    else if (item.ModelType == ProfessionalModelType.Homework)
                                     {
                                         <span class="model-type-badge type-homework">
                                             <i class="fa fa-tasks"></i>
                                             واجب
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="model-type-badge ppm-type-untyped">
+                                            <i class="fa-solid fa-circle-question"></i>
+                                            بلا نوع
                                         </span>
                                     }
                                 </td>
@@ -1619,6 +1706,15 @@
                         archiveManagerSection.classList.add('is-open');
                         archiveManagerToggle.setAttribute('aria-expanded', 'true');
                     }
+                });
+            }
+
+            var classifyAll = document.getElementById('classifySelectAll');
+            if (classifyAll) {
+                classifyAll.addEventListener('change', function () {
+                    document.querySelectorAll('[data-classify-item]').forEach(function (box) {
+                        box.checked = classifyAll.checked;
+                    });
                 });
             }
 

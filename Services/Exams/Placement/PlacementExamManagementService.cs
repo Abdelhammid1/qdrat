@@ -1941,12 +1941,12 @@ namespace QdratNew.Services.Exams.Placement
                 contracts.Any(s => s.SubscriptionCourses.Any(sc => sc.CourseId == c.Id && sc.CanUsePlatformQuestionBank)));
         }
 
-        // الأدمن: كل النماذج غير المؤرشفة (بما فيها غير المصنّفة).
+        // الأدمن: النماذج غير المؤرشفة عدا «الواجب». غير المصنّفة (ModelType = 0) تبقى لأن تحديد المستوى استخدمها فعليًا.
         // الشريك: نماذج «الاختبار» الموجّهة له فقط، بعقد يشمل تحديد المستوى والنماذج معًا.
         private IQueryable<ProfessionalModel> ModelsInScope(PlacementScope scope)
         {
             if (!scope.IsPartner)
-                return _context.ProfessionalModels.Where(m => !m.IsArchived);
+                return _context.ProfessionalModels.Where(m => !m.IsArchived && m.ModelType != ProfessionalModelType.Homework);
 
             var contracts = ActiveContracts(scope);
 

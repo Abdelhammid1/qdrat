@@ -142,6 +142,7 @@ namespace QdratNew.Tests.PartnerProfessionalModels
         [InlineData("Duplicate")]
         [InlineData("AddQuestions")]
         [InlineData("RemoveQuestion")]
+        [InlineData("ClassifyUntypedModels")]
         public async Task ModelMutations_WithoutAntiForgery_AreRejected(string action)
         {
             var response = await OwnerClient().PostAsync(
@@ -210,6 +211,67 @@ namespace QdratNew.Tests.PartnerProfessionalModels
             Assert.Equal(2, await db.ProfessionalModelPartners.CountAsync(p => p.ProfessionalModelId == model.Id));
 
             Assert.Contains("2 شركاء", await GetHtmlAsync("/Admin/ProfessionalModels"));
+        }
+
+        [Fact]
+        public async Task Edit_Untyped_ShowsPlaceholder_AndEmptyTypeIsRejectedWithArabicMessage()
+        {
+            var title = $"{Marker} بلا نوع";
+            var id = await SeedModelAsync(title, forPartners: false, type: 0);
+
+            var page = WebUtility.HtmlDecode(await GetHtmlAsync($"/Admin/ProfessionalModels/Edit/{id}"));
+            Assert.Contains("اختر النوع", page);
+
+            var fields = new List<KeyValuePair<string, string>>
+            {
+                new("Title", title),
+                new("Description", "-"),
+                new("ModelType", "")
+            };
+            var response = await OwnerClient().SendAsync(Post($"/Admin/ProfessionalModels/Edit/{id}", fields));
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var html = WebUtility.HtmlDecode(await response.Content.ReadAsStringAsync());
+            Assert.Contains("اختر نوع النموذج", html);
+            Assert.Contains("اختر النوع", html);
+
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            Assert.Equal((ProfessionalModelType)0, (await db.ProfessionalModels.AsNoTracking().SingleAsync(m => m.Id == id)).ModelType);
+        }
+
+        [Fact]
+        public async Task ClassifyUntyped_BulkPath_OnSqlServer_AndIndexFilterShowsThem()
+        {
+            var ids = new List<int>();
+            for (var i = 0; i < 25; i++)
+                ids.Add(await SeedModelAsync($"{Marker} جماعي {i}", forPartners: false, type: 0));
+            var classified = await SeedModelAsync($"{Marker} مصنف", forPartners: false, type: ProfessionalModelType.Homework);
+
+            var page = WebUtility.HtmlDecode(await GetHtmlAsync("/Admin/ProfessionalModels/Index?untyped=true"));
+            Assert.Contains($"{Marker} جماعي 24", page);
+            Assert.Contains("تصنيف النماذج بلا نوع", page);
+            Assert.DoesNotContain($"{Marker} مصنف", page);
+
+            var fields = ids.Append(classified)
+                .Select(id => new KeyValuePair<string, string>("selectedModelIds", id.ToString()))
+                .ToList();
+            fields.Add(new("modelType", ((int)ProfessionalModelType.Exam).ToString()));
+
+            var response = await OwnerClient().SendAsync(Post("/Admin/ProfessionalModels/ClassifyUntypedModels", fields));
+            Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var models = await db.ProfessionalModels.AsNoTracking()
+                .Where(m => m.Title.StartsWith(Marker))
+                .Select(m => new { m.Id, m.Title, m.CreatedBy, m.ModelType })
+                .ToListAsync();
+
+            Assert.Equal(25, models.Count(m => m.ModelType == ProfessionalModelType.Exam));
+            Assert.Equal(ProfessionalModelType.Homework, models.Single(m => m.Id == classified).ModelType);
+            Assert.Contains(models, m => m.Title == $"{Marker} جماعي 0");
+            Assert.All(models, m => Assert.Equal("-", m.CreatedBy));
         }
 
         [Fact]

@@ -123,6 +123,43 @@ namespace QdratNew.Services.ProfessionalModels
                 await _context.BulkInsertAsync(toAdd, cancellationToken: ct);
         }
 
+        public async Task<int> ClassifyUntypedModelsAsync(IEnumerable<int> modelIds, ProfessionalModelType type, CancellationToken ct = default)
+        {
+            var requested = modelIds.ToHashSet();
+            if (requested.Count == 0 || !Enum.IsDefined(type))
+                return 0;
+
+            // المقارنة في الذاكرة تتجنب Contains داخل الاستعلام، والنموذج المصنَّف لا يتغير حتى بطلب مصطنع
+            var untypedIds = await _context.ProfessionalModels
+                .AsNoTracking()
+                .Where(m => !m.IsArchived && m.ModelType != ProfessionalModelType.Exam && m.ModelType != ProfessionalModelType.Homework)
+                .Select(m => m.Id)
+                .ToListAsync(ct);
+
+            var stubs = untypedIds
+                .Where(requested.Contains)
+                .Select(id => new ProfessionalModel { Id = id, Title = "-", Description = "-", CreatedBy = "-", ModelType = type })
+                .ToList();
+
+            if (stubs.Count > BulkThreshold)
+            {
+                await _context.BulkUpdateAsync(stubs, new BulkConfig
+                {
+                    PropertiesToInclude = new List<string> { nameof(ProfessionalModel.ModelType) }
+                }, cancellationToken: ct);
+                return stubs.Count;
+            }
+
+            foreach (var stub in stubs)
+            {
+                _context.ProfessionalModels.Attach(stub);
+                _context.Entry(stub).Property(m => m.ModelType).IsModified = true;
+            }
+
+            await _context.SaveChangesAsync(ct);
+            return stubs.Count;
+        }
+
         public async Task SyncSubscriptionPeriodsAsync(int modelId, IEnumerable<int> periodIds, CancellationToken ct = default)
         {
             var requested = periodIds.ToHashSet();

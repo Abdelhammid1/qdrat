@@ -109,7 +109,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
         // 1. عرض جميع النماذج
         [AdminPermission("ProfessionalModels", "Read")]
-        public async Task<IActionResult> Index(bool showArchived = false, int? curriculumId = null, ProfessionalModelType? modelType = null)
+        public async Task<IActionResult> Index(bool showArchived = false, int? curriculumId = null, ProfessionalModelType? modelType = null, bool untyped = false)
         {
             var query = _context.ProfessionalModels
                 .Include(m => m.Curriculum)
@@ -118,7 +118,10 @@ namespace QdratNew.Areas.Admin.Controllers
             if (curriculumId.HasValue && curriculumId.Value > 0)
                 query = query.Where(m => m.CurriculumId == curriculumId.Value);
 
-            if (modelType.HasValue)
+            // PPM-S2: القيمة 0 لا تُربط بـ Enum عبر الرابط، فللنماذج بلا نوع مُعامل مستقل
+            if (untyped)
+                query = query.Where(m => m.ModelType != ProfessionalModelType.Exam && m.ModelType != ProfessionalModelType.Homework);
+            else if (modelType.HasValue)
                 query = query.Where(m => m.ModelType == modelType.Value);
 
             var models = await query
@@ -129,7 +132,10 @@ namespace QdratNew.Areas.Admin.Controllers
             ViewBag.ActiveModelsCount = await _context.ProfessionalModels.CountAsync(m => !m.IsArchived);
             ViewBag.ArchivedModelsCount = await _context.ProfessionalModels.CountAsync(m => m.IsArchived);
             ViewBag.SelectedCurriculumId = curriculumId;
-            ViewBag.SelectedModelType = modelType;
+            ViewBag.SelectedModelType = untyped ? null : modelType;
+            ViewBag.UntypedOnly = untyped;
+            ViewBag.UntypedModelsCount = await _context.ProfessionalModels.CountAsync(m =>
+                !m.IsArchived && m.ModelType != ProfessionalModelType.Exam && m.ModelType != ProfessionalModelType.Homework);
             ViewBag.Curriculums = await _context.Curriculums
                 .AsNoTracking()
                 .OrderBy(c => c.Title)
@@ -180,6 +186,34 @@ namespace QdratNew.Areas.Admin.Controllers
                 .ToHashSet();
 
             return View(models);
+        }
+
+        // PPM-S2: تصنيف جماعي للنماذج القديمة بلا نوع
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [AdminPermission("ProfessionalModels", "EditModel")]
+        public async Task<IActionResult> ClassifyUntypedModels(List<int> selectedModelIds, ProfessionalModelType? modelType)
+        {
+            if (!modelType.HasValue || !Enum.IsDefined(modelType.Value))
+            {
+                TempData["ClassifyError"] = "نوع النموذج غير صحيح.";
+                return RedirectToAction(nameof(Index), new { untyped = true });
+            }
+
+            if (selectedModelIds == null || selectedModelIds.Count == 0)
+            {
+                TempData["ClassifyError"] = "من فضلك اختر نموذجًا واحدًا على الأقل للتصنيف.";
+                return RedirectToAction(nameof(Index), new { untyped = true });
+            }
+
+            var count = await _availabilityService.ClassifyUntypedModelsAsync(selectedModelIds, modelType.Value, HttpContext.RequestAborted);
+
+            if (count == 0)
+                TempData["ClassifyError"] = "لم يُصنَّف أي نموذج: النماذج المحددة مصنفة بالفعل أو مؤرشفة.";
+            else
+                TempData["ClassifySuccess"] = $"تم تصنيف {count} نموذج كـ{(modelType == ProfessionalModelType.Exam ? "اختبارات" : "واجبات")}.";
+
+            return RedirectToAction(nameof(Index), new { untyped = true });
         }
 
         [HttpPost]
@@ -646,6 +680,13 @@ namespace QdratNew.Areas.Admin.Controllers
                 var hasPeriods = await _context.ProfessionalModelSubscriptionPeriods
                     .AnyAsync(p => p.ProfessionalModelId == id);
                 partnerIds = await ValidatePartnerAudienceAsync(vm, hasPeriods, "اختر شريكًا واحدًا على الأقل.");
+            }
+
+            // PPM-S2: النموذج بلا نوع لا يُحفظ حتى يُختار نوعه صراحة
+            if (!Enum.IsDefined(vm.ModelType))
+            {
+                ModelState.Remove(nameof(vm.ModelType));
+                ModelState.AddModelError(nameof(vm.ModelType), "اختر نوع النموذج: اختبارات أو واجبات.");
             }
 
             if (!ModelState.IsValid)
