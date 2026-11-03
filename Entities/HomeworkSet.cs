@@ -53,6 +53,10 @@ namespace QdratNew.Entities
 
         public bool IsFromProfessionalModel { get; set; } = false;
 
+        // PPM-S1: النموذج الذي أُرسل منه الواجب
+        public int? SourceProfessionalModelId { get; set; }
+        public ProfessionalModel? SourceProfessionalModel { get; set; }
+
         public bool IsArchived { get; set; } = false;
         public DateTime? ArchivedAt { get; set; }
         public string? ArchivedByUserId { get; set; }

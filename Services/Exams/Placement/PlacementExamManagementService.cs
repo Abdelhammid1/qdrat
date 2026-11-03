@@ -6,6 +6,7 @@ using QdratNew.Data;
 using QdratNew.Entities;
 using QdratNew.Enums;
 using QdratNew.Helpers;
+using QdratNew.Services.ProfessionalModels;
 using QdratNew.Services.Exams.Generators;
 using QdratNew.Services.Interfaces;
 using QdratNew.ViewModels.Exam;
@@ -29,6 +30,8 @@ namespace QdratNew.Services.Exams.Placement
         private readonly ILogger<PlacementExamManagementService> _logger;
         private readonly IAdvancedNotificationService _notificationService;
 
+        private readonly IProfessionalModelAvailabilityService _availabilityService;
+
         public PlacementExamManagementService(
             ApplicationDbContext context,
             IPlacementExamGeneratorService placementExamService,
@@ -36,8 +39,10 @@ namespace QdratNew.Services.Exams.Placement
             ITimeZoneService timeZoneService,
             IMemoryCache cache,
             ILogger<PlacementExamManagementService> logger,
-            IAdvancedNotificationService notificationService)
+            IAdvancedNotificationService notificationService,
+            IProfessionalModelAvailabilityService availabilityService)
         {
+            _availabilityService = availabilityService;
             _context = context;
             _placementExamService = placementExamService;
             _guard = guard;
@@ -1936,29 +1941,18 @@ namespace QdratNew.Services.Exams.Placement
                 contracts.Any(s => s.SubscriptionCourses.Any(sc => sc.CourseId == c.Id && sc.CanUsePlatformQuestionBank)));
         }
 
-        // الأدمن: كل النماذج غير المؤرشفة. الشريك: حسب العقد وإتاحة النموذج له.
+        // الأدمن: كل النماذج غير المؤرشفة (بما فيها غير المصنّفة).
+        // الشريك: نماذج «الاختبار» الموجّهة له فقط، بعقد يشمل تحديد المستوى والنماذج معًا.
         private IQueryable<ProfessionalModel> ModelsInScope(PlacementScope scope)
         {
-            var models = _context.ProfessionalModels.Where(m => !m.IsArchived);
-
             if (!scope.IsPartner)
-                return models;
+                return _context.ProfessionalModels.Where(m => !m.IsArchived);
 
-            var partnerId = scope.PartnerId!.Value;
-            var today = DateTime.Today;
             var contracts = ActiveContracts(scope);
 
-            return models.Where(m =>
-                contracts.Any(s => s.CanUseProfessionalModels) &&
-                (m.IsGlobal
-                 || _context.ProfessionalModelPartners.Any(p =>
-                        p.ProfessionalModelId == m.Id &&
-                        p.PartnerId == partnerId)
-                 || _context.ProfessionalModelSubscriptionPeriods.Any(sp =>
-                        sp.ProfessionalModelId == m.Id &&
-                        sp.PartnerSubscriptionPeriod.PartnerSubscription.PartnerId == partnerId &&
-                        sp.PartnerSubscriptionPeriod.StartDate <= today &&
-                        sp.PartnerSubscriptionPeriod.EndDate >= today)));
+            return _availabilityService
+                .AvailableForPartner(scope.PartnerId!.Value, ProfessionalModelType.Exam)
+                .Where(m => contracts.Any(s => s.CanUseProfessionalModels));
         }
 
         private async Task<bool> CanUseBankForExamCourseAsync(PlacementScope scope, int? courseId, CancellationToken ct)

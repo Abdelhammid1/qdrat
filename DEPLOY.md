@@ -121,6 +121,35 @@ UPDATE SystemSettings SET [Value] = N'true'  WHERE [Key] = N'RemedialTrack.Enabl
 
 ---
 
+## 📋 نشر Epic PPM (إتاحة النماذج الاحترافية للشركاء) — حتى PPM-S1
+
+### 1) قبل نشر الكود (Backup إلزامي)
+```sql
+BACKUP DATABASE [QdratNewDB] TO DISK = N'/var/opt/mssql/backup/QdratNewDB_before_PPM.bak' WITH INIT, COMPRESSION;
+```
+شغّل يدويًا `Migrations/Scripts/PPM_PartnerModels.sql` (Idempotent وإضافات فقط). الكود الجديد يقرأ الأعمدة، فنشره قبل السكربت يكسر صفحات النماذج والواجبات والاختبارات. لا تعتمد على `Migrate()` عند الإقلاع.
+
+### 2) التحقق بعد السكربت
+```sql
+SELECT COL_LENGTH(N'ProfessionalModels', N'IsForPartners');            -- المتوقع 1
+SELECT COL_LENGTH(N'HomeworkSets', N'SourceProfessionalModelId');      -- المتوقع 4
+SELECT COL_LENGTH(N'Exams', N'SourceProfessionalModelId');             -- المتوقع 4
+SELECT COUNT(*) FROM __EFMigrationsHistory WHERE MigrationId = N'20261103000022_PPM_PartnerModels'; -- المتوقع 1
+-- كل نموذج له جمهور اليوم يصبح موجّهًا للشركاء، وهذا العدد يجب أن يكون 0:
+SELECT COUNT(*) FROM ProfessionalModels pm WHERE pm.IsForPartners = 0 AND (pm.IsGlobal = 1
+    OR EXISTS (SELECT 1 FROM ProfessionalModelPartners p WHERE p.ProfessionalModelId = pm.Id)
+    OR EXISTS (SELECT 1 FROM ProfessionalModelSubscriptionPeriods s WHERE s.ProfessionalModelId = pm.Id));
+```
+
+### 3) بعد نشر الكود
+- ربط الفترة صار يُفحص بتاريخ اليوم، وكل نموذج يتطلب عقدًا نشطًا يحمل `CanUseProfessionalModels`. راجع نماذج الشركاء الحاليين في `Admin/ProfessionalModels` (الوسم بجوار كل نموذج).
+- `HomeworkGeneration/FromProfessionalModel` يرفض الآن أي نموذج غير متاح للشريك.
+
+### 4) خطة التراجع (بلا حذف بيانات)
+- **إيقاف فوري لكل الشركاء:** عدّل قيمة `ProfessionalModels.PartnerAccess.Enabled` إلى `false` في `SystemSettings`. الأثر فوري بلا إعادة تشغيل، والأدمن لا يتأثر.
+- **إيقاف نموذج واحد:** عطّل «موجّه للشركاء» من `Admin/ProfessionalModels/Edit`.
+- **سحب الكود:** الرجوع لنسخة سابقة يكفي مع بقاء الأعمدة. لا تشغّل `PPM_PartnerModels_Rollback.sql` إلا بعد سحب الكود.
+
 ## 📋 نشر Epic PPL (اختبار تحديد المستوى في منطقة الشركاء) — PPL-S7.4
 
 ⚠ **انشر خارج أوقات الاختبارات:** من فتح صفحة الحل قبل النشر لن يستطيع التسليم بالـ JavaScript القديم (الحفظ والتسليم أصبحا يتطلبان AntiForgery)، ويكفيه تحديث الصفحة.

@@ -54,6 +54,10 @@ namespace QdratNew.Entities
         [Display(Name = "من نموذج احترافي؟")]
         public bool IsFromProfessionalModel { get; set; } = false;
 
+        // PPM-S1: النموذج الذي أُرسل منه الاختبار
+        public int? SourceProfessionalModelId { get; set; }
+        public ProfessionalModel? SourceProfessionalModel { get; set; }
+
         public List<ExamQuestion> Questions { get; set; } = new();
         //public DateTime StartAt { get; internal set; }
         //public DateTime EndAt { get; internal set; }

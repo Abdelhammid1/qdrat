@@ -4,6 +4,7 @@ using QdratNew.Data;
 using QdratNew.Enums;
 using QdratNew.Interfaces;
 using QdratNew.Services.HomeworkDraft.Interfaces;
+using QdratNew.Services.ProfessionalModels;
 using QdratNew.ViewModels.Partner.Homework;
 
 namespace QdratNew.Areas.Partner.Controllers
@@ -13,24 +14,28 @@ namespace QdratNew.Areas.Partner.Controllers
     public class HomeworkGenerationController : PartnerBaseController
     {
         private readonly IHomeworkDraftService _draftService;
+        private readonly IProfessionalModelAvailabilityService _availabilityService;
 
         public HomeworkGenerationController(
             IHomeworkDraftService draftService,
+            IProfessionalModelAvailabilityService availabilityService,
             IPartnerSubscriptionService subscriptionService,
             ApplicationDbContext context)
             : base(subscriptionService, context)
         {
             _draftService = draftService;
+            _availabilityService = availabilityService;
         }
 
         // =========================
         // 🎓 Generate From Professional Model
         // =========================
         [HttpGet]
-        public IActionResult FromProfessionalModel(int modelId)
+        public async Task<IActionResult> FromProfessionalModel(int modelId)
         {
-            var modelIsAvailable = _context.ProfessionalModels
-                .Any(m => m.Id == modelId && !m.IsArchived && m.ModelType == ProfessionalModelType.Homework);
+            // PPM-S1: نفس قاعدة الإتاحة، لا يكفي أن يكون النموذج غير مؤرشف
+            var modelIsAvailable = await _availabilityService
+                .IsAvailableForPartnerAsync(modelId, ActivePartnerId, ProfessionalModelType.Homework);
 
             if (!modelIsAvailable)
             {
@@ -58,17 +63,17 @@ namespace QdratNew.Areas.Partner.Controllers
         public async Task<IActionResult> FromProfessionalModel(
             HomeworkGenerateFromProfessionalModelVM model)
         {
-            if (!ModelState.IsValid)
-                return View(model);
-
-            var modelIsAvailable = _context.ProfessionalModels
-                .Any(m => m.Id == model.ProfessionalModelId && !m.IsArchived && m.ModelType == ProfessionalModelType.Homework);
+            var modelIsAvailable = await _availabilityService
+                .IsAvailableForPartnerAsync(model.ProfessionalModelId, ActivePartnerId, ProfessionalModelType.Homework);
 
             if (!modelIsAvailable)
             {
                 TempData["Error"] = "النموذج الاحترافي غير متاح أو مؤرشف.";
                 return RedirectToAction("Index", "ProfessionalModels");
             }
+
+            if (!ModelState.IsValid)
+                return View(model);
 
             var draftId = await _draftService.GenerateDraftFromProfessionalModel(
                 ActivePartnerId,

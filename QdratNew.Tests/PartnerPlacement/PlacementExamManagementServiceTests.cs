@@ -148,7 +148,8 @@ namespace QdratNew.Tests.PartnerPlacement
                 tz.Object,
                 new MemoryCache(new MemoryCacheOptions()),
                 NullLogger<PlacementExamManagementService>.Instance,
-                notifications.Object);
+                notifications.Object,
+                new QdratNew.Services.ProfessionalModels.ProfessionalModelAvailabilityService(db));
 
             return new Harness { Db = db, Service = service, Factory = factory, Notifications = notifications };
         }
@@ -697,9 +698,9 @@ namespace QdratNew.Tests.PartnerPlacement
         {
             var h = Seed();
             h.Db.ProfessionalModels.AddRange(
-                new ProfessionalModel { Id = 900, Title = "عام", Description = "-", CreatedBy = "-", IsGlobal = true },
+                new ProfessionalModel { Id = 900, Title = "عام", Description = "-", CreatedBy = "-", IsForPartners = true, IsGlobal = true },
                 new ProfessionalModel { Id = 901, Title = "مخصص لغيره", Description = "-", CreatedBy = "-" },
-                new ProfessionalModel { Id = 902, Title = "مؤرشف", Description = "-", CreatedBy = "-", IsGlobal = true, IsArchived = true });
+                new ProfessionalModel { Id = 902, Title = "مؤرشف", Description = "-", CreatedBy = "-", IsForPartners = true, IsGlobal = true, IsArchived = true });
             await h.Db.SaveChangesAsync();
 
             var vm = await h.Service.GetCreateFromModelAsync(ScopeA);
@@ -713,10 +714,67 @@ namespace QdratNew.Tests.PartnerPlacement
         }
 
         [Fact]
+        public async Task Partner_InternalModel_IsHiddenEvenWhenGlobal_ButAdminSeesIt()
+        {
+            var h = Seed();
+            h.Db.ProfessionalModels.Add(new ProfessionalModel { Id = 900, Title = "داخلي", Description = "-", CreatedBy = "-", IsForPartners = false, IsGlobal = true });
+            await h.Db.SaveChangesAsync();
+
+            Assert.Empty((await h.Service.GetCreateFromModelAsync(ScopeA)).AvailableModels);
+            Assert.Single((await h.Service.GetCreateFromModelAsync(Admin)).AvailableModels);
+        }
+
+        [Fact]
+        public async Task Partner_SeesExamModelsOnly_AdminKeepsAll()
+        {
+            var h = Seed();
+            h.Db.ProfessionalModels.AddRange(
+                new ProfessionalModel { Id = 900, Title = "اختبار", Description = "-", CreatedBy = "-", IsForPartners = true, IsGlobal = true, ModelType = ProfessionalModelType.Exam },
+                new ProfessionalModel { Id = 901, Title = "واجب", Description = "-", CreatedBy = "-", IsForPartners = true, IsGlobal = true, ModelType = ProfessionalModelType.Homework },
+                new ProfessionalModel { Id = 902, Title = "غير مصنف", Description = "-", CreatedBy = "-", IsForPartners = true, IsGlobal = true, ModelType = 0 });
+            await h.Db.SaveChangesAsync();
+
+            var partner = await h.Service.GetCreateFromModelAsync(ScopeA);
+            Assert.Equal(new[] { "900" }, partner.AvailableModels.Select(m => m.Value));
+
+            Assert.NotNull(await h.Service.GetModelSummaryAsync(ScopeA, 900));
+            Assert.Null(await h.Service.GetModelSummaryAsync(ScopeA, 901));
+            Assert.Null(await h.Service.GetModelSummaryAsync(ScopeA, 902));
+
+            var admin = await h.Service.GetCreateFromModelAsync(Admin);
+            Assert.Equal(3, admin.AvailableModels.Count);
+            Assert.NotNull(await h.Service.GetModelSummaryAsync(Admin, 901));
+        }
+
+        [Fact]
+        public async Task Partner_ContractWithoutPlacement_HidesModelsEvenIfModelsAllowed()
+        {
+            var h = Seed();
+            h.Db.ProfessionalModels.Add(new ProfessionalModel { Id = 900, Title = "اختبار", Description = "-", CreatedBy = "-", IsForPartners = true, IsGlobal = true });
+            var contract = await h.Db.PartnerSubscriptions.SingleAsync(s => s.PartnerId == PartnerA);
+            contract.CanUsePlacementExams = false;
+            await h.Db.SaveChangesAsync();
+
+            Assert.Empty((await h.Service.GetCreateFromModelAsync(ScopeA)).AvailableModels);
+        }
+
+        [Fact]
+        public async Task Partner_KillSwitchOff_HidesModels_ButAdminSeesThem()
+        {
+            var h = Seed();
+            h.Db.ProfessionalModels.Add(new ProfessionalModel { Id = 900, Title = "عام", Description = "-", CreatedBy = "-", IsForPartners = true, IsGlobal = true });
+            h.Db.SystemSettings.Add(new SystemSetting(QdratNew.Services.ProfessionalModels.ProfessionalModelAvailabilityService.PartnerAccessSettingKey, "false", "-"));
+            await h.Db.SaveChangesAsync();
+
+            Assert.Empty((await h.Service.GetCreateFromModelAsync(ScopeA)).AvailableModels);
+            Assert.Single((await h.Service.GetCreateFromModelAsync(Admin)).AvailableModels);
+        }
+
+        [Fact]
         public async Task Partner_NoModelsFeature_HidesAllModels()
         {
             var h = Seed(partnerAModels: false);
-            h.Db.ProfessionalModels.Add(new ProfessionalModel { Id = 900, Title = "عام", Description = "-", CreatedBy = "-", IsGlobal = true });
+            h.Db.ProfessionalModels.Add(new ProfessionalModel { Id = 900, Title = "عام", Description = "-", CreatedBy = "-", IsForPartners = true, IsGlobal = true });
             await h.Db.SaveChangesAsync();
 
             Assert.Empty((await h.Service.GetCreateFromModelAsync(ScopeA)).AvailableModels);
@@ -903,7 +961,7 @@ namespace QdratNew.Tests.PartnerPlacement
         {
             var h = Seed();
             h.Db.ProfessionalModels.AddRange(
-                new ProfessionalModel { Id = 900, Title = "عام", Description = "-", CreatedBy = "-", IsGlobal = true },
+                new ProfessionalModel { Id = 900, Title = "عام", Description = "-", CreatedBy = "-", IsForPartners = true, IsGlobal = true },
                 new ProfessionalModel { Id = 901, Title = "خاص", Description = "-", CreatedBy = "-" });
             await h.Db.SaveChangesAsync();
 

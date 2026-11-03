@@ -35,7 +35,8 @@ namespace QdratNew.Tests.PartnerPlacement
                 tz.Object,
                 new MemoryCache(new MemoryCacheOptions()),
                 NullLogger<PlacementExamManagementService>.Instance,
-                new QdratNew.Services.Implementations.AdvancedNotificationService(db));
+                new QdratNew.Services.Implementations.AdvancedNotificationService(db),
+                new QdratNew.Services.ProfessionalModels.ProfessionalModelAvailabilityService(db));
         }
 
         public Task InitializeAsync() => RtkRealDb.IsConfigured ? CleanupAsync() : Task.CompletedTask;

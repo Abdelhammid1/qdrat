@@ -9,7 +9,9 @@ using QdratNew.Enums;
 using QdratNew.Extensions;
 using QdratNew.Models;
 using QdratNew.Security;
+using QdratNew.Security.AdminPermissions;
 using QdratNew.Services.Interfaces;
+using QdratNew.Services.ProfessionalModels;
 using QdratNew.ViewModels;
 using QdratNew.ViewModels.Course;
 using QdratNew.ViewModels.Exam;
@@ -39,10 +41,70 @@ namespace QdratNew.Areas.Admin.Controllers
     {
         private readonly ApplicationDbContext _context;
         private readonly ITimeZoneService _timeZoneService;
-        public ProfessionalModelsController(ApplicationDbContext context, ITimeZoneService timeZoneService)
+        private readonly IProfessionalModelAvailabilityService _availabilityService;
+        private readonly IAuthorizationService _authorization;
+
+        public ProfessionalModelsController(
+            ApplicationDbContext context,
+            ITimeZoneService timeZoneService,
+            IProfessionalModelAvailabilityService availabilityService,
+            IAuthorizationService authorization)
         {
             _context = context;
-            _timeZoneService = timeZoneService; 
+            _timeZoneService = timeZoneService;
+            _availabilityService = availabilityService;
+            _authorization = authorization;
+        }
+
+        // =========================
+        // PPM-S1: قسم «الإتاحة للشركاء» في Create/Edit/Visibility
+        // =========================
+        private async Task<bool> CanManageVisibilityAsync()
+            => (await _authorization.AuthorizeAsync(User, AdminPermissionPolicies.ProfessionalModels_Visibility)).Succeeded;
+
+        private async Task PopulatePartnerSectionAsync(IPartnerAudienceFields vm, bool canManage)
+        {
+            vm.CanManageVisibility = canManage;
+            vm.PartnerOptions = canManage
+                ? await _availabilityService.GetPartnerOptionsAsync(vm.SelectedPartnerIds)
+                : new List<PartnerOptionVm>();
+        }
+
+        // الحالة المحفوظة للنموذج كما تُعرض في النموذج (Form)
+        private async Task LoadPartnerAudienceAsync(IPartnerAudienceFields vm, PmEntity model, bool canManage)
+        {
+            if (canManage)
+            {
+                vm.IsForPartners = model.IsForPartners;
+                vm.SelectedPartnerIds = await _availabilityService.GetAssignedPartnerIdsAsync(model.Id);
+
+                var hasPeriods = await _context.ProfessionalModelSubscriptionPeriods
+                    .AnyAsync(p => p.ProfessionalModelId == model.Id);
+
+                vm.PartnerAudience = !model.IsGlobal && (vm.SelectedPartnerIds.Count > 0 || hasPeriods)
+                    ? PartnerAudience.Selected
+                    : PartnerAudience.All;
+            }
+
+            await PopulatePartnerSectionAsync(vm, canManage);
+        }
+
+        // يعيد الشركاء الموجودين فعلًا من الطلب، ويضيف خطأ ModelState عند جمهور محدد بلا أحد.
+        // hasPeriods: النموذج مربوط بفترات اشتراك، وهي جمهور صالح بلا شركاء.
+        private async Task<List<int>> ValidatePartnerAudienceAsync(IPartnerAudienceFields vm, bool hasPeriods, string emptyMessage)
+        {
+            if (!Enum.IsDefined(vm.PartnerAudience))
+            {
+                ModelState.AddModelError(nameof(vm.SelectedPartnerIds), "اختر جمهور الشركاء.");
+                return new List<int>();
+            }
+
+            var partnerIds = await _availabilityService.FilterExistingPartnerIdsAsync(vm.SelectedPartnerIds);
+
+            if (vm.IsForPartners && vm.PartnerAudience == PartnerAudience.Selected && partnerIds.Count == 0 && !hasPeriods)
+                ModelState.AddModelError(nameof(vm.SelectedPartnerIds), emptyMessage);
+
+            return partnerIds;
         }
 
         // 1. عرض جميع النماذج
@@ -102,6 +164,20 @@ namespace QdratNew.Areas.Admin.Controllers
             {
                 ViewBag.CurriculumStats = new List<CurriculumStatsVm>();
             }
+
+            // PPM-S1.4: وسم الإتاحة لكل نموذج
+            ViewBag.PartnerLinkCounts = await _context.ProfessionalModelPartners
+                .AsNoTracking()
+                .GroupBy(p => p.ProfessionalModelId)
+                .Select(g => new { ModelId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.ModelId, x => x.Count);
+
+            ViewBag.PeriodLinkedModelIds = (await _context.ProfessionalModelSubscriptionPeriods
+                .AsNoTracking()
+                .Select(p => p.ProfessionalModelId)
+                .Distinct()
+                .ToListAsync())
+                .ToHashSet();
 
             return View(models);
         }
@@ -179,62 +255,83 @@ namespace QdratNew.Areas.Admin.Controllers
             {
                 Curriculums = await GetCurriculumsSelectList()
             };
+            await PopulatePartnerSectionAsync(vm, await CanManageVisibilityAsync());
             return View(vm);
         }
 
         [HttpPost]
+        [ValidateAntiForgeryToken]
         [AdminPermission("ProfessionalModels", "CreateModel")]
         public async Task<IActionResult> Create(ProfessionalModelCreateVm vm)
         {
+            var canManage = await CanManageVisibilityAsync();
+            var partnerIds = canManage
+                ? await ValidatePartnerAudienceAsync(vm, hasPeriods: false, "اختر شريكًا واحدًا على الأقل.")
+                : new List<int>();
+
             if (!ModelState.IsValid)
             {
                 vm.Curriculums = await GetCurriculumsSelectList();
+                await PopulatePartnerSectionAsync(vm, canManage);
                 return View(vm);
             }
 
-            // 🟢 إنشاء النموذج
-            var model = new PmEntity
+            var strategy = _context.Database.CreateExecutionStrategy();
+            var modelId = await strategy.ExecuteAsync(async () =>
             {
-                Title = vm.Title,
-                Description = vm.Description,
-                CurriculumId = vm.CurriculumId,
-                ModelType = vm.ModelType,
-                CreatedAt = _timeZoneService.GetNowUtc(),
-                CreatedBy = User.Identity?.Name
-            };
+                _context.ChangeTracker.Clear();
+                await using var transaction = await _context.Database.BeginTransactionAsync();
 
-            _context.ProfessionalModels.Add(model);
-            await _context.SaveChangesAsync();
-
-            // 🟢 استيراد الأسئلة (لو في كود استيراد)
-            if (!string.IsNullOrEmpty(vm.ImportFromCode))
-            {
-                var importCode = vm.ImportFromCode; // ✅ string ثابت
-                var questions = await _context.Questions
-                    .Where(q => q.InternalNote.StartsWith(importCode))
-                    .ToListAsync();
-
-                var ordered = questions.Select(q => new
+                // 🟢 إنشاء النموذج
+                var model = new PmEntity
                 {
-                    q.Id,
-                    Order = ExtractOrderFromInternalNote(q.InternalNote)
-                })
-                .OrderBy(x => x.Order)
-                .ToList();
+                    Title = vm.Title,
+                    Description = vm.Description,
+                    CurriculumId = vm.CurriculumId,
+                    ModelType = vm.ModelType,
+                    CreatedAt = _timeZoneService.GetNowUtc(),
+                    CreatedBy = User.Identity?.Name
+                };
 
-                foreach (var q in ordered)
-                {
-                    _context.ProfessionalModelQuestions.Add(new ProfessionalModelQuestion
-                    {
-                        ModelId = model.Id,
-                        QuestionId = q.Id,
-                        OrderNumber = q.Order
-                    });
-                }
+                _context.ProfessionalModels.Add(model);
                 await _context.SaveChangesAsync();
-            }
 
-            return RedirectToAction("Details", new { id = model.Id });
+                // 🟢 استيراد الأسئلة (لو في كود استيراد)
+                if (!string.IsNullOrEmpty(vm.ImportFromCode))
+                {
+                    var importCode = vm.ImportFromCode; // ✅ string ثابت
+                    var questions = await _context.Questions
+                        .Where(q => q.InternalNote.StartsWith(importCode))
+                        .ToListAsync();
+
+                    var ordered = questions.Select(q => new
+                    {
+                        q.Id,
+                        Order = ExtractOrderFromInternalNote(q.InternalNote)
+                    })
+                    .OrderBy(x => x.Order)
+                    .ToList();
+
+                    foreach (var q in ordered)
+                    {
+                        _context.ProfessionalModelQuestions.Add(new ProfessionalModelQuestion
+                        {
+                            ModelId = model.Id,
+                            QuestionId = q.Id,
+                            OrderNumber = q.Order
+                        });
+                    }
+                    await _context.SaveChangesAsync();
+                }
+
+                if (canManage)
+                    await _availabilityService.ApplyPartnerAudienceAsync(model, vm.IsForPartners, vm.PartnerAudience, partnerIds);
+
+                await transaction.CommitAsync();
+                return model.Id;
+            });
+
+            return RedirectToAction("Details", new { id = modelId });
         }
 
 
@@ -439,6 +536,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
 
         [HttpPost]
+        [ValidateAntiForgeryToken]
         [AdminPermission("ProfessionalModels", "EditModel")]
         public async Task<IActionResult> AddQuestions(int modelId, List<Guid> questionIds)
         {
@@ -528,6 +626,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 ModelType = model.ModelType,
                 Curriculums = await GetCurriculumsSelectList()
             };
+            await LoadPartnerAudienceAsync(vm, model, await CanManageVisibilityAsync());
 
             ViewBag.ModelId = id;
             return View(vm);
@@ -539,23 +638,49 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("ProfessionalModels", "EditModel")]
         public async Task<IActionResult> Edit(int id, ProfessionalModelEditVm vm)
         {
+            var canManage = await CanManageVisibilityAsync();
+            var partnerIds = new List<int>();
+
+            if (canManage)
+            {
+                var hasPeriods = await _context.ProfessionalModelSubscriptionPeriods
+                    .AnyAsync(p => p.ProfessionalModelId == id);
+                partnerIds = await ValidatePartnerAudienceAsync(vm, hasPeriods, "اختر شريكًا واحدًا على الأقل.");
+            }
+
             if (!ModelState.IsValid)
             {
                 vm.Curriculums = await GetCurriculumsSelectList();
+                await PopulatePartnerSectionAsync(vm, canManage);
                 ViewBag.ModelId = id;
                 return View(vm);
             }
 
-            var model = await _context.ProfessionalModels.FindAsync(id);
-            if (model == null) return NotFound();
+            var strategy = _context.Database.CreateExecutionStrategy();
+            var found = await strategy.ExecuteAsync(async () =>
+            {
+                _context.ChangeTracker.Clear();
+                await using var transaction = await _context.Database.BeginTransactionAsync();
 
-            model.Title = vm.Title;
-            model.Description = vm.Description;
-            model.CurriculumId = vm.CurriculumId;
-            model.ModelType = vm.ModelType;
+                var model = await _context.ProfessionalModels.FindAsync(id);
+                if (model == null) return false;
 
-            _context.ProfessionalModels.Update(model);
-            await _context.SaveChangesAsync();
+                model.Title = vm.Title;
+                model.Description = vm.Description;
+                model.CurriculumId = vm.CurriculumId;
+                model.ModelType = vm.ModelType;
+
+                _context.ProfessionalModels.Update(model);
+                await _context.SaveChangesAsync();
+
+                if (canManage)
+                    await _availabilityService.ApplyPartnerAudienceAsync(model, vm.IsForPartners, vm.PartnerAudience, partnerIds);
+
+                await transaction.CommitAsync();
+                return true;
+            });
+
+            if (!found) return NotFound();
 
             TempData["SuccessMessage"] = "✅ تم تحديث النموذج بنجاح.";
             return RedirectToAction("Details", new { id });
@@ -564,6 +689,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
 
         [HttpPost]
+        [ValidateAntiForgeryToken]
         [AdminPermission("ProfessionalModels", "Duplicate")]
         public async Task<IActionResult> Duplicate(int id)
         {
@@ -579,11 +705,14 @@ namespace QdratNew.Areas.Admin.Controllers
             {
                 Title = original.Title + " - نسخة",
                 Description = original.Description,
+                ModelType = original.ModelType,
+                CurriculumId = original.CurriculumId,
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = User.Identity?.Name,
 
-                // 🔴 مهم جدًا: النسخة لا تكون Global
-                IsGlobal = false
+                // 🔴 مهم جدًا: النسخة لا تكون Global ولا موجّهة للشركاء
+                IsGlobal = false,
+                IsForPartners = false
             };
 
             _context.ProfessionalModels.Add(duplicated);
@@ -612,11 +741,11 @@ namespace QdratNew.Areas.Admin.Controllers
 
         [HttpGet]
         [AdminPermission("ProfessionalModels", "Visibility")]
-        public IActionResult Visibility(int id)
+        public async Task<IActionResult> Visibility(int id)
         {
-            var model = _context.ProfessionalModels
+            var model = await _context.ProfessionalModels
                 .AsNoTracking()
-                .FirstOrDefault(x => x.Id == id);
+                .FirstOrDefaultAsync(x => x.Id == id);
 
             if (model == null)
                 return NotFound();
@@ -624,91 +753,71 @@ namespace QdratNew.Areas.Admin.Controllers
             var vm = new ProfessionalModelVisibilityVm
             {
                 ProfessionalModelId = id,
-                IsGlobal = model.IsGlobal,
-
-                // الشركاء المحددون مسبقًا
-                SelectedPartnerIds = _context.ProfessionalModelPartners
-                    .Where(x => x.ProfessionalModelId == id)
-                    .Select(x => x.PartnerId)
-                    .ToList(),
 
                 // فترات الاشتراك المحددة مسبقًا
-                SelectedSubscriptionPeriodIds = _context.ProfessionalModelSubscriptionPeriods
+                SelectedSubscriptionPeriodIds = await _context.ProfessionalModelSubscriptionPeriods
                     .Where(x => x.ProfessionalModelId == id)
                     .Select(x => x.PartnerSubscriptionPeriodId)
-                    .ToList(),
+                    .ToListAsync(),
 
-                // قائمة الشركاء
-                Partners = _context.Partners
-                    .AsNoTracking()
-                    .Select(p => new SelectListItem
-                    {
-                        Value = p.Id.ToString(),
-                        Text = p.Name
-                    })
-                    .ToList(),
-
-                // قائمة فترات الاشتراك (بدون Title نهائيًا)
-                SubscriptionPeriods = _context.PartnerSubscriptionPeriods
-    .AsNoTracking()
-    .Select(sp => new SelectListItem
-    {
-        Value = sp.Id.ToString(),
-        Text =
-            sp.StartDate.ToString("yyyy-MM-dd")
-            + " → "
-            + sp.EndDate.ToString("yyyy-MM-dd")
-    })
-    .ToList()
-
+                SubscriptionPeriods = await GetSubscriptionPeriodsSelectList()
             };
+            await LoadPartnerAudienceAsync(vm, model, canManage: true);
 
             return View(vm);
         }
+
+        // قائمة فترات الاشتراك (بدون Title نهائيًا)
+        private Task<List<SelectListItem>> GetSubscriptionPeriodsSelectList()
+            => _context.PartnerSubscriptionPeriods
+                .AsNoTracking()
+                .Select(sp => new SelectListItem
+                {
+                    Value = sp.Id.ToString(),
+                    Text =
+                        sp.StartDate.ToString("yyyy-MM-dd")
+                        + " → "
+                        + sp.EndDate.ToString("yyyy-MM-dd")
+                })
+                .ToListAsync();
 
 
 
         [HttpPost]
         [ValidateAntiForgeryToken]
         [AdminPermission("ProfessionalModels", "Visibility")]
-        public IActionResult Visibility(ProfessionalModelVisibilityVm vm)
+        public async Task<IActionResult> Visibility(ProfessionalModelVisibilityVm vm)
         {
-            var model = _context.ProfessionalModels.Find(vm.ProfessionalModelId);
-            if (model == null) return NotFound();
+            if (!await _context.ProfessionalModels.AnyAsync(m => m.Id == vm.ProfessionalModelId))
+                return NotFound();
 
-            // 1️⃣ تحديث Global
-            model.IsGlobal = vm.IsGlobal;
+            var partnerIds = await ValidatePartnerAudienceAsync(
+                vm,
+                hasPeriods: vm.SelectedSubscriptionPeriodIds.Count > 0,
+                "اختر شريكًا واحدًا على الأقل أو فترة اشتراك.");
 
-            // 2️⃣ تنظيف التخصيصات القديمة
-            _context.ProfessionalModelPartners
-                .RemoveRange(_context.ProfessionalModelPartners
-                    .Where(x => x.ProfessionalModelId == vm.ProfessionalModelId));
-
-            _context.ProfessionalModelSubscriptionPeriods
-                .RemoveRange(_context.ProfessionalModelSubscriptionPeriods
-                    .Where(x => x.ProfessionalModelId == vm.ProfessionalModelId));
-
-            // 3️⃣ إضافة الشركاء
-            foreach (var partnerId in vm.SelectedPartnerIds)
+            if (!ModelState.IsValid)
             {
-                _context.ProfessionalModelPartners.Add(new Entities.ProfessionalModelPartner
-                {
-                    ProfessionalModelId = vm.ProfessionalModelId,
-                    PartnerId = partnerId
-                });
+                vm.SubscriptionPeriods = await GetSubscriptionPeriodsSelectList();
+                await PopulatePartnerSectionAsync(vm, canManage: true);
+                return View(vm);
             }
 
-            // 4️⃣ إضافة الفترات
-            foreach (var periodId in vm.SelectedSubscriptionPeriodIds)
+            var strategy = _context.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
             {
-                _context.ProfessionalModelSubscriptionPeriods.Add(new Entities.ProfessionalModelSubscriptionPeriod
-                {
-                    ProfessionalModelId = vm.ProfessionalModelId,
-                    PartnerSubscriptionPeriodId = periodId
-                });
-            }
+                _context.ChangeTracker.Clear();
+                await using var transaction = await _context.Database.BeginTransactionAsync();
 
-            _context.SaveChanges();
+                var model = await _context.ProfessionalModels.FindAsync(vm.ProfessionalModelId);
+                await _availabilityService.ApplyPartnerAudienceAsync(model!, vm.IsForPartners, vm.PartnerAudience, partnerIds);
+
+                // «داخلي» يبقي الروابط كلها محفوظة لإعادة التفعيل
+                if (vm.IsForPartners)
+                    await _availabilityService.SyncSubscriptionPeriodsAsync(vm.ProfessionalModelId, vm.SelectedSubscriptionPeriodIds);
+
+                await transaction.CommitAsync();
+            });
 
             TempData["SuccessMessage"] = "تم تحديث صلاحيات ظهور النموذج بنجاح.";
             return RedirectToAction("Details", new { id = vm.ProfessionalModelId });
@@ -1033,6 +1142,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
         // 5. حذف سؤال من النموذج
         [HttpPost]
+        [ValidateAntiForgeryToken]
         [AdminPermission("ProfessionalModels", "EditModel")]
         public async Task<IActionResult> RemoveQuestion(int id, int modelId)
         {

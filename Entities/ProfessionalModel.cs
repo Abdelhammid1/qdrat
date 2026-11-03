@@ -19,6 +19,9 @@ namespace QdratNew.Entities
 
         public bool IsGlobal { get; set; } = false;
 
+        // PPM-S1: البوابة الأولى للإتاحة. false = داخلي، لا يظهر لأي شريك مهما كانت الروابط
+        public bool IsForPartners { get; set; } = false;
+
         public int? CurriculumId { get; set; }
         public Curriculum? Curriculum { get; set; }
 

@@ -5,6 +5,7 @@ using QdratNew.Data;
 using QdratNew.Enums;
 using QdratNew.Interfaces;
 using QdratNew.Services.PartnerHomework.ProfessionalModels;
+using QdratNew.Services.ProfessionalModels;
 
 namespace QdratNew.Areas.Partner.Controllers
 {
@@ -14,52 +15,31 @@ namespace QdratNew.Areas.Partner.Controllers
     {
         private readonly ApplicationDbContext _context;
         private readonly IProfessionalModelAssignmentService _modelAssignmentService;
+        private readonly IProfessionalModelAvailabilityService _availabilityService;
 
         public ProfessionalModelsController(
             ApplicationDbContext context,
             IProfessionalModelAssignmentService modelAssignmentService,
+            IProfessionalModelAvailabilityService availabilityService,
             IPartnerSubscriptionService subscriptionService)
             : base(subscriptionService, context)
         {
             _context = context;
             _modelAssignmentService = modelAssignmentService;
+            _availabilityService = availabilityService;
         }
 
         // =========================================
         // 📄 قائمة النماذج الاحترافية
         // =========================================
-        public IActionResult Index()
+        public async Task<IActionResult> Index()
         {
-            int partnerId = ActivePartnerId;
-            int? periodId = ActiveSubscriptionPeriodId;
-
-            var modelsQuery = _context.ProfessionalModels
-                .Where(m => !m.IsArchived && m.ModelType == ProfessionalModelType.Homework)
-                .AsQueryable();
-
-            modelsQuery = modelsQuery.Where(m =>
-                // 1️⃣ نموذج عام
-                m.IsGlobal
-
-                // 2️⃣ نموذج مخصص للشريك
-                || _context.ProfessionalModelPartners
-                    .Any(p =>
-                        p.ProfessionalModelId == m.Id &&
-                        p.PartnerId == partnerId)
-
-                // 3️⃣ نموذج مخصص لفترة اشتراك (في حال وجود فترة نشطة)
-                || (periodId.HasValue &&
-                    _context.ProfessionalModelSubscriptionPeriods
-                        .Any(sp =>
-                            sp.ProfessionalModelId == m.Id &&
-                            sp.PartnerSubscriptionPeriodId == periodId.Value))
-            );
-
-            var models = modelsQuery
+            var models = await _availabilityService
+                .AvailableForPartner(ActivePartnerId, ProfessionalModelType.Homework)
                 .Include(m => m.Questions)
                     .ThenInclude(q => q.Question)
                 .OrderByDescending(m => m.CreatedAt)
-                .ToList();
+                .ToListAsync();
 
             return View(models);
         }
@@ -142,21 +122,6 @@ namespace QdratNew.Areas.Partner.Controllers
         // 🔒 PPL-S1.6: نفس قواعد الإتاحة في Index
         // =========================================
         private Task<bool> IsModelAvailableForPartnerAsync(int modelId)
-        {
-            int partnerId = ActivePartnerId;
-            int periodId = ActiveSubscriptionPeriodId;
-
-            return _context.ProfessionalModels
-                .AnyAsync(m =>
-                    m.Id == modelId &&
-                    !m.IsArchived &&
-                    (m.IsGlobal
-                     || _context.ProfessionalModelPartners.Any(p =>
-                            p.ProfessionalModelId == m.Id &&
-                            p.PartnerId == partnerId)
-                     || _context.ProfessionalModelSubscriptionPeriods.Any(sp =>
-                            sp.ProfessionalModelId == m.Id &&
-                            sp.PartnerSubscriptionPeriodId == periodId)));
-        }
+            => _availabilityService.IsAvailableForPartnerAsync(modelId, ActivePartnerId, null);
     }
 }

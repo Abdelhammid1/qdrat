@@ -1684,6 +1684,9 @@ namespace QdratNew.Migrations
                     b.Property<int?>("SectionId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("SourceProfessionalModelId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -1705,6 +1708,8 @@ namespace QdratNew.Migrations
                     b.HasIndex("OwnerPartnerId");
 
                     b.HasIndex("SectionId");
+
+                    b.HasIndex("SourceProfessionalModelId");
 
                     b.HasIndex("Type", "OwnerPartnerId")
                         .HasDatabaseName("IX_Exams_Type_OwnerPartnerId");
@@ -3644,6 +3649,9 @@ namespace QdratNew.Migrations
                     b.Property<int>("MaxRetakes")
                         .HasColumnType("int");
 
+                    b.Property<int?>("SourceProfessionalModelId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime?>("StartAt")
                         .HasColumnType("datetime2");
 
@@ -3660,6 +3668,8 @@ namespace QdratNew.Migrations
                     b.HasIndex("CurriculumId");
 
                     b.HasIndex("LectureId");
+
+                    b.HasIndex("SourceProfessionalModelId", "BatchId");
 
                     b.ToTable("HomeworkSets");
                 });
@@ -5876,6 +5886,9 @@ namespace QdratNew.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("IsArchived")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsForPartners")
                         .HasColumnType("bit");
 
                     b.Property<bool>("IsGlobal")
@@ -10387,6 +10400,11 @@ namespace QdratNew.Migrations
                         .WithMany()
                         .HasForeignKey("SectionId");
 
+                    b.HasOne("QdratNew.Entities.ProfessionalModel", "SourceProfessionalModel")
+                        .WithMany()
+                        .HasForeignKey("SourceProfessionalModelId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.Navigation("Course");
 
                     b.Navigation("Curriculum");
@@ -10396,6 +10414,8 @@ namespace QdratNew.Migrations
                     b.Navigation("OwnerPartner");
 
                     b.Navigation("Section");
+
+                    b.Navigation("SourceProfessionalModel");
                 });
 
             modelBuilder.Entity("QdratNew.Entities.ExamAssignment", b =>
@@ -10935,6 +10955,11 @@ namespace QdratNew.Migrations
                         .HasForeignKey("LectureId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("QdratNew.Entities.ProfessionalModel", "SourceProfessionalModel")
+                        .WithMany()
+                        .HasForeignKey("SourceProfessionalModelId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.Navigation("AssignedByUser");
 
                     b.Navigation("Batch");
@@ -10942,6 +10967,8 @@ namespace QdratNew.Migrations
                     b.Navigation("Curriculum");
 
                     b.Navigation("Lecture");
+
+                    b.Navigation("SourceProfessionalModel");
                 });
 
             modelBuilder.Entity("QdratNew.Entities.HomeworkSetAttempt", b =>

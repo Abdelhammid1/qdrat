@@ -1149,6 +1149,25 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                   .OnDelete(DeleteBehavior.NoAction);
 
 
+            // PPM-S1: تتبع مصدر الواجب/الاختبار المرسل من نموذج
+            modelBuilder.Entity<HomeworkSet>()
+                .HasOne(h => h.SourceProfessionalModel)
+                .WithMany()
+                .HasForeignKey(h => h.SourceProfessionalModelId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            modelBuilder.Entity<HomeworkSet>()
+                .HasIndex(h => new { h.SourceProfessionalModelId, h.BatchId });
+
+            modelBuilder.Entity<Exam>()
+                .HasOne(e => e.SourceProfessionalModel)
+                .WithMany()
+                .HasForeignKey(e => e.SourceProfessionalModelId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            modelBuilder.Entity<Exam>()
+                .HasIndex(e => e.SourceProfessionalModelId);
+
             modelBuilder.Entity<ProfessionalModelPartner>()
                 .HasIndex(x => new { x.ProfessionalModelId, x.PartnerId })
                 .IsUnique();

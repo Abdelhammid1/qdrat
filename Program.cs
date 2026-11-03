@@ -934,6 +934,7 @@ builder.Services.AddScoped<IPlacementExamGeneratorService, PlacementExamGenerato
 // PPL-S2: خدمة إدارة اختبارات تحديد المستوى المشتركة بين الأدمن والشريك + حارس النطاق
 builder.Services.AddScoped<QdratNew.Services.Exams.Placement.IPlacementExamScopeGuard, QdratNew.Services.Exams.Placement.PlacementExamScopeGuard>();
 builder.Services.AddScoped<QdratNew.Services.Exams.Placement.IPlacementExamManagementService, QdratNew.Services.Exams.Placement.PlacementExamManagementService>();
+builder.Services.AddScoped<QdratNew.Services.ProfessionalModels.IProfessionalModelAvailabilityService, QdratNew.Services.ProfessionalModels.ProfessionalModelAvailabilityService>(); // PPM-S1.2
 // PPL-S3: خدمة تقارير اختبارات تحديد المستوى المشتركة
 builder.Services.AddScoped<QdratNew.Services.Exams.Placement.IPlacementExamReportService, QdratNew.Services.Exams.Placement.PlacementExamReportService>();
 builder.Services.AddScoped<ITimeZoneService, TimeZoneService>();

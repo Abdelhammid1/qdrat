@@ -342,8 +342,18 @@ namespace QdratNew.Tests.PartnerPlacement
             HttpContext http,
             Mock<IPartnerSubscriptionService>? subscription = null)
         {
+            // PPM-S1: قاعدة الإتاحة تشترط عقدًا نشطًا يسمح بالنماذج
+            db.PartnerSubscriptions.Add(new PartnerSubscription
+            {
+                PartnerId = PartnerId,
+                StartDate = DateTime.Today.AddDays(-1),
+                EndDate = DateTime.Today.AddDays(30),
+                CanUseProfessionalModels = true
+            });
+            db.SaveChanges();
+
             var assignment = new Mock<IProfessionalModelAssignmentService>();
-            var controller = new ProfessionalModelsController(db, assignment.Object, (subscription ?? new Mock<IPartnerSubscriptionService>()).Object)
+            var controller = new ProfessionalModelsController(db, assignment.Object, new QdratNew.Services.ProfessionalModels.ProfessionalModelAvailabilityService(db), (subscription ?? new Mock<IPartnerSubscriptionService>()).Object)
             {
                 ControllerContext = new ControllerContext { HttpContext = http },
                 TempData = new TempDataDictionary(http, Mock.Of<ITempDataProvider>())
@@ -431,6 +441,7 @@ namespace QdratNew.Tests.PartnerPlacement
             Description = "-",
             CreatedBy = "-",
             CreatedAt = DateTime.UtcNow,
+            IsForPartners = true,
             IsGlobal = isGlobal,
             ModelType = ProfessionalModelType.Homework
         };
@@ -482,6 +493,78 @@ namespace QdratNew.Tests.PartnerPlacement
             Assert.IsType<RedirectToActionResult>(await controller.Send(2));
 
             Assert.Equal(2, assignment.Invocations.Count);
+        }
+
+        // =====================================================
+        // PPM-S1: HomeworkGeneration/FromProfessionalModel يتبع قاعدة الإتاحة
+        // =====================================================
+        private static (HomeworkGenerationController Controller, Mock<QdratNew.Services.HomeworkDraft.Interfaces.IHomeworkDraftService> Drafts) CreateGenerationController(ApplicationDbContext db)
+        {
+            db.PartnerSubscriptions.Add(new PartnerSubscription
+            {
+                PartnerId = PartnerId,
+                StartDate = DateTime.Today.AddDays(-1),
+                EndDate = DateTime.Today.AddDays(30),
+                CanUseProfessionalModels = true
+            });
+            db.SaveChanges();
+
+            var http = CreateHttpContext(PartnerId);
+            var drafts = new Mock<QdratNew.Services.HomeworkDraft.Interfaces.IHomeworkDraftService>();
+            var controller = new HomeworkGenerationController(
+                drafts.Object,
+                new QdratNew.Services.ProfessionalModels.ProfessionalModelAvailabilityService(db),
+                new Mock<IPartnerSubscriptionService>().Object,
+                db)
+            {
+                ControllerContext = new ControllerContext { HttpContext = http },
+                TempData = new TempDataDictionary(http, Mock.Of<ITempDataProvider>())
+            };
+            return (controller, drafts);
+        }
+
+        [Fact]
+        public async Task FromProfessionalModel_NotAvailable_RedirectsWithoutDraft()
+        {
+            using var db = TestDbContextFactory.CreateFreshContext(out _);
+            var internalModel = NewModel(1, isGlobal: true);
+            internalModel.IsForPartners = false;
+            var examModel = NewModel(3, isGlobal: true);
+            examModel.ModelType = ProfessionalModelType.Exam;
+            db.ProfessionalModels.AddRange(internalModel, NewModel(2), examModel);
+            db.ProfessionalModelPartners.Add(new ProfessionalModelPartner { ProfessionalModelId = 2, PartnerId = PartnerId + 1 });
+            db.SaveChanges();
+
+            var (controller, drafts) = CreateGenerationController(db);
+
+            foreach (var id in new[] { 1, 2, 3, 999 })
+            {
+                var get = Assert.IsType<RedirectToActionResult>(await controller.FromProfessionalModel(id));
+                Assert.Equal("ProfessionalModels", get.ControllerName);
+
+                var post = Assert.IsType<RedirectToActionResult>(await controller.FromProfessionalModel(
+                    new QdratNew.ViewModels.Partner.Homework.HomeworkGenerateFromProfessionalModelVM { ProfessionalModelId = id }));
+                Assert.Equal("ProfessionalModels", post.ControllerName);
+            }
+
+            Assert.Empty(drafts.Invocations);
+        }
+
+        [Fact]
+        public async Task FromProfessionalModel_Available_CreatesDraft()
+        {
+            using var db = TestDbContextFactory.CreateFreshContext(out _);
+            db.ProfessionalModels.Add(NewModel(1, isGlobal: true));
+            db.SaveChanges();
+
+            var (controller, drafts) = CreateGenerationController(db);
+
+            Assert.IsType<ViewResult>(await controller.FromProfessionalModel(1));
+
+            var post = Assert.IsType<RedirectToActionResult>(await controller.FromProfessionalModel(
+                new QdratNew.ViewModels.Partner.Homework.HomeworkGenerateFromProfessionalModelVM { ProfessionalModelId = 1 }));
+            Assert.Equal("HomeworkDrafts", post.ControllerName);
+            Assert.Single(drafts.Invocations);
         }
 
         [Fact]
