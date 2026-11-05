@@ -38,12 +38,12 @@ namespace QdratNew.Tests.PartnerProfessionalModels
         private static ModelSendScope ScopeA(Seed seed) => ModelSendScope.Partner(seed.PartnerA, SenderId, $"{Marker} مرسل");
 
         private static ProfessionalModelSendService NewService(ApplicationDbContext db, IAdvancedNotificationService? notifications = null)
-            => new(db, new ProfessionalModelAvailabilityService(db), new TimeZoneService(), notifications ?? new AdvancedNotificationService(db), NullLogger<ProfessionalModelSendService>.Instance);
+            => new(db, new ProfessionalModelAvailabilityService(db), new TimeZoneService(), notifications ?? new AdvancedNotificationService(db), new QdratNew.Services.PartnerDispatch.PartnerDispatchLogService(db), NullLogger<ProfessionalModelSendService>.Instance);
 
         private sealed class FailingSendService : ProfessionalModelSendService
         {
             public FailingSendService(ApplicationDbContext db)
-                : base(db, new ProfessionalModelAvailabilityService(db), new TimeZoneService(), new AdvancedNotificationService(db), NullLogger<ProfessionalModelSendService>.Instance)
+                : base(db, new ProfessionalModelAvailabilityService(db), new TimeZoneService(), new AdvancedNotificationService(db), new QdratNew.Services.PartnerDispatch.PartnerDispatchLogService(db), NullLogger<ProfessionalModelSendService>.Instance)
             {
             }
 
@@ -394,30 +394,53 @@ namespace QdratNew.Tests.PartnerProfessionalModels
         }
 
         [SqlServerFact]
-        public async Task Admin_Send_ReachesAnyBatch_AndFiltersByEnrollmentStatusOnly()
+        public async Task Admin_Send_PlatformBatchesOnly_AndFiltersByEnrollmentStatusOnly()
         {
             var seed = await SeedAsync();
             var internalModel = await AddModelAsync("داخلي", ProfessionalModelType.Homework, forPartners: false, seed);
 
+            // طلاب بحالات مختلفة على دفعة المنصة: الأدمن يفلتر بحالة التسجيل فقط
+            await using (var setup = RtkRealDb.CreateDb())
+            {
+                setup.StudentBatchEnrollments.AddRange(
+                    new StudentBatchEnrollment { StudentID = seed.InactiveStudent, BatchId = seed.InstituteBatch },
+                    new StudentBatchEnrollment { StudentID = seed.ForeignStudent, BatchId = seed.InstituteBatch },
+                    new StudentBatchEnrollment { StudentID = seed.LeftStudent, BatchId = seed.InstituteBatch, Status = "Withdrawn" });
+                await setup.SaveChangesAsync();
+            }
+
             await using var db = RtkRealDb.CreateDb();
-            var result = await NewService(db).SendHomeworkAsync(ModelSendScope.Admin(SenderId, $"{Marker} أدمن"), new SendModelHomeworkRequest
+            var service = NewService(db);
+
+            // APD-S2.2: دفعة الشريك لا تُقبل تحت نطاق الأدمن، حتى مع دفعة منصة في نفس الطلب
+            var mixed = await service.SendHomeworkAsync(ModelSendScope.Admin(SenderId, $"{Marker} أدمن"), new SendModelHomeworkRequest
             {
                 ModelId = internalModel,
                 BatchIds = new List<int> { seed.BatchA, seed.InstituteBatch }
+            });
+            Assert.False(mixed.Succeeded);
+
+            await using (var check = RtkRealDb.CreateDb())
+            {
+                Assert.False(await check.HomeworkSets.AsNoTracking().AnyAsync(h => h.BatchId == seed.BatchA || h.BatchId == seed.InstituteBatch));
+            }
+
+            var result = await service.SendHomeworkAsync(ModelSendScope.Admin(SenderId, $"{Marker} أدمن"), new SendModelHomeworkRequest
+            {
+                ModelId = internalModel,
+                BatchIds = new List<int> { seed.InstituteBatch }
             });
 
             Assert.True(result.Succeeded, result.Message);
 
             await using var read = RtkRealDb.CreateDb();
-            var recipients = await read.HomeworkSetStudents.Where(s => s.HomeworkSet.BatchId == seed.BatchA).Select(s => s.StudentId).ToListAsync();
+            var recipients = await read.HomeworkSetStudents.Where(s => s.HomeworkSet.BatchId == seed.InstituteBatch).Select(s => s.StudentId).ToListAsync();
             Assert.Contains(seed.InactiveStudent, recipients);
             Assert.Contains(seed.ForeignStudent, recipients);
             Assert.DoesNotContain(seed.LeftStudent, recipients);
-            Assert.Equal((1, 1, 1), await CountWritesAsync(seed.InstituteBatch));
 
-            // APD-S1.3: إرسال الأدمن يبقى ملك المعهد حتى على دفعة شريك
-            Assert.All(await read.HomeworkSets.AsNoTracking().Where(h => h.BatchId == seed.BatchA || h.BatchId == seed.InstituteBatch).ToListAsync(),
-                h => Assert.Null(h.OwnerPartnerId));
+            // APD-S1.3: إرسال الأدمن يبقى ملك المعهد
+            Assert.Null((await read.HomeworkSets.AsNoTracking().SingleAsync(h => h.BatchId == seed.InstituteBatch)).OwnerPartnerId);
         }
 
         [SqlServerFact]

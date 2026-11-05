@@ -38,12 +38,12 @@ namespace QdratNew.Tests.PartnerProfessionalModels
         private static ModelSendScope ScopeA(Seed seed) => ModelSendScope.Partner(seed.PartnerA, SenderId, $"{Marker} مرسل");
 
         private static ProfessionalModelSendService NewService(ApplicationDbContext db, IAdvancedNotificationService? notifications = null)
-            => new(db, new ProfessionalModelAvailabilityService(db), new TimeZoneService(), notifications ?? new AdvancedNotificationService(db), NullLogger<ProfessionalModelSendService>.Instance);
+            => new(db, new ProfessionalModelAvailabilityService(db), new TimeZoneService(), notifications ?? new AdvancedNotificationService(db), new QdratNew.Services.PartnerDispatch.PartnerDispatchLogService(db), NullLogger<ProfessionalModelSendService>.Instance);
 
         private sealed class FailingSendService : ProfessionalModelSendService
         {
             public FailingSendService(ApplicationDbContext db)
-                : base(db, new ProfessionalModelAvailabilityService(db), new TimeZoneService(), new AdvancedNotificationService(db), NullLogger<ProfessionalModelSendService>.Instance)
+                : base(db, new ProfessionalModelAvailabilityService(db), new TimeZoneService(), new AdvancedNotificationService(db), new QdratNew.Services.PartnerDispatch.PartnerDispatchLogService(db), NullLogger<ProfessionalModelSendService>.Instance)
             {
             }
 

@@ -9,6 +9,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 
+    <link rel="stylesheet" href="~/css/admin-dispatch-audience.css" asp-append-version="true" />
+
     <style>
         :root {
             --q-primary: #1a56db;
@@ -560,14 +562,12 @@
             <div class="qsection-body">
                 <div class="row g-3">
                     <div class="col-12">
-                        <label class="q-field-label">اختر الدفعات</label>
-                        <select asp-for="SelectedBatchIds" class="form-select q-multi-select" multiple asp-items="Model.Batches" id="batchesSelect"></select>
-                        <div class="q-help-text">يمكنك اختيار أكثر من دفعة بالضغط على Ctrl أو ⌘.</div>
+                        <partial name="~/Areas/Admin/Views/Shared/_DispatchAudiencePicker.cshtml" model="Model.AudiencePicker" />
                         <span asp-validation-for="SelectedBatchIds" class="text-danger"></span>
                     </div>
                 </div>
 
-                <div class="mt-4">
+                <div class="mt-4" id="sendModeSection">
                     <label class="q-field-label">طريقة الإرسال</label>
                     <div class="send-mode-grid">
                         <label class="send-mode-card" for="sendToBatchTrue">
@@ -669,6 +669,7 @@
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
+    <script src="~/js/admin-dispatch-audience.js" asp-append-version="true"></script>
 
     <script>
         document.addEventListener("DOMContentLoaded", function () {
@@ -677,8 +678,21 @@
             const loadStudentsArea = document.getElementById("load-students-area");
             const studentsSection = document.getElementById("students-section");
             const btnLoad = document.getElementById("btnLoadStudents");
-            const batchesSelect = document.getElementById("batchesSelect");
+            const picker = document.querySelector("#createModelExamForm [data-apd-picker]");
+            const sendModeSection = document.getElementById("sendModeSection");
             const studentsSelect = document.getElementById("studentsSelect");
+
+            // الطلاب المحددون لدفعات المنصة فقط: الإرسال للمدرسة يشمل كل طلابها النشطين
+            function applyAudience() {
+                const audience = picker.querySelector("[data-apd-audience]:checked");
+                const toPartners = !!audience && audience.value === "2";
+                sendModeSection.hidden = toPartners;
+
+                if (toPartners) {
+                    radioBatch.checked = true;
+                    toggleMode();
+                }
+            }
 
             function toggleMode() {
                 if (radioStudents && radioStudents.checked) {
@@ -700,10 +714,17 @@
             }
 
             toggleMode();
+            applyAudience();
+
+            picker.addEventListener("change", function (e) {
+                if (e.target.matches("[data-apd-audience]")) {
+                    applyAudience();
+                }
+            });
 
             if (btnLoad) {
                 btnLoad.addEventListener("click", async function () {
-                    const selectedBatches = Array.from(batchesSelect.selectedOptions).map(o => o.value);
+                    const selectedBatches = Array.from(picker.querySelectorAll("[data-apd-platform-batch]:checked:not(:disabled)")).map(i => i.value);
                     if (selectedBatches.length === 0) {
                         alert("⚠️ الرجاء اختيار دفعة واحدة على الأقل أولاً.");
                         return;
@@ -762,6 +783,8 @@
                 .finally(function () {
                     loadingEl.style.display = 'none';
                     modelSelect.disabled = false;
+                    // قائمة المدارس المؤهلة تتبع النموذج المختار
+                    modelSelect.dispatchEvent(new Event('change', { bubbles: true }));
                 });
         });
     })();

@@ -15,6 +15,9 @@ namespace QdratNew.Services.Exams.Placement
         /// <summary>Partner: b.Branch.PartnerId == PartnerId</summary>
         IQueryable<Batch> Batches(ApplicationDbContext db, PlacementScope scope);
 
+        /// <summary>APD-S3.2: دفعات اختيار الإنشاء. Admin: دفعات المنصة فقط، Partner: دفعاته. قراءة التقارير تبقى عبر Batches.</summary>
+        IQueryable<Batch> CreationBatches(ApplicationDbContext db, PlacementScope scope);
+
         /// <summary>Partner: Branch.PartnerId == PartnerId و IsActiveForLearning</summary>
         IQueryable<Student> Students(ApplicationDbContext db, PlacementScope scope);
 

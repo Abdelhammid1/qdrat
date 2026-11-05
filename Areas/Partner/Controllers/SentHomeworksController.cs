@@ -7,6 +7,7 @@ using QdratNew.Enums;
 using QdratNew.Interfaces;
 using QdratNew.Services.HomeworkTracking.Interfaces;
 using QdratNew.Services.Interfaces;
+using QdratNew.Services.PartnerDispatch;
 using QdratNew.ViewModels.Homework;
 
 namespace QdratNew.Areas.Partner.Controllers
@@ -37,6 +38,44 @@ namespace QdratNew.Areas.Partner.Controllers
         {
             var data = _service.GetSentHomeworksForPartner(ActivePartnerId);
             return View(data);
+        }
+
+        // =====================================================
+        // APD-S2.3: تعديل عنوان ومواعيد واجب يملكه الشريك
+        // =====================================================
+        [HttpGet]
+        public async Task<IActionResult> EditSent(int id, [FromServices] IPartnerOwnedItemsService ownedItems)
+        {
+            var vm = await ownedItems.GetHomeworkAsync(ActivePartnerId, id);
+            return vm == null ? NotFound() : View(vm);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EditSent(PartnerOwnedItemEditVm vm, [FromServices] IPartnerOwnedItemsService ownedItems)
+        {
+            var stored = await ownedItems.GetHomeworkAsync(ActivePartnerId, vm.Id);
+            if (stored == null)
+                return NotFound();
+
+            vm.BatchName = stored.BatchName;
+            ModelState.Remove(nameof(vm.BatchName));
+
+            if (!ModelState.IsValid)
+                return View(vm);
+
+            var error = await ownedItems.UpdateHomeworkAsync(ActivePartnerId, vm);
+            if (error == null)
+                return NotFound();
+
+            if (error.Length > 0)
+            {
+                ModelState.AddModelError(string.Empty, error);
+                return View(vm);
+            }
+
+            TempData["Success"] = "✅ تم تعديل الواجب.";
+            return RedirectToAction(nameof(Index));
         }
 
         // الواجب يخص الشريك النشط عبر فرع الدفعة

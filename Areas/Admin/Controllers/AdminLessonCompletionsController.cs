@@ -18,6 +18,7 @@ using QdratNew.ViewModels.EnhancementSkills;
 using QdratNew.ViewModels.Exam;
 using QdratNew.ViewModels.Homework;
 using System.Security.Claims;
+using QdratNew.Services.PartnerDispatch;
 using QdratNew.Services.ProfessionalModels;
 
 namespace QdratNew.Areas.Admin.Controllers
@@ -33,10 +34,17 @@ namespace QdratNew.Areas.Admin.Controllers
         private readonly IAutoExamGenerationService _autoExamGenerationService;
         private readonly ITimeZoneService _timeZoneService;
         private readonly IProfessionalModelSendService _modelSendService;
+        private readonly IDispatchAudienceService _audienceService;
+        private readonly IDispatchAudiencePickerBuilder _audiencePicker;
+        private readonly IPartnerModelDispatchService _partnerDispatch;
+
+        // APD-S2.3: ما يملكه الشريك يُدار من منطقته. ما أُرسل قبل APD بلا مالك ويبقى ظاهرًا كما هو.
+        private IQueryable<HomeworkSet> AdminHomeworkSets => _context.HomeworkSets.Where(hs => hs.OwnerPartnerId == null);
+
 
         public AdminLessonCompletionsController(ApplicationDbContext context, ILessonCompletionService lessonCompletionService, IStudentSectionExamService sectionExamService, IAdminActivityLogger logger,
     IAdvancedNotificationService notificationService // ✅ أضف هذا
-, IAutoExamGenerationService autoExamGenerationService, ITimeZoneService timeZoneService, IProfessionalModelSendService modelSendService)
+, IAutoExamGenerationService autoExamGenerationService, ITimeZoneService timeZoneService, IProfessionalModelSendService modelSendService, IDispatchAudienceService audienceService, IDispatchAudiencePickerBuilder audiencePicker, IPartnerModelDispatchService partnerDispatch)
         {
             _context = context;
             _lessonCompletionService = lessonCompletionService;
@@ -46,6 +54,9 @@ namespace QdratNew.Areas.Admin.Controllers
             _autoExamGenerationService = autoExamGenerationService;
             _timeZoneService = timeZoneService;
             _modelSendService = modelSendService;
+            _audienceService = audienceService;
+            _audiencePicker = audiencePicker;
+            _partnerDispatch = partnerDispatch;
         }
 
         [HttpGet]
@@ -191,7 +202,7 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("AdminLessonCompletions", "ManageModelHomework")]
         public async Task<IActionResult> EditProfessionalHomework(int id)
         {
-            var homeworkSet = await _context.HomeworkSets
+            var homeworkSet = await AdminHomeworkSets
                 .Include(h => h.Batch)
                 .FirstOrDefaultAsync(h => h.Id == id);
 
@@ -223,7 +234,7 @@ namespace QdratNew.Areas.Admin.Controllers
             if (!ModelState.IsValid)
                 return View(vm);
 
-            var homeworkSet = await _context.HomeworkSets.FindAsync(vm.Id);
+            var homeworkSet = await AdminHomeworkSets.FirstOrDefaultAsync(h => h.Id == vm.Id);
             if (homeworkSet == null)
                 return NotFound("⚠️ الواجب غير موجود.");
 
@@ -249,7 +260,7 @@ namespace QdratNew.Areas.Admin.Controllers
             var assignment = await _context.ExamAssignmentsToBatches
                 .Include(a => a.Exam)
                 .Include(a => a.Batch)
-                .FirstOrDefaultAsync(a => a.Id == id);
+                .FirstOrDefaultAsync(a => a.Id == id && (a.Exam == null || a.Exam.OwnerPartnerId == null)); // APD-S2.3
 
             if (assignment == null)
                 return NotFound("❌ لم يتم العثور على هذا الاختبار.");
@@ -296,7 +307,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
             var assignment = await _context.ExamAssignmentsToBatches
                 .Include(a => a.Exam)
-                .FirstOrDefaultAsync(a => a.Id == vm.Id);
+                .FirstOrDefaultAsync(a => a.Id == vm.Id && (a.Exam == null || a.Exam.OwnerPartnerId == null)); // APD-S2.3
 
             if (assignment == null)
             {
@@ -392,7 +403,7 @@ namespace QdratNew.Areas.Admin.Controllers
             ViewBag.CanViewArchive = canViewArchive;
 
             var allHomeworks = await (
-                from hs in _context.HomeworkSets
+                from hs in AdminHomeworkSets
                 join b in _context.Batches on hs.BatchId equals b.Id
                 where hs.IsFromProfessionalModel == true
                 orderby hs.CreatedAt descending
@@ -470,7 +481,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 return NotFound("لم يتم العثور على الدفعة.");
 
             var homeworks = await (
-                from hs in _context.HomeworkSets.AsNoTracking()
+                from hs in AdminHomeworkSets.AsNoTracking()
                 join b in _context.Batches.AsNoTracking() on hs.BatchId equals b.Id
                 where hs.IsFromProfessionalModel
                       && !hs.IsArchived
@@ -569,7 +580,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 return NotFound("لم يتم العثور على الدفعة.");
 
             var archivedHomeworks = await (
-                from hs in _context.HomeworkSets.AsNoTracking()
+                from hs in AdminHomeworkSets.AsNoTracking()
                 join b in _context.Batches.AsNoTracking() on hs.BatchId equals b.Id
                 where hs.IsFromProfessionalModel
                       && hs.IsArchived
@@ -633,7 +644,7 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("AdminLessonCompletions", "ManageModelHomework")]
         public async Task<IActionResult> ArchiveModelHomework(int id)
         {
-            var set = await _context.HomeworkSets
+            var set = await AdminHomeworkSets
                 .FirstOrDefaultAsync(hs => hs.Id == id && hs.IsFromProfessionalModel);
 
             if (set == null)
@@ -657,7 +668,7 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("AdminLessonCompletions", "ManageModelHomework")]
         public async Task<IActionResult> RestoreModelHomework(int id)
         {
-            var set = await _context.HomeworkSets
+            var set = await AdminHomeworkSets
                 .FirstOrDefaultAsync(hs => hs.Id == id && hs.IsFromProfessionalModel);
 
             if (set == null)
@@ -759,7 +770,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 // ✅ SQL Server 2014 Safe:
                 // لا نستخدم Contains داخل الاستعلام.
                 // نجلب واجبات النماذج غير المؤرشفة ثم نفلتر داخل الذاكرة.
-                var allProfessionalHomeworks = await _context.HomeworkSets
+                var allProfessionalHomeworks = await AdminHomeworkSets
                     .Where(hs => hs.IsFromProfessionalModel && !hs.IsArchived)
                     .ToListAsync();
 
@@ -839,7 +850,7 @@ namespace QdratNew.Areas.Admin.Controllers
             {
                 // ✅ SQL Server 2014 Safe:
                 // لا نستخدم Contains داخل الاستعلام.
-                var allArchivedProfessionalHomeworks = await _context.HomeworkSets
+                var allArchivedProfessionalHomeworks = await AdminHomeworkSets
                     .Where(hs => hs.IsFromProfessionalModel && hs.IsArchived)
                     .ToListAsync();
 
@@ -1056,7 +1067,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 vm.SelectedBatchIds = new List<int> { batchId.Value };
             }
 
-            await PopulateCreateModelHomeworkListsAsync(vm);
+            await PopulateCreateModelHomeworkListsAsync(vm, new AudienceSelection { PlatformBatchIds = vm.SelectedBatchIds.ToList() });
 
             return View(vm);
         }
@@ -1065,19 +1076,36 @@ namespace QdratNew.Areas.Admin.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [AdminPermission("AdminLessonCompletions", "ManageModelHomework")]
-        public async Task<IActionResult> CreateModelHomework(CreateModelHomeworkViewModel vm)
+        public async Task<IActionResult> CreateModelHomework(CreateModelHomeworkViewModel vm, AudienceSelection selection)
         {
-            if (!ModelState.IsValid || vm.SelectedBatchIds == null || !vm.SelectedBatchIds.Any())
+            // الحقل القديم SelectedBatchIds يبقى مقبولًا ويُعامل كدفعات منصة، فيُفحص كما تُفحص
+            selection.PlatformBatchIds = selection.PlatformBatchIds.Union(vm.SelectedBatchIds ?? new List<int>()).ToList();
+
+            if (selection.Audience == DispatchAudience.Partners)
+                return await SendHomeworkToPartnersAsync(vm, selection);
+
+            vm.SelectedBatchIds = selection.PlatformBatchIds;
+
+            if (!ModelState.IsValid || !vm.SelectedBatchIds.Any())
             {
                 TempData["Error"] = "⚠️ تأكد من اختيار نموذج ودفعة واحدة على الأقل.";
-                await PopulateCreateModelHomeworkListsAsync(vm);
+                await PopulateCreateModelHomeworkListsAsync(vm, selection);
                 return View(vm);
             }
 
             if (vm.IsLinkedToLecture && (!vm.LectureId.HasValue || vm.LectureId.Value <= 0))
             {
                 TempData["Error"] = "⚠️ اختر المحاضرة المرتبطة بالواجب.";
-                await PopulateCreateModelHomeworkListsAsync(vm);
+                await PopulateCreateModelHomeworkListsAsync(vm, selection);
+                return View(vm);
+            }
+
+            // APD-S2.2: دفعات المنصة فقط تحت «المنصة»
+            var audienceError = await ValidatePlatformAudienceAsync(PartnerDispatchKind.Homework, vm.ModelId, selection);
+            if (audienceError != null)
+            {
+                TempData["Error"] = audienceError;
+                await PopulateCreateModelHomeworkListsAsync(vm, selection);
                 return View(vm);
             }
 
@@ -1105,12 +1133,104 @@ namespace QdratNew.Areas.Admin.Controllers
                 vm.SendPreview = result.Preview;
                 vm.ConfirmWarnings = false;
                 ModelState.Remove(nameof(vm.ConfirmWarnings));
-                await PopulateCreateModelHomeworkListsAsync(vm);
+                await PopulateCreateModelHomeworkListsAsync(vm, selection);
                 return View(vm);
             }
 
             TempData["Success"] = ModelSendSuccessMessage(result, vm.SelectedBatchIds, "✅ تم إرسال واجب النموذج لجميع الدفعات المحددة بنجاح.");
             return RedirectToAction("ModelAssignments");
+        }
+
+        // APD-S2.2: إرسال واحد لعدة مدارس شريكة. كل مدرسة تأخذ نسختها، ويظهر الملخص في صفحة النتيجة.
+        private async Task<IActionResult> SendHomeworkToPartnersAsync(CreateModelHomeworkViewModel vm, AudienceSelection selection)
+        {
+            if (!await _audiencePicker.CanSendAsync(User))
+                return Forbid();
+
+            vm.SelectedBatchIds = new List<int>();
+
+            string? error = null;
+            if (!ModelState.IsValid)
+                error = "⚠️ تأكد من اختيار نموذج ودفعة واحدة على الأقل.";
+            else if (vm.IsLinkedToLecture)
+                error = "⚠️ ربط الواجب بمحاضرة متاح لدفعات المنصة فقط.";
+
+            AudienceValidation? audience = null;
+            if (error == null)
+            {
+                audience = await ValidatePartnerAudienceAsync(PartnerDispatchKind.Homework, vm.ModelId, selection);
+                if (!audience.IsValid)
+                    error = AudienceErrorMessage(audience);
+            }
+
+            PartnerDispatchOutcome? outcome = null;
+            if (error == null)
+            {
+                outcome = await _partnerDispatch.SendHomeworkAsync(audience!.Partners, new SendModelHomeworkRequest
+                {
+                    ModelId = vm.ModelId,
+                    Title = vm.Title,
+                    StartAtLocal = vm.StartAt,
+                    EndAtLocal = vm.EndAt,
+                    ConfirmWarnings = vm.ConfirmWarnings
+                }, CurrentDispatchActor());
+
+                if (outcome.IsNotFound)
+                {
+                    TempData["Error"] = "❌ النموذج غير موجود.";
+                    return RedirectToAction(nameof(CreateModelHomework));
+                }
+
+                if (!outcome.RequiresConfirmation && outcome.ValidationError == null)
+                    return RedirectToDispatchResult(outcome);
+
+                error = outcome.RequiresConfirmation ? DispatchWarningsMessage : outcome.ValidationError;
+                vm.SendPreview = outcome.Preview;
+            }
+
+            TempData["Error"] = error;
+            vm.ConfirmWarnings = false;
+            ModelState.Remove(nameof(vm.ConfirmWarnings));
+            await PopulateCreateModelHomeworkListsAsync(vm, selection);
+            return View(vm);
+        }
+
+        private const string DispatchWarningsMessage = "⚠️ سبق إرسال هذا النموذج أو بعض أسئلته لدفعة مختارة. راجع التحذيرات وأكد الإرسال.";
+
+        private DispatchActor CurrentDispatchActor()
+            => new(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "", User.Identity?.Name);
+
+        private static string AudienceErrorMessage(AudienceValidation audience)
+            => "⚠️ " + string.Join(" ", audience.Errors);
+
+        private async Task<string?> ValidatePlatformAudienceAsync(PartnerDispatchKind kind, int modelId, AudienceSelection selection)
+        {
+            var audience = await _audienceService.ValidateAsync(new DispatchSource(kind, modelId, null, null), selection, canOverride: false);
+            return audience.IsValid ? null : AudienceErrorMessage(audience);
+        }
+
+        private async Task<AudienceValidation> ValidatePartnerAudienceAsync(PartnerDispatchKind kind, int modelId, AudienceSelection selection)
+            => await _audienceService.ValidateAsync(
+                new DispatchSource(kind, modelId, null, null),
+                selection,
+                await _audiencePicker.CanOverrideAsync(User));
+
+        private IActionResult RedirectToDispatchResult(PartnerDispatchOutcome outcome)
+        {
+            TempData[PartnerDispatchController.OutcomeTempDataKey] = System.Text.Json.JsonSerializer.Serialize(outcome);
+            return RedirectToAction("Result", "PartnerDispatch", new { area = "Admin" });
+        }
+
+        private async Task<QdratNew.ViewModels.PartnerDispatch.DispatchAudiencePickerVm> BuildAudiencePickerAsync(PartnerDispatchKind kind, int modelId, AudienceSelection selection)
+        {
+            var picker = await _audiencePicker.BuildAsync(
+                User,
+                new DispatchSource(kind, modelId > 0 ? modelId : null, null, null),
+                selection,
+                includePartners: selection.Audience == DispatchAudience.Partners && modelId > 0);
+
+            picker.ModelInputSelector = "#ModelIdSelect";
+            return picker;
         }
 
         private ModelSendScope AdminSendScope()
@@ -1125,22 +1245,13 @@ namespace QdratNew.Areas.Admin.Controllers
                 : $"✅ تم الإرسال إلى {result.BatchesSent} دفعة، وتم تخطي {skipped} دفعة بلا طلاب نشطين مستهدفين.";
         }
 
-        private async Task PopulateCreateModelHomeworkListsAsync(CreateModelHomeworkViewModel vm)
+        private async Task PopulateCreateModelHomeworkListsAsync(CreateModelHomeworkViewModel vm, AudienceSelection selection)
         {
             vm.Curriculums = await GetCurriculumsSelectListAsync();
 
             vm.Models = await GetModelsSelectListAsync(ProfessionalModelType.Homework, vm.CurriculumId);
 
-            vm.Batches = await _context.Batches
-                .AsNoTracking()
-                .Where(b => !b.IsDeleted && !b.IsArchived)
-                .OrderBy(b => b.Name)
-                .Select(b => new SelectListItem
-                {
-                    Value = b.Id.ToString(),
-                    Text = b.Name
-                })
-                .ToListAsync();
+            vm.AudiencePicker = await BuildAudiencePickerAsync(PartnerDispatchKind.Homework, vm.ModelId, selection);
 
             var selectedBatchIds = vm.SelectedBatchIds?
                 .Where(batchId => batchId > 0)
@@ -1197,11 +1308,10 @@ namespace QdratNew.Areas.Admin.Controllers
             {
                 BatchId = batchId ?? 0,
                 Models  = await GetModelsSelectListAsync(ProfessionalModelType.Exam, null),
-                Batches = await _context.Batches
-                    .Where(b => !b.IsDeleted && !b.IsArchived)
-                    .OrderBy(b => b.Name)
-                    .Select(b => new SelectListItem { Value = b.Id.ToString(), Text = b.Name })
-                    .ToListAsync(),
+                AudiencePicker = await BuildAudiencePickerAsync(
+                    PartnerDispatchKind.Exam,
+                    0,
+                    new AudienceSelection { PlatformBatchIds = batchId > 0 ? new List<int> { batchId.Value } : new List<int>() }),
                 Curriculums = await GetCurriculumsSelectListAsync(),
                 Students    = students,
                 StartAt     = DateTime.Now,
@@ -1218,9 +1328,17 @@ namespace QdratNew.Areas.Admin.Controllers
         [ValidateAntiForgeryToken]
         [AdminPermission("AdminLessonCompletions", "ManageModelExam")]
 
-        public async Task<IActionResult> CreateModelExam(CreateModelExamViewModel vm)
+        public async Task<IActionResult> CreateModelExam(CreateModelExamViewModel vm, AudienceSelection selection)
         {
-            if (vm.SelectedBatchIds == null || !vm.SelectedBatchIds.Any())
+            // الحقل القديم SelectedBatchIds يبقى مقبولًا ويُعامل كدفعات منصة، فيُفحص كما تُفحص
+            selection.PlatformBatchIds = selection.PlatformBatchIds.Union(vm.SelectedBatchIds ?? new List<int>()).ToList();
+
+            if (selection.Audience == DispatchAudience.Partners)
+                return await SendExamToPartnersAsync(vm, selection);
+
+            vm.SelectedBatchIds = selection.PlatformBatchIds;
+
+            if (!vm.SelectedBatchIds.Any())
             {
                 TempData["Error"] = "⚠️ لم يتم اختيار أي دفعات.";
                 return RedirectToAction(nameof(CreateModelExam));
@@ -1230,6 +1348,16 @@ namespace QdratNew.Areas.Admin.Controllers
             {
                 TempData["Error"] = "⚠️ لم يتم اختيار النموذج.";
                 return RedirectToAction(nameof(CreateModelExam));
+            }
+
+            // APD-S2.2: دفعات المنصة فقط تحت «المنصة»
+            var audienceError = await ValidatePlatformAudienceAsync(PartnerDispatchKind.Exam, vm.ModelId, selection);
+            if (audienceError != null)
+            {
+                TempData["Error"] = audienceError;
+                ModelState.Clear();
+                await PopulateCreateModelExamListsAsync(vm, selection);
+                return View(vm);
             }
 
             // PPM-S6.2: نفس خدمة الإرسال التي يستخدمها الشريك
@@ -1261,7 +1389,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
                 // هذا المسار لا يعتمد ModelState، فلا تظهر للمستخدم أخطاء حقول اختيارية عند إعادة العرض
                 ModelState.Clear();
-                await PopulateCreateModelExamListsAsync(vm);
+                await PopulateCreateModelExamListsAsync(vm, selection);
                 return View(vm);
             }
 
@@ -1269,17 +1397,67 @@ namespace QdratNew.Areas.Admin.Controllers
             return RedirectToAction("ModelAssignments");
         }
 
-        private async Task PopulateCreateModelExamListsAsync(CreateModelExamViewModel vm)
+        // APD-S2.2: إرسال واحد لعدة مدارس شريكة، والإرسال يشمل كل الطلاب النشطين في الدفعات المختارة
+        private async Task<IActionResult> SendExamToPartnersAsync(CreateModelExamViewModel vm, AudienceSelection selection)
+        {
+            if (!await _audiencePicker.CanSendAsync(User))
+                return Forbid();
+
+            vm.SelectedBatchIds = new List<int>();
+
+            string? error = null;
+            if (vm.ModelId <= 0)
+                error = "⚠️ لم يتم اختيار النموذج.";
+            else if (!vm.SendToBatch)
+                error = "⚠️ الإرسال لطلاب محددين متاح لدفعات المنصة فقط.";
+
+            AudienceValidation? audience = null;
+            if (error == null)
+            {
+                audience = await ValidatePartnerAudienceAsync(PartnerDispatchKind.Exam, vm.ModelId, selection);
+                if (!audience.IsValid)
+                    error = AudienceErrorMessage(audience);
+            }
+
+            if (error == null)
+            {
+                var outcome = await _partnerDispatch.SendExamAsync(audience!.Partners, new SendModelExamRequest
+                {
+                    ModelId = vm.ModelId,
+                    Title = vm.Title,
+                    StartAtLocal = vm.StartAt,
+                    EndAtLocal = vm.EndAt,
+                    DurationMinutes = vm.DurationMinutes,
+                    IsInLab = vm.IsInLab,
+                    RandomizeQuestions = vm.RandomizeQuestions,
+                    ConfirmWarnings = vm.ConfirmWarnings
+                }, CurrentDispatchActor());
+
+                if (outcome.IsNotFound)
+                {
+                    TempData["Error"] = "❌ النموذج المحدد غير موجود.";
+                    return RedirectToAction(nameof(CreateModelExam));
+                }
+
+                if (!outcome.RequiresConfirmation && outcome.ValidationError == null)
+                    return RedirectToDispatchResult(outcome);
+
+                error = outcome.RequiresConfirmation ? DispatchWarningsMessage : outcome.ValidationError;
+                vm.SendPreview = outcome.Preview;
+            }
+
+            TempData["Error"] = error;
+            vm.ConfirmWarnings = false;
+            ModelState.Clear();
+            await PopulateCreateModelExamListsAsync(vm, selection);
+            return View(vm);
+        }
+
+        private async Task PopulateCreateModelExamListsAsync(CreateModelExamViewModel vm, AudienceSelection selection)
         {
             vm.Curriculums = await GetCurriculumsSelectListAsync();
             vm.Models = await GetModelsSelectListAsync(ProfessionalModelType.Exam, vm.CurriculumId);
-
-            vm.Batches = await _context.Batches
-                .AsNoTracking()
-                .Where(b => !b.IsDeleted && !b.IsArchived)
-                .OrderBy(b => b.Name)
-                .Select(b => new SelectListItem { Value = b.Id.ToString(), Text = b.Name })
-                .ToListAsync();
+            vm.AudiencePicker = await BuildAudiencePickerAsync(PartnerDispatchKind.Exam, vm.ModelId, selection);
 
             // قائمة الطلاب تُحمَّل بـ AJAX، فتُعاد المختارة منها حتى لا يضيع اختيارها عند إعادة العرض
             var selectedStudentIds = vm.SendToBatch
@@ -2214,7 +2392,7 @@ namespace QdratNew.Areas.Admin.Controllers
         {
             try
             {
-                var set = await _context.HomeworkSets
+                var set = await AdminHomeworkSets
                     .Include(hs => hs.Homeworks)
                     .FirstOrDefaultAsync(hs => hs.Id == id && hs.IsFromProfessionalModel);
 
@@ -2279,7 +2457,7 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("AdminLessonCompletions", "GenerateHomework")]
         public async Task<IActionResult> GenerateHomeworkForNewStudents(int homeworkSetId)
         {
-            var set = await _context.HomeworkSets
+            var set = await AdminHomeworkSets
                 .Include(hs => hs.Homeworks)
                 .FirstOrDefaultAsync(hs => hs.Id == homeworkSetId);
 

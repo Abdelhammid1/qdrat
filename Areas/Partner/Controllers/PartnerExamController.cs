@@ -90,12 +90,20 @@ namespace QdratNew.Areas.Partner.Controllers
                     x.AssignedAt,
                     x.Exam.OwnerPartnerId,
                     IsFromModel = x.Exam.OwnerPartnerId != null && x.Exam.IsFromProfessionalModel,
-                    SourceModelTitle = x.Exam.SourceProfessionalModel != null ? x.Exam.SourceProfessionalModel.Title : null
+                    SourceModelTitle = x.Exam.SourceProfessionalModel != null ? x.Exam.SourceProfessionalModel.Title : null,
+                    ReferenceCode = x.Exam.OwnerPartnerId != null ? x.Exam.ReferenceCode : null
                 })
                 .ToList();
 
             if (!assignmentsRaw.Any())
                 return View(new List<SentExamListVM>());
+
+            // APD-S2.3: ما أرسله المعهد باسم الشريك
+            var fromInstitute = _context.PartnerDispatchLogs
+                .AsNoTracking()
+                .Where(l => l.PartnerId == ActivePartnerId && l.Kind == PartnerDispatchKind.Exam)
+                .Select(l => l.TargetEntityId)
+                .ToHashSet();
 
             // 🔹 جلب الدُفعات مرة واحدة
             var allBatches = _context.Batches
@@ -164,11 +172,52 @@ namespace QdratNew.Areas.Partner.Controllers
                     // PPM-S5: يُخزن UTC، بينما مسار المسودات يخزن الوقت المحلي
                     SentAt = a.OwnerPartnerId != null ? _timeZoneService.ConvertToSaudi(a.AssignedAt) : a.AssignedAt,
                     IsFromModel = a.IsFromModel,
-                    SourceModelTitle = a.SourceModelTitle
+                    SourceModelTitle = a.SourceModelTitle,
+                    IsFromInstitute = fromInstitute.Contains(a.ExamId),
+                    CanEdit = a.OwnerPartnerId != null,
+                    ReferenceCode = a.ReferenceCode
                 });
             }
 
             return View(result);
+        }
+
+        // =====================================================
+        // APD-S2.3: تعديل عنوان ومواعيد اختبار يملكه الشريك
+        // =====================================================
+        [HttpGet]
+        public async Task<IActionResult> EditSent(int id, [FromServices] QdratNew.Services.PartnerDispatch.IPartnerOwnedItemsService ownedItems)
+        {
+            var vm = await ownedItems.GetExamAssignmentAsync(ActivePartnerId, id);
+            return vm == null ? NotFound() : View(vm);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> EditSent(QdratNew.Services.PartnerDispatch.PartnerOwnedItemEditVm vm, [FromServices] QdratNew.Services.PartnerDispatch.IPartnerOwnedItemsService ownedItems)
+        {
+            var stored = await ownedItems.GetExamAssignmentAsync(ActivePartnerId, vm.Id);
+            if (stored == null)
+                return NotFound();
+
+            vm.BatchName = stored.BatchName;
+            ModelState.Remove(nameof(vm.BatchName));
+
+            if (!ModelState.IsValid)
+                return View(vm);
+
+            var error = await ownedItems.UpdateExamAssignmentAsync(ActivePartnerId, vm);
+            if (error == null)
+                return NotFound();
+
+            if (error.Length > 0)
+            {
+                ModelState.AddModelError(string.Empty, error);
+                return View(vm);
+            }
+
+            TempData["Success"] = "✅ تم تعديل الاختبار.";
+            return RedirectToAction(nameof(SentExams));
         }
 
 

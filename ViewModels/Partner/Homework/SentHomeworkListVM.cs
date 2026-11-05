@@ -24,5 +24,11 @@ namespace QdratNew.ViewModels.Partner.Homework
         public bool IsFromModel { get; set; }
 
         public string? SourceModelTitle { get; set; }
+
+        // APD-S2.3: أرسله المعهد باسم الشريك
+        public bool IsFromInstitute { get; set; }
+
+        // APD-S2.3: يملكه الشريك فيعدّل عنوانه ومواعيده
+        public bool CanEdit { get; set; }
     }
 }

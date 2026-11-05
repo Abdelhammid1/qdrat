@@ -381,6 +381,9 @@ namespace QdratNew.Tests.PartnerPlacement
             var services = new ServiceCollection();
             services.AddSingleton(db);
             services.AddSingleton(new Mock<IPlacementExamManagementService>().Object);
+            services.AddSingleton(new Mock<QdratNew.Services.PartnerDispatch.IDispatchAudienceService>().Object); // APD-S3.1
+            services.AddSingleton(new Mock<QdratNew.Services.PartnerDispatch.IDispatchAudiencePickerBuilder>().Object);
+            services.AddSingleton(new Mock<QdratNew.Services.PartnerDispatch.IPartnerPlacementDispatchService>().Object);
             services.AddSingleton(timeZone.Object);
             services.AddSingleton<IExamRecommendationService, ExamRecommendationService>();
             services.AddSingleton(new Mock<UserManager<ApplicationUser>>(

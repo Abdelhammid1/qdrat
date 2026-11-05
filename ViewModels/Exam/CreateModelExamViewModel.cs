@@ -41,6 +41,11 @@ namespace QdratNew.ViewModels.Exam
         public bool IsInLab { get; set; } = false;  // اختياري – حضوري أو لا
         public bool RandomizeQuestions { get; set; } = true;
 
+        // APD-S2.2: اختيار جمهور الإرسال. ما يُرسل منه يُربط في AudienceSelection
+        [BindNever]
+        [ValidateNever]
+        public QdratNew.ViewModels.PartnerDispatch.DispatchAudiencePickerVm AudiencePicker { get; set; } = null!;
+
         // تأكيد تحذيرات التكرار (PPM-S6.2)
         public bool ConfirmWarnings { get; set; }
 

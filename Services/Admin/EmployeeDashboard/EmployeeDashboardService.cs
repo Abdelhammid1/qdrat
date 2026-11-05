@@ -103,6 +103,7 @@ namespace QdratNew.Services.Admin.EmployeeDashboard
                     where eba.UserId == userId
                           && eba.Feature == InstructorBatchFeature.Homework
                           && eba.IsGranted
+                          && h.OwnerPartnerId == null // APD-S2.3
                           && h.IsSent && !h.IsClosed && !h.IsArchived
                           && (h.EndAt == null || h.EndAt >= now)
                     select h.Id
@@ -123,6 +124,7 @@ namespace QdratNew.Services.Admin.EmployeeDashboard
                     where eba.UserId == userId
                           && eba.Feature == InstructorBatchFeature.Homework
                           && eba.IsGranted
+                          && h.OwnerPartnerId == null // APD-S2.3
                           && h.IsSent && !h.IsClosed && !h.IsArchived
                           && h.EndAt != null && h.EndAt >= now && h.EndAt <= in24h
                     select h.Id
@@ -146,6 +148,7 @@ namespace QdratNew.Services.Admin.EmployeeDashboard
                     where eba.UserId == userId
                           && eba.Feature == InstructorBatchFeature.Exams
                           && eba.IsGranted
+                          && (eab.Exam == null || eab.Exam.OwnerPartnerId == null) // APD-S2.3
                           && eab.IsSentToStudents && !eab.IsArchived
                           && (eab.EndAt == null || eab.EndAt >= now)
                     select eab.Id
@@ -166,6 +169,7 @@ namespace QdratNew.Services.Admin.EmployeeDashboard
                     where eba.UserId == userId
                           && eba.Feature == InstructorBatchFeature.Exams
                           && eba.IsGranted
+                          && (eab.Exam == null || eab.Exam.OwnerPartnerId == null) // APD-S2.3
                           && eab.IsSentToStudents && !eab.IsArchived
                           && eab.EndAt != null && eab.EndAt >= now && eab.EndAt <= in24h.AddDays(6)
                     select eab.Id
@@ -245,6 +249,7 @@ namespace QdratNew.Services.Admin.EmployeeDashboard
                     where eba.UserId == userId
                           && eba.Feature == InstructorBatchFeature.Homework
                           && eba.IsGranted
+                          && h.OwnerPartnerId == null // APD-S2.3
                           && h.IsSent && !h.IsClosed && !h.IsArchived
                           && h.EndAt != null && h.EndAt >= now && h.EndAt <= in48h
                     select new { h.Id, h.Title, BatchName = b.Name, h.EndAt }
@@ -274,6 +279,7 @@ namespace QdratNew.Services.Admin.EmployeeDashboard
                     where eba.UserId == userId
                           && eba.Feature == InstructorBatchFeature.Exams
                           && eba.IsGranted
+                          && (eab.Exam == null || eab.Exam.OwnerPartnerId == null) // APD-S2.3
                           && eab.IsSentToStudents && !eab.IsArchived
                           && eab.EndAt != null && eab.EndAt >= now && eab.EndAt <= in48h
                     select new { eab.Id, eab.Title, BatchName = b.Name, eab.EndAt }
@@ -366,6 +372,7 @@ namespace QdratNew.Services.Admin.EmployeeDashboard
                     where eba.UserId == userId
                           && eba.Feature == InstructorBatchFeature.Homework
                           && eba.IsGranted
+                          && h.OwnerPartnerId == null // APD-S2.3
                           && h.IsSent && !h.IsClosed && !h.IsArchived
                           && h.EndAt != null && h.EndAt >= now && h.EndAt < sevenDaysLater
                     select new { h.Title, BatchName = b.Name, h.EndAt }
@@ -390,6 +397,7 @@ namespace QdratNew.Services.Admin.EmployeeDashboard
                     where eba.UserId == userId
                           && eba.Feature == InstructorBatchFeature.Exams
                           && eba.IsGranted
+                          && (eab.Exam == null || eab.Exam.OwnerPartnerId == null) // APD-S2.3
                           && eab.IsSentToStudents && !eab.IsArchived
                           && eab.EndAt != null && eab.EndAt >= now && eab.EndAt < sevenDaysLater
                     select new { eab.Title, BatchName = b.Name, eab.EndAt }

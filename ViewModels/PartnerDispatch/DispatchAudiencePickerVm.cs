@@ -16,6 +16,18 @@ namespace QdratNew.ViewModels.PartnerDispatch
 
         // قائمة الشركاء مُعدّة من الخادم (عند إعادة عرض الفورم بعد خطأ). null = تُحمَّل عند اختيار «المدارس الشريكة».
         public DispatchAudiencePartnersVm? Partners { get; init; }
+
+        // محدد CSS لحقل النموذج في الصفحة: تغيّره يعيد تحميل المدارس المؤهلة (APD-S2.2)
+        public string? ModelInputSelector { get; set; }
+
+        // APD-S3.1: محدد CSS لحقل الكورس. تغيّره يعيد تحميل المدارس، ودفعاتها تُفلتر به.
+        public string? CourseInputSelector { get; set; }
+
+        // APD-S3.1: لا تُحمَّل المدارس قبل اختيار الكورس (الاختبار الواحد يتبع كورسًا واحدًا)
+        public bool RequiresCourse { get; set; }
+
+        // APD-S3.1: دفعة منصة واحدة (Radio) بدل عدة دفعات
+        public bool SinglePlatformBatch { get; set; }
     }
 
     // APD-S1.4: قائمة المدارس ودفعاتها (_DispatchAudiencePartners) — تُعرض داخل الـ Picker وتُرجعها AudienceOptions

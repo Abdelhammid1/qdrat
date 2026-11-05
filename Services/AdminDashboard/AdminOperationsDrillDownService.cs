@@ -370,7 +370,8 @@ namespace QdratNew.Services.AdminDashboard
                 from assignment in _context.ExamAssignmentsToBatches.AsNoTracking()
                 join batch in _context.Batches.AsNoTracking()
                     on assignment.BatchId equals batch.Id
-                where assignment.ScheduledDate.HasValue
+                where (assignment.Exam == null || assignment.Exam.OwnerPartnerId == null) // APD-S2.3
+                      && assignment.ScheduledDate.HasValue
                       && assignment.ScheduledDate.Value >= todayStart
                       && assignment.ScheduledDate.Value < tomorrowStart
                       && assignment.IsSentToStudents
@@ -566,7 +567,8 @@ namespace QdratNew.Services.AdminDashboard
                 from homeworkSet in _context.HomeworkSets.AsNoTracking()
                 join batch in _context.Batches.AsNoTracking()
                     on homeworkSet.BatchId equals batch.Id
-                where homeworkSet.EndAt.HasValue
+                where homeworkSet.OwnerPartnerId == null // APD-S2.3
+                      && homeworkSet.EndAt.HasValue
                       && homeworkSet.EndAt.Value >= now
                       && homeworkSet.EndAt.Value <= within24Hours
                       && homeworkSet.IsSent
@@ -668,7 +670,8 @@ namespace QdratNew.Services.AdminDashboard
                 from homeworkSetStudent in _context.HomeworkSetStudents.AsNoTracking()
                 join homeworkSet in _context.HomeworkSets.AsNoTracking()
                     on homeworkSetStudent.HomeworkSetId equals homeworkSet.Id
-                where homeworkSet.CreatedAt >= weekStart
+                where homeworkSet.OwnerPartnerId == null // APD-S2.3
+                      && homeworkSet.CreatedAt >= weekStart
                       && homeworkSet.CreatedAt < tomorrowStart
                 select new HomeworkSetStudentProjection
                 {
@@ -682,7 +685,8 @@ namespace QdratNew.Services.AdminDashboard
                 from status in _context.ExamStudentStatuses.AsNoTracking()
                 join assignment in _context.ExamAssignmentsToBatches.AsNoTracking()
                     on status.ExamAssignmentId equals assignment.Id
-                where assignment.CreatedAt >= weekStart
+                where (assignment.Exam == null || assignment.Exam.OwnerPartnerId == null) // APD-S2.3
+                      && assignment.CreatedAt >= weekStart
                       && assignment.CreatedAt < tomorrowStart
                 select new ExamStatusProjection
                 {
@@ -835,7 +839,7 @@ namespace QdratNew.Services.AdminDashboard
 
             List<ExamProjection> exams = await _context.ExamAssignmentsToBatches
                 .AsNoTracking()
-                .Where(item => item.CreatedAt >= weekStart && item.CreatedAt < tomorrowStart)
+                .Where(item => (item.Exam == null || item.Exam.OwnerPartnerId == null) && item.CreatedAt >= weekStart && item.CreatedAt < tomorrowStart) // APD-S2.3
                 .Select(item => new ExamProjection
                 {
                     ExamAssignmentId = item.Id,

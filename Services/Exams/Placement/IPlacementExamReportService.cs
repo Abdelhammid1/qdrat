@@ -46,7 +46,8 @@ namespace QdratNew.Services.Exams.Placement
         Task<PlacementReportResult<ExamReviewViewModel>> GetReviewLessonQuestionsAsync(PlacementScope scope, int assignmentId, int studentId, int lessonId, CancellationToken ct = default);
 
         /// <summary>null = الاختبار أو الدرس خارج النطاق.</summary>
-        Task<BatchLessonQuestionsReportViewModel?> GetReviewLessonQuestionsBatchAsync(PlacementScope scope, int examId, int lessonId, CancellationToken ct = default);
+        /// <summary>APD-S3.1: batchId يحدد الدفعة لاختبار الشريك المرتبط بعدة دفعات. بدونه: أول دفعة مرتبطة.</summary>
+        Task<BatchLessonQuestionsReportViewModel?> GetReviewLessonQuestionsBatchAsync(PlacementScope scope, int examId, int lessonId, CancellationToken ct = default, int batchId = 0);
 
         Task<PlacementReportResult<AdminExamSectionAnalysisViewModel>> GetBatchPerformanceReportAsync(PlacementScope scope, int examId, int batchId, CancellationToken ct = default);
 

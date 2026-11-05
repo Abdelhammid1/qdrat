@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Internal;
@@ -63,6 +64,23 @@ namespace QdratNew.Areas.Admin.Controllers
             _batchPerformanceRecommendationService = batchPerformanceRecommendationService;
         }
 
+        // APD-S2.3: ما يملكه الشريك يُدار من منطقته. ما أُرسل قبل APD بلا مالك ويبقى ظاهرًا كما هو.
+        private IQueryable<HomeworkSet> AdminHomeworkSets => _context.HomeworkSets.Where(hs => hs.OwnerPartnerId == null);
+
+        // الأكشنات التي تستقبل homeworkSetId ولا تقرأ HomeworkSets (التقارير والمراجعة) تمر من هنا أيضًا
+        public override async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
+        {
+            if (context.ActionArguments.TryGetValue("homeworkSetId", out var value) &&
+                value is int homeworkSetId &&
+                await _context.HomeworkSets.AsNoTracking().AnyAsync(hs => hs.Id == homeworkSetId && hs.OwnerPartnerId != null))
+            {
+                context.Result = NotFound();
+                return;
+            }
+
+            await next();
+        }
+
         private bool IsArchiveOwner()
         {
             return User.IsInRole("Owner") || User.IsInRole("Developer");
@@ -80,7 +98,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
         private async Task<bool> CanAccessArchivedHomeworkSetAsync(int homeworkSetId)
         {
-            var archiveState = await _context.HomeworkSets
+            var archiveState = await AdminHomeworkSets
                 .AsNoTracking()
                 .Where(x => x.Id == homeworkSetId)
                 .Select(x => new { x.IsArchived })
@@ -105,7 +123,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
         private async Task<bool> CanAccessArchivedBatchAsync(int batchId)
         {
-            var archivedHomeworkSetIds = await _context.HomeworkSets
+            var archivedHomeworkSetIds = await AdminHomeworkSets
                 .AsNoTracking()
                 .Where(x => x.BatchId == batchId && x.IsArchived)
                 .Select(x => x.Id)
@@ -143,7 +161,7 @@ namespace QdratNew.Areas.Admin.Controllers
         {
             if (actionType is "ArchiveView" or "ArchiveEdit" or "ArchiveDelete")
             {
-                var isArchived = await _context.HomeworkSets
+                var isArchived = await AdminHomeworkSets
                     .AsNoTracking()
                     .Where(x => x.Id == homeworkSetId)
                     .Select(x => x.IsArchived)
@@ -194,7 +212,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 permittedBatchIds = await _batchAccess.GetPermittedBatchIdsAsync(uid, InstructorBatchFeature.Homework);
             }
 
-            var homeworkSets = await _context.HomeworkSets
+            var homeworkSets = await AdminHomeworkSets
                 .AsNoTracking()
                 .Where(hs => hs.IsArchived == archived &&
                              (permittedBatchIds == null || permittedBatchIds.Contains(hs.BatchId)))
@@ -310,7 +328,7 @@ namespace QdratNew.Areas.Admin.Controllers
         {
             var now = DateTime.Now;
 
-            var hwStats = await _context.HomeworkSets
+            var hwStats = await AdminHomeworkSets
                 .Where(hs => !hs.IsArchived)
                 .GroupBy(hs => hs.BatchId)
                 .Select(g => new { BatchId = g.Key, Count = g.Count() })
@@ -320,7 +338,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
             var studentStats = await (
                 from hss in _context.HomeworkSetStudents
-                join hs in _context.HomeworkSets on hss.HomeworkSetId equals hs.Id
+                join hs in AdminHomeworkSets on hss.HomeworkSetId equals hs.Id
                 where !hs.IsArchived
                 select new
                 {
@@ -486,7 +504,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 .ToListAsync();
 
             // ── واجبات الدفعة ─────────────────────────────────────────
-            var hwSetQuery = _context.HomeworkSets
+            var hwSetQuery = AdminHomeworkSets
                 .AsNoTracking()
                 .Where(hs => hs.BatchId == batchId && hs.IsArchived == archived);
 
@@ -716,7 +734,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            var allHomeworks = await _context.HomeworkSets
+            var allHomeworks = await AdminHomeworkSets
                 .Where(hs => !hs.IsArchived)
                 .ToListAsync();
 
@@ -767,7 +785,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            var allHomeworks = await _context.HomeworkSets
+            var allHomeworks = await AdminHomeworkSets
                 .Where(hs => hs.IsArchived)
                 .ToListAsync();
 
@@ -802,7 +820,7 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("HomeworkManagement", "Archive")]
         public async Task<IActionResult> ArchiveHomeworkSet(int id)
         {
-            var set = await _context.HomeworkSets.FirstOrDefaultAsync(x => x.Id == id);
+            var set = await AdminHomeworkSets.FirstOrDefaultAsync(x => x.Id == id);
 
             if (set == null)
             {
@@ -831,7 +849,7 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("HomeworkManagement", "Archive")]
         public async Task<IActionResult> RestoreHomeworkSet(int id)
         {
-            var set = await _context.HomeworkSets.FirstOrDefaultAsync(x => x.Id == id);
+            var set = await AdminHomeworkSets.FirstOrDefaultAsync(x => x.Id == id);
 
             if (set == null)
             {
@@ -862,7 +880,7 @@ namespace QdratNew.Areas.Admin.Controllers
             if (!await CanAccessArchivedHomeworkSetAsync(id))
                 return ArchivedAccessDenied();
 
-            var homeworkSet = await _context.HomeworkSets
+            var homeworkSet = await AdminHomeworkSets
                 .AsNoTracking()
                 .Include(h => h.Batch)
                 .Include(h => h.Curriculum)
@@ -1205,7 +1223,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 return ArchivedAccessDenied();
 
             // 🟢 جلب الواجب المحدد
-            var set = await _context.HomeworkSets
+            var set = await AdminHomeworkSets
                 .Include(h => h.Batch)
                 .FirstOrDefaultAsync(h => h.Id == homeworkSetId);
 
@@ -1361,7 +1379,7 @@ namespace QdratNew.Areas.Admin.Controllers
             if (!await CanAccessArchivedHomeworkSetAsync(request.HomeworkSetId))
                 return Forbid();
 
-            var homeworkSet = await _context.HomeworkSets.FindAsync(request.HomeworkSetId);
+            var homeworkSet = await AdminHomeworkSets.FirstOrDefaultAsync(h => h.Id == request.HomeworkSetId);
             if (homeworkSet == null)
                 return NotFound("الواجب غير موجود.");
 
@@ -1498,7 +1516,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
             try
             {
-                var homeworkSet = await _context.HomeworkSets
+                var homeworkSet = await AdminHomeworkSets
                     .AsNoTracking()
                     .FirstOrDefaultAsync(h => h.Id == homeworkSetId);
 
@@ -1645,7 +1663,7 @@ namespace QdratNew.Areas.Admin.Controllers
             // ======================================
             // 1️⃣ جلب الواجب
             // ======================================
-            var set = await _context.HomeworkSets
+            var set = await AdminHomeworkSets
                 .Include(hs => hs.Batch)
                 .FirstOrDefaultAsync(hs => hs.Id == homeworkSetId);
 
@@ -1796,7 +1814,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 return ArchivedAccessDenied();
 
             // 🟩 تأكيد وجود الواجب
-            var homeworkSet = await _context.HomeworkSets
+            var homeworkSet = await AdminHomeworkSets
                 .Include(hs => hs.Homeworks)
                 .FirstOrDefaultAsync(hs => hs.Id == id);
 
@@ -2319,7 +2337,7 @@ namespace QdratNew.Areas.Admin.Controllers
             if (section == null)
                 return NotFound("❌ لم يتم العثور على المحور.");
 
-            var homeworkExists = await _context.HomeworkSets
+            var homeworkExists = await AdminHomeworkSets
                 .AsNoTracking()
                 .AnyAsync(x => x.Id == homeworkSetId);
 
@@ -2550,7 +2568,7 @@ namespace QdratNew.Areas.Admin.Controllers
             if (!studentId.HasValue || studentId.Value <= 0)
                 return BadRequest("لا يمكن مراجعة أسئلة المؤشر بدون تحديد الطالب.");
 
-            var homeworkSet = await _context.HomeworkSets
+            var homeworkSet = await AdminHomeworkSets
                 .AsNoTracking()
                 .FirstOrDefaultAsync(x => x.Id == homeworkSetId);
 
@@ -2740,7 +2758,7 @@ namespace QdratNew.Areas.Admin.Controllers
             if (!IsArchiveOwner())
                 return Forbid();
 
-            var homeworkSet = await _context.HomeworkSets
+            var homeworkSet = await AdminHomeworkSets
                 .AsNoTracking()
                 .Include(x => x.Batch)
                 .FirstOrDefaultAsync(x => x.Id == homeworkSetId);
@@ -2794,7 +2812,7 @@ namespace QdratNew.Areas.Admin.Controllers
             if (!IsArchiveOwner())
                 return Forbid();
 
-            var homeworkSet = await _context.HomeworkSets
+            var homeworkSet = await AdminHomeworkSets
                 .FirstOrDefaultAsync(x => x.Id == homeworkSetId);
 
             if (homeworkSet == null)
@@ -2859,7 +2877,7 @@ namespace QdratNew.Areas.Admin.Controllers
             if (!await CanAccessArchivedHomeworkSetAsync(homeworkSetId))
                 return ArchivedAccessDenied();
 
-            var homeworkSet = await _context.HomeworkSets
+            var homeworkSet = await AdminHomeworkSets
                 .AsNoTracking()
                 .Include(x => x.Batch)
                 .FirstOrDefaultAsync(x => x.Id == homeworkSetId);
@@ -2907,7 +2925,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
             if (batch == null) return NotFound();
 
-            var archivedHomeworkSetIds = await _context.HomeworkSets
+            var archivedHomeworkSetIds = await AdminHomeworkSets
                 .AsNoTracking()
                 .Where(hs => hs.BatchId == batchId && hs.IsArchived)
                 .Select(hs => hs.Id)
@@ -2971,7 +2989,7 @@ namespace QdratNew.Areas.Admin.Controllers
             var candidateUserIds = candidateUsers.Select(x => x.Id).ToHashSet();
             allowedSet.RemoveWhere(x => !candidateUserIds.Contains(x));
 
-            var archivedHomeworkSetIds = await _context.HomeworkSets
+            var archivedHomeworkSetIds = await AdminHomeworkSets
                 .AsNoTracking()
                 .Where(hs => hs.BatchId == batchId && hs.IsArchived)
                 .Select(hs => hs.Id)
@@ -3067,7 +3085,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 .ToListAsync();
 
             // ── واجبات الدفعة في الفترة ───────────────────────────────────
-            var hwSets = await _context.HomeworkSets
+            var hwSets = await AdminHomeworkSets
                 .AsNoTracking()
                 .Where(hs => hs.BatchId == batchId && !hs.IsArchived
                              && hs.CreatedAt >= rangeStart && hs.CreatedAt < rangeEndExclusive)
@@ -3444,7 +3462,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 overallAttendanceRate = Math.Round(presentCount * 100.0 / (lectureIds.Count * studentCount), 1);
             }
 
-            var hwSets = await _context.HomeworkSets
+            var hwSets = await AdminHomeworkSets
                 .AsNoTracking()
                 .Where(hs => hs.BatchId == batchId && !hs.IsArchived
                              && hs.CreatedAt >= rangeStart && hs.CreatedAt < rangeEndExclusive)

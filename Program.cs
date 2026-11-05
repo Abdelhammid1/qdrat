@@ -953,6 +953,9 @@ builder.Services.AddScoped<QdratNew.Services.ProfessionalModels.IProfessionalMod
 builder.Services.AddScoped<QdratNew.Services.PartnerDispatch.IDispatchAudienceService, QdratNew.Services.PartnerDispatch.DispatchAudienceService>(); // APD-S1.2
 builder.Services.AddScoped<QdratNew.Services.PartnerDispatch.IPartnerDispatchLogService, QdratNew.Services.PartnerDispatch.PartnerDispatchLogService>(); // APD-S1.2
 builder.Services.AddScoped<QdratNew.Services.PartnerDispatch.IDispatchAudiencePickerBuilder, QdratNew.Services.PartnerDispatch.DispatchAudiencePickerBuilder>(); // APD-S1.4
+builder.Services.AddScoped<QdratNew.Services.PartnerDispatch.IPartnerModelDispatchService, QdratNew.Services.PartnerDispatch.PartnerModelDispatchService>(); // APD-S2.1
+builder.Services.AddScoped<QdratNew.Services.PartnerDispatch.IPartnerOwnedItemsService, QdratNew.Services.PartnerDispatch.PartnerOwnedItemsService>(); // APD-S2.3
+builder.Services.AddScoped<QdratNew.Services.PartnerDispatch.IPartnerPlacementDispatchService, QdratNew.Services.PartnerDispatch.PartnerPlacementDispatchService>(); // APD-S3.1
 // PPL-S3: خدمة تقارير اختبارات تحديد المستوى المشتركة
 builder.Services.AddScoped<QdratNew.Services.Exams.Placement.IPlacementExamReportService, QdratNew.Services.Exams.Placement.PlacementExamReportService>();
 builder.Services.AddScoped<ITimeZoneService, TimeZoneService>();

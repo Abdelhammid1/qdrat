@@ -7,6 +7,7 @@ using QdratNew.Entities;
 using QdratNew.Enums;
 using QdratNew.Services.Helpers;
 using QdratNew.Services.Interfaces;
+using QdratNew.Services.PartnerDispatch;
 using HomeworkEntity = QdratNew.Entities.Homework;
 
 namespace QdratNew.Services.ProfessionalModels
@@ -30,6 +31,7 @@ namespace QdratNew.Services.ProfessionalModels
         private readonly IProfessionalModelAvailabilityService _availabilityService;
         private readonly ITimeZoneService _timeZoneService;
         private readonly IAdvancedNotificationService _notificationService;
+        private readonly IPartnerDispatchLogService _dispatchLog;
         private readonly ILogger<ProfessionalModelSendService> _logger;
 
         public ProfessionalModelSendService(
@@ -37,12 +39,14 @@ namespace QdratNew.Services.ProfessionalModels
             IProfessionalModelAvailabilityService availabilityService,
             ITimeZoneService timeZoneService,
             IAdvancedNotificationService notificationService,
+            IPartnerDispatchLogService dispatchLog,
             ILogger<ProfessionalModelSendService> logger)
         {
             _context = context;
             _availabilityService = availabilityService;
             _timeZoneService = timeZoneService;
             _notificationService = notificationService;
+            _dispatchLog = dispatchLog;
             _logger = logger;
         }
 
@@ -370,7 +374,7 @@ namespace QdratNew.Services.ProfessionalModels
                         LectureId = req.LectureId,
                         IsFromProfessionalModel = true,
                         SourceProfessionalModelId = send.Model.Id,
-                        OwnerPartnerId = scope.PartnerId, // APD-S1.3: null للأدمن
+                        OwnerPartnerId = scope.OwnerPartnerId, // APD-S1.3: null للأدمن
                         AssignedByUserId = scope.UserId,
                         IsSent = true
                     })
@@ -414,6 +418,8 @@ namespace QdratNew.Services.ProfessionalModels
 
                 await _context.BulkInsertAsync(setStudents, cancellationToken: ct);
                 await InsertHomeworksAsync(homeworks, ct);
+
+                return sets.ToDictionary(set => set.BatchId, set => set.Id);
             }, ct);
         }
 
@@ -429,6 +435,10 @@ namespace QdratNew.Services.ProfessionalModels
             if (scope.IsPartner && (req.IsInLab || req.RandomizeQuestions.HasValue || req.StudentIds != null))
                 return ModelSendResult.Fail("⚠️ هذه الخيارات غير متاحة.");
 
+            // APD-S2.1: الحضوري والترتيب العشوائي مسموحان للأدمن، والإرسال للشريك يشمل كل طلابه النشطين
+            if (scope.IsAdminForPartner && req.StudentIds != null)
+                return ModelSendResult.Fail("⚠️ الإرسال لطلاب محددين متاح لدفعات المنصة فقط.");
+
             var (send, stop) = await PrepareSendAsync(scope, ProfessionalModelType.Exam, req, ct);
             if (send == null)
                 return stop!;
@@ -437,14 +447,21 @@ namespace QdratNew.Services.ProfessionalModels
 
             // الشريك: اختبار لكل دفعة حتى يبقى حذف الإرسال مستقلًا لكل دفعة، كما في مسوداته.
             // الأدمن: اختبار واحد ورقم مرجعي واحد لكل الدفعات، وحذفه من ModelAssignments يشمل دفعاته كلها.
-            var examCount = scope.IsPartner ? send.TargetBatchIds.Count : 1;
-            var curriculumId = scope.IsPartner ? send.Model.CurriculumId : null;
-            var referenceCode = req.IsInLab ? Random.Shared.Next(100000, 999999).ToString() : null;
+            var ownedByPartner = TargetsPartner(scope);
+            var examCount = ownedByPartner ? send.TargetBatchIds.Count : 1;
+            var curriculumId = ownedByPartner ? send.Model.CurriculumId : null;
+
+            // APD-S2.1: Students/Exams يبحث عن الاختبار الحضوري بالرقم وحده، فلكل اختبار مملوك للشريك رقمه
+            var referenceCodes = !req.IsInLab
+                ? null
+                : ownedByPartner
+                    ? await NewReferenceCodesAsync(examCount, ct)
+                    : new List<string> { Random.Shared.Next(100000, 999999).ToString() };
 
             return await ExecuteSendAsync(scope, send, req.ConfirmWarnings, async now =>
             {
                 var exams = Enumerable.Range(0, examCount)
-                    .Select(_ => new Exam
+                    .Select(examIndex => new Exam
                     {
                         Title = send.Title,
                         Type = ExamType.Manual,
@@ -455,8 +472,8 @@ namespace QdratNew.Services.ProfessionalModels
                         IsActive = true,
                         IsFromProfessionalModel = true,
                         SourceProfessionalModelId = send.Model.Id,
-                        OwnerPartnerId = scope.PartnerId,
-                        ReferenceCode = referenceCode,
+                        OwnerPartnerId = scope.OwnerPartnerId,
+                        ReferenceCode = referenceCodes?[examIndex],
                         RandomizeQuestions = req.RandomizeQuestions ?? true
                     })
                     .ToList();
@@ -466,7 +483,7 @@ namespace QdratNew.Services.ProfessionalModels
                 var assignments = send.TargetBatchIds
                     .Select((batchId, index) => new ExamAssignmentToBatch
                     {
-                        ExamId = exams[scope.IsPartner ? index : 0].Id,
+                        ExamId = exams[ownedByPartner ? index : 0].Id,
                         BatchId = batchId,
                         CurriculumId = curriculumId,
                         Title = send.Title,
@@ -502,7 +519,7 @@ namespace QdratNew.Services.ProfessionalModels
                     foreach (var studentId in send.Recipients[assignment.BatchId])
                     {
                         // شاشة الأدمن لا تنشئ ExamAssignments، وصفوفها تُظهر الاختبار في Students/Exams/Index القديمة
-                        if (scope.IsPartner)
+                        if (ownedByPartner)
                         {
                             examAssignments.Add(new ExamAssignment
                             {
@@ -528,12 +545,38 @@ namespace QdratNew.Services.ProfessionalModels
                 await _context.BulkInsertAsync(examQuestions, cancellationToken: ct);
                 await _context.BulkInsertAsync(examAssignments, cancellationToken: ct);
                 await InsertExamStatusesAsync(statuses, ct);
+
+                return assignments.ToDictionary(assignment => assignment.BatchId, assignment => assignment.ExamId!.Value);
             }, ct);
         }
 
         // نقطة فصل لاختبار إلغاء الـ Transaction عند الفشل في منتصف الكتابة
         protected virtual Task InsertExamStatusesAsync(List<ExamStudentStatus> statuses, CancellationToken ct)
             => _context.BulkInsertAsync(statuses, cancellationToken: ct);
+
+        private async Task<List<string>> NewReferenceCodesAsync(int count, CancellationToken ct)
+        {
+            var codes = new HashSet<string>();
+
+            while (codes.Count < count)
+            {
+                var candidates = Enumerable.Range(0, count - codes.Count)
+                    .Select(_ => Random.Shared.Next(100000, 999999).ToString())
+                    .Where(code => !codes.Contains(code))
+                    .Distinct()
+                    .ToList();
+
+                var taken = await _context.Exams
+                    .AsNoTracking()
+                    .Where(e => EF.Constant(candidates).Contains(e.ReferenceCode))
+                    .Select(e => e.ReferenceCode)
+                    .ToListAsync(ct);
+
+                codes.UnionWith(candidates.Except(taken));
+            }
+
+            return codes.ToList();
+        }
 
         // =====================================================
         // خطوات الإرسال المشتركة
@@ -589,7 +632,7 @@ namespace QdratNew.Services.ProfessionalModels
             ModelSendScope scope,
             PreparedSend send,
             bool confirmed,
-            Func<DateTime, Task> writeAsync,
+            Func<DateTime, Task<Dictionary<int, int>>> writeAsync,
             CancellationToken ct)
         {
             var model = send.Model;
@@ -606,17 +649,25 @@ namespace QdratNew.Services.ProfessionalModels
                     await AcquireModelSendLockAsync(model.Id, ct);
                     await EnsureNotDuplicateSendAsync(model, send.TargetBatchIds, confirmed, ct);
 
-                    await writeAsync(_timeZoneService.GetNowUtc());
+                    var now = _timeZoneService.GetNowUtc();
+                    var targets = await writeAsync(now);
+
+                    // APD-S2.1: السجل داخل نفس الـ Transaction، فلا إرسال بلا سجل ولا سجل بلا إرسال
+                    if (scope.IsAdminForPartner)
+                        await WriteDispatchLogAsync(scope, send, targets, now, ct);
 
                     await transaction.CommitAsync(ct);
                 });
             }
             catch (ModelSendRuleException ex)
             {
+                _context.ChangeTracker.Clear();
                 return ModelSendResult.Fail(ex.Message);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
+                // ما بقي متتبعًا من محاولة فاشلة قد يُحفظ مع إرسال الشريك التالي على نفس الـ DbContext
+                _context.ChangeTracker.Clear();
                 _logger.LogError(ex, "PPM {ModelType} send failed for model {ModelId}, scope {Kind}, partner {PartnerId}", model.ModelType, model.Id, scope.Kind, scope.PartnerId);
                 return ModelSendResult.Fail($"⚠️ تعذر إرسال {noun}، ولم يُحفظ أي شيء. حاول مرة أخرى.");
             }
@@ -639,6 +690,34 @@ namespace QdratNew.Services.ProfessionalModels
             };
         }
 
+        private async Task WriteDispatchLogAsync(ModelSendScope scope, PreparedSend send, Dictionary<int, int> targets, DateTime now, CancellationToken ct)
+        {
+            // إعادة المحاولة عبر ExecutionStrategy تبدأ بلا صفوف سجل معلّقة من المحاولة السابقة
+            _context.ChangeTracker.Clear();
+
+            var kind = send.Model.ModelType == ProfessionalModelType.Exam ? PartnerDispatchKind.Exam : PartnerDispatchKind.Homework;
+
+            await _dispatchLog.WriteAsync(
+                send.TargetBatchIds
+                    .Select(batchId => new PartnerDispatchLog
+                    {
+                        DispatchGroupId = scope.DispatchGroupId!.Value,
+                        Kind = kind,
+                        Title = send.Title,
+                        SourceProfessionalModelId = send.Model.Id,
+                        PartnerId = scope.PartnerId!.Value,
+                        BatchId = batchId,
+                        TargetEntityId = targets[batchId],
+                        StudentsCount = send.Recipients[batchId].Count,
+                        ContractOverridden = scope.ContractOverridden,
+                        OverrideReason = scope.OverrideReason,
+                        SentByUserId = scope.UserId!,
+                        SentAtUtc = now
+                    })
+                    .ToList(),
+                ct);
+        }
+
         private static ModelSendResult RequiresConfirmation(ModelSendPreview preview) => new()
         {
             Succeeded = false,
@@ -652,7 +731,7 @@ namespace QdratNew.Services.ProfessionalModels
             if (!lectureId.HasValue)
                 return null;
 
-            if (scope.IsPartner)
+            if (TargetsPartner(scope))
                 return "⚠️ ربط الواجب بمحاضرة غير متاح.";
 
             if (batchIds.Count != 1)
@@ -675,7 +754,7 @@ namespace QdratNew.Services.ProfessionalModels
                 (exam.DurationMinutes < MinExamDurationMinutes || exam.DurationMinutes > MaxExamDurationMinutes))
                 return (null, null, $"⚠️ مدة الاختبار يجب أن تكون بين {MinExamDurationMinutes} و{MaxExamDurationMinutes} دقيقة.");
 
-            if (scope.IsPartner && (!req.StartAtLocal.HasValue || !req.EndAtLocal.HasValue))
+            if (TargetsPartner(scope) && (!req.StartAtLocal.HasValue || !req.EndAtLocal.HasValue))
                 return (null, null, req is SendModelExamRequest
                     ? "⚠️ حدد موعد بداية ونهاية الاختبار."
                     : "⚠️ حدد موعد بداية ونهاية الواجب.");
@@ -684,7 +763,7 @@ namespace QdratNew.Services.ProfessionalModels
             var endAt = req.EndAtLocal.HasValue ? _timeZoneService.ConvertToUtc(req.EndAtLocal.Value) : (DateTime?)null;
 
             // موعد اختبار الأدمن اختياري: يبدأ الآن وينتهي بعد مدته
-            if (!scope.IsPartner && req is SendModelExamRequest adminExam)
+            if (!TargetsPartner(scope) && req is SendModelExamRequest adminExam)
             {
                 startAt ??= _timeZoneService.GetNowUtc();
                 endAt ??= startAt.Value.AddMinutes(adminExam.DurationMinutes);
@@ -693,7 +772,7 @@ namespace QdratNew.Services.ProfessionalModels
             if (startAt.HasValue && endAt.HasValue && endAt <= startAt)
                 return (null, null, "⚠️ موعد النهاية يجب أن يكون بعد موعد البداية.");
 
-            if (scope.IsPartner && endAt <= _timeZoneService.GetNowUtc())
+            if (TargetsPartner(scope) && endAt <= _timeZoneService.GetNowUtc())
                 return (null, null, "⚠️ موعد النهاية يجب أن يكون في المستقبل.");
 
             return (startAt, endAt, null);
@@ -739,7 +818,12 @@ namespace QdratNew.Services.ProfessionalModels
             try
             {
                 var who = scope.UserName ?? scope.UserId ?? "Unknown";
-                var owner = scope.IsPartner ? $"الشريك {scope.PartnerId}" : "المعهد";
+                var owner = scope.Kind switch
+                {
+                    ModelSendScopeKind.Partner => $"الشريك {scope.PartnerId}",
+                    ModelSendScopeKind.AdminForPartner => $"المعهد باسم الشريك {scope.PartnerId}",
+                    _ => "المعهد"
+                };
                 var isExam = model.ModelType == ProfessionalModelType.Exam;
 
                 _context.SystemLogs.Add(new SystemLog
@@ -812,6 +896,10 @@ namespace QdratNew.Services.ProfessionalModels
         // مساعدات النطاق
         // =====================================================
 
+        // APD-S2.1: الدفعات والطلاب والمواعيد وشكل الاختبار كنطاق الشريك سواء أرسله هو أو الأدمن باسمه.
+        // أما النماذج والعقد والبنك فشرطها IsPartner: إرسال الأدمن فُحصت أهليته في IDispatchAudienceService.
+        private static bool TargetsPartner(ModelSendScope scope) => scope.OwnerPartnerId != null;
+
         // الأدمن: كل النماذج غير المؤرشفة من النوع. الشريك: خدمة الإتاحة + عقد يسمح بإنشاء هذا النوع.
         private IQueryable<ProfessionalModel> ModelsInScope(ModelSendScope scope, ProfessionalModelType type)
         {
@@ -857,14 +945,27 @@ namespace QdratNew.Services.ProfessionalModels
                 : contracts.Where(s => s.CanCreateHomework);
         }
 
-        // الأدمن: الدفعات غير المحذوفة وغير المؤرشفة كما في شاشته الحالية.
+        // الأدمن: دفعات المنصة غير المحذوفة وغير المؤرشفة (APD-S2.2).
+        // الأدمن باسم شريك: دفعات فروع الشريك المتوافقة مع منهج النموذج، كما في IDispatchAudienceService، بلا شرط العقد.
         // الشريك: دفعات فروعه، دورتها في عقده وتحتوي منهج النموذج. النموذج بلا منهج لا يُرسل للشريك.
         private IQueryable<Batch> EligibleBatches(ModelSendScope scope, ModelInfo model)
         {
             var batches = _context.Batches.AsNoTracking().Where(b => !b.IsDeleted && !b.IsArchived);
 
-            if (!scope.IsPartner)
-                return batches;
+            if (scope.Kind == ModelSendScopeKind.Admin)
+                return batches.Where(b => b.Branch.PartnerId == null);
+
+            if (scope.IsAdminForPartner)
+            {
+                var targetPartnerId = scope.PartnerId!.Value;
+                batches = batches.Where(b => b.Branch.PartnerId == targetPartnerId);
+
+                if (!model.CurriculumId.HasValue)
+                    return batches;
+
+                var modelCurriculumId = model.CurriculumId.Value;
+                return batches.Where(b => _context.CourseCurriculums.Any(cc => cc.CourseId == b.CourseId && cc.CurriculumId == modelCurriculumId));
+            }
 
             if (!model.CurriculumId.HasValue)
                 return batches.Where(b => false);
@@ -884,7 +985,7 @@ namespace QdratNew.Services.ProfessionalModels
         {
             var enrollments = _context.StudentBatchEnrollments.AsNoTracking().Where(e => e.Status == ActiveEnrollmentStatus);
 
-            if (!scope.IsPartner)
+            if (!TargetsPartner(scope))
                 return enrollments;
 
             var partnerId = scope.PartnerId!.Value;

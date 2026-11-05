@@ -233,6 +233,7 @@ namespace QdratNew.Tests.Integration
 
             foreach (var sql in new[]
             {
+                $"DELETE FROM PartnerDispatchLogs WHERE PartnerId IN {partners}",
                 $"DELETE FROM Notifications WHERE StudentID IN {students}",
                 "DELETE FROM SystemLogs WHERE Description LIKE N'%PPMS6E2E%'",
                 $"DELETE FROM ExamStudentQuestionOrders WHERE ExamAssignmentId IN {assignments}",
@@ -315,6 +316,166 @@ namespace QdratNew.Tests.Integration
             await admin.Locator($"input[name=SelectedPartnerIds][value='{_partnerId}']").CheckAsync();
             await admin.Locator("form button[type=submit]").Last.ClickAsync();
             await admin.WaitForURLAsync(url => !url.Contains("/Edit/"), new PageWaitForURLOptions { Timeout = 20000 });
+        }
+
+        // APD-S2.2: اختيار «المدارس الشريكة» بمتصفح حقيقي: الـ JS يفعّل الدفعات، والإرسال يظهر للشريك ويختفي من الأدمن
+        [SqlServerFact]
+        public async Task Admin_SendsToSchools_ResultPage_PartnerSeesInstituteBadge_AdminDoesNot()
+        {
+            var admin = await LoginAsync(OwnerUser, mobile: false);
+            await ShareWithPartnerAsync(admin, _homeworkModelId);
+            var pageErrors = new List<string>();
+            admin.PageError += (_, message) => pageErrors.Add(message);
+
+            var title = $"{Marker} واجب للمدارس";
+            await admin.GotoAsync("/Admin/AdminLessonCompletions/CreateModelHomework");
+
+            // دفعة الشريك ليست ضمن دفعات المنصة
+            Assert.Equal(0, await admin.Locator($"#apd-platform-{_batchId}").CountAsync());
+
+            await admin.FillAsync("#Title", title);
+            await admin.CheckAsync($"input[name=Audience][value='{(int)DispatchAudience.Partners}']");
+
+            // قبل اختيار النموذج: لا تحميل، بل تنبيه
+            await admin.Locator("[data-apd-need-model]").WaitForAsync();
+
+            await admin.SelectOptionAsync("#ModelIdSelect", _homeworkModelId.ToString());
+            await admin.Locator($"#apd-partner-{_partnerId}").WaitForAsync();
+            Assert.True(await admin.Locator("#lectureSection").IsHiddenAsync());
+            Assert.True(await admin.Locator($"#apd-batch-{_partnerId}-{_batchId}").IsDisabledAsync());
+
+            await admin.CheckAsync($"#apd-partner-{_partnerId}");
+            Assert.True(await admin.Locator($"#apd-batch-{_partnerId}-{_batchId}").IsEnabledAsync());
+            Assert.True(await admin.IsCheckedAsync($"#apd-batch-{_partnerId}-{_batchId}"));
+            Assert.Equal("1", await admin.InnerTextAsync("[data-apd-count-partners]"));
+
+            await admin.FillAsync("#StartAt", SaudiLocal(0));
+            await admin.FillAsync("#EndAt", SaudiLocal(3));
+            await admin.ClickAsync("#createModelHomeworkForm button[type=submit]");
+
+            await admin.WaitForURLAsync(url => url.Contains("/PartnerDispatch/Result"), new PageWaitForURLOptions { Timeout = 20000 });
+            Assert.Contains("نجح", await admin.InnerTextAsync($"[data-apd-result-partner='{_partnerId}']"));
+
+            await admin.GotoAsync("/Admin/AdminLessonCompletions/ModelAssignments");
+            Assert.DoesNotContain(title, await admin.InnerTextAsync("body"));
+            Assert.Empty(pageErrors);
+
+            int setId;
+            await using (var db = RtkRealDb.CreateDb())
+            {
+                var set = await db.HomeworkSets.AsNoTracking().SingleAsync(h => h.Title == title);
+                Assert.Equal(_partnerId, set.OwnerPartnerId);
+                setId = set.Id;
+                Assert.Equal(1, await db.PartnerDispatchLogs.AsNoTracking().CountAsync(l => l.TargetEntityId == set.Id && l.PartnerId == _partnerId));
+            }
+
+            var partner = await LoginPartnerAsync(PartnerUser, _partnerId);
+            await partner.GotoAsync("/Partner/SentHomeworks");
+            var row = partner.Locator("tr", new PageLocatorOptions { HasTextString = title });
+            Assert.Contains("مرسل من المعهد", await row.InnerTextAsync());
+
+            // الشريك يدير ما أصبح ملكه: تعديل العنوان
+            await partner.GotoAsync($"/Partner/SentHomeworks/EditSent/{setId}");
+            await partner.FillAsync("#Title", $"{title} معدل");
+            await partner.ClickAsync("form[action*='EditSent'] button[type=submit]");
+            await partner.WaitForLoadStateAsync();
+            await partner.GotoAsync("/Partner/SentHomeworks");
+            Assert.Contains($"{title} معدل", await partner.InnerTextAsync("body"));
+
+            // ---------- الاختبار: طريقة الإرسال تختفي، والإرسال يشمل كل طلاب الدفعة ----------
+            await ShareWithPartnerAsync(admin, _examModelId);
+            var examTitle = $"{Marker} اختبار للمدارس";
+            await admin.GotoAsync("/Admin/AdminLessonCompletions/CreateModelExam");
+            await admin.FillAsync("#Title", examTitle);
+            await admin.CheckAsync("#sendToBatchFalse");
+            await admin.CheckAsync($"input[name=Audience][value='{(int)DispatchAudience.Partners}']");
+            Assert.True(await admin.Locator("#sendModeSection").IsHiddenAsync());
+            Assert.True(await admin.IsCheckedAsync("#sendToBatchTrue"));
+
+            await admin.SelectOptionAsync("#ModelIdSelect", _examModelId.ToString());
+            await admin.Locator($"#apd-partner-{_partnerId}").WaitForAsync();
+            await admin.CheckAsync($"#apd-partner-{_partnerId}");
+            await admin.FillAsync("#DurationMinutes", "45");
+            await admin.ClickAsync("#createModelExamForm button[type=submit]");
+
+            // نفس أسئلة الواجب أعلاه وصلت الدفعة، فيظهر التحذير ويبقى اختيار المدرسة
+            await admin.Locator("#modelSendWarnings").WaitForAsync();
+            Assert.True(await admin.IsCheckedAsync($"#apd-partner-{_partnerId}"));
+            Assert.True(await admin.Locator("#sendModeSection").IsHiddenAsync());
+            await admin.CheckAsync("#confirmModelSend");
+            await admin.ClickAsync("#createModelExamForm button[type=submit]");
+
+            await admin.WaitForURLAsync(url => url.Contains("/PartnerDispatch/Result"), new PageWaitForURLOptions { Timeout = 20000 });
+            Assert.Contains("نجح", await admin.InnerTextAsync($"[data-apd-result-partner='{_partnerId}']"));
+            Assert.Empty(pageErrors);
+
+            await partner.GotoAsync("/Partner/PartnerExam/SentExams");
+            Assert.Contains("مرسل من المعهد", await partner.Locator("tr", new PageLocatorOptions { HasTextString = examTitle }).InnerTextAsync());
+        }
+
+        // APD-S3: تحديد المستوى للمدارس بمتصفح حقيقي: الكورس يحمّل الدفعات، والمسودة تظهر للشريك فيرسلها، والأدمن لا يراها
+        [SqlServerFact]
+        public async Task Admin_SendsPlacementDraftToSchool_PartnerSendsIt_AdminDoesNotSeeIt()
+        {
+            var admin = await LoginAsync(OwnerUser, mobile: false);
+            await ShareWithPartnerAsync(admin, _examModelId);
+            var pageErrors = new List<string>();
+            admin.PageError += (_, message) => pageErrors.Add(message);
+
+            await admin.GotoAsync("/Admin/PlacementExams/CreateFromProfessionalModel");
+
+            // دفعة الشريك ليست ضمن دفعات المنصة، ودفعات المنصة اختيار واحد
+            Assert.Equal(0, await admin.Locator($"#apd-platform-{_batchId}").CountAsync());
+            Assert.Equal("radio", await admin.GetAttributeAsync($"#apd-platform-{_instituteBatchId}", "type"));
+            Assert.True(await admin.Locator("#partnerDeliverySection").IsHiddenAsync());
+
+            await admin.CheckAsync($"input[name=Audience][value='{(int)DispatchAudience.Partners}']");
+            Assert.True(await admin.Locator("#partnerDeliverySection").IsVisibleAsync());
+            await admin.Locator("[data-apd-need-model]").WaitForAsync();
+
+            await admin.SelectOptionAsync("#modelSelect", _examModelId.ToString());
+            await admin.Locator("[data-apd-need-course]").WaitForAsync();
+
+            await admin.SelectOptionAsync("#SelectedCourseId", _courseId.ToString());
+            await admin.Locator($"#apd-partner-{_partnerId}").WaitForAsync();
+
+            await admin.CheckAsync($"#apd-partner-{_partnerId}");
+            Assert.True(await admin.IsCheckedAsync($"#apd-batch-{_partnerId}-{_batchId}"));
+
+            await admin.CheckAsync("#deliveryDraft");
+            await admin.FillAsync("#DurationMinutes", "45");
+            await admin.ClickAsync("form[action*='CreateFromProfessionalModel'] button[type=submit]");
+
+            await admin.WaitForURLAsync(url => url.Contains("/PartnerDispatch/Result"), new PageWaitForURLOptions { Timeout = 20000 });
+            Assert.Contains("مسودة", await admin.InnerTextAsync("#partnerDispatchResult"));
+            Assert.Empty(pageErrors);
+
+            int examId;
+            await using (var db = RtkRealDb.CreateDb())
+            {
+                var exam = await db.Exams.AsNoTracking().SingleAsync(e =>
+                    e.OwnerPartnerId == _partnerId && e.SourceProfessionalModelId == _examModelId && e.Type == ExamType.LevelAssessment);
+                examId = exam.Id;
+                Assert.False(await db.ExamAssignments.AsNoTracking().AnyAsync(a => a.ExamId == examId));
+            }
+
+            await admin.GotoAsync($"/Admin/PlacementExams/BatchExams?batchId={_batchId}");
+            Assert.DoesNotContain("اختبار تحديد مستوى", await admin.InnerTextAsync("body"));
+
+            var partner = await LoginPartnerAsync(PartnerUser, _partnerId);
+            await partner.GotoAsync($"/Partner/PlacementExams/BatchExams?batchId={_batchId}");
+            var row = partner.Locator("tr.pp-exam-row");
+            Assert.Contains("من المعهد", await row.InnerTextAsync());
+            Assert.Contains("مسودة", await row.InnerTextAsync());
+
+            await partner.GotoAsync($"/Partner/PlacementExams/ConfirmSend?examId={examId}");
+            await partner.ClickAsync("form[action*='SendExamToStudents'] button");
+            await partner.WaitForURLAsync(url => url.Contains("/PlacementDetails"), new PageWaitForURLOptions { Timeout = 20000 });
+
+            await using (var db = RtkRealDb.CreateDb())
+            {
+                Assert.True(await db.ExamAssignments.AsNoTracking().AnyAsync(a => a.ExamId == examId));
+            }
         }
 
         [SqlServerFact]
@@ -418,7 +579,7 @@ namespace QdratNew.Tests.Integration
             await admin.GotoAsync("/Admin/AdminLessonCompletions/CreateModelHomework");
             await admin.FillAsync("#Title", $"{Marker} واجب الأدمن");
             await admin.SelectOptionAsync("#ModelIdSelect", _homeworkModelId.ToString());
-            await admin.SelectOptionAsync("#BatchMultiSelect", _instituteBatchId.ToString());
+            await admin.CheckAsync($"#apd-platform-{_instituteBatchId}");
             await admin.FillAsync("#StartAt", SaudiLocal(0));
             await admin.FillAsync("#EndAt", SaudiLocal(3));
             await admin.ClickAsync("#createModelHomeworkForm button[type=submit]");
@@ -433,7 +594,7 @@ namespace QdratNew.Tests.Integration
             await admin.GotoAsync("/Admin/AdminLessonCompletions/CreateModelHomework");
             await admin.FillAsync("#Title", $"{Marker} واجب الأدمن ثانيًا");
             await admin.SelectOptionAsync("#ModelIdSelect", _homeworkModelId.ToString());
-            await admin.SelectOptionAsync("#BatchMultiSelect", _instituteBatchId.ToString());
+            await admin.CheckAsync($"#apd-platform-{_instituteBatchId}");
             await admin.ClickAsync("#createModelHomeworkForm button[type=submit]");
 
             await admin.Locator("#modelSendWarnings").WaitForAsync();
@@ -454,7 +615,7 @@ namespace QdratNew.Tests.Integration
             Assert.Equal("30", await admin.InputValueAsync("#DurationMinutes"));
 
             await admin.SelectOptionAsync("#ModelIdSelect", _examModelId.ToString());
-            await admin.SelectOptionAsync("#batchesSelect", _instituteBatchId.ToString());
+            await admin.CheckAsync($"#apd-platform-{_instituteBatchId}");
             await admin.FillAsync("#DurationMinutes", "45");
             await admin.ClickAsync("#createModelExamForm button[type=submit]");
 
@@ -478,7 +639,7 @@ namespace QdratNew.Tests.Integration
 
             await admin.GotoAsync("/Admin/AdminLessonCompletions/CreateModelExam");
             await admin.SelectOptionAsync("#ModelIdSelect", _examModelId.ToString());
-            await admin.SelectOptionAsync("#batchesSelect", _instituteBatchId.ToString());
+            await admin.CheckAsync($"#apd-platform-{_instituteBatchId}");
             await admin.FillAsync("#DurationMinutes", "50");
             await admin.CheckAsync("#sendToBatchFalse");
             await admin.ClickAsync("#btnLoadStudents");

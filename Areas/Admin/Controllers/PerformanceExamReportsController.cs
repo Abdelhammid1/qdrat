@@ -358,6 +358,7 @@ namespace QdratNew.Areas.Admin.Controllers
                     join hs in _context.HomeworkSets.AsNoTracking()
                         on hss.HomeworkSetId equals hs.Id
                     where hss.StudentId == studentId
+                          && hs.OwnerPartnerId == null // APD-S2.3
                           && reportBatchIds.Contains(hs.BatchId)
                     select new
                     {
@@ -381,6 +382,7 @@ namespace QdratNew.Areas.Admin.Controllers
                     join hs in _context.HomeworkSets.AsNoTracking()
                         on homework.HomeworkSetId equals hs.Id
                     where homework.StudentId == studentId
+                          && hs.OwnerPartnerId == null // APD-S2.3
                           && reportBatchIds.Contains(hs.BatchId)
                     select new
                     {
@@ -413,6 +415,7 @@ namespace QdratNew.Areas.Admin.Controllers
                     join hs in _context.HomeworkSets.AsNoTracking()
                         on homework.HomeworkSetId equals hs.Id
                     where attempt.StudentId == studentId
+                          && hs.OwnerPartnerId == null // APD-S2.3
                           && reportBatchIds.Contains(hs.BatchId)
                     select new
                     {

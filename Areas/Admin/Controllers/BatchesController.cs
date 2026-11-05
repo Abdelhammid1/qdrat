@@ -735,7 +735,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 from hs in _context.HomeworkSets.AsNoTracking()
                 join hss in _context.HomeworkSetStudents.AsNoTracking()
                     on hs.Id equals hss.HomeworkSetId
-                where hs.BatchId == id
+                where hs.BatchId == id && hs.OwnerPartnerId == null // APD-S2.3
                 select new
                 {
                     HomeworkSetId = hs.Id,
@@ -1522,7 +1522,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 .AsNoTracking()
                 .Include(h => h.Batch).ThenInclude(b => b.Course)
                 .Include(h => h.AssignedByUser)
-                .FirstOrDefaultAsync(h => h.Id == homeworkSetId && h.BatchId == batchId);
+                .FirstOrDefaultAsync(h => h.Id == homeworkSetId && h.BatchId == batchId && h.OwnerPartnerId == null); // APD-S2.3
 
             if (hwSet == null)
                 return NotFound();
@@ -1674,7 +1674,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 from hs in _context.HomeworkSets.AsNoTracking()
                 join hss in _context.HomeworkSetStudents.AsNoTracking()
                     on hs.Id equals hss.HomeworkSetId
-                where hs.BatchId == batchId && lectureIds.Contains(hs.LectureId ?? -1)
+                where hs.BatchId == batchId && hs.OwnerPartnerId == null && lectureIds.Contains(hs.LectureId ?? -1) // APD-S2.3
                 select new { hs.Id, hs.Title, hs.CreatedAt, hs.EndAt, hss.IsSubmitted, hss.Score }
             ).ToListAsync();
 
@@ -1868,6 +1868,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 .Where(id => id > 0).ToList();
 
             var hwSet = await _context.HomeworkSets.AsNoTracking()
+                .Where(h => h.OwnerPartnerId == null) // APD-S2.3
                 .Select(h => new { h.Id, h.Title })
                 .FirstOrDefaultAsync(h => h.Id == homeworkSetId);
 

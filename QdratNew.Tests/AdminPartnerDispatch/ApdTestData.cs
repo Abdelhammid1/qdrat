@@ -18,6 +18,9 @@ namespace QdratNew.Tests.AdminPartnerDispatch
         int ActiveStudentA, int StudentI1,
         int ModelLinkedToA, int ModelNotForAnyone, int LessonId, Guid QuestionId);
 
+    // APD-S3: نموذج اختبار متاح لـ A وB بعقدين يشملان تحديد المستوى، ودفعة ثانية لـ A فيها طالب نشط.
+    internal sealed record ApdPlacementSeed(int ModelId, int BatchA4, int StudentA4);
+
     internal static class ApdTestData
     {
         public const string Marker = "APDS1";
@@ -28,6 +31,9 @@ namespace QdratNew.Tests.AdminPartnerDispatch
         private const string Sets = "(SELECT Id FROM HomeworkSets WHERE BatchId IN " + Batches + ")";
         private const string Courses = "(SELECT Id FROM Courses WHERE Name LIKE 'APDS1%')";
         private const string Profiles = "(SELECT Id FROM AdminProfiles WHERE Name LIKE 'APDS1%')";
+        private const string Students = "(SELECT StudentID FROM Students WHERE NationalID LIKE 'APDS1%')";
+        private const string Assignments = "(SELECT Id FROM ExamAssignmentsToBatches WHERE BatchId IN " + Batches + ")";
+        private const string Models = "(SELECT Id FROM ProfessionalModels WHERE Title LIKE 'APDS1%')";
 
         public static async Task CleanupAsync(ApplicationDbContext db)
         {
@@ -39,12 +45,22 @@ namespace QdratNew.Tests.AdminPartnerDispatch
                 "DELETE FROM AdminProfiles WHERE Name LIKE 'APDS1%'",
                 "DELETE FROM AdminUserProfiles WHERE UserId LIKE 'apds1-%'",
                 $"DELETE FROM PartnerDispatchLogs WHERE PartnerId IN {Partners}",
+                $"DELETE FROM UserPartners WHERE PartnerId IN {Partners}",
+                $"DELETE FROM Notifications WHERE StudentID IN {Students}",
+                "DELETE FROM SystemLogs WHERE Description LIKE N'%APDS1%'",
+                $"DELETE FROM ExamStudentStatuses WHERE StudentId IN {Students}",
+                $"DELETE FROM ExamAssignments WHERE StudentId IN {Students}",
+                $"DELETE FROM ExamQuestions WHERE ExamAssignmentId IN {Assignments}",
+                $"DELETE FROM ExamQuestions WHERE ExamId IN (SELECT Id FROM Exams WHERE SourceProfessionalModelId IN {Models} OR OwnerPartnerId IN {Partners})",
+                $"DELETE FROM ExamAssignmentsToBatches WHERE BatchId IN {Batches}",
+                $"DELETE FROM Exams WHERE SourceProfessionalModelId IN {Models} OR OwnerPartnerId IN {Partners}",
                 $"DELETE FROM Homeworks WHERE HomeworkSetId IN {Sets}",
                 $"DELETE FROM HomeworkSetStudents WHERE HomeworkSetId IN {Sets}",
                 $"DELETE FROM HomeworkSets WHERE BatchId IN {Batches}",
                 $"DELETE FROM HomeworkDraftQuestions WHERE HomeworkDraftId IN (SELECT Id FROM HomeworkDrafts WHERE PartnerId IN {Partners})",
                 $"DELETE FROM HomeworkDrafts WHERE PartnerId IN {Partners}",
                 "DELETE FROM ProfessionalModelPartners WHERE ProfessionalModelId IN (SELECT Id FROM ProfessionalModels WHERE Title LIKE 'APDS1%')",
+                $"DELETE FROM ProfessionalModelQuestions WHERE ModelId IN {Models}",
                 "DELETE FROM ProfessionalModels WHERE Title LIKE 'APDS1%'",
                 "DELETE FROM Questions WHERE ReferenceNumber LIKE 'APDS1%'",
                 $"DELETE FROM StudentBatchEnrollments WHERE BatchId IN {Batches}",
@@ -62,6 +78,68 @@ namespace QdratNew.Tests.AdminPartnerDispatch
             {
                 await db.Database.ExecuteSqlRawAsync(sql);
             }
+        }
+
+        // APD-S2: يجعل نموذج A قابلًا للإرسال لـ A وB، ويضيف نموذج اختبار لهما. يرجع رقم نموذج الاختبار.
+        public static async Task<int> PrepareSendableModelsAsync(ApplicationDbContext db, ApdSeed seed)
+        {
+            var examModel = new ProfessionalModel
+            {
+                Title = $"{Marker} نموذج اختبار", Description = "-", CreatedBy = "-", CreatedAt = DateTime.UtcNow,
+                IsForPartners = true, IsGlobal = false, ModelType = ProfessionalModelType.Exam, CurriculumId = seed.CurriculumId
+            };
+            db.ProfessionalModels.Add(examModel);
+            await db.SaveChangesAsync();
+
+            db.ProfessionalModelQuestions.AddRange(
+                new ProfessionalModelQuestion { ModelId = seed.ModelLinkedToA, QuestionId = seed.QuestionId, OrderNumber = 1 },
+                new ProfessionalModelQuestion { ModelId = seed.ModelNotForAnyone, QuestionId = seed.QuestionId, OrderNumber = 1 },
+                new ProfessionalModelQuestion { ModelId = examModel.Id, QuestionId = seed.QuestionId, OrderNumber = 1 });
+
+            db.ProfessionalModelPartners.AddRange(
+                new ProfessionalModelPartner { ProfessionalModelId = seed.ModelLinkedToA, PartnerId = seed.PartnerB },
+                new ProfessionalModelPartner { ProfessionalModelId = examModel.Id, PartnerId = seed.PartnerA },
+                new ProfessionalModelPartner { ProfessionalModelId = examModel.Id, PartnerId = seed.PartnerB });
+
+            var contractB = await db.PartnerSubscriptions.FirstAsync(s => s.PartnerId == seed.PartnerB);
+            contractB.CanCreateHomework = true;
+            db.PartnerSubscriptionPeriods.Add(new PartnerSubscriptionPeriod
+            {
+                PartnerSubscriptionId = contractB.Id, StartDate = DateTime.Today.AddDays(-1), EndDate = DateTime.Today.AddDays(30)
+            });
+
+            await db.SaveChangesAsync();
+            db.ChangeTracker.Clear();
+            return examModel.Id;
+        }
+
+        public static async Task<ApdPlacementSeed> PreparePlacementAsync(ApplicationDbContext db, ApdSeed seed)
+        {
+            var modelId = await PrepareSendableModelsAsync(db, seed);
+
+            var contracts = await db.PartnerSubscriptions
+                .Where(s => s.PartnerId == seed.PartnerA || s.PartnerId == seed.PartnerB)
+                .ToListAsync();
+            contracts.ForEach(c => c.CanUsePlacementExams = true);
+
+            var branchA = await db.Batches.Where(b => b.Id == seed.BatchA1).Select(b => b.BranchId).FirstAsync();
+            var batch = new Batch { Name = $"{Marker} دفعة A4", BranchId = branchA, CourseId = seed.CourseId, StartDate = DateTime.UtcNow };
+            db.Batches.Add(batch);
+
+            db.Users.Add(NewUser("apds1-sa4"));
+            var student = new Student
+            {
+                NationalID = $"{Marker}A4", FullName = $"طالب {Marker} A4", Gender = "ذكر", Age = 17,
+                School = "-", Level = "-", UserId = "apds1-sa4", BranchId = branchA, IsActiveForLearning = true
+            };
+            db.Students.Add(student);
+            await db.SaveChangesAsync();
+
+            db.StudentBatchEnrollments.Add(new StudentBatchEnrollment { StudentID = student.StudentID, BatchId = batch.Id });
+            await db.SaveChangesAsync();
+            db.ChangeTracker.Clear();
+
+            return new ApdPlacementSeed(modelId, batch.Id, student.StudentID);
         }
 
         public static ApplicationUser NewUser(string userName) => new()

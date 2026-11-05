@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using QdratNew.Enums;
@@ -11,6 +12,8 @@ namespace QdratNew.Areas.Admin.Controllers
     [Authorize(Policy = "AdminArea")]
     public class PartnerDispatchController : Controller
     {
+        public const string OutcomeTempDataKey = "PartnerDispatchOutcome";
+
         private readonly IDispatchAudiencePickerBuilder _picker;
 
         public PartnerDispatchController(IDispatchAudiencePickerBuilder picker)
@@ -34,6 +37,21 @@ namespace QdratNew.Areas.Admin.Controllers
             var vm = await _picker.BuildPartnersAsync(User, source, null, ct);
 
             return PartialView("_DispatchAudiencePartners", vm);
+        }
+
+        // APD-S2.2: نتيجة الإرسال لكل مدرسة بعد Redirect، لأن ما أُرسل لم يعد ظاهرًا في قوائم الأدمن.
+        // تبقى في الجلسة حتى إرسال تالٍ، فتحديث الصفحة لا يفقدها ولا يعيد الإرسال.
+        [HttpGet]
+        [AdminPermission("PartnerDispatch", "Send")]
+        public IActionResult Result()
+        {
+            if (TempData.Peek(OutcomeTempDataKey) is not string json)
+                return RedirectToAction("ModelAssignments", "AdminLessonCompletions", new { area = "Admin" });
+
+            var outcome = JsonSerializer.Deserialize<PartnerDispatchOutcome>(json);
+            return outcome == null
+                ? RedirectToAction("ModelAssignments", "AdminLessonCompletions", new { area = "Admin" })
+                : View(outcome);
         }
     }
 }

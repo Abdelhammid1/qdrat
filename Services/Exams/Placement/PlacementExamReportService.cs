@@ -62,6 +62,12 @@ namespace QdratNew.Services.Exams.Placement
             return links.Where(x => x.Batch.Branch.PartnerId == partnerId);
         }
 
+        // APD-S3.1: اختبار الشريك قد يرتبط بعدة دفعات، فتُختار دفعة الطالب لا أول دفعة. الأدمن بلا تغيير.
+        private IQueryable<ExamAssignmentToBatch> StudentBatchLinks(PlacementScope scope, int studentId)
+            => scope.IsPartner
+                ? BatchLinks(scope).Where(l => _context.StudentBatchEnrollments.Any(e => e.BatchId == l.BatchId && e.StudentID == studentId))
+                : BatchLinks(scope);
+
         // PPL-S6: الشريك لا يفتح تقرير دفعة لاختبار لم يُربط بها
         private async Task<bool> IsPartnerExamNotOnBatchAsync(PlacementScope scope, int examId, int batchId, CancellationToken ct)
             => scope.IsPartner &&
@@ -125,7 +131,7 @@ namespace QdratNew.Services.Exams.Placement
                     e.Title,
                     AssignmentId = a.Id,
                     a.AssignedAt,
-                    BatchId = BatchLinks(scope)
+                    BatchId = StudentBatchLinks(scope, studentId)
                         .Where(l => l.ExamId == a.ExamId)
                         .Select(l => (int?)l.BatchId)
                         .FirstOrDefault(),
@@ -255,7 +261,7 @@ namespace QdratNew.Services.Exams.Placement
         // =====================================================
         // ReviewLessonQuestionsBatch
         // =====================================================
-        public async Task<BatchLessonQuestionsReportViewModel?> GetReviewLessonQuestionsBatchAsync(PlacementScope scope, int examId, int lessonId, CancellationToken ct = default)
+        public async Task<BatchLessonQuestionsReportViewModel?> GetReviewLessonQuestionsBatchAsync(PlacementScope scope, int examId, int lessonId, CancellationToken ct = default, int batchId = 0)
         {
             var exam = await _guard.ExamsInScope(_context, scope).AsNoTracking().FirstOrDefaultAsync(e => e.Id == examId, ct);
             if (exam == null) return null;
@@ -275,8 +281,13 @@ namespace QdratNew.Services.Exams.Placement
             if (scope.IsPartner && !await examLessonQuestions.AnyAsync(ct))
                 return null;
 
-            var batchId = await BatchLinks(scope)
-                .Where(e => e.ExamId == examId)
+            // APD-S3.1: اختبار الشريك قد يرتبط بعدة دفعات، فتحدد الصفحة دفعتها إن كانت مرتبطة بالاختبار
+            var requestedBatchId = batchId;
+            var batchLinks = BatchLinks(scope).Where(e => e.ExamId == examId);
+            if (requestedBatchId > 0)
+                batchLinks = batchLinks.OrderByDescending(e => e.BatchId == requestedBatchId);
+
+            batchId = await batchLinks
                 .Select(e => e.BatchId)
                 .FirstOrDefaultAsync(ct);
 
@@ -1110,7 +1121,7 @@ namespace QdratNew.Services.Exams.Placement
                 return PlacementReportResult<AdminPlacementReportViewModel>.NotFound();
 
             // ✅ جلب BatchId من جدول ExamAssignmentsToBatches
-            var batchId = await BatchLinks(scope)
+            var batchId = await StudentBatchLinks(scope, studentId)
                 .Where(e => e.ExamId == examId)
                 .Select(e => e.BatchId)
                 .FirstOrDefaultAsync(ct);

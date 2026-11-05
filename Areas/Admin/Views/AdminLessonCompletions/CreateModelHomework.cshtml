@@ -9,6 +9,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 
+    <link rel="stylesheet" href="~/css/admin-dispatch-audience.css" asp-append-version="true" />
+
     <style>
         :root {
             --q-primary: #1a56db;
@@ -540,14 +542,12 @@
                 </h2>
             </div>
             <div class="qsection-body">
-                <label class="q-field-label">الدفعات المستهدفة</label>
-                <select asp-for="SelectedBatchIds" asp-items="Model.Batches" class="form-select q-multi-select" multiple id="BatchMultiSelect"></select>
-                <div class="q-help-text">يمكنك اختيار أكثر من دفعة بالضغط على Ctrl أو ⌘.</div>
+                <partial name="~/Areas/Admin/Views/Shared/_DispatchAudiencePicker.cshtml" model="Model.AudiencePicker" />
                 <span asp-validation-for="SelectedBatchIds" class="text-danger"></span>
             </div>
         </div>
 
-        <div class="qsection">
+        <div class="qsection" id="lectureSection">
             <div class="qsection-header">
                 <h2 class="qsection-title">
                     <span class="section-icon icon-purple">🏫</span>
@@ -614,6 +614,7 @@
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
+    <script src="~/js/admin-dispatch-audience.js" asp-append-version="true"></script>
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
@@ -621,7 +622,8 @@
             const linkedCheckbox = document.getElementById('IsLinkedToLecture');
             const lectureWrap = document.getElementById('lectureSelectWrap');
             const lectureSelect = document.getElementById('LectureId');
-            const batchSelect = document.getElementById('BatchMultiSelect');
+            const picker = form.querySelector('[data-apd-picker]');
+            const lectureSection = document.getElementById('lectureSection');
             let currentLectureValue = lectureSelect.value;
 
             if (!form) {
@@ -636,8 +638,24 @@
                 lectureSelect.appendChild(option);
             };
 
+            const partnersSelected = function () {
+                const audience = picker.querySelector('[data-apd-audience]:checked');
+                return !!audience && audience.value === '2';
+            };
+
+            // دفعات المنصة المختارة
             const selectedBatches = function () {
-                return Array.from(batchSelect.querySelectorAll('option:checked')).map(o => o.value);
+                return Array.from(picker.querySelectorAll('[data-apd-platform-batch]:checked:not(:disabled)')).map(i => i.value);
+            };
+
+            // ربط المحاضرة لدفعات المنصة فقط
+            const applyAudienceToLecture = function () {
+                const toPartners = partnersSelected();
+                lectureSection.hidden = toPartners;
+                if (toPartners && linkedCheckbox.checked) {
+                    linkedCheckbox.checked = false;
+                    toggleLectureSelection();
+                }
             };
 
             const loadLecturesForSelectedBatch = async function () {
@@ -699,20 +717,29 @@
             };
 
             linkedCheckbox.addEventListener('change', toggleLectureSelection);
-            batchSelect.addEventListener('change', function () {
-                currentLectureValue = '';
-                document.querySelector('[name="BatchId"]').value = selectedBatches()[0] || '0';
-                loadLecturesForSelectedBatch();
+            picker.addEventListener('change', function (e) {
+                if (e.target.matches('[data-apd-audience]')) {
+                    applyAudienceToLecture();
+                }
+
+                if (e.target.matches('[data-apd-platform-batch]')) {
+                    currentLectureValue = '';
+                    document.querySelector('[name="BatchId"]').value = selectedBatches()[0] || '0';
+                    loadLecturesForSelectedBatch();
+                }
             });
             lectureSelect.addEventListener('change', function () {
                 currentLectureValue = lectureSelect.value;
             });
 
             toggleLectureSelection();
+            applyAudienceToLecture();
 
             form.addEventListener('submit', function (e) {
                 const modelId = document.querySelector('[name="ModelId"]').value;
-                const batches = selectedBatches();
+                const batches = partnersSelected()
+                    ? Array.from(picker.querySelectorAll('[data-apd-batch]:checked:not(:disabled)'))
+                    : selectedBatches();
 
                 if (!modelId) {
                     alert('الرجاء اختيار النموذج أولاً.');
@@ -774,6 +801,8 @@
                 .finally(function () {
                     loadingEl.style.display = 'none';
                     modelSelect.disabled = false;
+                    // قائمة المدارس المؤهلة تتبع النموذج المختار
+                    modelSelect.dispatchEvent(new Event('change', { bubbles: true }));
                 });
         });
     })();

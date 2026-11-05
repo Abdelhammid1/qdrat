@@ -15,5 +15,13 @@ namespace QdratNew.ViewModels.Exam
         public List<SelectListItem> AvailableModels { get; set; } = new();
         public List<SelectListItem> AvailableBatches { get; set; } = new();
         public List<SelectListItem> AvailableCourses { get; set; } = new();
+
+        // APD-S3.1: تحت «المدارس الشريكة» فقط
+        public QdratNew.Services.PartnerDispatch.PlacementPartnerDelivery PartnerDelivery { get; set; }
+            = QdratNew.Services.PartnerDispatch.PlacementPartnerDelivery.SendNow;
+
+        [Microsoft.AspNetCore.Mvc.ModelBinding.BindNever]
+        [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
+        public QdratNew.ViewModels.PartnerDispatch.DispatchAudiencePickerVm? AudiencePicker { get; set; }
     }
 }

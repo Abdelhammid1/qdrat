@@ -24,5 +24,14 @@ namespace QdratNew.ViewModels.Partner.Exam
 
         public string? SourceModelTitle { get; set; }
 
+        // APD-S2.3: أرسله المعهد باسم الشريك
+        public bool IsFromInstitute { get; set; }
+
+        // APD-S2.3: يملكه الشريك فيعدّل عنوانه ومواعيده
+        public bool CanEdit { get; set; }
+
+        // APD-S2.1: الرقم المرجعي لاختبار حضوري يملكه الشريك ويعطيه لطلابه
+        public string? ReferenceCode { get; set; }
+
     }
 }

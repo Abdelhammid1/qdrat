@@ -2656,6 +2656,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 from hs in _context.HomeworkSets
                 join b in _context.Batches on hs.BatchId equals b.Id
                 where hs.IsFromProfessionalModel == true
+                      && hs.OwnerPartnerId == null // APD-S2.3
                 orderby hs.CreatedAt descending
                 select new ModelAssignmentViewModel
                 {

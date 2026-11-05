@@ -44,6 +44,11 @@ namespace QdratNew.ViewModels.Homework
         [ValidateNever]
         public List<SelectListItem> Lectures { get; set; } = new();
 
+        // APD-S2.2: اختيار جمهور الإرسال. ما يُرسل منه يُربط في AudienceSelection
+        [BindNever]
+        [ValidateNever]
+        public QdratNew.ViewModels.PartnerDispatch.DispatchAudiencePickerVm AudiencePicker { get; set; } = null!;
+
         // تأكيد تحذيرات التكرار (PPM-S6.1)
         public bool ConfirmWarnings { get; set; }
 

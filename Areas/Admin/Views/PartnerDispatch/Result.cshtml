@@ -1,0 +1,87 @@
+@using QdratNew.Enums
+@model QdratNew.Services.PartnerDispatch.PartnerDispatchOutcome
+@{
+    var noun = Model.Kind switch
+    {
+        PartnerDispatchKind.Homework => "الواجب",
+        PartnerDispatchKind.Exam => "الاختبار",
+        PartnerDispatchKind.Placement => "اختبار تحديد المستوى",
+        PartnerDispatchKind.PerformanceIndicator => "اختبار مؤشر الأداء",
+        PartnerDispatchKind.MinistrySim => "معمل القياس",
+        _ => "الإرسال"
+    };
+    ViewData["Title"] = $"نتيجة إرسال {noun} للمدارس الشريكة";
+    var allFailed = Model.SucceededCount == 0;
+
+    // APD-S3.1
+    var isPlacement = Model.Kind == PartnerDispatchKind.Placement;
+    var newController = isPlacement ? "PlacementExams" : "AdminLessonCompletions";
+    var newAction = isPlacement ? "CreateFromProfessionalModel" : Model.Kind == PartnerDispatchKind.Exam ? "CreateModelExam" : "CreateModelHomework";
+    var backController = isPlacement ? "PlacementExams" : "AdminLessonCompletions";
+    var backAction = isPlacement ? "Index" : "ModelAssignments";
+    var operation = Model.IsDraft ? "إنشاء المسودة" : "الإرسال";
+}
+
+<div class="container py-4" dir="rtl" id="partnerDispatchResult">
+    <h1 class="h4 fw-bold mb-3">نتيجة إرسال @noun للمدارس الشريكة</h1>
+
+    @if (Model.FailedCount == 0 && Model.IsDraft)
+    {
+        <div class="alert alert-success" role="status">
+            ✅ أُنشئت مسودة لدى @Model.SucceededCount مدرسة، ولم تصل لأي طالب. تراجعها كل مدرسة وترسلها من منطقتها، ولا تظهر في قوائم الأدمن.
+        </div>
+    }
+    else if (Model.FailedCount == 0)
+    {
+        <div class="alert alert-success" role="status">
+            ✅ تم الإرسال إلى @Model.SucceededCount مدرسة و@Model.TotalStudents طالب. يظهر الإرسال لكل مدرسة في منطقتها ولا يظهر في قوائم الأدمن.
+        </div>
+    }
+    else if (allFailed)
+    {
+        <div class="alert alert-danger" role="alert">⚠️ لم يتم @operation لأي مدرسة، ولم يُحفظ أي شيء.</div>
+    }
+    else
+    {
+        <div class="alert alert-warning" role="alert">
+            ⚠️ نجح @operation لدى @Model.SucceededCount مدرسة وتعذر لدى @Model.FailedCount. فشل مدرسة لا يلغي ما تم للمدارس الأخرى، وما نجح لا يحتاج إعادة.
+        </div>
+    }
+
+    <div class="table-responsive">
+        <table class="table table-bordered align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>المدرسة</th>
+                    <th>الحالة</th>
+                    <th>الدفعات</th>
+                    <th>الطلاب</th>
+                    <th>التفاصيل</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var result in Model.Results)
+                {
+                    <tr class="@(result.Succeeded ? "" : "table-danger")" data-apd-result-partner="@result.PartnerId">
+                        <td>
+                            @result.PartnerName
+                            @if (result.ContractOverridden)
+                            {
+                                <span class="badge bg-warning text-dark">تجاوز العقد</span>
+                            }
+                        </td>
+                        <td>@(result.Succeeded ? "نجح" : "فشل")</td>
+                        <td>@result.BatchesSent</td>
+                        <td>@result.StudentsSent</td>
+                        <td>@result.Message</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="d-flex gap-2 flex-wrap">
+        <a class="btn btn-primary" asp-area="Admin" asp-controller="@newController" asp-action="@newAction">إرسال جديد</a>
+        <a class="btn btn-outline-secondary" asp-area="Admin" asp-controller="@backController" asp-action="@backAction">رجوع للقائمة</a>
+    </div>
+</div>

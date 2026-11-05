@@ -1,8 +1,13 @@
-﻿@using QdratNew.ViewModels.Exam
+﻿@using QdratNew.Services.PartnerDispatch
+@using QdratNew.ViewModels.Exam
 @model PlacementExamFromModelVm
 
 @{
     ViewData["Title"] = "إنشاء اختبار تحديد مستوى من نموذج احترافي";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/admin-dispatch-audience.css" asp-append-version="true" />
 }
 
 <div class="qdrat-page" dir="rtl">
@@ -59,7 +64,7 @@
             <div class="qdrat-card-body">
                 <div class="row g-4">
 
-                    <div class="col-lg-4 col-md-6">
+                    <div class="col-md-6">
                         <div class="qdrat-field">
                             <label class="form-label">اختيار النموذج</label>
                             <div class="qdrat-input-wrap">
@@ -76,24 +81,7 @@
                         </div>
                     </div>
 
-                    <div class="col-lg-4 col-md-6">
-                        <div class="qdrat-field">
-                            <label class="form-label">اختيار الدفعة</label>
-                            <div class="qdrat-input-wrap">
-                                <i class="fa-solid fa-users"></i>
-                                <select asp-for="SelectedBatchId" class="form-select">
-                                    <option value="">-- اختر دفعة --</option>
-                                    @foreach (var item in Model.AvailableBatches)
-                                    {
-                                        <option value="@item.Value">@item.Text</option>
-                                    }
-                                </select>
-                            </div>
-                            <span asp-validation-for="SelectedBatchId" class="text-danger small"></span>
-                        </div>
-                    </div>
-
-                    <div class="col-lg-4 col-md-6">
+                    <div class="col-md-6">
                         <div class="qdrat-field">
                             <label class="form-label">اختيار الكورس</label>
                             <div class="qdrat-input-wrap">
@@ -107,6 +95,22 @@
                                 </select>
                             </div>
                             <span asp-validation-for="SelectedCourseId" class="text-danger small"></span>
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <partial name="~/Areas/Admin/Views/Shared/_DispatchAudiencePicker.cshtml" model="Model.AudiencePicker" />
+                    </div>
+
+                    <div class="col-12" id="partnerDeliverySection" hidden>
+                        <label class="form-label fw-bold">طريقة الوصول للمدرسة</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" asp-for="PartnerDelivery" id="deliverySendNow" value="@PlacementPartnerDelivery.SendNow" />
+                            <label class="form-check-label" for="deliverySendNow">إرسال فوري: يصل لطلاب الدفعات المختارة النشطين الآن</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" asp-for="PartnerDelivery" id="deliveryDraft" value="@PlacementPartnerDelivery.Draft" />
+                            <label class="form-check-label" for="deliveryDraft">مسودة لدى المدرسة: تراجعها وترسلها من منطقتها، ولا تصل لأي طالب قبل ذلك</label>
                         </div>
                     </div>
 
@@ -535,8 +539,42 @@
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
+    <script src="~/js/admin-dispatch-audience.js" asp-append-version="true"></script>
 
     <script>
+        // APD-S3.1: طريقة الوصول تخص المدارس الشريكة فقط، والضغطة الثانية لا تنشئ نسخًا مكررة لدى المدارس
+        (function () {
+            const form = document.querySelector("form[action*='CreateFromProfessionalModel']");
+            const picker = form ? form.querySelector("[data-apd-picker]") : null;
+            const section = document.getElementById("partnerDeliverySection");
+
+            if (!form || !picker || !section) {
+                return;
+            }
+
+            function applyAudience() {
+                const audience = picker.querySelector("[data-apd-audience]:checked");
+                section.hidden = !audience || audience.value !== "2";
+            }
+
+            applyAudience();
+
+            picker.addEventListener("change", function (e) {
+                if (e.target.matches("[data-apd-audience]")) {
+                    applyAudience();
+                }
+            });
+
+            form.addEventListener("submit", function () {
+                const isValid = !window.jQuery || !jQuery.fn.valid || jQuery(form).valid();
+                if (isValid) {
+                    form.querySelectorAll("button[type='submit']").forEach(function (button) {
+                        button.disabled = true;
+                    });
+                }
+            });
+        })();
+
         (function () {
             const modelSelect = document.getElementById("modelSelect");
             const previewContainer = document.getElementById("modelPreview");

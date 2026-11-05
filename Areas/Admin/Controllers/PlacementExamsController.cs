@@ -12,6 +12,7 @@ using QdratNew.Security.AdminPermissions;
 using QdratNew.Services;
 using QdratNew.Services.Exams.Placement;
 using QdratNew.Services.Interfaces;
+using QdratNew.Services.PartnerDispatch;
 using QdratNew.ViewModels;
 using QdratNew.ViewModels.Exam;
 using QdratNew.ViewModels.Homework;
@@ -31,14 +32,23 @@ namespace QdratNew.Areas.Admin.Controllers
         private readonly IPlacementExamReportService _reportService; // PPL-S3
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IAdminActivityLogger _activityLogger;
+        private readonly IDispatchAudienceService _audienceService; // APD-S3.1
+        private readonly IDispatchAudiencePickerBuilder _audiencePicker;
+        private readonly IPartnerPlacementDispatchService _partnerDispatch;
 
         public PlacementExamsController(
             ApplicationDbContext context,
             IPlacementExamManagementService managementService,
             IPlacementExamReportService reportService,
             UserManager<ApplicationUser> userManager,
-            IAdminActivityLogger activityLogger)
+            IAdminActivityLogger activityLogger,
+            IDispatchAudienceService audienceService,
+            IDispatchAudiencePickerBuilder audiencePicker,
+            IPartnerPlacementDispatchService partnerDispatch)
         {
+            _audienceService = audienceService;
+            _audiencePicker = audiencePicker;
+            _partnerDispatch = partnerDispatch;
             _context = context;
             _managementService = managementService;
             _reportService = reportService;
@@ -692,6 +702,7 @@ namespace QdratNew.Areas.Admin.Controllers
         public async Task<IActionResult> CreateFromProfessionalModel()
         {
             var vm = await _managementService.GetCreateFromModelAsync(AdminScope);
+            vm.AudiencePicker = await BuildPlacementPickerAsync(vm, new AudienceSelection());
             return View(vm);
         }
 
@@ -699,19 +710,131 @@ namespace QdratNew.Areas.Admin.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [AdminPermission("PlacementExams", "Create")]
-        public async Task<IActionResult> CreateFromProfessionalModel(PlacementExamFromModelVm vm)
+        public async Task<IActionResult> CreateFromProfessionalModel(PlacementExamFromModelVm vm, AudienceSelection selection)
         {
+            // الحقل القديم SelectedBatchId يبقى مقبولًا ويُعامل كدفعة منصة، فيُفحص كما تُفحص
+            selection.PlatformBatchIds ??= new List<int>();
+            if (vm.SelectedBatchId > 0 && !selection.PlatformBatchIds.Contains(vm.SelectedBatchId))
+                selection.PlatformBatchIds.Add(vm.SelectedBatchId);
+
+            if (selection.Audience == DispatchAudience.Partners)
+                return await SendPlacementToPartnersAsync(vm, selection);
+
+            // APD-S3.2: دفعة منصة واحدة فقط تحت «المنصة»
+            var audienceError = await ValidatePlatformPlacementAudienceAsync(vm, selection);
+            if (audienceError != null)
+                return await RedisplayCreateFromModelAsync(vm, selection, audienceError);
+
+            vm.SelectedBatchId = selection.PlatformBatchIds.FirstOrDefault();
+
             var result = await _managementService.CreateFromProfessionalModelAsync(AdminScope, vm);
 
             if (!result.Succeeded)
-            {
-                TempData["Error"] = result.Message;
-                await _managementService.ReloadCreateFromModelLookupsAsync(AdminScope, vm);
-                return View("CreateFromProfessionalModel", vm);
-            }
+                return await RedisplayCreateFromModelAsync(vm, selection, result.Message);
 
             TempData["Success"] = result.Message;
             return RedirectToAction("Index");
+        }
+
+        private async Task<string?> ValidatePlatformPlacementAudienceAsync(PlacementExamFromModelVm vm, AudienceSelection selection)
+        {
+            if (selection.PlatformBatchIds.Count > 1)
+                return "⚠️ اختر دفعة منصة واحدة فقط.";
+
+            var audience = await _audienceService.ValidateAsync(PlacementSource(vm, withCourse: false), selection, canOverride: false);
+            return audience.IsValid ? null : "⚠️ " + string.Join(" ", audience.Errors);
+        }
+
+        // APD-S3.1: اختبار مستقل لكل مدرسة، ويظهر الملخص في صفحة النتيجة لأن الأدمن لن يراه في قوائمه
+        private async Task<IActionResult> SendPlacementToPartnersAsync(PlacementExamFromModelVm vm, AudienceSelection selection)
+        {
+            if (!await _audiencePicker.CanSendAsync(User))
+                return Forbid();
+
+            vm.SelectedBatchId = 0;
+
+            // قيمة غير صالحة يتركها الـ Binder على الافتراضي SendNow، فلا يُرسل للطلاب طلب لم يقصد ذلك
+            if (ModelState.TryGetValue(nameof(vm.PartnerDelivery), out var deliveryState) && deliveryState.Errors.Count > 0)
+                return await RedisplayCreateFromModelAsync(vm, selection, "⚠️ طريقة الإرسال غير صالحة.");
+
+            if (vm.SelectedModelId <= 0)
+                return await RedisplayCreateFromModelAsync(vm, selection, "⚠️ يجب اختيار نموذج.");
+
+            if (vm.SelectedCourseId <= 0)
+                return await RedisplayCreateFromModelAsync(vm, selection, "⚠️ يجب اختيار كورس.");
+
+            var audience = await _audienceService.ValidateAsync(
+                PlacementSource(vm, withCourse: true),
+                selection,
+                await _audiencePicker.CanOverrideAsync(User));
+
+            if (!audience.IsValid)
+                return await RedisplayCreateFromModelAsync(vm, selection, "⚠️ " + string.Join(" ", audience.Errors));
+
+            var outcome = await _partnerDispatch.DispatchAsync(
+                audience.Partners,
+                new SendPlacementToPartnersRequest
+                {
+                    ModelId = vm.SelectedModelId,
+                    CourseId = vm.SelectedCourseId,
+                    DurationMinutes = vm.DurationMinutes,
+                    Delivery = vm.PartnerDelivery
+                },
+                new DispatchActor(CurrentUserId(), User.Identity?.Name));
+
+            if (outcome.IsNotFound)
+            {
+                TempData["Error"] = "⚠️ النموذج غير موجود.";
+                return RedirectToAction(nameof(CreateFromProfessionalModel));
+            }
+
+            if (outcome.ValidationError != null)
+                return await RedisplayCreateFromModelAsync(vm, selection, outcome.ValidationError);
+
+            TempData[PartnerDispatchController.OutcomeTempDataKey] = System.Text.Json.JsonSerializer.Serialize(outcome);
+            return RedirectToAction("Result", "PartnerDispatch", new { area = "Admin" });
+        }
+
+        private async Task<IActionResult> RedisplayCreateFromModelAsync(PlacementExamFromModelVm vm, AudienceSelection selection, string error)
+        {
+            TempData["Error"] = error;
+            ModelState.Clear();
+            await _managementService.ReloadCreateFromModelLookupsAsync(AdminScope, vm);
+            vm.AudiencePicker = await BuildPlacementPickerAsync(vm, selection);
+            return View("CreateFromProfessionalModel", vm);
+        }
+
+        // منهج النموذج يُقرأ من القاعدة داخل الخدمة. الكورس يقيّد دفعات المدارس فقط:
+        // دفعات المنصة تبقى كلها لأن الشاشة لم تكن تربط الدفعة بالكورس.
+        private static DispatchSource PlacementSource(PlacementExamFromModelVm vm, bool withCourse)
+            => new(
+                PartnerDispatchKind.Placement,
+                vm.SelectedModelId > 0 ? vm.SelectedModelId : null,
+                null,
+                withCourse && vm.SelectedCourseId > 0 ? vm.SelectedCourseId : null);
+
+        private async Task<QdratNew.ViewModels.PartnerDispatch.DispatchAudiencePickerVm> BuildPlacementPickerAsync(PlacementExamFromModelVm vm, AudienceSelection selection)
+        {
+            var platform = await _audiencePicker.BuildAsync(User, PlacementSource(vm, withCourse: false), selection);
+            var source = PlacementSource(vm, withCourse: true);
+
+            var loadPartners = platform.CanSendToPartners &&
+                               platform.Selection.Audience == DispatchAudience.Partners &&
+                               vm.SelectedModelId > 0 &&
+                               vm.SelectedCourseId > 0;
+
+            return new QdratNew.ViewModels.PartnerDispatch.DispatchAudiencePickerVm
+            {
+                Source = source,
+                PlatformBatches = platform.PlatformBatches,
+                Selection = platform.Selection,
+                CanSendToPartners = platform.CanSendToPartners,
+                Partners = loadPartners ? await _audiencePicker.BuildPartnersAsync(User, source, platform.Selection) : null,
+                ModelInputSelector = "#modelSelect",
+                CourseInputSelector = "#SelectedCourseId",
+                RequiresCourse = true,
+                SinglePlatformBatch = true
+            };
         }
 
 

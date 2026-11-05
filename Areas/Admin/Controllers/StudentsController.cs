@@ -192,7 +192,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
             // واجبات الدفعة
             var hwSets = await _context.HomeworkSets.AsNoTracking()
-                .Where(hs => hs.BatchId == id)
+                .Where(hs => hs.BatchId == id && hs.OwnerPartnerId == null) // APD-S2.3
                 .Select(hs => hs.Id)
                 .ToListAsync();
 
@@ -308,6 +308,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 join batch in _context.Batches.AsNoTracking()
                     on homeworkSet.BatchId equals batch.Id
                 where homeworkStudent.StudentId == id
+                      && homeworkSet.OwnerPartnerId == null // APD-S2.3
                 select new StudentHomeworkProjection
                 {
                     HomeworkSetId = homeworkSet.Id,
@@ -1505,7 +1506,7 @@ namespace QdratNew.Areas.Admin.Controllers
             var today = DateTime.Today;
 
             var hwActivity = await _context.HomeworkSetStudents.AsNoTracking()
-                .Where(h => h.StudentId == id)
+                .Where(h => h.StudentId == id && _context.HomeworkSets.Any(hs => hs.Id == h.HomeworkSetId && hs.OwnerPartnerId == null)) // APD-S2.3
                 .OrderByDescending(h => h.LastUpdated)
                 .Take(30)
                 .Select(h => new StudentActivityItemVm
@@ -1606,7 +1607,7 @@ namespace QdratNew.Areas.Admin.Controllers
             var hwDetail = await (
                 from hss in _context.HomeworkSetStudents.AsNoTracking()
                 join hs in _context.HomeworkSets.AsNoTracking() on hss.HomeworkSetId equals hs.Id
-                where hss.StudentId == id
+                where hss.StudentId == id && hs.OwnerPartnerId == null // APD-S2.3
                 select new { hs.BatchId, hss.IsSubmitted, hss.Score }
             ).ToListAsync();
 

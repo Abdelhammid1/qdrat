@@ -27,6 +27,12 @@ namespace QdratNew.ViewModels.Exam
         public bool IsActive { get; set; }
         public string? ReferenceCode { get; set; }
 
+        // APD-S3.2: أرسله المعهد باسم الشريك
+        public bool IsFromInstitute { get; set; }
+
+        // APD-S3.1: عدد الدفعات المرتبطة بالاختبار. الإخفاء والحذف يسريان عليها كلها.
+        public int LinkedBatchCount { get; set; } = 1;
+
         // PPL-S4: false = مسودة لم تُرسل لطلاب الدفعة
         public bool IsSentToStudents { get; set; }
 

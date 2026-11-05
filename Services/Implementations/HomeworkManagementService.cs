@@ -56,6 +56,7 @@ namespace QdratNew.Services.Implementations
                 from hs in _context.HomeworkSets.AsNoTracking()
                 join b in _context.Batches.AsNoTracking()
                     on hs.BatchId equals b.Id
+                where hs.OwnerPartnerId == null // APD-S2.3
                 select new
                 {
                     HomeworkSetId = hs.Id,
@@ -152,7 +153,7 @@ namespace QdratNew.Services.Implementations
             // ===============================
             var homeworkSet = await _context.HomeworkSets
                 .Include(hs => hs.Batch)
-                .FirstOrDefaultAsync(hs => hs.Id == homeworkSetId);
+                .FirstOrDefaultAsync(hs => hs.Id == homeworkSetId && hs.OwnerPartnerId == null);
 
             if (homeworkSet == null)
                 return null;
@@ -375,7 +376,7 @@ namespace QdratNew.Services.Implementations
 
             var homeworkSet = await _context.HomeworkSets
                 .Include(hs => hs.Batch)
-                .FirstOrDefaultAsync(hs => hs.Id == homeworkSetId);
+                .FirstOrDefaultAsync(hs => hs.Id == homeworkSetId && hs.OwnerPartnerId == null);
 
             if (homeworkSet == null)
                 return false;
@@ -427,7 +428,7 @@ namespace QdratNew.Services.Implementations
             using var _context = _contextFactory.CreateDbContext();
 
             return await _context.Homeworks
-                .Where(h => h.Id == homeworkId)
+                .Where(h => h.Id == homeworkId && h.HomeworkSet.OwnerPartnerId == null)
                 .Select(h => (int?)h.HomeworkSetId)
                 .FirstOrDefaultAsync();
         }

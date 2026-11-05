@@ -534,7 +534,7 @@ namespace QdratNew.Areas.Admin.Controllers
             // ── واجبات الدفعة ──────────────────────────────────────────
             var hwSets = await _context.HomeworkSets
                 .AsNoTracking()
-                .Where(hs => hs.BatchId == batchId && !hs.IsArchived)
+                .Where(hs => hs.BatchId == batchId && !hs.IsArchived && hs.OwnerPartnerId == null) // APD-S2.3
                 .OrderByDescending(hs => hs.CreatedAt)
                 .Select(hs => new { hs.Id, hs.Title, hs.CompletionTitle, hs.CreatedAt, hs.CurriculumId })
                 .ToListAsync();

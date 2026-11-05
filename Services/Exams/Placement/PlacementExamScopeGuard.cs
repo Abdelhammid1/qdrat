@@ -29,6 +29,9 @@ namespace QdratNew.Services.Exams.Placement
             return db.Batches.Where(b => b.Branch.PartnerId == partnerId);
         }
 
+        public IQueryable<Batch> CreationBatches(ApplicationDbContext db, PlacementScope scope)
+            => scope.IsPartner ? Batches(db, scope) : db.Batches.Where(b => b.Branch.PartnerId == null);
+
         public IQueryable<Student> Students(ApplicationDbContext db, PlacementScope scope)
         {
             if (!scope.IsPartner)

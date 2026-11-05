@@ -422,7 +422,7 @@ namespace QdratNew.Areas.Partner.Controllers
         [PartnerFeature(PartnerFeatureType.PlacementExams, AllowReadAfterExpiry = true)]
         public async Task<IActionResult> ReviewLessonQuestionsBatch(int examId, int lessonId, int batchId = 0)
         {
-            var model = await _reportService.GetReviewLessonQuestionsBatchAsync(Scope, examId, lessonId, HttpContext.RequestAborted);
+            var model = await _reportService.GetReviewLessonQuestionsBatchAsync(Scope, examId, lessonId, HttpContext.RequestAborted, batchId);
             return model == null ? NotFound() : View(ReportPage(model, examId, batchId));
         }
 

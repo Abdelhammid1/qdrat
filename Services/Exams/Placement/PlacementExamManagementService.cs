@@ -20,7 +20,8 @@ namespace QdratNew.Services.Exams.Placement
     {
         private const string NotInContractMessage = "هذه الخدمة غير مشمولة في عقدكم الحالي أو أن العقد غير نشط.";
         private const string PartnerUnexpectedErrorMessage = "تعذر تنفيذ العملية، حاول مرة أخرى.";
-        private const string StudentPlacementDashboardUrl = "/Students/PlacementExams/PlacementExamDashboard"; // PPL-S5.2
+        public const string StudentPlacementDashboardUrl = "/Students/PlacementExams/PlacementExamDashboard"; // PPL-S5.2
+        private const string NotPlatformBatchMessage = "⚠️ هذه الدفعة ليست من دفعات المنصة. الإرسال للمدارس الشريكة يتم من «تحديد المستوى من نموذج»."; // APD-S3.2
 
         private readonly ApplicationDbContext _context;
         private readonly IPlacementExamGeneratorService _placementExamService;
@@ -150,7 +151,13 @@ namespace QdratNew.Services.Exams.Placement
                             && s.IsSubmitted),
                     IsActive = e.IsActive,
                     ReferenceCode = e.ReferenceCode,
-                    IsSentToStudents = eab.IsSentToStudents
+                    IsSentToStudents = eab.IsSentToStudents,
+                    // APD-S3.2
+                    IsFromInstitute = _context.PartnerDispatchLogs.Any(l =>
+                        l.Kind == PartnerDispatchKind.Placement &&
+                        l.TargetEntityId == e.Id &&
+                        l.PartnerId == e.OwnerPartnerId),
+                    LinkedBatchCount = _context.ExamAssignmentsToBatches.Count(l => l.ExamId == e.Id)
                 }
             )
             .OrderByDescending(x => x.CreatedAt)
@@ -192,7 +199,7 @@ namespace QdratNew.Services.Exams.Placement
                         Text = c.Name
                     }).ToListAsync(ct),
 
-                Batches = await _guard.Batches(_context, scope)
+                Batches = await _guard.CreationBatches(_context, scope)
                     .Select(b => new SelectListItem
                     {
                         Value = b.Id.ToString(),
@@ -213,7 +220,7 @@ namespace QdratNew.Services.Exams.Placement
                     Text = s.FullName
                 }).ToListAsync(ct);
 
-            model.Batches = await _guard.Batches(_context, scope)
+            model.Batches = await _guard.CreationBatches(_context, scope)
                 .OrderBy(b => b.Name)
                 .Select(b => new SelectListItem
                 {
@@ -257,6 +264,11 @@ namespace QdratNew.Services.Exams.Placement
                     var denied = await ValidatePartnerCreateAdvancedAsync(scope, model, selectedSections, ct);
                     if (denied != null)
                         return denied;
+                }
+                else if (model.StudentId is not > 0 && model.BatchId is > 0 &&
+                         !await _guard.CreationBatches(_context, scope).AnyAsync(b => b.Id == model.BatchId.Value, ct))
+                {
+                    return PlacementOperationResult.Fail(NotPlatformBatchMessage); // APD-S3.2
                 }
 
                 int examId;
@@ -399,7 +411,7 @@ namespace QdratNew.Services.Exams.Placement
                     Text = x.Title
                 }).ToListAsync(ct);
 
-            vm.AvailableBatches = await _guard.Batches(_context, scope)
+            vm.AvailableBatches = await _guard.CreationBatches(_context, scope)
                 .AsNoTracking()
                 .Select(b => new SelectListItem
                 {
@@ -455,6 +467,10 @@ namespace QdratNew.Services.Exams.Placement
 
                         if (!batchMatchesCourse || !await CoursesInScope(scope).AnyAsync(c => c.Id == vm.SelectedCourseId, ct))
                             throw new PlacementRuleException("غير مسموح");
+                    }
+                    else if (!await _guard.CreationBatches(_context, scope).AnyAsync(b => b.Id == vm.SelectedBatchId, ct))
+                    {
+                        throw new PlacementRuleException(NotPlatformBatchMessage); // APD-S3.2
                     }
 
                     // =========================================

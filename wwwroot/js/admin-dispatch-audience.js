@@ -67,9 +67,33 @@
         if (error) { error.hidden = state !== 'error'; }
     }
 
+    // المدارس المؤهلة تعتمد على النموذج، فلا يُطلب شيء قبل اختياره
+    function needsModel(root) {
+        if (root.getAttribute('data-apd-requires-model') !== '1') { return false; }
+        var modelId = root.getAttribute('data-apd-model-id');
+        return !modelId || modelId === '0';
+    }
+
+    // APD-S3.1: دفعات المدارس تتبع كورس الاختبار في الشاشات التي تطلبه
+    function needsCourse(root) {
+        if (root.getAttribute('data-apd-requires-course') !== '1') { return false; }
+        var courseId = root.getAttribute('data-apd-course-id');
+        return !courseId || courseId === '0';
+    }
+
     function load(root) {
         var host = partnersHost(root);
         if (!host || root.getAttribute('data-apd-loading-now') === '1') { return; }
+
+        var hint = qs(root, '[data-apd-need-model]');
+        if (hint) { hint.hidden = !needsModel(root); }
+        var courseHint = qs(root, '[data-apd-need-course]');
+        if (courseHint) { courseHint.hidden = needsModel(root) || !needsCourse(root); }
+        if (needsModel(root) || needsCourse(root)) {
+            setState(root, 'ready');
+            updateCounts(root);
+            return;
+        }
 
         root.setAttribute('data-apd-loading-now', '1');
         host.innerHTML = '';
@@ -222,8 +246,23 @@
         if (modelSelector) {
             var modelInput = document.querySelector(modelSelector);
             if (modelInput) {
+                // النموذج قد يكون مختارًا مسبقًا في الصفحة قبل أول تحميل
+                if (modelInput.value) { root.setAttribute('data-apd-model-id', modelInput.value); }
+
                 modelInput.addEventListener('change', function () {
                     setSource(root, { modelId: modelInput.value });
+                });
+            }
+        }
+
+        var courseSelector = root.getAttribute('data-apd-course-input');
+        if (courseSelector) {
+            var courseInput = document.querySelector(courseSelector);
+            if (courseInput) {
+                if (courseInput.value) { root.setAttribute('data-apd-course-id', courseInput.value); }
+
+                courseInput.addEventListener('change', function () {
+                    setSource(root, { courseId: courseInput.value });
                 });
             }
         }

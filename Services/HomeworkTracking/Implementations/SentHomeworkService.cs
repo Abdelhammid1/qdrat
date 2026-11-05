@@ -1,5 +1,7 @@
 ﻿using QdratNew.Data;
+using Microsoft.EntityFrameworkCore;
 using QdratNew.Entities;
+using QdratNew.Enums;
 using QdratNew.Services.HomeworkTracking.Interfaces;
 using QdratNew.ViewModels.Partner.Homework;
 using System;
@@ -75,6 +77,13 @@ namespace QdratNew.Services.HomeworkTracking.Implementations
                 select new { hs.Id, m.Title }
             ).ToDictionary(x => x.Id, x => x.Title);
 
+            // APD-S2.3: ما أرسله المعهد باسم الشريك
+            var fromInstitute = _context.PartnerDispatchLogs
+                .AsNoTracking()
+                .Where(l => l.PartnerId == partnerId && l.Kind == PartnerDispatchKind.Homework)
+                .Select(l => l.TargetEntityId)
+                .ToHashSet();
+
             // ===============================
             // 6️⃣ بناء ViewModel (كل الربط في الذاكرة)
             // ===============================
@@ -105,7 +114,10 @@ namespace QdratNew.Services.HomeworkTracking.Implementations
                         IsFromModel = hs.IsFromProfessionalModel,
                         SourceModelTitle = hs.IsFromProfessionalModel
                             ? modelTitles.GetValueOrDefault(hs.Id, hs.CompletionTitle)
-                            : null
+                            : null,
+
+                        IsFromInstitute = fromInstitute.Contains(hs.Id),
+                        CanEdit = hs.OwnerPartnerId == partnerId
                     };
                 })
                 .OrderByDescending(x => x.SentAt)

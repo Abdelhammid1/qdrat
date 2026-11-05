@@ -28,7 +28,7 @@ namespace QdratNew.Tests.PartnerProfessionalModels
             int HomeworkModel, int ExamModel, int UntypedModel, Guid Q1, Guid Q2);
 
         private static ProfessionalModelSendService NewService(ApplicationDbContext db)
-            => new(db, new ProfessionalModelAvailabilityService(db), new TimeZoneService(), new AdvancedNotificationService(db), NullLogger<ProfessionalModelSendService>.Instance);
+            => new(db, new ProfessionalModelAvailabilityService(db), new TimeZoneService(), new AdvancedNotificationService(db), new QdratNew.Services.PartnerDispatch.PartnerDispatchLogService(db), NullLogger<ProfessionalModelSendService>.Instance);
 
         public Task InitializeAsync() => RtkRealDb.IsConfigured ? CleanupAsync() : Task.CompletedTask;
 
