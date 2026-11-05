@@ -29,5 +29,9 @@ namespace QdratNew.Entities
 
         // موعد ظهور الاختبار لطلاب الدفعة في أريا الطالب (null = يظهر فورًا)
         public DateTime? VisibleFrom { get; set; }
+
+        // APD-S1: الشريك المالك (null = ملك المعهد). ما يُرسل لشريك يُدار من منطقته ويختفي من إدارة الأدمن.
+        public int? OwnerPartnerId { get; set; }
+        public Partner? OwnerPartner { get; set; }
     }
 }

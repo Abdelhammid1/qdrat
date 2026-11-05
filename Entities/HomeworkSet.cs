@@ -57,6 +57,10 @@ namespace QdratNew.Entities
         public int? SourceProfessionalModelId { get; set; }
         public ProfessionalModel? SourceProfessionalModel { get; set; }
 
+        // APD-S1: الشريك المالك (null = ملك المعهد). ما يُرسل لشريك يُدار من منطقته ويختفي من إدارة الأدمن.
+        public int? OwnerPartnerId { get; set; }
+        public Partner? OwnerPartner { get; set; }
+
         public bool IsArchived { get; set; } = false;
         public DateTime? ArchivedAt { get; set; }
         public string? ArchivedByUserId { get; set; }

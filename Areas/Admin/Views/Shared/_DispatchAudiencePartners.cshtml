@@ -1,0 +1,125 @@
+@using QdratNew.ViewModels.PartnerDispatch
+@model DispatchAudiencePartnersVm
+@*
+    APD-S1.4: قائمة المدارس الشريكة ودفعاتها. تُعرض داخل _DispatchAudiencePicker أو تُرجعها PartnerDispatch/AudienceOptions.
+    المدرسة غير المختارة: دفعاتها معطّلة فلا تُرسل. المدرسة غير المؤهلة: معطّلة مع سببها، والقابلة للتجاوز تُفعَّل بخيار التجاوز.
+*@
+
+@if (Model.Partners.Count == 0)
+{
+    <div class="apd-empty" data-apd-empty>
+        <i class="fas fa-school"></i>
+        لا توجد مدارس شريكة بعقد نشط حاليًا.
+    </div>
+}
+else
+{
+    <div class="apd-partners-toolbar">
+        <input type="search" class="form-control form-control-sm apd-search" placeholder="ابحث باسم المدرسة" data-apd-search aria-label="ابحث باسم المدرسة" />
+        <label class="apd-select-all">
+            <input type="checkbox" class="form-check-input" data-apd-select-all />
+            تحديد كل المؤهلة
+        </label>
+    </div>
+
+    <ul class="apd-partner-list" data-apd-partner-list>
+        @foreach (var partner in Model.Partners)
+        {
+            var selected = Model.IsPartnerSelected(partner.PartnerId);
+            var selectable = partner.Eligible || (partner.Overridable && Model.CanOverride && Model.Selection.OverrideContract);
+            var sendable = partner.Batches.Any(b => b.ActiveStudents > 0);
+            var checkedNow = selected && selectable;
+            var partnerInputId = $"apd-partner-{partner.PartnerId}";
+
+            <li class="apd-partner @(partner.Eligible ? "" : "is-blocked")"
+                data-apd-partner="@partner.PartnerId"
+                data-apd-name="@partner.Name"
+                data-apd-eligible="@(partner.Eligible ? "1" : "0")"
+                data-apd-overridable="@(partner.Overridable && Model.CanOverride ? "1" : "0")">
+                <div class="apd-partner-head">
+                    <input type="checkbox"
+                           class="form-check-input"
+                           id="@partnerInputId"
+                           data-apd-partner-check
+                           @(checkedNow ? "checked" : "")
+                           @(selectable && sendable ? "" : "disabled") />
+                    <label for="@partnerInputId" class="apd-partner-name">@partner.Name</label>
+
+                    @if (!partner.Eligible)
+                    {
+                        <span class="apd-badge @(partner.Overridable ? "apd-badge-warn" : "apd-badge-bad")" data-apd-reason>
+                            @partner.BlockReason
+                        </span>
+                    }
+
+                    <span class="apd-partner-meta">
+                        @partner.Batches.Count دفعة · @partner.Batches.Sum(b => b.ActiveStudents) طالب
+                    </span>
+                </div>
+
+                @if (partner.Batches.Count == 0)
+                {
+                    <div class="apd-partner-empty">لا توجد دفعات متوافقة مع هذا الإرسال.</div>
+                }
+                else
+                {
+                    <details class="apd-batches" @(checkedNow ? "open" : "")>
+                        <summary>الدفعات</summary>
+                        <ul>
+                            @foreach (var batch in partner.Batches)
+                            {
+                                var batchInputId = $"apd-batch-{partner.PartnerId}-{batch.BatchId}";
+                                var empty = batch.ActiveStudents == 0;
+                                <li>
+                                    <input type="checkbox"
+                                           class="form-check-input"
+                                           id="@batchInputId"
+                                           name="PartnerBatchIds[@partner.PartnerId]"
+                                           value="@batch.BatchId"
+                                           data-apd-batch
+                                           data-apd-students="@batch.ActiveStudents"
+                                           data-apd-empty-batch="@(empty ? "1" : "0")"
+                                           @(Model.IsBatchChecked(partner.PartnerId, batch) ? "checked" : "")
+                                           @(checkedNow && !empty ? "" : "disabled") />
+                                    <label for="@batchInputId">
+                                        @batch.Name
+                                        <small class="text-muted">@batch.BranchName</small>
+                                    </label>
+                                    <span class="apd-batch-count @(empty ? "is-empty" : "")">
+                                        @(empty ? "لا طلاب نشطون" : $"{batch.ActiveStudents} طالب")
+                                    </span>
+                                </li>
+                            }
+                        </ul>
+                    </details>
+                }
+            </li>
+        }
+    </ul>
+
+    @if (Model.CanOverride && Model.HasOverridablePartners)
+    {
+        <div class="apd-override" data-apd-override>
+            <label class="apd-override-toggle">
+                <input type="checkbox"
+                       class="form-check-input"
+                       name="OverrideContract"
+                       value="true"
+                       data-apd-override-check
+                       @(Model.Selection.OverrideContract ? "checked" : "") />
+                تجاوز العقد أو إتاحة النموذج للمدارس المعلَّمة باللون البرتقالي
+            </label>
+            <div class="apd-override-reason" data-apd-override-reason @(Model.Selection.OverrideContract ? "" : "hidden")>
+                <label for="apd-override-reason" class="form-label">سبب التجاوز (يُسجَّل في سجل الإرسال)</label>
+                <textarea id="apd-override-reason"
+                          name="OverrideReason"
+                          class="form-control"
+                          rows="2"
+                          minlength="10"
+                          maxlength="500"
+                          @(Model.Selection.OverrideContract ? "" : "disabled")>@Model.Selection.OverrideReason</textarea>
+                <small class="text-muted">بين 10 و500 حرف. المدرسة بلا عقد نشط لا يمكن تجاوزها.</small>
+            </div>
+        </div>
+    }
+}

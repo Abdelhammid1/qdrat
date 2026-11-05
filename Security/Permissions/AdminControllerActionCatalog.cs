@@ -264,6 +264,14 @@
                     new AdminActionDescriptor { Key = "Send",    DisplayNameAr = "إرسال رسائل للدفعة" }
                 },
 
+                // APD-S1.3: الإرسال للمدارس الشريكة من الشاشات الخمس (وحدة بلا Controller خاص بها حتى S6)
+                "PartnerDispatch" => new[]
+                {
+                    new AdminActionDescriptor { Key = "Send", DisplayNameAr = "اختيار «المدارس الشريكة» كجمهور للإرسال" },
+                    new AdminActionDescriptor { Key = "Override", DisplayNameAr = "تجاوز عقد المدرسة أو إتاحة النموذج (بسبب مكتوب يُسجَّل)" },
+                    new AdminActionDescriptor { Key = "ReadLog", DisplayNameAr = "عرض سجل الإرسال للمدارس الشريكة" }
+                },
+
                 "IntegrityViolations" => new[]
                 {
                     new AdminActionDescriptor { Key = "Read", DisplayNameAr = "عرض مخالفات النزاهة" },

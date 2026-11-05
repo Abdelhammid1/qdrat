@@ -3649,6 +3649,9 @@ namespace QdratNew.Migrations
                     b.Property<int>("MaxRetakes")
                         .HasColumnType("int");
 
+                    b.Property<int?>("OwnerPartnerId")
+                        .HasColumnType("int");
+
                     b.Property<int?>("SourceProfessionalModelId")
                         .HasColumnType("int");
 
@@ -3668,6 +3671,8 @@ namespace QdratNew.Migrations
                     b.HasIndex("CurriculumId");
 
                     b.HasIndex("LectureId");
+
+                    b.HasIndex("OwnerPartnerId", "BatchId");
 
                     b.HasIndex("SourceProfessionalModelId", "BatchId");
 
@@ -4739,6 +4744,9 @@ namespace QdratNew.Migrations
                     b.Property<int>("MinistrySimExamId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("OwnerPartnerId")
+                        .HasColumnType("int");
+
                     b.Property<string>("ReferenceCode")
                         .HasColumnType("nvarchar(max)");
 
@@ -4752,6 +4760,8 @@ namespace QdratNew.Migrations
                     b.HasIndex("CreatedByInstructorId");
 
                     b.HasIndex("MinistrySimExamId");
+
+                    b.HasIndex("OwnerPartnerId", "BatchId");
 
                     b.ToTable("MinistrySimExamAssignmentsToBatches");
                 });
@@ -4800,6 +4810,9 @@ namespace QdratNew.Migrations
                     b.Property<int>("MinistrySimExamId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("OwnerPartnerId")
+                        .HasColumnType("int");
+
                     b.Property<string>("ReferenceCode")
                         .HasColumnType("nvarchar(max)");
 
@@ -4816,6 +4829,8 @@ namespace QdratNew.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("MinistrySimExamId");
+
+                    b.HasIndex("OwnerPartnerId");
 
                     b.HasIndex("StudentId");
 
@@ -5462,6 +5477,72 @@ namespace QdratNew.Migrations
                     b.ToTable("Partners");
                 });
 
+            modelBuilder.Entity("QdratNew.Entities.PartnerDispatchLog", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("BatchId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("ContractOverridden")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("DispatchGroupId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("int");
+
+                    b.Property<string>("OverrideReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("PartnerId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("SentAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("SentByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int?>("SourceMinistrySimExamId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("SourcePerformanceIndicatorExamId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("SourceProfessionalModelId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("StudentsCount")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TargetEntityId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DispatchGroupId");
+
+                    b.HasIndex("SentAtUtc");
+
+                    b.HasIndex("PartnerId", "Kind");
+
+                    b.ToTable("PartnerDispatchLogs");
+                });
+
             modelBuilder.Entity("QdratNew.Entities.PartnerSubscription", b =>
                 {
                     b.Property<int>("Id")
@@ -5486,6 +5567,9 @@ namespace QdratNew.Migrations
                         .HasColumnType("bit");
 
                     b.Property<bool>("CanUseAIAnalytics")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("CanUseMinistrySimExams")
                         .HasColumnType("bit");
 
                     b.Property<bool>("CanUsePerformanceIndicatorExams")
@@ -5631,6 +5715,9 @@ namespace QdratNew.Migrations
                     b.Property<bool>("IsSent")
                         .HasColumnType("bit");
 
+                    b.Property<int?>("OwnerPartnerId")
+                        .HasColumnType("int");
+
                     b.Property<double>("PassPercent")
                         .HasColumnType("float");
 
@@ -5658,6 +5745,8 @@ namespace QdratNew.Migrations
                     b.HasIndex("BatchId");
 
                     b.HasIndex("CurriculumId");
+
+                    b.HasIndex("OwnerPartnerId");
 
                     b.ToTable("PerformanceIndicatorExams");
                 });
@@ -10955,6 +11044,11 @@ namespace QdratNew.Migrations
                         .HasForeignKey("LectureId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("QdratNew.Entities.Partner", "OwnerPartner")
+                        .WithMany()
+                        .HasForeignKey("OwnerPartnerId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.HasOne("QdratNew.Entities.ProfessionalModel", "SourceProfessionalModel")
                         .WithMany()
                         .HasForeignKey("SourceProfessionalModelId")
@@ -10967,6 +11061,8 @@ namespace QdratNew.Migrations
                     b.Navigation("Curriculum");
 
                     b.Navigation("Lecture");
+
+                    b.Navigation("OwnerPartner");
 
                     b.Navigation("SourceProfessionalModel");
                 });
@@ -11389,11 +11485,18 @@ namespace QdratNew.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("QdratNew.Entities.Partner", "OwnerPartner")
+                        .WithMany()
+                        .HasForeignKey("OwnerPartnerId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.Navigation("Batch");
 
                     b.Navigation("CreatedByInstructor");
 
                     b.Navigation("MinistrySimExam");
+
+                    b.Navigation("OwnerPartner");
                 });
 
             modelBuilder.Entity("QdratNew.Entities.MinistrySimExamAssignmentToGuest", b =>
@@ -11423,6 +11526,11 @@ namespace QdratNew.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("QdratNew.Entities.Partner", "OwnerPartner")
+                        .WithMany()
+                        .HasForeignKey("OwnerPartnerId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.HasOne("QdratNew.Entities.Student", "Student")
                         .WithMany()
                         .HasForeignKey("StudentId")
@@ -11430,6 +11538,8 @@ namespace QdratNew.Migrations
                         .IsRequired();
 
                     b.Navigation("MinistrySimExam");
+
+                    b.Navigation("OwnerPartner");
 
                     b.Navigation("Student");
                 });
@@ -11728,6 +11838,17 @@ namespace QdratNew.Migrations
                     b.Navigation("Student");
                 });
 
+            modelBuilder.Entity("QdratNew.Entities.PartnerDispatchLog", b =>
+                {
+                    b.HasOne("QdratNew.Entities.Partner", "Partner")
+                        .WithMany()
+                        .HasForeignKey("PartnerId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.Navigation("Partner");
+                });
+
             modelBuilder.Entity("QdratNew.Entities.PartnerSubscription", b =>
                 {
                     b.HasOne("QdratNew.Entities.Partner", "Partner")
@@ -11782,9 +11903,16 @@ namespace QdratNew.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("QdratNew.Entities.Partner", "OwnerPartner")
+                        .WithMany()
+                        .HasForeignKey("OwnerPartnerId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.Navigation("Batch");
 
                     b.Navigation("Curriculum");
+
+                    b.Navigation("OwnerPartner");
                 });
 
             modelBuilder.Entity("QdratNew.Entities.PerformanceIndicatorExamArchiveAccess", b =>

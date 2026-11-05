@@ -52,6 +52,7 @@ namespace QdratNew.Entities
         // =========================
         public bool CanUsePlacementExams { get; set; } = false;
         public bool CanUsePerformanceIndicatorExams { get; set; } = false;
+        public bool CanUseMinistrySimExams { get; set; } = false; // APD-S1: معمل القياس
 
         // =========================
         // 🔹 Academic Support

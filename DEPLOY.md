@@ -121,6 +121,40 @@ UPDATE SystemSettings SET [Value] = N'true'  WHERE [Key] = N'RemedialTrack.Enabl
 
 ---
 
+## 📋 نشر Epic APD (جمهور الإرسال: المنصة أو المدارس الشريكة) — APD-S1 (الأساس)
+> يُستكمل هذا القسم في APD-S6.2. بعد S1 لا تتغير أي شاشة إرسال؛ الجديد: علَم «معمل القياس» في عقد الشريك، ووحدة صلاحيات «الإرسال للمدارس الشريكة» في مصفوفة البروفايل.
+
+### 1) قبل نشر الكود (Backup إلزامي)
+```sql
+BACKUP DATABASE [QdratNewDB] TO DISK = N'/var/opt/mssql/backup/QdratNewDB_before_APD_S1.bak' WITH INIT, COMPRESSION;
+```
+شغّل يدويًا `Migrations/Scripts/APD_PartnerDispatch.sql` (Idempotent وإضافات فقط). الكود الجديد يقرأ الأعمدة (`HomeworkSets.OwnerPartnerId` في كل إرسال واجب)، فنشره قبل السكربت يكسر الواجبات.
+
+### 2) التحقق بعد السكربت
+```sql
+SELECT COL_LENGTH(N'HomeworkSets', N'OwnerPartnerId');                          -- 4
+SELECT COL_LENGTH(N'PerformanceIndicatorExams', N'OwnerPartnerId');             -- 4
+SELECT COL_LENGTH(N'MinistrySimExamAssignmentsToBatches', N'OwnerPartnerId');   -- 4
+SELECT COL_LENGTH(N'MinistrySimExamAssignmentsToStudents', N'OwnerPartnerId');  -- 4
+SELECT COL_LENGTH(N'PartnerSubscriptions', N'CanUseMinistrySimExams');          -- 1
+SELECT OBJECT_ID(N'PartnerDispatchLogs');                                       -- ليس NULL
+SELECT COUNT(*) FROM __EFMigrationsHistory WHERE MigrationId = N'20261105004750_APD_PartnerDispatch'; -- 1
+-- لا Backfill: يجب أن يكون 0
+SELECT COUNT(*) FROM HomeworkSets WHERE OwnerPartnerId IS NOT NULL;
+-- البروفايلات التي مُنحت PartnerDispatch.Send تلقائيًا (من يملك ManageModelHomework)
+SELECT p.Name FROM AdminProfiles p JOIN AdminProfileControllerPermissions c ON c.AdminProfileId = p.Id WHERE c.ControllerName = N'PartnerDispatch';
+```
+اختياري (قراءة فقط): `Migrations/Scripts/APD_Diagnose_PartnerHomework.sql` يعدّ واجبات أرسلها الشركاء قبل APD وتبقى ظاهرة للأدمن.
+
+### 3) بعد نشر الكود
+- واجبات الشريك الجديدة (من مسوداته أو من نموذج) تحمل `OwnerPartnerId`. لا شيء يُخفى عن الأدمن قبل APD-S2.
+- فعّل «معمل القياس» في عقود الشركاء المعنيين من `Admin/PartnerSubscriptions/Edit` (الافتراضي غير مفعّل).
+- راجع في مصفوفة البروفايل وحدة «الإرسال للمدارس الشريكة»: `Send` ممنوحة تلقائيًا كما في الاستعلام أعلاه، و`Override` و`ReadLog` لا تُمنح إلا يدويًا.
+
+### 4) مفتاح التعطيل وخطة التراجع
+- **إيقاف فوري:** `UPDATE SystemSettings SET Value = 'false' WHERE [Key] = N'PartnerDispatch.Enabled';` يخفي خيار «المدارس الشريكة» ويغلق `Admin/PartnerDispatch/AudienceOptions` (404) بلا إعادة تشغيل. الإرسال للمنصة لا يتأثر.
+- **تراجع كامل** (بعد سحب الكود فقط): `Migrations/Scripts/APD_PartnerDispatch_Rollback.sql` — يحذف أعمدة الملكية وسجل الإرسال وصلاحيات الوحدة.
+
 ## 📋 نشر Epic PPM (إتاحة النماذج الاحترافية للشركاء والإرسال من نموذج) — PPM-S1 إلى S6
 
 ### 1) قبل نشر الكود (Backup إلزامي)

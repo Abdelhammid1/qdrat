@@ -90,6 +90,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
 
     public DbSet<ProfessionalModelPartner> ProfessionalModelPartners { get; set; }
     public DbSet<ProfessionalModelSubscriptionPeriod> ProfessionalModelSubscriptionPeriods { get; set; }
+    public DbSet<PartnerDispatchLog> PartnerDispatchLogs { get; set; } // APD-S1
 
     public DbSet<CurriculumInstructor> CurriculumInstructors { get; set; }
     public DbSet<StudySessionRating> StudySessionRatings { get; set; }
@@ -1175,6 +1176,55 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             modelBuilder.Entity<ProfessionalModelSubscriptionPeriod>()
                 .HasIndex(x => new { x.ProfessionalModelId, x.PartnerSubscriptionPeriodId })
                 .IsUnique();
+
+            // APD-S1: الشريك المالك لما يرسله الأدمن للشركاء (null = ملك المعهد)
+            modelBuilder.Entity<HomeworkSet>()
+                .HasOne(h => h.OwnerPartner)
+                .WithMany()
+                .HasForeignKey(h => h.OwnerPartnerId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            modelBuilder.Entity<HomeworkSet>()
+                .HasIndex(h => new { h.OwnerPartnerId, h.BatchId });
+
+            modelBuilder.Entity<PerformanceIndicatorExam>()
+                .HasOne(e => e.OwnerPartner)
+                .WithMany()
+                .HasForeignKey(e => e.OwnerPartnerId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            modelBuilder.Entity<PerformanceIndicatorExam>()
+                .HasIndex(e => e.OwnerPartnerId);
+
+            modelBuilder.Entity<MinistrySimExamAssignmentToBatch>()
+                .HasOne(a => a.OwnerPartner)
+                .WithMany()
+                .HasForeignKey(a => a.OwnerPartnerId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            modelBuilder.Entity<MinistrySimExamAssignmentToBatch>()
+                .HasIndex(a => new { a.OwnerPartnerId, a.BatchId });
+
+            modelBuilder.Entity<MinistrySimExamAssignmentToStudent>()
+                .HasOne(a => a.OwnerPartner)
+                .WithMany()
+                .HasForeignKey(a => a.OwnerPartnerId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            modelBuilder.Entity<MinistrySimExamAssignmentToStudent>()
+                .HasIndex(a => a.OwnerPartnerId);
+
+            modelBuilder.Entity<PartnerDispatchLog>(log =>
+            {
+                log.HasOne(l => l.Partner)
+                    .WithMany()
+                    .HasForeignKey(l => l.PartnerId)
+                    .OnDelete(DeleteBehavior.NoAction);
+
+                log.HasIndex(l => l.SentAtUtc);
+                log.HasIndex(l => new { l.PartnerId, l.Kind });
+                log.HasIndex(l => l.DispatchGroupId);
+            });
             modelBuilder.Entity<AdminPermission>()
                 .HasIndex(p => new { p.ProfileId, p.ModuleId })
                 .IsUnique();

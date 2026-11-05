@@ -332,6 +332,20 @@ builder.Services.AddAuthorization(options =>
             policy => policy.Requirements.Add(new AdminPermissionAuthorizationRequirement(policyName)));
     }
 
+    // APD-S1.3 — الإرسال للمدارس الشريكة
+    foreach (var apdPolicy in new[]
+    {
+        AdminPermissionPolicies.PartnerDispatch_Send,
+        AdminPermissionPolicies.PartnerDispatch_Override,
+        AdminPermissionPolicies.PartnerDispatch_ReadLog
+    })
+    {
+        var policyName = apdPolicy;
+        options.AddPolicy(
+            policyName,
+            policy => policy.Requirements.Add(new AdminPermissionAuthorizationRequirement(policyName)));
+    }
+
 
     // ===============================
     // 🧪 Placement Exams (Level Assessment)
@@ -936,6 +950,9 @@ builder.Services.AddScoped<QdratNew.Services.Exams.Placement.IPlacementExamScope
 builder.Services.AddScoped<QdratNew.Services.Exams.Placement.IPlacementExamManagementService, QdratNew.Services.Exams.Placement.PlacementExamManagementService>();
 builder.Services.AddScoped<QdratNew.Services.ProfessionalModels.IProfessionalModelAvailabilityService, QdratNew.Services.ProfessionalModels.ProfessionalModelAvailabilityService>(); // PPM-S1.2
 builder.Services.AddScoped<QdratNew.Services.ProfessionalModels.IProfessionalModelSendService, QdratNew.Services.ProfessionalModels.ProfessionalModelSendService>(); // PPM-S3
+builder.Services.AddScoped<QdratNew.Services.PartnerDispatch.IDispatchAudienceService, QdratNew.Services.PartnerDispatch.DispatchAudienceService>(); // APD-S1.2
+builder.Services.AddScoped<QdratNew.Services.PartnerDispatch.IPartnerDispatchLogService, QdratNew.Services.PartnerDispatch.PartnerDispatchLogService>(); // APD-S1.2
+builder.Services.AddScoped<QdratNew.Services.PartnerDispatch.IDispatchAudiencePickerBuilder, QdratNew.Services.PartnerDispatch.DispatchAudiencePickerBuilder>(); // APD-S1.4
 // PPL-S3: خدمة تقارير اختبارات تحديد المستوى المشتركة
 builder.Services.AddScoped<QdratNew.Services.Exams.Placement.IPlacementExamReportService, QdratNew.Services.Exams.Placement.PlacementExamReportService>();
 builder.Services.AddScoped<ITimeZoneService, TimeZoneService>();

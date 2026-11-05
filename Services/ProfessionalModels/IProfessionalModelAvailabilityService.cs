@@ -12,6 +12,9 @@ namespace QdratNew.Services.ProfessionalModels
 
         Task<bool> IsAvailableForPartnerAsync(int modelId, int partnerId, ProfessionalModelType? type, CancellationToken ct = default);
 
+        // APD-S1.2: نفس قاعدة AvailableForPartner لكل الشركاء دفعة واحدة (عدد استعلامات ثابت لا يتبع عدد الشركاء)
+        Task<HashSet<int>> GetPartnerIdsWithAccessAsync(int modelId, ProfessionalModelType? type, CancellationToken ct = default);
+
         // الشركاء النشطون + أي شريك منتهٍ مختار سابقًا
         Task<List<PartnerOptionVm>> GetPartnerOptionsAsync(IEnumerable<int> selectedPartnerIds, CancellationToken ct = default);
 

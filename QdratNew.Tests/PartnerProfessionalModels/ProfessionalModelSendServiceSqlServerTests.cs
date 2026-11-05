@@ -351,6 +351,7 @@ namespace QdratNew.Tests.PartnerProfessionalModels
             Assert.Null(set.LectureId);
             Assert.True(set.IsSent);
             Assert.Equal(SenderId, set.AssignedByUserId);
+            Assert.Equal(seed.PartnerA, set.OwnerPartnerId); // APD-S1.3: ما يرسله الشريك ملكه
             Assert.Equal(request.StartAtLocal!.Value.AddHours(-3), set.StartAt);
             Assert.Equal(request.EndAtLocal!.Value.AddHours(-3), set.EndAt);
 
@@ -413,6 +414,10 @@ namespace QdratNew.Tests.PartnerProfessionalModels
             Assert.Contains(seed.ForeignStudent, recipients);
             Assert.DoesNotContain(seed.LeftStudent, recipients);
             Assert.Equal((1, 1, 1), await CountWritesAsync(seed.InstituteBatch));
+
+            // APD-S1.3: إرسال الأدمن يبقى ملك المعهد حتى على دفعة شريك
+            Assert.All(await read.HomeworkSets.AsNoTracking().Where(h => h.BatchId == seed.BatchA || h.BatchId == seed.InstituteBatch).ToListAsync(),
+                h => Assert.Null(h.OwnerPartnerId));
         }
 
         [SqlServerFact]

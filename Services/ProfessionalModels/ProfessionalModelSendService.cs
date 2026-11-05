@@ -370,6 +370,7 @@ namespace QdratNew.Services.ProfessionalModels
                         LectureId = req.LectureId,
                         IsFromProfessionalModel = true,
                         SourceProfessionalModelId = send.Model.Id,
+                        OwnerPartnerId = scope.PartnerId, // APD-S1.3: null للأدمن
                         AssignedByUserId = scope.UserId,
                         IsSent = true
                     })

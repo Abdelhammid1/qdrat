@@ -163,6 +163,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 CanCreateExams = model.CanCreateExams,
                 CanUsePlacementExams = model.CanUsePlacementExams,
                 CanUsePerformanceIndicatorExams = model.CanUsePerformanceIndicatorExams,
+                CanUseMinistrySimExams = model.CanUseMinistrySimExams,
                 CanUseReinforcementSkills = model.CanUseReinforcementSkills,
                 CanUseRemedialPlans = model.CanUseRemedialPlans,
                 CanUseRemedialSessions = model.CanUseRemedialSessions,
@@ -258,6 +259,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 CanCreateExams = subscription.CanCreateExams,
                 CanUsePlacementExams = subscription.CanUsePlacementExams,
                 CanUsePerformanceIndicatorExams = subscription.CanUsePerformanceIndicatorExams,
+                CanUseMinistrySimExams = subscription.CanUseMinistrySimExams,
                 CanUseReinforcementSkills = subscription.CanUseReinforcementSkills,
                 CanUseRemedialPlans = subscription.CanUseRemedialPlans,
                 CanUseRemedialSessions = subscription.CanUseRemedialSessions,
@@ -306,6 +308,7 @@ namespace QdratNew.Areas.Admin.Controllers
             subscription.CanCreateExams = model.CanCreateExams;
             subscription.CanUsePlacementExams = model.CanUsePlacementExams;
             subscription.CanUsePerformanceIndicatorExams = model.CanUsePerformanceIndicatorExams;
+            subscription.CanUseMinistrySimExams = model.CanUseMinistrySimExams;
             subscription.CanUseReinforcementSkills = model.CanUseReinforcementSkills;
             subscription.CanUseRemedialPlans = model.CanUseRemedialPlans;
             subscription.CanUseRemedialSessions = model.CanUseRemedialSessions;
@@ -365,6 +368,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 CanCreateExams = subscription.CanCreateExams,
                 CanUsePlacementExams = subscription.CanUsePlacementExams,
                 CanUsePerformanceIndicatorExams = subscription.CanUsePerformanceIndicatorExams,
+                CanUseMinistrySimExams = subscription.CanUseMinistrySimExams,
                 CanUseReinforcementSkills = subscription.CanUseReinforcementSkills,
                 CanUseRemedialPlans = subscription.CanUseRemedialPlans,
                 CanUseRemedialSessions = subscription.CanUseRemedialSessions,

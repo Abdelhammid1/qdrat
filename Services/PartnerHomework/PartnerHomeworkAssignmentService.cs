@@ -140,6 +140,7 @@ namespace QdratNew.Services.PartnerHomework
                     Title = draft.Title,
                     CompletionTitle = draft.Title,
                     BatchId = batchId,
+                    OwnerPartnerId = partnerId, // APD-S1.3: ما يرسله الشريك ملكه
                     IsSent = true,
                     StartAt = model.StartAt,
                     EndAt = model.EndAt,

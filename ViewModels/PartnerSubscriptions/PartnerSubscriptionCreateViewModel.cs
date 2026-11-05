@@ -56,6 +56,7 @@ namespace QdratNew.ViewModels.PartnerSubscriptions
 
         [Display(Name = "اختبارات مؤشر الأداء")]
         public bool CanUsePerformanceIndicatorExams { get; set; }
+        public bool CanUseMinistrySimExams { get; set; } // APD-S1.3
 
         // =========================
         // 🔹 مهارات وخطط علاجية

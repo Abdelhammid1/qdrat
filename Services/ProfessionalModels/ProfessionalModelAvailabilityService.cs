@@ -49,6 +49,50 @@ namespace QdratNew.Services.ProfessionalModels
         public Task<bool> IsAvailableForPartnerAsync(int modelId, int partnerId, ProfessionalModelType? type, CancellationToken ct = default)
             => AvailableForPartner(partnerId, type).AnyAsync(m => m.Id == modelId, ct);
 
+        public async Task<HashSet<int>> GetPartnerIdsWithAccessAsync(int modelId, ProfessionalModelType? type, CancellationToken ct = default)
+        {
+            var today = DateTime.Today;
+
+            var model = await _context.ProfessionalModels.AsNoTracking()
+                .Where(m =>
+                    m.Id == modelId &&
+                    !m.IsArchived &&
+                    m.IsForPartners &&
+                    (type == null || m.ModelType == type) &&
+                    !_context.SystemSettings.Any(x => x.Key == PartnerAccessSettingKey && x.Value == "false"))
+                .Select(m => new { m.IsGlobal })
+                .FirstOrDefaultAsync(ct);
+
+            if (model == null)
+                return new HashSet<int>();
+
+            var contracted = await _context.PartnerSubscriptions.AsNoTracking()
+                .Where(s => s.StartDate <= today && s.EndDate >= today && s.CanUseProfessionalModels)
+                .Select(s => s.PartnerId)
+                .Distinct()
+                .ToListAsync(ct);
+
+            var result = contracted.ToHashSet();
+            if (model.IsGlobal)
+                return result;
+
+            var linked = await _context.ProfessionalModelPartners.AsNoTracking()
+                .Where(p => p.ProfessionalModelId == modelId)
+                .Select(p => p.PartnerId)
+                .ToListAsync(ct);
+
+            var viaPeriods = await _context.ProfessionalModelSubscriptionPeriods.AsNoTracking()
+                .Where(sp =>
+                    sp.ProfessionalModelId == modelId &&
+                    sp.PartnerSubscriptionPeriod.StartDate <= today &&
+                    sp.PartnerSubscriptionPeriod.EndDate >= today)
+                .Select(sp => sp.PartnerSubscriptionPeriod.PartnerSubscription.PartnerId)
+                .ToListAsync(ct);
+
+            result.IntersectWith(linked.Concat(viaPeriods));
+            return result;
+        }
+
         public async Task<List<PartnerOptionVm>> GetPartnerOptionsAsync(IEnumerable<int> selectedPartnerIds, CancellationToken ct = default)
         {
             var today = DateTime.Today;

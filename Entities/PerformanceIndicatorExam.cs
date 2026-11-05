@@ -57,6 +57,10 @@ namespace QdratNew.Entities
 
         public bool IsSent { get; set; } = false; // ✅ يوضح هل تم إرسال الاختبار أم لا
 
+        // APD-S1: الشريك المالك (null = ملك المعهد). ما يُرسل لشريك يُدار من منطقته ويختفي من إدارة الأدمن.
+        public int? OwnerPartnerId { get; set; }
+        public Partner? OwnerPartner { get; set; }
+
         // 🔹 الأرشفة
         public bool IsArchived { get; set; } = false;
         public DateTime? ArchivedAt { get; set; }

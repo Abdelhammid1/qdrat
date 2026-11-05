@@ -193,6 +193,24 @@ namespace QdratNew.Tests.PartnerPlacement
             Assert.Null(context.Result);
         }
 
+        // APD-S1.3: معمل القياس يتبع علَمه الجديد في العقد
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void Filter_MinistrySimExams_FollowsContractFlag(bool allowed)
+        {
+            var service = new Mock<IPartnerSubscriptionService>();
+            service.Setup(s => s.CanUseMinistrySimExams(PartnerId)).Returns(allowed);
+            var context = CreateFilterContext(CreateHttpContext(PartnerId), new object(), metadata: new PartnerFeatureAttribute(PartnerFeatureType.MinistrySimExams));
+
+            new PartnerFeatureFilter(service.Object).OnActionExecuting(context);
+
+            if (allowed)
+                Assert.Null(context.Result);
+            else
+                Assert.Equal(403, Assert.IsType<ViewResult>(context.Result).StatusCode);
+        }
+
         [Fact]
         public void Filter_NoActivePartner_RedirectsToSelectPartner()
         {

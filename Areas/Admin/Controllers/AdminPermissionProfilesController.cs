@@ -285,7 +285,8 @@ namespace QdratNew.Areas.Admin.Controllers
         ("CoursePackageRegistrations", "طلبات حجز الباقات"),
         ("FrontendLeads", "التواصل: طلبات الالتحاق"),
         ("ContactMessages", "التواصل: رسائل التواصل"),
-        ("CorporateRequests", "التواصل: طلبات تسجيل الرعاة")
+        ("CorporateRequests", "التواصل: طلبات تسجيل الرعاة"),
+        ("PartnerDispatch", "الإرسال للمدارس الشريكة")
     };
         }
 

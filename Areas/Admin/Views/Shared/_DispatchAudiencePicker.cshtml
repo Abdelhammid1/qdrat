@@ -1,0 +1,111 @@
+@using QdratNew.Enums
+@using QdratNew.ViewModels.PartnerDispatch
+@model DispatchAudiencePickerVm
+@*
+    APD-S1.4: اختيار جمهور الإرسال المشترك بين شاشات الأدمن الخمس. الـ View المضيف يمرر DispatchAudiencePickerVm فقط،
+    ويضيف في قسم Styles/Scripts: ~/css/admin-dispatch-audience.css و ~/js/admin-dispatch-audience.js.
+    الحقول المرسلة: Audience, PlatformBatchIds, PartnerBatchIds[PartnerId], OverrideContract, OverrideReason.
+    data-apd-model-input (اختياري): محدد CSS لحقل النموذج في الصفحة؛ تغيّره يعيد تحميل قائمة المدارس.
+*@
+@{
+    var isPartners = Model.CanSendToPartners && Model.Selection.Audience == DispatchAudience.Partners;
+    var selectedPlatform = (Model.Selection.PlatformBatchIds ?? new List<int>()).ToHashSet();
+    var optionsUrl = Url.Action("AudienceOptions", "PartnerDispatch", new { area = "Admin" });
+}
+
+<fieldset class="apd-picker"
+          data-apd-picker
+          data-apd-options-url="@optionsUrl"
+          data-apd-kind="@((int)Model.Source.Kind)"
+          data-apd-model-id="@Model.Source.ProfessionalModelId"
+          data-apd-curriculum-id="@Model.Source.CurriculumId"
+          data-apd-course-id="@Model.Source.CourseId"
+          data-apd-loaded="@(Model.Partners != null ? "1" : "0")">
+    <legend class="apd-legend">جمهور الإرسال</legend>
+
+    <div class="apd-audience-options" role="radiogroup" aria-label="جمهور الإرسال">
+        <label class="apd-audience-option">
+            <input type="radio" class="form-check-input" name="Audience" value="@((int)DispatchAudience.Platform)" data-apd-audience
+                   @(isPartners ? "" : "checked") />
+            <span>
+                <strong>دفعات المنصة</strong>
+                <small>دفعات المعهد فقط</small>
+            </span>
+        </label>
+
+        @if (Model.CanSendToPartners)
+        {
+            <label class="apd-audience-option">
+                <input type="radio" class="form-check-input" name="Audience" value="@((int)DispatchAudience.Partners)" data-apd-audience
+                       @(isPartners ? "checked" : "") />
+                <span>
+                    <strong>المدارس الشريكة</strong>
+                    <small>نسخة مستقلة لكل مدرسة تُدار من منطقتها</small>
+                </span>
+            </label>
+        }
+    </div>
+
+    <div class="apd-panel" data-apd-panel="@((int)DispatchAudience.Platform)" @(isPartners ? "hidden" : "")>
+        @if (Model.PlatformBatches.Count == 0)
+        {
+            <div class="apd-empty">لا توجد دفعات منصة متاحة.</div>
+        }
+        else
+        {
+            <ul class="apd-platform-list">
+                @foreach (var batch in Model.PlatformBatches)
+                {
+                    var inputId = $"apd-platform-{batch.BatchId}";
+                    <li>
+                        <input type="checkbox"
+                               class="form-check-input"
+                               id="@inputId"
+                               name="PlatformBatchIds"
+                               value="@batch.BatchId"
+                               data-apd-platform-batch
+                               @(selectedPlatform.Contains(batch.BatchId) ? "checked" : "")
+                               @(isPartners ? "disabled" : "") />
+                        <label for="@inputId">
+                            @batch.Name
+                            <small class="text-muted">@batch.BranchName</small>
+                        </label>
+                        <span class="apd-batch-count @(batch.ActiveStudents == 0 ? "is-empty" : "")">@batch.ActiveStudents طالب</span>
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+
+    @if (Model.CanSendToPartners)
+    {
+        <div class="apd-panel" data-apd-panel="@((int)DispatchAudience.Partners)" @(isPartners ? "" : "hidden")>
+            <noscript>
+                <div class="apd-error">اختيار المدارس الشريكة يتطلب تفعيل JavaScript في المتصفح.</div>
+            </noscript>
+
+            <div class="apd-summary" data-apd-summary aria-live="polite">
+                <span data-apd-count-partners>0</span> مدرسة ·
+                <span data-apd-count-batches>0</span> دفعة ·
+                <span data-apd-count-students>0</span> طالب
+            </div>
+
+            <div class="apd-loading" data-apd-loading hidden>
+                <span class="spinner-border spinner-border-sm" role="status"></span>
+                جارٍ تحميل المدارس الشريكة...
+            </div>
+
+            <div class="apd-error" data-apd-error hidden>
+                تعذّر تحميل المدارس الشريكة.
+                <button type="button" class="btn btn-sm btn-link" data-apd-retry>إعادة المحاولة</button>
+            </div>
+
+            <div data-apd-partners>
+                @if (Model.Partners != null)
+                {
+                    <partial name="~/Areas/Admin/Views/Shared/_DispatchAudiencePartners.cshtml" model="Model.Partners" />
+                }
+            </div>
+        </div>
+    }
+</fieldset>

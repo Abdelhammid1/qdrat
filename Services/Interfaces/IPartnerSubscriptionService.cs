@@ -28,6 +28,7 @@ namespace QdratNew.Interfaces
         bool CanUsePlacementExams(int partnerId);
 
         bool CanUsePerformanceIndicatorExams(int partnerId);
+        bool CanUseMinistrySimExams(int partnerId); // APD-S1.3
 
         // =========================================
         // 🔹 الخطط العلاجية والمهارات

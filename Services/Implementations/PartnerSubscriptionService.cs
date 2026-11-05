@@ -116,6 +116,13 @@ namespace QdratNew.Implementations
             return sub != null && sub.CanUsePerformanceIndicatorExams;
         }
 
+        // APD-S1.3
+        public bool CanUseMinistrySimExams(int partnerId)
+        {
+            var sub = GetActiveSubscription(partnerId);
+            return sub != null && sub.CanUseMinistrySimExams;
+        }
+
         // =====================================================
         // 🔹 الخطط العلاجية والمهارات
         // =====================================================
@@ -217,6 +224,7 @@ namespace QdratNew.Implementations
 
                 CanUsePlacementExams = subscription.CanUsePlacementExams,
                 CanUsePerformanceIndicatorExams = subscription.CanUsePerformanceIndicatorExams,
+                CanUseMinistrySimExams = subscription.CanUseMinistrySimExams,
 
                 CanUseReinforcementSkills = subscription.CanUseReinforcementSkills,
                 CanUseRemedialPlans = subscription.CanUseRemedialPlans,
@@ -302,6 +310,7 @@ namespace QdratNew.Implementations
             PartnerFeatureType.EducationalContent => sub.CanAccessEducationalContent,
             PartnerFeatureType.AIAnalytics => sub.CanUseAIAnalytics,
             PartnerFeatureType.ProfessionalModels => sub.CanUseProfessionalModels,
+            PartnerFeatureType.MinistrySimExams => sub.CanUseMinistrySimExams,
             _ => false
         };
     }

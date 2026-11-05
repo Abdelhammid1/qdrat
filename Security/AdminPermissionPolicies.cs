@@ -233,5 +233,12 @@
         public const string ContactMessages_Manage = "ContactMessages:Manage";
         public const string CorporateRequests_Read = "CorporateRequests:Read";
         public const string CorporateRequests_Manage = "CorporateRequests:Manage";
+
+        // ===============================
+        // APD — الإرسال للمدارس الشريكة
+        // ===============================
+        public const string PartnerDispatch_Send = "PartnerDispatch:Send";
+        public const string PartnerDispatch_Override = "PartnerDispatch:Override";
+        public const string PartnerDispatch_ReadLog = "PartnerDispatch:ReadLog";
     }
 }

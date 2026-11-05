@@ -69,6 +69,9 @@ namespace QdratNew.Filters
                 PartnerFeatureType.ProfessionalModels =>
                     _subscriptionService.CanUseProfessionalModels(partnerId.Value),
 
+                PartnerFeatureType.MinistrySimExams =>
+                    _subscriptionService.CanUseMinistrySimExams(partnerId.Value),
+
                 _ => false
             };
 

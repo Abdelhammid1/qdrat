@@ -32,6 +32,9 @@ namespace QdratNew.Enums
         AIAnalytics = 9,
 
         [Display(Name = "النماذج الاحترافية")]
-        ProfessionalModels = 10
+        ProfessionalModels = 10,
+
+        [Display(Name = "معمل القياس")]
+        MinistrySimExams = 11 // APD-S1
     }
 }
