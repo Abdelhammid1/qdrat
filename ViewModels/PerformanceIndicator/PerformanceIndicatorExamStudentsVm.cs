@@ -64,6 +64,9 @@
         public bool NeedsRemedialPlan { get; set; }
         public List<StudentWeakSectionViewModel> WeakSections { get; set; } = new();
 
+        // APD-S4.2: درجة الطالب في كل المحاور (لتقرير الدفعة في منطقة الشريك)
+        public List<StudentWeakSectionViewModel> SectionScores { get; set; } = new();
+
         /// <summary>true = محاولة اختبار مؤشر الأداء هذه موقوفة حاليًا بسبب رصد ترجمة المتصفح (Translation Guard)</summary>
         public bool IsIntegrityBlocked { get; set; }
     }
@@ -96,6 +99,9 @@
         public Guid QuestionId { get; set; }
         public int OrderNumber { get; set; }
         public string QuestionTitle { get; set; } = string.Empty;
+
+        // APD-S4.2: أرقام هندية في عرض الكمي
+        public bool IsQuantitative { get; set; }
         public int? SectionId { get; set; }
         public string SectionTitle { get; set; } = string.Empty;
         public int? LessonId { get; set; }

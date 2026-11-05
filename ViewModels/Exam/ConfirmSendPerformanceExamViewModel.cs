@@ -19,5 +19,9 @@
 
         // 🟢 عدد الطلاب الذين سيُرسل إليهم الاختبار
         public int StudentCount { get; set; }
+
+        // APD-S4.1: قالب إرسال للشركاء: يُختار له المدارس ودفعاتها هنا
+        public bool IsPartnerTemplate { get; set; }
+        public QdratNew.ViewModels.PartnerDispatch.DispatchAudiencePickerVm? AudiencePicker { get; set; }
     }
 }

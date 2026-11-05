@@ -9,10 +9,14 @@ using QdratNew.Entities;
 using QdratNew.Enums;
 using QdratNew.Security;
 using QdratNew.Services.Interfaces;
+using QdratNew.Services.PartnerDispatch;
+using QdratNew.Services.PerformanceIndicator;
+using QdratNew.ViewModels.PartnerDispatch;
 using QdratNew.ViewModels.Exam;
 using QdratNew.ViewModels.PerformanceIndicator;
 using QdratNew.ViewModels.Question;
 using System.Security.Claims;
+using System.Text.Json;
 
 namespace QdratNew.Areas.Admin.Controllers
 {
@@ -24,6 +28,9 @@ namespace QdratNew.Areas.Admin.Controllers
         private readonly IDbContextFactory<ApplicationDbContext> _contextFactory;
         private readonly IMemoryCache _cache;
         private readonly UserManager<ApplicationUser> _userManager;
+        private readonly IDispatchAudienceService _audienceService; // APD-S4.1
+        private readonly IDispatchAudiencePickerBuilder _audiencePicker;
+        private readonly IPartnerPerformanceDispatchService _partnerDispatch;
 
         // 🟢 الـ Constructor الرسمي الوحيد
         // هنا يتم تمرير الخدمات من الـ DI Container تلقائيًا (Startup / Program.cs)
@@ -31,12 +38,18 @@ namespace QdratNew.Areas.Admin.Controllers
             IPerformanceIndicatorExamService examService,
             IDbContextFactory<ApplicationDbContext> contextFactory,
             IMemoryCache cache,
-            UserManager<ApplicationUser> userManager)
+            UserManager<ApplicationUser> userManager,
+            IDispatchAudienceService audienceService,
+            IDispatchAudiencePickerBuilder audiencePicker,
+            IPartnerPerformanceDispatchService partnerDispatch)
         {
             _examService = examService ?? throw new ArgumentNullException(nameof(examService));
             _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
             _cache = cache ?? throw new ArgumentNullException(nameof(cache));
             _userManager = userManager ?? throw new ArgumentNullException(nameof(userManager));
+            _audienceService = audienceService ?? throw new ArgumentNullException(nameof(audienceService));
+            _audiencePicker = audiencePicker ?? throw new ArgumentNullException(nameof(audiencePicker));
+            _partnerDispatch = partnerDispatch ?? throw new ArgumentNullException(nameof(partnerDispatch));
         }
 
         // 🟢 عرض جميع اختبارات مؤشر الأداء
@@ -46,13 +59,13 @@ namespace QdratNew.Areas.Admin.Controllers
             using var _context = _contextFactory.CreateDbContext();
 
             ViewBag.ArchivedCount = await _context.PerformanceIndicatorExams
-                .CountAsync(e => e.IsArchived);
+                .CountAsync(e => e.IsArchived && e.OwnerPartnerId == null); // APD-S4.1
 
             ViewBag.ShowArchived = showArchived;
 
             var query = _context.PerformanceIndicatorExams
                 .AsNoTracking()
-                .Where(e => e.IsArchived == showArchived)
+                .Where(e => e.IsArchived == showArchived && e.OwnerPartnerId == null) // APD-S4.1: ما أُرسل لمدرسة يُدار من منطقتها
                 .Include(e => e.Curriculum)
                 .Include(e => e.ExamToBatches)
                     .ThenInclude(b => b.Batch)
@@ -94,7 +107,7 @@ namespace QdratNew.Areas.Admin.Controllers
             using var _context = _contextFactory.CreateDbContext();
 
             var exams = await _context.PerformanceIndicatorExams
-                .Where(e => selectedExamIds.Contains(e.Id) && !e.IsArchived)
+                .Where(e => selectedExamIds.Contains(e.Id) && !e.IsArchived && e.OwnerPartnerId == null)
                 .ToListAsync();
 
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -127,7 +140,7 @@ namespace QdratNew.Areas.Admin.Controllers
             using var _context = _contextFactory.CreateDbContext();
 
             var exams = await _context.PerformanceIndicatorExams
-                .Where(e => selectedExamIds.Contains(e.Id) && e.IsArchived)
+                .Where(e => selectedExamIds.Contains(e.Id) && e.IsArchived && e.OwnerPartnerId == null && !e.IsPartnerTemplate) // القالب يبقى مؤرشفًا
                 .ToListAsync();
 
             foreach (var exam in exams)
@@ -152,6 +165,9 @@ namespace QdratNew.Areas.Admin.Controllers
 
             var vm = new CreatePerformanceExamViewModel
             {
+                // APD-S4.1: الدفعات من اختيار جمهور الإرسال، والطلاب المخصصون للمنصة فقط
+                AudiencePicker = await BuildCreatePickerAsync(0, new AudienceSelection()),
+
                 // 🟢 جلب المناهج
                 AvailableCurriculums = await _context.Curriculums
                     .AsNoTracking()
@@ -162,19 +178,10 @@ namespace QdratNew.Areas.Admin.Controllers
                     })
                     .ToListAsync(),
 
-                // 🟢 جلب الدفعات
-                AvailableBatches = await _context.Batches
-                    .AsNoTracking()
-                    .Select(b => new SelectListItem
-                    {
-                        Value = b.Id.ToString(),
-                        Text = b.Name
-                    })
-                    .ToListAsync(),
-
                 // 🟢 جلب الطلاب
                 AvailableStudents = await _context.Students
                     .AsNoTracking()
+                    .Where(s => s.Branch.PartnerId == null)
                     .Select(s => new SelectListItem
                     {
                         Value = s.StudentID.ToString(),
@@ -204,16 +211,34 @@ namespace QdratNew.Areas.Admin.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [AdminPermission("PerformanceIndicatorExams", "Add")]
-        public async Task<IActionResult> Create(CreatePerformanceExamViewModel vm)
+        public async Task<IActionResult> Create(CreatePerformanceExamViewModel vm, AudienceSelection selection)
         {
             using var _context = _contextFactory.CreateDbContext();
+
+            // الحقل القديم SelectedBatchIds يبقى مقبولًا ويُعامل كدفعات منصة، فيُفحص كما تُفحص
+            selection.PlatformBatchIds ??= new List<int>();
+            selection.PlatformBatchIds.AddRange((vm.SelectedBatchIds ?? new List<int>()).Except(selection.PlatformBatchIds));
 
             if (!ModelState.IsValid)
             {
                 vm.ErrorMessage = "⚠️ تأكد من إدخال جميع البيانات.";
-                await FillViewModelListsAsync(_context, vm);
+                await FillViewModelListsAsync(_context, vm, selection);
                 return View(vm);
             }
+
+            if (selection.Audience == DispatchAudience.Partners)
+                return await CreatePartnerTemplateAsync(_context, vm, selection);
+
+            // APD-S4.1: تحت «المنصة» دفعات المعهد وطلابه فقط
+            var platformError = await ValidatePlatformAudienceAsync(_context, vm, selection);
+            if (platformError != null)
+            {
+                vm.ErrorMessage = platformError;
+                await FillViewModelListsAsync(_context, vm, selection);
+                return View(vm);
+            }
+
+            vm.SelectedBatchIds = selection.PlatformBatchIds.Distinct().ToList();
 
             try
             {
@@ -226,7 +251,7 @@ namespace QdratNew.Areas.Admin.Controllers
                     if (!modelIsAvailable)
                     {
                         vm.ErrorMessage = "❌ النموذج الاحترافي المحدد غير متاح أو مؤرشف.";
-                        await FillViewModelListsAsync(_context, vm);
+                        await FillViewModelListsAsync(_context, vm, selection);
                         return View(vm);
                     }
                 }
@@ -291,27 +316,118 @@ namespace QdratNew.Areas.Admin.Controllers
             catch (Exception ex)
             {
                 vm.ErrorMessage = $"❌ خطأ أثناء الحفظ: {ex.Message}";
-                await FillViewModelListsAsync(_context, vm);
+                await FillViewModelListsAsync(_context, vm, selection);
                 return View(vm);
             }
         }
 
-
-
-        private async Task FillViewModelListsAsync(ApplicationDbContext _context, CreatePerformanceExamViewModel vm)
+        // APD-S4.1: يُولَّد القالب مرة، ثم تُراجع أسئلته ويُرسل من ConfirmSend فتُنسخ منه نسخة لكل مدرسة.
+        private async Task<IActionResult> CreatePartnerTemplateAsync(ApplicationDbContext context, CreatePerformanceExamViewModel vm, AudienceSelection selection)
         {
+            if (!await _audiencePicker.CanSendAsync(User))
+                return Forbid();
+
+            string? error = null;
+
+            if (vm.CurriculumId <= 0)
+                error = "⚠️ يجب اختيار المنهج.";
+            else if (vm.TotalQuestions < 1)
+                error = "⚠️ عدد الأسئلة في كل محور يجب أن يكون 1 على الأقل.";
+            else if (vm.EndAt <= vm.StartAt)
+                error = "⚠️ نهاية الاختبار يجب أن تكون بعد بدايته.";
+            else if (vm.SelectedStudentIds is { Count: > 0 })
+                error = "⚠️ الطلاب المخصصون متاحون لدفعات المنصة فقط.";
+
+            if (error == null)
+            {
+                var audience = await _audienceService.ValidateAsync(
+                    PerformanceSource(vm.CurriculumId),
+                    selection,
+                    await _audiencePicker.CanOverrideAsync(User));
+
+                if (!audience.IsValid)
+                    error = "⚠️ " + string.Join(" ", audience.Errors);
+            }
+
+            int? templateId = null;
+
+            if (error == null)
+            {
+                try
+                {
+                    templateId = await _examService.CreatePartnerTemplateAsync(
+                        vm.ExamTitle, vm.CurriculumId, vm.IsOnline, vm.StartAt, vm.EndAt, vm.TotalQuestions, CurrentUserId());
+
+                    if (templateId == null)
+                        error = "⚠️ لا توجد أسئلة متاحة في هذا المنهج.";
+                }
+                catch (Exception ex)
+                {
+                    error = $"❌ خطأ أثناء الحفظ: {ex.Message}";
+                }
+            }
+
+            if (error != null)
+            {
+                vm.ErrorMessage = error;
+                await FillViewModelListsAsync(context, vm, selection);
+                return View(vm);
+            }
+
+            TempData[TemplateSelectionKey(templateId!.Value)] = JsonSerializer.Serialize(selection);
+            return RedirectToAction("ConfirmSend", new { id = templateId });
+        }
+
+        private async Task<string?> ValidatePlatformAudienceAsync(ApplicationDbContext context, CreatePerformanceExamViewModel vm, AudienceSelection selection)
+        {
+            if (selection.PlatformBatchIds.Count == 0)
+                return "⚠️ اختر دفعة منصة واحدة على الأقل.";
+
+            var audience = await _audienceService.ValidateAsync(PerformanceSource(null), selection, canOverride: false);
+            if (!audience.IsValid)
+                return "⚠️ " + string.Join(" ", audience.Errors);
+
+            var studentIds = (vm.SelectedStudentIds ?? new List<int>()).Distinct().ToList();
+            if (studentIds.Count == 0)
+                return null;
+
+            var hasPartnerStudent = await context.Students
+                .AsNoTracking()
+                .AnyAsync(s => EF.Constant(studentIds).Contains(s.StudentID) && s.Branch.PartnerId != null);
+
+            return hasPartnerStudent ? "⚠️ طالب أو أكثر من المحددين يتبع مدرسة شريكة." : null;
+        }
+
+        private static DispatchSource PerformanceSource(int? curriculumId)
+            => new(PartnerDispatchKind.PerformanceIndicator, null, curriculumId is > 0 ? curriculumId : null, null);
+
+        private static string TemplateSelectionKey(int templateId) => $"PerformanceTemplateSelection_{templateId}";
+
+        private async Task<DispatchAudiencePickerVm> BuildCreatePickerAsync(int curriculumId, AudienceSelection selection)
+        {
+            var picker = await _audiencePicker.BuildAsync(
+                User,
+                PerformanceSource(curriculumId),
+                selection,
+                includePartners: selection.Audience == DispatchAudience.Partners && curriculumId > 0);
+
+            picker.CurriculumInputSelector = "#CurriculumId";
+            picker.RequiresCurriculum = true;
+            return picker;
+        }
+
+        private async Task FillViewModelListsAsync(ApplicationDbContext _context, CreatePerformanceExamViewModel vm, AudienceSelection selection)
+        {
+            vm.AudiencePicker = await BuildCreatePickerAsync(vm.CurriculumId, selection);
+
             vm.AvailableCurriculums = await _context.Curriculums
                 .AsNoTracking()
                 .Select(c => new SelectListItem { Value = c.Id.ToString(), Text = c.Title })
                 .ToListAsync();
 
-            vm.AvailableBatches = await _context.Batches
-                .AsNoTracking()
-                .Select(b => new SelectListItem { Value = b.Id.ToString(), Text = b.Name })
-                .ToListAsync();
-
             vm.AvailableStudents = await _context.Students
                 .AsNoTracking()
+                .Where(s => s.Branch.PartnerId == null)
                 .Select(s => new SelectListItem { Value = s.StudentID.ToString(), Text = s.FullName })
                 .ToListAsync();
 
@@ -347,7 +463,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 .Include(e => e.Curriculum)
                 .Include(e => e.Sections)
                     .ThenInclude(s => s.Section)
-                .FirstOrDefaultAsync(e => e.Id == id);
+                .FirstOrDefaultAsync(e => e.Id == id && e.OwnerPartnerId == null);
 
             if (exam == null)
                 return NotFound("❌ لم يتم العثور على الاختبار المطلوب.");
@@ -426,7 +542,7 @@ namespace QdratNew.Areas.Admin.Controllers
                     .ThenInclude(b => b.Batch)
                 .Include(e => e.Sections)
                     .ThenInclude(s => s.Section)
-                .FirstOrDefaultAsync(e => e.Id == id);
+                .FirstOrDefaultAsync(e => e.Id == id && e.OwnerPartnerId == null);
 
             if (exam == null)
                 return NotFound("❌ لم يتم العثور على الاختبار.");
@@ -537,7 +653,7 @@ namespace QdratNew.Areas.Admin.Controllers
             var exam = await _context.PerformanceIndicatorExams
                 .Include(e => e.Curriculum)
                 .AsNoTracking()
-                .FirstOrDefaultAsync(e => e.Id == examId);
+                .FirstOrDefaultAsync(e => e.Id == examId && e.OwnerPartnerId == null);
 
             if (exam == null)
                 return NotFound("⚠️ لم يتم العثور على الاختبار.");
@@ -618,8 +734,10 @@ namespace QdratNew.Areas.Admin.Controllers
                     .Select(c => new SelectListItem { Value = c.Id.ToString(), Text = c.Title })
                     .ToListAsync(),
 
+                // APD-S4.1: دفعات المعهد فقط
                 AvailableBatches = await _context.Batches
                     .AsNoTracking()
+                    .Where(b => b.Branch.PartnerId == null)
                     .Select(b => new SelectListItem { Value = b.Id.ToString(), Text = b.Name })
                     .ToListAsync(),
 
@@ -645,6 +763,13 @@ namespace QdratNew.Areas.Admin.Controllers
         {
             using var _context = _contextFactory.CreateDbContext();
 
+            // APD-S4.1: لا اختبار معهد على دفعة مدرسة شريكة
+            if (ModelState.IsValid &&
+                !await _context.Batches.AsNoTracking().AnyAsync(b => b.Id == vm.SelectedBatchId && b.Branch.PartnerId == null))
+            {
+                ModelState.AddModelError(nameof(vm.SelectedBatchId), "الدفعة ليست من دفعات المنصة.");
+            }
+
             if (!ModelState.IsValid)
             {
                 vm.ErrorMessage = "⚠️ تأكد من إدخال جميع الحقول المطلوبة.";
@@ -653,6 +778,7 @@ namespace QdratNew.Areas.Admin.Controllers
                     .ToListAsync();
 
                 vm.AvailableBatches = await _context.Batches.AsNoTracking()
+                    .Where(b => b.Branch.PartnerId == null)
                     .Select(b => new SelectListItem { Value = b.Id.ToString(), Text = b.Name })
                     .ToListAsync();
 
@@ -773,10 +899,26 @@ namespace QdratNew.Areas.Admin.Controllers
                 .Include(e => e.ExamToBatches)
                     .ThenInclude(b => b.Batch)
                 .AsNoTracking()
-                .FirstOrDefaultAsync(e => e.Id == id);
+                .FirstOrDefaultAsync(e => e.Id == id && e.OwnerPartnerId == null);
 
             if (exam == null)
                 return NotFound("⚠️ لم يتم العثور على الاختبار.");
+
+            // APD-S4.1: القالب يُرسل للمدارس فقط، واختيارها من شاشة الإنشاء يُعرض قابلًا للتعديل
+            DispatchAudiencePickerVm? partnersPicker = null;
+            if (exam.IsPartnerTemplate)
+            {
+                if (!await _audiencePicker.CanSendAsync(User))
+                    return Forbid();
+
+                var selection = TempData.Peek(TemplateSelectionKey(id)) is string json
+                    ? JsonSerializer.Deserialize<AudienceSelection>(json) ?? new AudienceSelection()
+                    : new AudienceSelection();
+                selection.Audience = DispatchAudience.Partners;
+
+                partnersPicker = await _audiencePicker.BuildAsync(User, PerformanceSource(exam.CurriculumId), selection, includePartners: true);
+                partnersPicker.PartnersOnly = true;
+            }
 
             // 🟢 بناء ViewModel المطلوب للصفحة
             var vm = new ConfirmSendPerformanceExamViewModel
@@ -793,7 +935,10 @@ namespace QdratNew.Areas.Admin.Controllers
                 ReferenceCode = exam.ReferenceCode,
 
                 // سيتم حساب عدد الطلاب لاحقاً في ConfirmSendPost
-                StudentCount = 0
+                StudentCount = 0,
+
+                IsPartnerTemplate = exam.IsPartnerTemplate,
+                AudiencePicker = partnersPicker
             };
 
             return View(vm);
@@ -807,20 +952,24 @@ namespace QdratNew.Areas.Admin.Controllers
         [ValidateAntiForgeryToken]
         [AdminPermission("PerformanceIndicatorExams", "ConfirmSend")]
 
-        public async Task<IActionResult> ConfirmSendPost(int examId)
+        public async Task<IActionResult> ConfirmSendPost(int examId, AudienceSelection selection)
         {
             using var _context = _contextFactory.CreateDbContext();
 
             // 1️⃣ جلب الاختبار مع الدفعات المرتبطة
             var exam = await _context.PerformanceIndicatorExams
                 .Include(e => e.ExamToBatches)
-                .FirstOrDefaultAsync(e => e.Id == examId);
+                .FirstOrDefaultAsync(e => e.Id == examId && e.OwnerPartnerId == null);
 
             if (exam == null)
             {
                 TempData["Error"] = "⚠️ لم يتم العثور على الاختبار.";
                 return RedirectToAction("Index");
             }
+
+            // APD-S4.1: القالب لا يصل لطلاب مباشرة، بل تُنسخ منه نسخة لكل مدرسة
+            if (exam.IsPartnerTemplate)
+                return await SendTemplateToPartnersAsync(exam, selection);
 
             // 2️⃣ جلب الطلاب عبر JOIN بدون Contains
             var studentIds = await (
@@ -860,6 +1009,49 @@ namespace QdratNew.Areas.Admin.Controllers
 
 
 
+        private async Task<IActionResult> SendTemplateToPartnersAsync(PerformanceIndicatorExam template, AudienceSelection selection)
+        {
+            if (!await _audiencePicker.CanSendAsync(User))
+                return Forbid();
+
+            // زر الإرسال في صفحة المراجعة لا يحمل اختيارًا: يذهب لشاشة اختيار المدارس
+            if (selection.Audience != DispatchAudience.Partners)
+                return RedirectToAction("ConfirmSend", new { id = template.Id });
+
+            var audience = await _audienceService.ValidateAsync(
+                PerformanceSource(template.CurriculumId),
+                selection,
+                await _audiencePicker.CanOverrideAsync(User));
+
+            if (!audience.IsValid)
+                return RedisplayTemplateSend(template.Id, selection, "⚠️ " + string.Join(" ", audience.Errors));
+
+            var outcome = await _partnerDispatch.DispatchAsync(
+                template.Id,
+                audience.Partners,
+                new DispatchActor(CurrentUserId(), User.Identity?.Name));
+
+            if (outcome.IsNotFound)
+            {
+                TempData["Error"] = "⚠️ لم يتم العثور على الاختبار.";
+                return RedirectToAction("Index");
+            }
+
+            if (outcome.ValidationError != null)
+                return RedisplayTemplateSend(template.Id, selection, outcome.ValidationError);
+
+            TempData.Remove(TemplateSelectionKey(template.Id));
+            TempData[PartnerDispatchController.OutcomeTempDataKey] = JsonSerializer.Serialize(outcome);
+            return RedirectToAction("Result", "PartnerDispatch", new { area = "Admin" });
+        }
+
+        private IActionResult RedisplayTemplateSend(int templateId, AudienceSelection selection, string error)
+        {
+            TempData["Error"] = error;
+            TempData[TemplateSelectionKey(templateId)] = JsonSerializer.Serialize(selection);
+            return RedirectToAction("ConfirmSend", new { id = templateId });
+        }
+
         // =============================
         // 🟢 تنفيذ الاستبدال الفعلي بعد الضغط على "اختيار"
         // =============================
@@ -873,6 +1065,7 @@ namespace QdratNew.Areas.Admin.Controllers
             var target = await _context.PerformanceIndicatorExamQuestions
                 .FirstOrDefaultAsync(q =>
                     q.PerformanceIndicatorExamId == model.ExamId &&
+                    q.PerformanceIndicatorExam.OwnerPartnerId == null &&
                     q.QuestionId == model.OldQuestionId);
 
             if (target == null)
@@ -904,151 +1097,11 @@ namespace QdratNew.Areas.Admin.Controllers
             if (id == 0 && examId.HasValue)
                 id = examId.Value;
 
-            var exam = await _context.PerformanceIndicatorExams
-                .AsNoTracking()
-                .Include(e => e.Curriculum)
-                .Include(e => e.ExamStudents)
-                    .ThenInclude(s => s.Student)
-                .FirstOrDefaultAsync(e => e.Id == id);
+            // APD-S4.2: ownerPartnerId = null: اختبارات المعهد فقط
+            var vm = await PerformanceExamResultsBuilder.BuildStudentsReportAsync(_context, id, null);
 
-            if (exam == null)
+            if (vm == null)
                 return NotFound("❌ لم يتم العثور على الاختبار.");
-
-            var passPercent = exam.PassPercent > 0 && exam.PassPercent <= 100
-                ? exam.PassPercent
-                : 60;
-
-            var examQuestions = await _context.PerformanceIndicatorExamQuestions
-                .AsNoTracking()
-                .Include(eq => eq.Section)
-                .Include(eq => eq.Question)
-                    .ThenInclude(q => q.Lesson)
-                        .ThenInclude(l => l.Section)
-                .Include(eq => eq.Question)
-                    .ThenInclude(q => q.Section)
-                .Where(eq => eq.PerformanceIndicatorExamId == id)
-                .OrderBy(eq => eq.OrderNumber)
-                .ThenBy(eq => eq.Id)
-                .ToListAsync();
-
-            var attempts = await _context.QuestionAttemptNew
-                .AsNoTracking()
-                .Where(a => a.PerformanceIndicatorExamId == id)
-                .ToListAsync();
-
-            var examQuestionIds = examQuestions
-                .Select(eq => eq.QuestionId)
-                .ToHashSet();
-
-            var sectionGroups = examQuestions
-                .Where(eq => eq.Question != null)
-                .GroupBy(eq => new
-                {
-                    SectionId = eq.SectionId
-                        ?? eq.Question.Lesson?.SectionId
-                        ?? eq.Question.SectionId
-                        ?? 0,
-                    SectionTitle = eq.Section?.Title
-                        ?? eq.Question.Lesson?.Section?.Title
-                        ?? eq.Question.Section?.Title
-                        ?? "محور غير محدد"
-                })
-                .ToList();
-
-            var studentRows = new List<PerformanceIndicatorExamStudentRowViewModel>();
-            var totalQuestions = examQuestions.Count;
-
-            var blockedStudentIds = await _context.IntegrityViolationLogs
-                .Where(v => v.AttemptType == IntegrityAttemptType.PerformanceIndicator
-                         && v.AttemptEntityId == exam.Id
-                         && !v.IsResolved)
-                .Select(v => v.StudentId)
-                .ToListAsync();
-            var blockedStudentIdsSet = blockedStudentIds.ToHashSet();
-
-            foreach (var examStudent in exam.ExamStudents.OrderBy(s => s.Student?.FullName))
-            {
-                var latestAttempts = attempts
-                    .Where(a => a.StudentId == examStudent.StudentId && examQuestionIds.Contains(a.QuestionId))
-                    .GroupBy(a => a.QuestionId)
-                    .Select(g => g.OrderByDescending(a => a.AttemptedAt).ThenByDescending(a => a.Id).First())
-                    .ToList();
-
-                var attemptsByQuestionId = latestAttempts.ToDictionary(a => a.QuestionId, a => a);
-                var correctCount = examQuestions.Count(eq =>
-                    attemptsByQuestionId.TryGetValue(eq.QuestionId, out var attempt) &&
-                    !string.IsNullOrWhiteSpace(attempt.SelectedAnswer) &&
-                    attempt.SelectedAnswer != "—" &&
-                    attempt.IsCorrect);
-
-                var scorePercent = totalQuestions > 0
-                    ? Math.Round(correctCount * 100.0 / totalQuestions, 1)
-                    : 0;
-
-                var weakSections = new List<StudentWeakSectionViewModel>();
-
-                foreach (var sectionGroup in sectionGroups)
-                {
-                    var sectionTotal = sectionGroup.Count();
-                    var sectionCorrect = sectionGroup.Count(eq =>
-                        attemptsByQuestionId.TryGetValue(eq.QuestionId, out var attempt) &&
-                        !string.IsNullOrWhiteSpace(attempt.SelectedAnswer) &&
-                        attempt.SelectedAnswer != "—" &&
-                        attempt.IsCorrect);
-
-                    var sectionScore = sectionTotal > 0
-                        ? Math.Round(sectionCorrect * 100.0 / sectionTotal, 1)
-                        : 0;
-
-                    if (sectionScore < passPercent)
-                    {
-                        weakSections.Add(new StudentWeakSectionViewModel
-                        {
-                            SectionId = sectionGroup.Key.SectionId,
-                            SectionTitle = sectionGroup.Key.SectionTitle,
-                            ScorePercent = sectionScore,
-                            CorrectCount = sectionCorrect,
-                            TotalQuestions = sectionTotal
-                        });
-                    }
-                }
-
-                var started = examStudent.StartedAt.HasValue || latestAttempts.Any();
-                var statusText = examStudent.IsCompleted
-                    ? "مكتمل"
-                    : started ? "بدأ ولم يكمل" : "لم يبدأ";
-
-                studentRows.Add(new PerformanceIndicatorExamStudentRowViewModel
-                {
-                    StudentId = examStudent.StudentId,
-                    StudentName = examStudent.Student?.FullName ?? "طالب غير محدد",
-                    IsCompleted = examStudent.IsCompleted,
-                    StartedAt = examStudent.StartedAt,
-                    CompletedAt = examStudent.CompletedAt,
-                    ScorePercent = scorePercent,
-                    StatusText = statusText,
-                    Passed = scorePercent >= passPercent,
-                    NeedsRemedialPlan = scorePercent < passPercent,
-                    WeakSections = weakSections,
-                    IsIntegrityBlocked = blockedStudentIdsSet.Contains(examStudent.StudentId),
-                });
-            }
-
-            var vm = new PerformanceIndicatorExamStudentsReportViewModel
-            {
-                ExamId = exam.Id,
-                ExamTitle = exam.Title,
-                CurriculumTitle = exam.Curriculum?.Title ?? "—",
-                TotalStudents = studentRows.Count,
-                CompletedStudents = studentRows.Count(s => s.IsCompleted),
-                PassedStudents = studentRows.Count(s => s.Passed),
-                NeedRemedialPlanStudents = studentRows.Count(s => s.NeedsRemedialPlan),
-                AverageScore = studentRows.Any()
-                    ? Math.Round(studentRows.Average(s => s.ScorePercent ?? 0), 1)
-                    : 0,
-                PassPercent = passPercent,
-                Students = studentRows
-            };
 
             return View(vm);
         }
@@ -1059,95 +1112,10 @@ namespace QdratNew.Areas.Admin.Controllers
         {
             using var _context = _contextFactory.CreateDbContext();
 
-            var exam = await _context.PerformanceIndicatorExams
-                .AsNoTracking()
-                .FirstOrDefaultAsync(e => e.Id == examId);
+            var vm = await PerformanceExamResultsBuilder.BuildStudentQuestionsAsync(_context, examId, studentId, null);
 
-            if (exam == null)
-                return NotFound("❌ لم يتم العثور على الاختبار.");
-
-            var student = await _context.Students
-                .AsNoTracking()
-                .FirstOrDefaultAsync(s => s.StudentID == studentId);
-
-            if (student == null)
-                return NotFound("❌ لم يتم العثور على الطالب.");
-
-            var examQuestions = await _context.PerformanceIndicatorExamQuestions
-                .AsNoTracking()
-                .Include(eq => eq.Section)
-                .Include(eq => eq.Question)
-                    .ThenInclude(q => q.Lesson)
-                        .ThenInclude(l => l.Section)
-                .Include(eq => eq.Question)
-                    .ThenInclude(q => q.Section)
-                .Where(eq => eq.PerformanceIndicatorExamId == examId)
-                .OrderBy(eq => eq.OrderNumber)
-                .ThenBy(eq => eq.Id)
-                .ToListAsync();
-
-            var attempts = await _context.QuestionAttemptNew
-                .AsNoTracking()
-                .Where(a => a.PerformanceIndicatorExamId == examId && a.StudentId == studentId)
-                .ToListAsync();
-
-            var latestAttempts = attempts
-                .GroupBy(a => a.QuestionId)
-                .Select(g => g.OrderByDescending(a => a.AttemptedAt).ThenByDescending(a => a.Id).First())
-                .ToDictionary(a => a.QuestionId, a => a);
-
-            var rows = examQuestions
-                .Where(eq => eq.Question != null)
-                .Select((eq, index) =>
-                {
-                    latestAttempts.TryGetValue(eq.QuestionId, out var attempt);
-
-                    var isSkipped = attempt == null ||
-                                    string.IsNullOrWhiteSpace(attempt.SelectedAnswer) ||
-                                    attempt.SelectedAnswer == "—";
-                    var isCorrect = !isSkipped && attempt!.IsCorrect;
-
-                    return new StudentPerformanceIndicatorQuestionRowViewModel
-                    {
-                        QuestionId = eq.QuestionId,
-                        OrderNumber = eq.OrderNumber > 0 ? eq.OrderNumber : index + 1,
-                        QuestionTitle = eq.Question.Title ?? "بدون نص",
-                        SectionId = eq.SectionId ?? eq.Question.Lesson?.SectionId ?? eq.Question.SectionId,
-                        SectionTitle = eq.Section?.Title
-                            ?? eq.Question.Lesson?.Section?.Title
-                            ?? eq.Question.Section?.Title
-                            ?? "محور غير محدد",
-                        LessonId = eq.Question.LessonId,
-                        LessonTitle = eq.Question.Lesson?.Title ?? "مؤشر غير محدد",
-                        StudentAnswer = isSkipped ? "لم يجب" : attempt!.SelectedAnswer,
-                        CorrectAnswer = eq.Question.CorrectAnswer ?? "—",
-                        IsCorrect = isCorrect,
-                        IsSkipped = isSkipped,
-                        StatusText = isSkipped ? "متخطى" : (isCorrect ? "صحيح" : "خطأ"),
-                        TimeTakenSeconds = isSkipped ? null : attempt!.TimeTakenSeconds
-                    };
-                })
-                .OrderBy(q => q.OrderNumber)
-                .ToList();
-
-            var correctCount = rows.Count(q => q.IsCorrect);
-            var skippedCount = rows.Count(q => q.IsSkipped);
-            var wrongCount = rows.Count(q => !q.IsCorrect);
-            var total = rows.Count;
-
-            var vm = new StudentPerformanceIndicatorQuestionReportViewModel
-            {
-                ExamId = exam.Id,
-                ExamTitle = exam.Title,
-                StudentId = student.StudentID,
-                StudentName = student.FullName,
-                TotalQuestions = total,
-                CorrectCount = correctCount,
-                WrongCount = wrongCount,
-                SkippedCount = skippedCount,
-                ScorePercent = total > 0 ? Math.Round(correctCount * 100.0 / total, 1) : 0,
-                Questions = rows
-            };
+            if (vm == null)
+                return NotFound("❌ لم يتم العثور على الاختبار أو الطالب.");
 
             return View(vm);
         }
@@ -1160,7 +1128,14 @@ namespace QdratNew.Areas.Admin.Controllers
         [AdminPermission("PerformanceIndicatorExams", "Delete")]
         public async Task<IActionResult> Delete(int id)
         {
-            var success = await _examService.DeleteExamAsync(id);
+            using var _context = _contextFactory.CreateDbContext();
+
+            // APD-S4.1: ما تملكه مدرسة لا يُحذف من الأدمن
+            var isInstituteExam = await _context.PerformanceIndicatorExams
+                .AsNoTracking()
+                .AnyAsync(e => e.Id == id && e.OwnerPartnerId == null);
+
+            var success = isInstituteExam && await _examService.DeleteExamAsync(id);
             TempData[success ? "Success" : "Error"] = success
                 ? "✅ تم حذف الاختبار وجميع بياناته التابعة بنجاح."
                 : "⚠️ لم يتم العثور على الاختبار المحدد.";
@@ -1201,7 +1176,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
             var exam = await _context.PerformanceIndicatorExams
                 .AsNoTracking()
-                .FirstOrDefaultAsync(e => e.Id == examId);
+                .FirstOrDefaultAsync(e => e.Id == examId && e.OwnerPartnerId == null);
 
             if (exam == null) return NotFound();
 
@@ -1252,7 +1227,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
             using var _context = _contextFactory.CreateDbContext();
 
-            var exam = await _context.PerformanceIndicatorExams.FirstOrDefaultAsync(e => e.Id == examId);
+            var exam = await _context.PerformanceIndicatorExams.FirstOrDefaultAsync(e => e.Id == examId && e.OwnerPartnerId == null);
             if (exam == null) return NotFound();
 
             allowedUserIds ??= new List<string>();

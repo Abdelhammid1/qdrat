@@ -33,6 +33,10 @@ namespace QdratNew.ViewModels.Exam
 
         public string? ErrorMessage { get; set; }
 
+        // APD-S4.1: اختيار جمهور الإرسال
+        [ValidateNever]
+        public QdratNew.ViewModels.PartnerDispatch.DispatchAudiencePickerVm? AudiencePicker { get; set; }
+
 
         // ✅ القوائم التي يجب تعبئتها قبل الوصول إلى الصفحة
         [ValidateNever]

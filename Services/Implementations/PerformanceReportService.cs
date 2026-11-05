@@ -27,7 +27,7 @@ namespace QdratNew.Services.Implementations
      join sec in _context.Sections.AsNoTracking() on r.SectionId equals sec.Id
      join rp in _context.RemedialPlans.AsNoTracking() on r.RemedialPlanId equals rp.Id into rpJoin
      from rp in rpJoin.DefaultIfEmpty()
-     where sb.BatchId == batchId
+     where sb.BatchId == batchId && r.PerformanceIndicatorExam.OwnerPartnerId == null // APD-S4.1
      select new IndicatorPerformanceReportViewModel
      {
          StudentId = s.StudentID,
@@ -59,7 +59,7 @@ namespace QdratNew.Services.Implementations
                       r => r.StudentId,
                       sb => sb.StudentID,
                       (r, sb) => new { Result = r, StudentBatch = sb })
-                .Where(x => x.StudentBatch.BatchId == batchId)
+                .Where(x => x.StudentBatch.BatchId == batchId && x.Result.PerformanceIndicatorExam.OwnerPartnerId == null) // APD-S4.1
                 .Select(x => new { x.Result.StudentId, x.Result.IsPassed, x.Result.RemedialPlanId })
                 .ToListAsync();
 

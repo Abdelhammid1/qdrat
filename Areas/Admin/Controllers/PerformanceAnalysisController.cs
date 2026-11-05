@@ -45,7 +45,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
             var exam = await _context.PerformanceIndicatorExams
                 .Include(e => e.Curriculum)
-                .FirstOrDefaultAsync(e => e.Id == examId);
+                .FirstOrDefaultAsync(e => e.Id == examId && e.OwnerPartnerId == null); // APD-S4.1
 
             if (batch == null || exam == null)
                 return NotFound("⚠️ لم يتم العثور على بيانات الدفعة أو الاختبار.");

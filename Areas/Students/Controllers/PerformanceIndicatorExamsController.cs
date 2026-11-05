@@ -240,6 +240,10 @@ namespace QdratNew.Areas.Students.Controllers
             studentExam = await _context.PerformanceIndicatorExamStudents
                 .FirstOrDefaultAsync(s => s.PerformanceIndicatorExamId == id && s.StudentId == studentId);
 
+            // APD-S4.2: القالب لا يُحل، ونسخة المدرسة لا يدخلها طالب لم تُسند إليه (لا إنشاء لسجل تلقائي لها)
+            if (exam.IsPartnerTemplate || (exam.OwnerPartnerId != null && studentExam == null))
+                return NotFound("❌ لم يتم العثور على هذا الاختبار.");
+
             // 🛑 لو الاختبار أصبح مكتمل — لا نفتح الأسئلة
             if (studentExam != null && studentExam.IsCompleted)
             {

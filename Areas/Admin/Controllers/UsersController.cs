@@ -2905,7 +2905,7 @@ ORDER BY b.rn;";
                 // لأن صفحة التقرير تتوقع PerformanceIndicatorExamId
                 var examRaw = await _db.PerformanceIndicatorExamStudents
                     .AsNoTracking()
-                    .Where(e => e.StudentId == student.StudentID && e.IsCompleted)
+                    .Where(e => e.StudentId == student.StudentID && e.IsCompleted && e.PerformanceIndicatorExam.OwnerPartnerId == null) // APD-S4.1
                     .Include(e => e.PerformanceIndicatorExam)
                     .OrderByDescending(e => e.CompletedAt)
                     .Take(30)

@@ -5712,6 +5712,9 @@ namespace QdratNew.Migrations
                     b.Property<bool>("IsOnline")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsPartnerTemplate")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("IsSent")
                         .HasColumnType("bit");
 

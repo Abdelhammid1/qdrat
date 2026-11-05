@@ -219,6 +219,10 @@ namespace QdratNew.Areas.Admin.Controllers
         [HttpPost]
         public async Task<IActionResult> GenerateFromExam(int examId)
         {
+            // APD-S4.1: ما تملكه مدرسة لا يُدار من الأدمن
+            if (!await _context.PerformanceIndicatorExams.AsNoTracking().AnyAsync(e => e.Id == examId && e.OwnerPartnerId == null))
+                return NotFound();
+
             try
             {
                 await _analysisService.GenerateRemedialPlansAsync(examId);

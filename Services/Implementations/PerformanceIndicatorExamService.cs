@@ -3,6 +3,7 @@ using Microsoft.Extensions.Caching.Memory;
 using QdratNew.Data;
 using QdratNew.Entities;
 using QdratNew.Services.Interfaces;
+using QdratNew.Services.PerformanceIndicator;
 
 namespace QdratNew.Services.Implementations
 {
@@ -47,6 +48,96 @@ namespace QdratNew.Services.Implementations
             if (!linkedBatches.Any())
                 throw new Exception("⚠️ لا توجد دفعات مرتبطة بهذا الاختبار.");
 
+            await GenerateQuestionsAsync(_context, exam, curriculumId, totalQuestions);
+
+            // ✅ بعد توليد الأسئلة: ربط الطلاب بالاختبار حسب الدفعات فقط
+            // ✅ جلب الطلاب المنتمين لكل دفعة من جدول StudentBatchEnrollments
+            foreach (var batchId in linkedBatches)
+            {
+                var studentsInBatch = await (
+                    from e in _context.StudentBatchEnrollments
+                    join s in _context.Students on e.StudentID equals s.StudentID
+                    where e.BatchId == batchId
+                    select s.StudentID
+                ).ToListAsync();
+
+                foreach (var studentId in studentsInBatch)
+                {
+                    bool alreadyLinked = await _context.PerformanceIndicatorExamStudents
+                        .AnyAsync(x => x.PerformanceIndicatorExamId == exam.Id && x.StudentId == studentId);
+
+                    if (!alreadyLinked)
+                    {
+                        _context.PerformanceIndicatorExamStudents.Add(new PerformanceIndicatorExamStudent
+                        {
+                            PerformanceIndicatorExamId = exam.Id,
+                            StudentId = studentId,
+                            IsCompleted = false,
+                            StartedAt = null,
+                            ScorePercent = null,
+                            CompletedAt = null
+                        });
+                    }
+                }
+            }
+
+            await _context.SaveChangesAsync();
+
+
+            await _context.SaveChangesAsync();
+        }
+
+        // APD-S4.1: القالب يمر بنفس التوليد، ولا يصل لأي طالب حتى يُنسخ لمدرسة
+        public async Task<int?> CreatePartnerTemplateAsync(string title, int curriculumId, bool isOnline, DateTime startAt, DateTime endAt, int totalQuestions, string? userId)
+        {
+            using var _context = _contextFactory.CreateDbContext();
+
+            int? templateId = null;
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            await strategy.ExecuteAsync(async () =>
+            {
+                _context.ChangeTracker.Clear();
+                templateId = null;
+
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                var exam = new PerformanceIndicatorExam
+                {
+                    Title = title,
+                    CurriculumId = curriculumId,
+                    CreatedAt = DateTime.Now,
+                    IsOnline = isOnline,
+                    StartAt = startAt,
+                    EndAt = endAt,
+                    ReferenceCode = await PerformanceExamReferenceCode.GenerateAsync(
+                        code => _context.PerformanceIndicatorExams.AsNoTracking().AnyAsync(e => e.ReferenceCode == code)),
+                    IsPartnerTemplate = true,
+                    IsArchived = true,
+                    ArchivedAt = DateTime.UtcNow,
+                    ArchivedByUserId = userId
+                };
+
+                _context.PerformanceIndicatorExams.Add(exam);
+                await _context.SaveChangesAsync();
+
+                await GenerateQuestionsAsync(_context, exam, curriculumId, totalQuestions);
+
+                if (exam.TotalQuestions == 0)
+                {
+                    await transaction.RollbackAsync();
+                    return;
+                }
+
+                await transaction.CommitAsync();
+                templateId = exam.Id;
+            });
+
+            return templateId;
+        }
+
+        private static async Task GenerateQuestionsAsync(ApplicationDbContext _context, PerformanceIndicatorExam exam, int curriculumId, int totalQuestions)
+        {
             // 🟢 جلب المحاور التابعة للمنهج
             var sections = await _context.Sections
                 .AsNoTracking()
@@ -142,42 +233,6 @@ namespace QdratNew.Services.Implementations
             // حفظ العدد الإجمالي في الكيان الرئيسي (لو الخاصية موجودة)
             if (_context.Entry(exam).Property("TotalQuestions") != null)
                 exam.GetType().GetProperty("TotalQuestions")?.SetValue(exam, totalGenerated);
-
-            await _context.SaveChangesAsync();
-
-            // ✅ بعد توليد الأسئلة: ربط الطلاب بالاختبار حسب الدفعات فقط
-            // ✅ جلب الطلاب المنتمين لكل دفعة من جدول StudentBatchEnrollments
-            foreach (var batchId in linkedBatches)
-            {
-                var studentsInBatch = await (
-                    from e in _context.StudentBatchEnrollments
-                    join s in _context.Students on e.StudentID equals s.StudentID
-                    where e.BatchId == batchId
-                    select s.StudentID
-                ).ToListAsync();
-
-                foreach (var studentId in studentsInBatch)
-                {
-                    bool alreadyLinked = await _context.PerformanceIndicatorExamStudents
-                        .AnyAsync(x => x.PerformanceIndicatorExamId == exam.Id && x.StudentId == studentId);
-
-                    if (!alreadyLinked)
-                    {
-                        _context.PerformanceIndicatorExamStudents.Add(new PerformanceIndicatorExamStudent
-                        {
-                            PerformanceIndicatorExamId = exam.Id,
-                            StudentId = studentId,
-                            IsCompleted = false,
-                            StartedAt = null,
-                            ScorePercent = null,
-                            CompletedAt = null
-                        });
-                    }
-                }
-            }
-
-            await _context.SaveChangesAsync();
-
 
             await _context.SaveChangesAsync();
         }

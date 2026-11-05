@@ -170,6 +170,17 @@ SELECT p.Name FROM AdminProfiles p JOIN AdminProfileControllerPermissions c ON c
 - **تحقق بعد النشر:** أرسل مسودة لمدرسة تجريبية، ثم تأكد من صفحة النتيجة، ومن ظهورها في `Partner/PlacementExams/BatchExams` بوسم «من المعهد»، ومن غيابها عن `Admin/PlacementExams`، ومن عدم وصولها لأي طالب قبل إرسال المدرسة.
 - **التراجع:** مفتاح `PartnerDispatch.Enabled = false` يوقف الإرسال للشركاء فورًا، وما أُرسل يبقى ملك الشريك.
 
+### 7) APD-S4 (مؤشر الأداء)
+- **قبل نشر الكود، بعد Backup:** شغّل `Migrations/Scripts/APD_PerformanceIndicatorTemplate.sql` (Idempotent، يضيف العمود فقط، ويتطلب سكربت APD-S1). الكود الجديد يقرأ هذا العمود، فلا يُنشر قبله.
+```sql
+SELECT COL_LENGTH(N'PerformanceIndicatorExams', N'IsPartnerTemplate');  -- 1
+SELECT COUNT(*) FROM __EFMigrationsHistory WHERE MigrationId = N'20261105131916_APD_PerformanceIndicatorTemplate'; -- 1
+```
+- **بعد النشر:** رابط «مؤشر الأداء» في سايدبار الشريك يعمل لأول مرة (كان يشير إلى Controller غير موجود)، ويظهر للعقد الذي يشمل `CanUsePerformanceIndicatorExams`.
+- **يختفي من الأدمن:** كل نسخة `OwnerPartnerId` فيها قيمة، من القوائم والتقارير ولوحة الأداء وتفاصيل المستخدم. القوالب تظهر في الأرشيف بوسم «قالب إرسال للشركاء».
+- **تغيّر تحت «المنصة»:** دفعات المعهد وطلابه فقط في `Create` و`CreateFromProfessionalModel`، والدفعات المؤرشفة والمحذوفة لم تعد ضمن الاختيار.
+- **تراجع** (بعد سحب الكود فقط): `Migrations/Scripts/APD_PerformanceIndicatorTemplate_Rollback.sql`. نسخ المدارس لا تتأثر، والقوالب تبقى اختبارات مؤرشفة عادية.
+
 ## 📋 نشر Epic PPM (إتاحة النماذج الاحترافية للشركاء والإرسال من نموذج) — PPM-S1 إلى S6
 
 ### 1) قبل نشر الكود (Backup إلزامي)

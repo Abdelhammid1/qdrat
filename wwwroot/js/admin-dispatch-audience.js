@@ -81,6 +81,13 @@
         return !courseId || courseId === '0';
     }
 
+    // APD-S4.1: دفعات المدارس تتبع منهج الاختبار في الشاشات التي تطلبه
+    function needsCurriculum(root) {
+        if (root.getAttribute('data-apd-requires-curriculum') !== '1') { return false; }
+        var curriculumId = root.getAttribute('data-apd-curriculum-id');
+        return !curriculumId || curriculumId === '0';
+    }
+
     function load(root) {
         var host = partnersHost(root);
         if (!host || root.getAttribute('data-apd-loading-now') === '1') { return; }
@@ -89,7 +96,9 @@
         if (hint) { hint.hidden = !needsModel(root); }
         var courseHint = qs(root, '[data-apd-need-course]');
         if (courseHint) { courseHint.hidden = needsModel(root) || !needsCourse(root); }
-        if (needsModel(root) || needsCourse(root)) {
+        var curriculumHint = qs(root, '[data-apd-need-curriculum]');
+        if (curriculumHint) { curriculumHint.hidden = needsModel(root) || needsCourse(root) || !needsCurriculum(root); }
+        if (needsModel(root) || needsCourse(root) || needsCurriculum(root)) {
             setState(root, 'ready');
             updateCounts(root);
             return;
@@ -263,6 +272,18 @@
 
                 courseInput.addEventListener('change', function () {
                     setSource(root, { courseId: courseInput.value });
+                });
+            }
+        }
+
+        var curriculumSelector = root.getAttribute('data-apd-curriculum-input');
+        if (curriculumSelector) {
+            var curriculumInput = document.querySelector(curriculumSelector);
+            if (curriculumInput) {
+                if (curriculumInput.value) { root.setAttribute('data-apd-curriculum-id', curriculumInput.value); }
+
+                curriculumInput.addEventListener('change', function () {
+                    setSource(root, { curriculumId: curriculumInput.value });
                 });
             }
         }

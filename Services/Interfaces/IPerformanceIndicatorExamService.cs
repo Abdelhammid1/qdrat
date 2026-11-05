@@ -10,6 +10,11 @@ namespace QdratNew.Services.Interfaces
         Task GenerateExamAsync(int examId, int curriculumId, int totalQuestions, bool manualSelection, int? professionalModelId);
 
         /// <summary>
+        /// APD-S4.1: توليد قالب إرسال للشركاء: مؤرشف بلا دفعات ولا طلاب. null = لم تتوفر أسئلة ولم يُحفظ شيء.
+        /// </summary>
+        Task<int?> CreatePartnerTemplateAsync(string title, int curriculumId, bool isOnline, DateTime startAt, DateTime endAt, int totalQuestions, string? userId);
+
+        /// <summary>
         /// جلب كل اختبارات المؤشر الخاصة بالدفعة.
         /// </summary>
         Task<List<PerformanceIndicatorExam>> GetExamsByBatchAsync(int batchId);

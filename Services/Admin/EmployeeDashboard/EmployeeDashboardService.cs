@@ -223,7 +223,7 @@ namespace QdratNew.Services.Admin.EmployeeDashboard
                     where eba.UserId == userId
                           && eba.Feature == InstructorBatchFeature.Exams
                           && eba.IsGranted
-                          && !pie.IsSent && !pie.IsArchived
+                          && !pie.IsSent && !pie.IsArchived && pie.OwnerPartnerId == null
                     select pie.Id
                 ).Distinct().CountAsync();
 
@@ -311,7 +311,7 @@ namespace QdratNew.Services.Admin.EmployeeDashboard
                     where eba.UserId == userId
                           && eba.Feature == InstructorBatchFeature.Exams
                           && eba.IsGranted
-                          && !pie.IsSent && !pie.IsArchived
+                          && !pie.IsSent && !pie.IsArchived && pie.OwnerPartnerId == null
                     select new { pie.Id, pie.Title, BatchName = b.Name, pie.CreatedAt }
                 ).AsNoTracking().Distinct().OrderBy(x => x.CreatedAt).Take(5).ToListAsync();
 

@@ -28,6 +28,13 @@ namespace QdratNew.ViewModels.PartnerDispatch
 
         // APD-S3.1: دفعة منصة واحدة (Radio) بدل عدة دفعات
         public bool SinglePlatformBatch { get; set; }
+
+        // APD-S4.1: محدد CSS لحقل المنهج. تغيّره يعيد تحميل المدارس، ولا تُحمَّل قبل اختياره.
+        public string? CurriculumInputSelector { get; set; }
+        public bool RequiresCurriculum { get; set; }
+
+        // APD-S4.1: قالب مؤشر الأداء يُرسل للمدارس فقط، فلا يظهر خيار المنصة
+        public bool PartnersOnly { get; set; }
     }
 
     // APD-S1.4: قائمة المدارس ودفعاتها (_DispatchAudiencePartners) — تُعرض داخل الـ Picker وتُرجعها AudienceOptions

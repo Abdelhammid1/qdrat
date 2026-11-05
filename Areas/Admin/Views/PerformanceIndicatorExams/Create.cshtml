@@ -7,6 +7,7 @@
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet" />
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link rel="stylesheet" href="~/css/admin-dispatch-audience.css" asp-append-version="true" />
 
 <div class="qdrat-page-wrapper" dir="rtl">
     <div class="qdrat-page-header">
@@ -95,22 +96,11 @@
             </div>
 
             <div class="row g-4">
-                <div class="col-lg-6">
-                    <div class="qdrat-form-group">
-                        <label asp-for="SelectedBatchIds" class="qdrat-label">
-                            الدفعات المستهدفة
-                            <span class="qdrat-required">*</span>
-                        </label>
-                        <select asp-for="SelectedBatchIds"
-                                asp-items="Model.AvailableBatches ?? new List<SelectListItem>()"
-                                class="form-select qdrat-select select2"
-                                multiple></select>
-                        <small class="qdrat-help-text">يمكن اختيار أكثر من دفعة لنفس الاختبار.</small>
-                        <span asp-validation-for="SelectedBatchIds" class="text-danger small"></span>
-                    </div>
+                <div class="col-12">
+                    <partial name="~/Areas/Admin/Views/Shared/_DispatchAudiencePicker.cshtml" model="Model.AudiencePicker" />
                 </div>
 
-                <div class="col-lg-6">
+                <div class="col-lg-6" id="platformStudentsSection">
                     <div class="qdrat-form-group">
                         <label asp-for="SelectedStudentIds" class="qdrat-label">
                             الطلاب المخصصون
@@ -120,7 +110,7 @@
                                 asp-items="Model.AvailableStudents ?? new List<SelectListItem>()"
                                 class="form-select qdrat-select select2"
                                 multiple></select>
-                        <small class="qdrat-help-text">اتركها فارغة إذا كان الاختبار لكل طلاب الدفعات المحددة.</small>
+                        <small class="qdrat-help-text">اتركها فارغة إذا كان الاختبار لكل طلاب الدفعات المحددة. متاحة لدفعات المنصة فقط.</small>
                         <span asp-validation-for="SelectedStudentIds" class="text-danger small"></span>
                     </div>
                 </div>
@@ -249,7 +239,7 @@
                 <i class="bi bi-arrow-right"></i>
                 رجوع
             </a>
-            <button type="submit" class="qdrat-save-btn">
+            <button type="submit" class="qdrat-save-btn" id="createExamSubmit">
                 <i class="bi bi-check-circle"></i>
                 توليد الاختبار
             </button>
@@ -644,6 +634,7 @@
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="~/js/admin-dispatch-audience.js" asp-append-version="true"></script>
     <script>
         $(function () {
             $('.select2').select2({ width: '100%', placeholder: "اختر من القائمة...", dir: "rtl" });
@@ -659,6 +650,25 @@
             if ($('#manualSel').is(':checked')) {
                 $('#modelSelectContainer').show();
             }
+
+            // APD-S4.1: الطلاب المخصصون للمنصة فقط، والضغطة الثانية لا تولّد قالبًا مكررًا
+            function applyAudience() {
+                var isPartners = $('[data-apd-audience]:checked').val() === '2';
+                $('#platformStudentsSection').toggle(!isPartners);
+                if (isPartners) {
+                    $('#SelectedStudentIds').val(null).trigger('change');
+                }
+            }
+
+            applyAudience();
+            $('[data-apd-audience]').on('change', applyAudience);
+
+            $('form[action*="PerformanceIndicatorExams/Create"]').on('submit', function () {
+                var isValid = !$.fn.valid || $(this).valid();
+                if (isValid) {
+                    $('#createExamSubmit').prop('disabled', true);
+                }
+            });
         });
     </script>
 }

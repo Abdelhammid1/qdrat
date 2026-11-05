@@ -231,9 +231,16 @@ namespace QdratNew.Tests.Integration
             const string users = "(SELECT Id FROM AspNetUsers WHERE UserName LIKE 'ppms6e2e-%')";
             const string questions = "(SELECT Id FROM Questions WHERE ReferenceNumber LIKE 'PPMS6E2E%')";
 
+            const string performanceExams = "(SELECT Id FROM PerformanceIndicatorExams WHERE Title LIKE 'PPMS6E2E%')";
+
             foreach (var sql in new[]
             {
                 $"DELETE FROM PartnerDispatchLogs WHERE PartnerId IN {partners}",
+                $"DELETE FROM PerformanceIndicatorExamStudents WHERE PerformanceIndicatorExamId IN {performanceExams}",
+                $"DELETE FROM PerformanceIndicatorExamQuestions WHERE PerformanceIndicatorExamId IN {performanceExams}",
+                $"DELETE FROM PerformanceIndicatorExamSections WHERE PerformanceIndicatorExamId IN {performanceExams}",
+                $"DELETE FROM PerformanceIndicatorExamToBatch WHERE PerformanceIndicatorExamId IN {performanceExams}",
+                "DELETE FROM PerformanceIndicatorExams WHERE Title LIKE 'PPMS6E2E%'",
                 $"DELETE FROM Notifications WHERE StudentID IN {students}",
                 "DELETE FROM SystemLogs WHERE Description LIKE N'%PPMS6E2E%'",
                 $"DELETE FROM ExamStudentQuestionOrders WHERE ExamAssignmentId IN {assignments}",
@@ -476,6 +483,87 @@ namespace QdratNew.Tests.Integration
             {
                 Assert.True(await db.ExamAssignments.AsNoTracking().AnyAsync(a => a.ExamId == examId));
             }
+        }
+
+        // APD-S4: من شاشة الإنشاء حتى صفحة المتابعة لدى المدرسة، واختفاء النسخة عن الأدمن
+        [SqlServerFact]
+        public async Task Admin_SendsPerformanceExamToSchool_PartnerFollowsIt_AdminDoesNotSeeIt()
+        {
+            int curriculumId;
+            await using (var db = RtkRealDb.CreateDb())
+            {
+                var contract = await db.PartnerSubscriptions.FirstAsync(s => s.PartnerId == _partnerId);
+                contract.CanUsePerformanceIndicatorExams = true;
+                await db.SaveChangesAsync();
+
+                curriculumId = await db.CourseCurriculums.AsNoTracking()
+                    .Where(c => c.CourseId == _courseId)
+                    .Select(c => c.CurriculumId)
+                    .FirstAsync();
+            }
+
+            var admin = await LoginAsync(OwnerUser, mobile: false);
+            var pageErrors = new List<string>();
+            admin.PageError += (_, message) => pageErrors.Add(message);
+
+            await admin.GotoAsync("/Admin/PerformanceIndicatorExams/Create");
+
+            Assert.Equal(0, await admin.Locator($"#apd-platform-{_batchId}").CountAsync());
+            Assert.Equal(1, await admin.Locator($"#apd-platform-{_instituteBatchId}").CountAsync());
+
+            var title = $"{Marker} مؤشر للمدارس";
+            await admin.FillAsync("#ExamTitle", title);
+            await admin.CheckAsync($"input[name=Audience][value='{(int)DispatchAudience.Partners}']");
+            await admin.Locator("[data-apd-need-curriculum]").WaitForAsync();
+            Assert.True(await admin.Locator("#platformStudentsSection").IsHiddenAsync());
+
+            await admin.SelectOptionAsync("#CurriculumId", curriculumId.ToString());
+            await admin.Locator($"#apd-partner-{_partnerId}").WaitForAsync();
+            await admin.CheckAsync($"#apd-partner-{_partnerId}");
+            Assert.True(await admin.IsCheckedAsync($"#apd-batch-{_partnerId}-{_batchId}"));
+
+            await admin.FillAsync("#StartAt", DateTime.Today.ToString("yyyy-MM-ddT08:00"));
+            await admin.FillAsync("#EndAt", DateTime.Today.AddDays(7).ToString("yyyy-MM-ddT08:00"));
+            await admin.ClickAsync("#createExamSubmit");
+
+            await admin.WaitForURLAsync(url => url.Contains("/PerformanceIndicatorExams/ConfirmSend"), new PageWaitForURLOptions { Timeout = 20000 });
+
+            // الاختيار من شاشة الإنشاء محفوظ، وخيار المنصة غير موجود للقالب
+            Assert.Equal(0, await admin.Locator($"input[name=Audience][value='{(int)DispatchAudience.Platform}']").CountAsync());
+            Assert.True(await admin.IsCheckedAsync($"#apd-partner-{_partnerId}"));
+
+            await admin.ClickAsync("#partnerTemplateSendForm button[type=submit]");
+            await admin.WaitForURLAsync(url => url.Contains("/PartnerDispatch/Result"), new PageWaitForURLOptions { Timeout = 20000 });
+            Assert.Contains("اختبار مؤشر الأداء", await admin.InnerTextAsync("#partnerDispatchResult"));
+            Assert.Empty(pageErrors);
+
+            int copyId;
+            await using (var db = RtkRealDb.CreateDb())
+            {
+                copyId = await db.PerformanceIndicatorExams.AsNoTracking()
+                    .Where(e => e.OwnerPartnerId == _partnerId && e.Title == title)
+                    .Select(e => e.Id)
+                    .SingleAsync();
+            }
+
+            await admin.GotoAsync("/Admin/PerformanceIndicatorExams");
+            Assert.DoesNotContain(title, await admin.InnerTextAsync("body"));
+
+            var response = await admin.GotoAsync($"/Admin/PerformanceIndicatorExams/Details/{copyId}");
+            Assert.Equal(404, response!.Status);
+
+            var partner = await LoginPartnerAsync(PartnerUser, _partnerId);
+            await partner.GotoAsync("/Partner/PerformanceIndicatorExams");
+            var row = partner.Locator($"tr[data-performance-exam='{copyId}']");
+            Assert.Contains("من المعهد", await row.InnerTextAsync());
+
+            await row.Locator("a").First.ClickAsync();
+            await partner.WaitForURLAsync(url => url.Contains("/ExamStudents"), new PageWaitForURLOptions { Timeout = 20000 });
+            Assert.Contains(title, await partner.InnerTextAsync("h1"));
+
+            var other = await LoginPartnerAsync(OtherPartnerUser, _otherPartnerId);
+            var otherResponse = await other.GotoAsync($"/Partner/PerformanceIndicatorExams/ExamStudents/{copyId}");
+            Assert.NotEqual(200, otherResponse!.Status);
         }
 
         [SqlServerFact]

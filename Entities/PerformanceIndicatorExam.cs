@@ -61,6 +61,9 @@ namespace QdratNew.Entities
         public int? OwnerPartnerId { get; set; }
         public Partner? OwnerPartner { get; set; }
 
+        // APD-S4.1: قالب إرسال للشركاء: يُولَّد مرة ويبقى مؤرشفًا بلا دفعات ولا طلاب، ويُنسخ منه لكل مدرسة.
+        public bool IsPartnerTemplate { get; set; }
+
         // 🔹 الأرشفة
         public bool IsArchived { get; set; } = false;
         public DateTime? ArchivedAt { get; set; }

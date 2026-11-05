@@ -21,6 +21,9 @@ namespace QdratNew.Tests.AdminPartnerDispatch
     // APD-S3: نموذج اختبار متاح لـ A وB بعقدين يشملان تحديد المستوى، ودفعة ثانية لـ A فيها طالب نشط.
     internal sealed record ApdPlacementSeed(int ModelId, int BatchA4, int StudentA4);
 
+    // APD-S4: منهج مستقل بمحور ودرس وسؤالين مرتبط بكورس الدفعات، وقالب جاهز، وعقدا A وB يشملان مؤشر الأداء.
+    internal sealed record ApdPerformanceSeed(int CurriculumId, int TemplateId, int SectionId, Guid QuestionA, Guid QuestionB, int StudentB);
+
     internal static class ApdTestData
     {
         public const string Marker = "APDS1";
@@ -34,6 +37,7 @@ namespace QdratNew.Tests.AdminPartnerDispatch
         private const string Students = "(SELECT StudentID FROM Students WHERE NationalID LIKE 'APDS1%')";
         private const string Assignments = "(SELECT Id FROM ExamAssignmentsToBatches WHERE BatchId IN " + Batches + ")";
         private const string Models = "(SELECT Id FROM ProfessionalModels WHERE Title LIKE 'APDS1%')";
+        private const string PerformanceExams = "(SELECT Id FROM PerformanceIndicatorExams WHERE Title LIKE 'APDS1%' OR OwnerPartnerId IN " + Partners + ")";
 
         public static async Task CleanupAsync(ApplicationDbContext db)
         {
@@ -45,6 +49,12 @@ namespace QdratNew.Tests.AdminPartnerDispatch
                 "DELETE FROM AdminProfiles WHERE Name LIKE 'APDS1%'",
                 "DELETE FROM AdminUserProfiles WHERE UserId LIKE 'apds1-%'",
                 $"DELETE FROM PartnerDispatchLogs WHERE PartnerId IN {Partners}",
+                $"DELETE FROM QuestionAttemptNew WHERE PerformanceIndicatorExamId IN {PerformanceExams}",
+                $"DELETE FROM PerformanceIndicatorExamStudents WHERE PerformanceIndicatorExamId IN {PerformanceExams}",
+                $"DELETE FROM PerformanceIndicatorExamQuestions WHERE PerformanceIndicatorExamId IN {PerformanceExams}",
+                $"DELETE FROM PerformanceIndicatorExamSections WHERE PerformanceIndicatorExamId IN {PerformanceExams}",
+                $"DELETE FROM PerformanceIndicatorExamToBatch WHERE PerformanceIndicatorExamId IN {PerformanceExams}",
+                "DELETE FROM PerformanceIndicatorExams WHERE Title LIKE 'APDS1%' OR OwnerPartnerId IN " + Partners,
                 $"DELETE FROM UserPartners WHERE PartnerId IN {Partners}",
                 $"DELETE FROM Notifications WHERE StudentID IN {Students}",
                 "DELETE FROM SystemLogs WHERE Description LIKE N'%APDS1%'",
@@ -71,6 +81,10 @@ namespace QdratNew.Tests.AdminPartnerDispatch
                 $"DELETE FROM PartnerSubscriptionCourses WHERE PartnerSubscriptionId IN (SELECT Id FROM PartnerSubscriptions WHERE PartnerId IN {Partners})",
                 $"DELETE FROM PartnerSubscriptions WHERE PartnerId IN {Partners}",
                 $"DELETE FROM CourseCurriculums WHERE CourseId IN {Courses}",
+                "DELETE FROM Lessons WHERE Title LIKE 'APDS1%'",
+                "DELETE FROM Units WHERE Title LIKE 'APDS1%'",
+                "DELETE FROM Sections WHERE Title LIKE 'APDS1%'",
+                "DELETE FROM Curriculums WHERE Title LIKE 'APDS1%'",
                 "DELETE FROM Branches WHERE Name LIKE 'APDS1%'",
                 "DELETE FROM Partners WHERE Code LIKE 'APDS1%'",
                 "DELETE FROM Courses WHERE Name LIKE 'APDS1%'"
@@ -140,6 +154,72 @@ namespace QdratNew.Tests.AdminPartnerDispatch
             db.ChangeTracker.Clear();
 
             return new ApdPlacementSeed(modelId, batch.Id, student.StudentID);
+        }
+
+        public static async Task<ApdPerformanceSeed> PreparePerformanceAsync(ApplicationDbContext db, ApdSeed seed)
+        {
+            var contracts = await db.PartnerSubscriptions
+                .Where(s => s.PartnerId == seed.PartnerA || s.PartnerId == seed.PartnerB)
+                .ToListAsync();
+            contracts.ForEach(c => c.CanUsePerformanceIndicatorExams = true);
+
+            // سياق الشريك يتطلب فترة نشطة، والأساس يضيفها لعقد A فقط
+            db.PartnerSubscriptionPeriods.Add(new PartnerSubscriptionPeriod
+            {
+                PartnerSubscriptionId = contracts.Single(c => c.PartnerId == seed.PartnerB).Id,
+                StartDate = DateTime.Today.AddDays(-1),
+                EndDate = DateTime.Today.AddDays(30)
+            });
+
+            var curriculum = new Curriculum { Title = $"{Marker} منهج مؤشر", Description = "-", CurriculumTypeName = "-" };
+            var unit = new Unit { Title = $"{Marker} وحدة" };
+            db.AddRange(curriculum, unit);
+            await db.SaveChangesAsync();
+
+            var section = new Section { Title = $"{Marker} محور", CurriculumId = curriculum.Id };
+            db.Sections.Add(section);
+            db.CourseCurriculums.Add(new CourseCurriculum { CourseId = seed.CourseId, CurriculumId = curriculum.Id });
+            await db.SaveChangesAsync();
+
+            var lesson = new Lesson { Title = $"{Marker} درس", Content = "-", SectionId = section.Id, UnitId = unit.Id };
+            db.Lessons.Add(lesson);
+            await db.SaveChangesAsync();
+
+            Question NewQuestion(string suffix) => new()
+            {
+                Id = Guid.NewGuid(), Title = $"{Marker} سؤال {suffix}", ReferenceNumber = $"{Marker}-KPI-{suffix}",
+                CurriculumId = curriculum.Id, SectionId = section.Id, LessonId = lesson.Id, CorrectAnswer = "أ",
+                IsComplete = true, IsReviewed = true
+            };
+
+            var questionA = NewQuestion("A");
+            var questionB = NewQuestion("B");
+            db.Questions.AddRange(questionA, questionB);
+
+            var template = new PerformanceIndicatorExam
+            {
+                Title = $"{Marker} قالب مؤشر", CurriculumId = curriculum.Id, ReferenceCode = "919191", TotalQuestions = 2, DurationMinutes = 2,
+                PassPercent = 50, IsPartnerTemplate = true, IsArchived = true
+            };
+            db.PerformanceIndicatorExams.Add(template);
+            await db.SaveChangesAsync();
+
+            db.PerformanceIndicatorExamSections.Add(new PerformanceIndicatorExamSection
+            {
+                PerformanceIndicatorExamId = template.Id, SectionId = section.Id, QuestionCount = 2
+            });
+            db.PerformanceIndicatorExamQuestions.AddRange(
+                new PerformanceIndicatorExamQuestion { PerformanceIndicatorExamId = template.Id, QuestionId = questionA.Id, SectionId = section.Id, OrderNumber = 1 },
+                new PerformanceIndicatorExamQuestion { PerformanceIndicatorExamId = template.Id, QuestionId = questionB.Id, SectionId = section.Id, OrderNumber = 2 });
+            await db.SaveChangesAsync();
+
+            var studentB = await db.StudentBatchEnrollments.AsNoTracking()
+                .Where(e => e.BatchId == seed.BatchB1)
+                .Select(e => e.StudentID)
+                .FirstAsync();
+
+            db.ChangeTracker.Clear();
+            return new ApdPerformanceSeed(curriculum.Id, template.Id, section.Id, questionA.Id, questionB.Id, studentB);
         }
 
         public static ApplicationUser NewUser(string userName) => new()

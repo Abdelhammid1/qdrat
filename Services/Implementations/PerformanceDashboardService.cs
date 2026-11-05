@@ -41,7 +41,7 @@ namespace QdratNew.Services.Implementations
                 .AsNoTracking()
                 .Include(e => e.Batch)
                 .Include(e => e.Curriculum)
-                .Where(e => e.CreatedAt >= startOfWeek && e.CreatedAt <= endOfWeek)
+                .Where(e => e.CreatedAt >= startOfWeek && e.CreatedAt <= endOfWeek && e.OwnerPartnerId == null && !e.IsPartnerTemplate) // APD-S4.1
                 .ToListAsync();
 
             // ============================
@@ -58,6 +58,7 @@ namespace QdratNew.Services.Implementations
             // ============================
             var allResults = await _context.StudentIndicatorResults
                 .AsNoTracking()
+                .Where(r => r.PerformanceIndicatorExam.OwnerPartnerId == null) // APD-S4.1
                 .Select(r => new { r.StudentId, r.ScorePercent })
                 .ToListAsync();
 
@@ -179,6 +180,7 @@ namespace QdratNew.Services.Implementations
                     on eb.BatchId equals b.Id
                 join c in _context.Curriculums.AsNoTracking()
                     on e.CurriculumId equals c.Id
+                where e.OwnerPartnerId == null // APD-S4.1
                 select new BatchPerformanceItem
                 {
                     BatchId = b.Id,
@@ -254,7 +256,7 @@ namespace QdratNew.Services.Implementations
                 join link in _context.PerformanceIndicatorExamToBatch.AsNoTracking()
                     on e.Id equals link.PerformanceIndicatorExamId
                 join c in _context.Curriculums.AsNoTracking() on e.CurriculumId equals c.Id
-                where link.BatchId == batchId
+                where link.BatchId == batchId && e.OwnerPartnerId == null // APD-S4.1
                 orderby e.CreatedAt descending
                 select new BatchExamItem
                 {
@@ -283,7 +285,7 @@ namespace QdratNew.Services.Implementations
             var exam = await _context.PerformanceIndicatorExams
                 .Include(e => e.Curriculum)
                 .AsNoTracking()
-                .FirstOrDefaultAsync(e => e.Id == examId);
+                .FirstOrDefaultAsync(e => e.Id == examId && e.OwnerPartnerId == null); // APD-S4.1
 
             if (exam == null)
                 return null;
@@ -319,7 +321,7 @@ namespace QdratNew.Services.Implementations
                 .Include(e => e.Curriculum)
                 .Include(e => e.Batch)
                 .AsNoTracking()
-                .FirstOrDefaultAsync(e => e.Id == examId);
+                .FirstOrDefaultAsync(e => e.Id == examId && e.OwnerPartnerId == null); // APD-S4.1
 
             if (exam == null) return null;
 
@@ -410,7 +412,7 @@ namespace QdratNew.Services.Implementations
             var exam = await _context.PerformanceIndicatorExams
                 .Include(e => e.Curriculum)
                 .Include(e => e.Batch)
-                .FirstOrDefaultAsync(e => e.Id == examId);
+                .FirstOrDefaultAsync(e => e.Id == examId && e.OwnerPartnerId == null); // APD-S4.1
 
             if (exam == null)
                 return null;
