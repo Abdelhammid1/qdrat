@@ -935,6 +935,7 @@ builder.Services.AddScoped<IPlacementExamGeneratorService, PlacementExamGenerato
 builder.Services.AddScoped<QdratNew.Services.Exams.Placement.IPlacementExamScopeGuard, QdratNew.Services.Exams.Placement.PlacementExamScopeGuard>();
 builder.Services.AddScoped<QdratNew.Services.Exams.Placement.IPlacementExamManagementService, QdratNew.Services.Exams.Placement.PlacementExamManagementService>();
 builder.Services.AddScoped<QdratNew.Services.ProfessionalModels.IProfessionalModelAvailabilityService, QdratNew.Services.ProfessionalModels.ProfessionalModelAvailabilityService>(); // PPM-S1.2
+builder.Services.AddScoped<QdratNew.Services.ProfessionalModels.IProfessionalModelSendService, QdratNew.Services.ProfessionalModels.ProfessionalModelSendService>(); // PPM-S3
 // PPL-S3: خدمة تقارير اختبارات تحديد المستوى المشتركة
 builder.Services.AddScoped<QdratNew.Services.Exams.Placement.IPlacementExamReportService, QdratNew.Services.Exams.Placement.PlacementExamReportService>();
 builder.Services.AddScoped<ITimeZoneService, TimeZoneService>();
@@ -1015,9 +1016,6 @@ builder.Services.AddSingleton<QdratNew.Services.AdminDashboard.IAdminLiveStudent
 builder.Services.AddScoped<QdratNew.Services.AdminDashboard.IAdminOperationsDrillDownService, QdratNew.Services.AdminDashboard.AdminOperationsDrillDownService>();
 
 
-builder.Services.AddScoped<
-    QdratNew.Services.PartnerHomework.ProfessionalModels.IProfessionalModelAssignmentService,
-    QdratNew.Services.PartnerHomework.ProfessionalModels.ProfessionalModelAssignmentService>();
 builder.Services.AddScoped<
     QdratNew.Services.Exams.Interfaces.IPartnerExamGenerationService,
     QdratNew.Services.Exams.Implementations.PartnerExamGenerationService>();

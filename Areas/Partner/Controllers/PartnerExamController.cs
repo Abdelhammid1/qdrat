@@ -22,6 +22,7 @@ namespace QdratNew.Areas.Partner.Controllers
         private readonly IExamResultEngine _examResultEngine;
         private readonly IExamRecommendationService _recommendationService;
         private readonly IAdvancedNotificationService _notificationService;
+        private readonly ITimeZoneService _timeZoneService;
 
         public PartnerExamController(
             ApplicationDbContext context,
@@ -29,7 +30,8 @@ namespace QdratNew.Areas.Partner.Controllers
             IExamResultEngine examResultEngine,
             IExamRecommendationService recommendationService,
             IPartnerExamGenerationService examService,
-            IAdvancedNotificationService notificationService
+            IAdvancedNotificationService notificationService,
+            ITimeZoneService timeZoneService
         )
             : base(subscriptionService, context)
         {
@@ -37,6 +39,7 @@ namespace QdratNew.Areas.Partner.Controllers
             _examResultEngine = examResultEngine;
             _recommendationService = recommendationService;
             _notificationService = notificationService;
+            _timeZoneService = timeZoneService;
         }
 
 
@@ -74,7 +77,9 @@ namespace QdratNew.Areas.Partner.Controllers
                     x.IsSentToStudents &&
                     x.ExamId.HasValue &&          // ExamId nullable ✔
                     x.BatchId > 0 &&              // BatchId int ✔
-                    x.Exam.OwnerPartnerId == null // PPL-S5: تحديد المستوى له صفحته
+                    // PPL-S5: تحديد مستوى الشريك له صفحته. PPM-S5: اختبار الشريك من نموذج يظهر هنا
+                    (x.Exam.OwnerPartnerId == null ||
+                     (x.Exam.OwnerPartnerId == ActivePartnerId && x.Exam.Type != ExamType.LevelAssessment))
                 )
                 .Select(x => new
                 {
@@ -82,7 +87,10 @@ namespace QdratNew.Areas.Partner.Controllers
                     ExamId = x.ExamId.Value,
                     x.BatchId,
                     x.Title,
-                    x.AssignedAt
+                    x.AssignedAt,
+                    x.Exam.OwnerPartnerId,
+                    IsFromModel = x.Exam.OwnerPartnerId != null && x.Exam.IsFromProfessionalModel,
+                    SourceModelTitle = x.Exam.SourceProfessionalModel != null ? x.Exam.SourceProfessionalModel.Title : null
                 })
                 .ToList();
 
@@ -122,14 +130,25 @@ namespace QdratNew.Areas.Partner.Controllers
                     .Count(s => s.BatchId == a.BatchId);
 
                 var attempted = 0;
+                var recipients = 0;
 
                 foreach (var s in allStatuses)
                 {
-                    if (s.ExamAssignmentId == a.Id &&
-                        (s.IsSubmitted || s.Status == ExamStatus.Completed))
+                    if (s.ExamAssignmentId != a.Id)
+                        continue;
+
+                    recipients++;
+
+                    if (s.IsSubmitted || s.Status == ExamStatus.Completed)
                     {
                         attempted++;
                     }
+                }
+
+                // PPM-S5.3: الإرسال من نموذج يصل للنشطين فقط، فلا يُحسب غير المستلم ضمن من لم يخض
+                if (a.OwnerPartnerId != null)
+                {
+                    totalStudents = recipients;
                 }
 
                 result.Add(new SentExamListVM
@@ -142,7 +161,10 @@ namespace QdratNew.Areas.Partner.Controllers
                     StudentsCount = totalStudents,
                     AttemptedCount = attempted,
                     NotAttemptedCount = Math.Max(0, totalStudents - attempted),
-                    SentAt = a.AssignedAt
+                    // PPM-S5: يُخزن UTC، بينما مسار المسودات يخزن الوقت المحلي
+                    SentAt = a.OwnerPartnerId != null ? _timeZoneService.ConvertToSaudi(a.AssignedAt) : a.AssignedAt,
+                    IsFromModel = a.IsFromModel,
+                    SourceModelTitle = a.SourceModelTitle
                 });
             }
 
@@ -207,6 +229,18 @@ namespace QdratNew.Areas.Partner.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ResendExamToStudent(int examAssignmentId, int studentId)
         {
+            // الإرسال في دفعة للشريك، والطالب مسجل فيها أو مستلم للاختبار
+            var isOwnStudentInOwnExam = await _context.ExamAssignmentsToBatches
+                .AsNoTracking()
+                .AnyAsync(x =>
+                    x.Id == examAssignmentId &&
+                    x.Batch.Branch.PartnerId == ActivePartnerId &&
+                    (_context.StudentBatchEnrollments.Any(e => e.BatchId == x.BatchId && e.StudentID == studentId) ||
+                     _context.ExamStudentStatuses.Any(s => s.ExamAssignmentId == x.Id && s.StudentId == studentId)));
+
+            if (!isOwnStudentInOwnExam)
+                return NotFound();
+
             // ============================
             // 1️⃣ إعادة ضبط حالة الاختبار
             // ============================
@@ -664,6 +698,7 @@ namespace QdratNew.Areas.Partner.Controllers
                 .Select(x => new
                 {
                     x.Id, // ExamAssignmentId
+                    x.Exam.OwnerPartnerId,
                     x.Title,
                     BatchName = x.Batch.Name,
                     x.AssignedAt,
@@ -700,9 +735,10 @@ namespace QdratNew.Areas.Partner.Controllers
                 Title = assignment.Title,
                 BatchName = assignment.BatchName,
                 StudentsCount = assignment.StudentsCount,
-                SentAt = assignment.AssignedAt,
-                StartAt = assignment.ScheduledDate,
-                EndAt = assignment.EndAt,
+                // PPM-S5: يُخزن UTC، بينما مسار المسودات يخزن الوقت المحلي
+                SentAt = assignment.OwnerPartnerId != null ? _timeZoneService.ConvertToSaudi(assignment.AssignedAt) : assignment.AssignedAt,
+                StartAt = assignment.OwnerPartnerId != null && assignment.ScheduledDate.HasValue ? _timeZoneService.ConvertToSaudi(assignment.ScheduledDate.Value) : assignment.ScheduledDate,
+                EndAt = assignment.OwnerPartnerId != null && assignment.EndAt.HasValue ? _timeZoneService.ConvertToSaudi(assignment.EndAt.Value) : assignment.EndAt,
                 Questions = questions
             };
 
@@ -841,6 +877,9 @@ namespace QdratNew.Areas.Partner.Controllers
         [HttpGet]
         public async Task<IActionResult> PreviewDraft(int draftId)
         {
+            if (!await OwnsDraftAsync(draftId))
+                return NotFound();
+
             var model = await _examService.GetDraftForPreview(draftId);
             return View(model);
         }
@@ -850,6 +889,9 @@ namespace QdratNew.Areas.Partner.Controllers
         [HttpGet]
         public async Task<IActionResult> AddQuestion(int draftId, int lessonId)
         {
+            if (!await OwnsDraftAsync(draftId))
+                return NotFound();
+
             var model = await _examService.GetAddQuestionCandidates(draftId, lessonId);
             return View(model);
         }
@@ -882,6 +924,9 @@ namespace QdratNew.Areas.Partner.Controllers
           Guid oldQuestionId,
           int lessonId)
         {
+            if (!await OwnsDraftAsync(draftId))
+                return NotFound();
+
             var model = await _examService.GetReplaceCandidates(
                 draftId,
                 oldQuestionId,
@@ -899,6 +944,9 @@ namespace QdratNew.Areas.Partner.Controllers
       Guid oldQuestionId,
       Guid newQuestionId)
         {
+            if (!await OwnsDraftAsync(draftId))
+                return NotFound();
+
             await _examService.ReplaceQuestion(
                 draftId,
                 oldQuestionId,
@@ -984,6 +1032,11 @@ namespace QdratNew.Areas.Partner.Controllers
                         .Where(a => a.ExamAssignmentId == examAssignmentId)
                         .ExecuteDeleteAsync();
 
+                    // ترتيب الأسئلة لكل طالب، وقيده يمنع حذف الإرسال بعد دخول أي طالب
+                    await _context.ExamStudentQuestionOrders
+                        .Where(o => o.ExamAssignmentId == examAssignmentId)
+                        .ExecuteDeleteAsync();
+
                     // حذف حالات الطلاب
                     await _context.ExamStudentStatuses
                         .Where(s => s.ExamAssignmentId == examAssignmentId)
@@ -1007,9 +1060,9 @@ namespace QdratNew.Areas.Partner.Controllers
 
                 TempData["Success"] = "تم حذف الاختبار وجميع بيانات الطلاب المرتبطة به.";
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                TempData["Error"] = "فشل الحذف: " + ex.GetBaseException().Message;
+                TempData["Error"] = "تعذر حذف الاختبار، ولم يُحذف أي شيء. حاول مرة أخرى.";
             }
 
             return RedirectToAction(nameof(SentExams));
@@ -1097,9 +1150,17 @@ namespace QdratNew.Areas.Partner.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ConfirmAddQuestion(int draftId, Guid questionId)
         {
+            if (!await OwnsDraftAsync(draftId))
+                return NotFound();
+
             await _examService.AddQuestionToDraft(draftId, questionId);
             return RedirectToAction(nameof(PreviewDraft), new { draftId });
         }
+
+        private Task<bool> OwnsDraftAsync(int draftId)
+            => _context.ExamDrafts
+                .AsNoTracking()
+                .AnyAsync(d => d.Id == draftId && d.PartnerId == ActivePartnerId);
 
 
 

@@ -478,6 +478,7 @@ namespace QdratNew.Tests.PartnerPlacement
             var exam = await read.Exams.SingleAsync(e => e.Title == $"اختبار تحديد مستوى - {Marker} نموذج");
             Assert.Null(exam.OwnerPartnerId);
             Assert.True(exam.IsFromProfessionalModel);
+            Assert.Equal(modelId, exam.SourceProfessionalModelId); // PPM-S3
             Assert.Equal(2, await read.ExamQuestions.CountAsync(q => q.ExamId == exam.Id));
             Assert.Equal((3, 3, true), await ReadSendStateAsync(exam.Id));
         }

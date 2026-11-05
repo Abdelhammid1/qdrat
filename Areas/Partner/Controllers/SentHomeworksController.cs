@@ -39,11 +39,20 @@ namespace QdratNew.Areas.Partner.Controllers
             return View(data);
         }
 
-        public IActionResult Details(int id)
-        {
-            var isArchived = _context.HomeworkSets
+        // الواجب يخص الشريك النشط عبر فرع الدفعة
+        private Task<bool> OwnsHomeworkSetAsync(int homeworkSetId)
+            => _context.HomeworkSets
                 .AsNoTracking()
-                .Any(x => x.Id == id && x.IsArchived);
+                .AnyAsync(h => h.Id == homeworkSetId && h.Batch.Branch.PartnerId == ActivePartnerId);
+
+        public async Task<IActionResult> Details(int id)
+        {
+            if (!await OwnsHomeworkSetAsync(id))
+                return NotFound();
+
+            var isArchived = await _context.HomeworkSets
+                .AsNoTracking()
+                .AnyAsync(x => x.Id == id && x.IsArchived);
 
             if (isArchived)
                 return Forbid();
@@ -62,6 +71,9 @@ namespace QdratNew.Areas.Partner.Controllers
             int homeworkSetId,
             int studentId)
         {
+            if (!await OwnsHomeworkSetAsync(homeworkSetId))
+                return NotFound();
+
             var isArchived = await _context.HomeworkSets
                 .AsNoTracking()
                 .AnyAsync(x => x.Id == homeworkSetId && x.IsArchived);
@@ -306,6 +318,9 @@ namespace QdratNew.Areas.Partner.Controllers
                 // Partner مرتبط بسياق الشريك الحالي
                 if (ActivePartnerId <= 0)
                     return RedirectToAction("Select", "PartnerContext");
+
+                if (!await OwnsHomeworkSetAsync(homeworkSetId))
+                    return NotFound();
 
                 isAllowed = await _context.StudentBatchEnrollments
                     .Include(e => e.Batch)
@@ -566,8 +581,19 @@ namespace QdratNew.Areas.Partner.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult ResetHomework(int homeworkSetId, int studentId)
+        public async Task<IActionResult> ResetHomework(int homeworkSetId, int studentId)
         {
+            var isRecipientInOwnHomework = await _context.HomeworkSetStudents
+                .AsNoTracking()
+                .AnyAsync(x =>
+                    x.HomeworkSetId == homeworkSetId &&
+                    x.StudentId == studentId &&
+                    !x.HomeworkSet.IsArchived &&
+                    x.HomeworkSet.Batch.Branch.PartnerId == ActivePartnerId);
+
+            if (!isRecipientInOwnHomework)
+                return NotFound();
+
             _service.ResetHomeworkForStudent(homeworkSetId, studentId);
 
             TempData["Success"] = "تم السماح للطالب بإعادة حل الواجب.";

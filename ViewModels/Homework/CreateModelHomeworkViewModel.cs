@@ -1,5 +1,7 @@
-﻿using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
+﻿using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
 using Microsoft.AspNetCore.Mvc.Rendering;
+using QdratNew.Services.ProfessionalModels;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 
@@ -42,8 +44,11 @@ namespace QdratNew.ViewModels.Homework
         [ValidateNever]
         public List<SelectListItem> Lectures { get; set; } = new();
 
+        // تأكيد تحذيرات التكرار (PPM-S6.1)
+        public bool ConfirmWarnings { get; set; }
 
-
-
+        [BindNever]
+        [ValidateNever]
+        public ModelSendPreview? SendPreview { get; set; }
     }
 }

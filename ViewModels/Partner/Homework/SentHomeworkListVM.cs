@@ -19,5 +19,10 @@ namespace QdratNew.ViewModels.Partner.Homework
         public int PendingStudents { get; set; }
 
         public DateTime SentAt { get; set; }
+
+        // PPM-S4.3: أُرسل من نموذج احترافي
+        public bool IsFromModel { get; set; }
+
+        public string? SourceModelTitle { get; set; }
     }
 }

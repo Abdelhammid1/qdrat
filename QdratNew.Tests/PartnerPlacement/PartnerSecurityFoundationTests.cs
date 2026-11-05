@@ -23,7 +23,7 @@ using QdratNew.Enums;
 using QdratNew.Filters;
 using QdratNew.Implementations;
 using QdratNew.Interfaces;
-using QdratNew.Services.PartnerHomework.ProfessionalModels;
+using QdratNew.Services.ProfessionalModels;
 using QdratNew.Tests.Integration;
 using QdratNew.ViewModels.Partner;
 using Xunit;
@@ -337,7 +337,7 @@ namespace QdratNew.Tests.PartnerPlacement
         // =====================================================
         // PartnerBaseController: تحقق الـ Session + NullReference
         // =====================================================
-        private static (ProfessionalModelsController Controller, Mock<IProfessionalModelAssignmentService> Assignment) CreateModelsController(
+        private static (ProfessionalModelsController Controller, Mock<IProfessionalModelSendService> Send) CreateModelsController(
             ApplicationDbContext db,
             HttpContext http,
             Mock<IPartnerSubscriptionService>? subscription = null)
@@ -352,13 +352,13 @@ namespace QdratNew.Tests.PartnerPlacement
             });
             db.SaveChanges();
 
-            var assignment = new Mock<IProfessionalModelAssignmentService>();
-            var controller = new ProfessionalModelsController(db, assignment.Object, new QdratNew.Services.ProfessionalModels.ProfessionalModelAvailabilityService(db), (subscription ?? new Mock<IPartnerSubscriptionService>()).Object)
+            var send = new Mock<IProfessionalModelSendService>();
+            var controller = new ProfessionalModelsController(db, send.Object, new ProfessionalModelAvailabilityService(db), new QdratNew.Services.Implementations.TimeZoneService(), (subscription ?? new Mock<IPartnerSubscriptionService>()).Object)
             {
                 ControllerContext = new ControllerContext { HttpContext = http },
                 TempData = new TempDataDictionary(http, Mock.Of<ITempDataProvider>())
             };
-            return (controller, assignment);
+            return (controller, send);
         }
 
         [Fact]
@@ -446,20 +446,21 @@ namespace QdratNew.Tests.PartnerPlacement
             ModelType = ProfessionalModelType.Homework
         };
 
+        // PPM-S4.2: المسار القديم لا يرسل شيئًا، والمسار الجديد يفحص الإتاحة
         [Fact]
-        public async Task SendModels_NotAvailableToPartner_ReturnNotFoundAndSendNothing()
+        public void LegacySendActions_RedirectToSendHomework_WithoutSending()
         {
             using var db = TestDbContextFactory.CreateFreshContext(out _);
-            db.ProfessionalModels.Add(NewModel(1));
-            db.ProfessionalModelPartners.Add(new ProfessionalModelPartner { ProfessionalModelId = 1, PartnerId = PartnerId + 1 });
-            db.SaveChanges();
+            var (controller, send) = CreateModelsController(db, CreateHttpContext(PartnerId));
 
-            var (controller, assignment) = CreateModelsController(db, CreateHttpContext(PartnerId));
+            foreach (var result in new[] { controller.Send(7), controller.SendCustomized(7) })
+            {
+                var redirect = Assert.IsType<RedirectToActionResult>(result);
+                Assert.Equal(nameof(ProfessionalModelsController.SendHomework), redirect.ActionName);
+                Assert.Equal(7, redirect.RouteValues!["id"]);
+            }
 
-            Assert.IsType<NotFoundResult>(await controller.Send(1));
-            Assert.IsType<NotFoundResult>(await controller.SendCustomized(1, new List<Guid> { Guid.NewGuid() }));
-
-            Assert.Empty(assignment.Invocations);
+            Assert.Empty(send.Invocations);
         }
 
         [Fact]
@@ -477,22 +478,6 @@ namespace QdratNew.Tests.PartnerPlacement
             Assert.IsType<NotFoundResult>(await controller.Preview(1));
             Assert.IsType<ViewResult>(await controller.Preview(2));
             Assert.IsType<ViewResult>(await controller.Preview(3));
-        }
-
-        [Fact]
-        public async Task SendModel_GlobalOrAssignedToPartner_IsSent()
-        {
-            using var db = TestDbContextFactory.CreateFreshContext(out _);
-            db.ProfessionalModels.AddRange(NewModel(1, isGlobal: true), NewModel(2));
-            db.ProfessionalModelPartners.Add(new ProfessionalModelPartner { ProfessionalModelId = 2, PartnerId = PartnerId });
-            db.SaveChanges();
-
-            var (controller, assignment) = CreateModelsController(db, CreateHttpContext(PartnerId));
-
-            Assert.IsType<RedirectToActionResult>(await controller.Send(1));
-            Assert.IsType<RedirectToActionResult>(await controller.Send(2));
-
-            Assert.Equal(2, assignment.Invocations.Count);
         }
 
         // =====================================================
@@ -551,7 +536,7 @@ namespace QdratNew.Tests.PartnerPlacement
         }
 
         [Fact]
-        public async Task FromProfessionalModel_Available_CreatesDraft()
+        public async Task FromProfessionalModel_Available_RedirectsToDirectSend_WithoutDraft()
         {
             using var db = TestDbContextFactory.CreateFreshContext(out _);
             db.ProfessionalModels.Add(NewModel(1, isGlobal: true));
@@ -559,26 +544,16 @@ namespace QdratNew.Tests.PartnerPlacement
 
             var (controller, drafts) = CreateGenerationController(db);
 
-            Assert.IsType<ViewResult>(await controller.FromProfessionalModel(1));
+            var get = Assert.IsType<RedirectToActionResult>(await controller.FromProfessionalModel(1));
+            Assert.Equal("SendHomework", get.ActionName);
+            Assert.Equal("ProfessionalModels", get.ControllerName);
 
             var post = Assert.IsType<RedirectToActionResult>(await controller.FromProfessionalModel(
                 new QdratNew.ViewModels.Partner.Homework.HomeworkGenerateFromProfessionalModelVM { ProfessionalModelId = 1 }));
-            Assert.Equal("HomeworkDrafts", post.ControllerName);
-            Assert.Single(drafts.Invocations);
-        }
+            Assert.Equal("SendHomework", post.ActionName);
+            Assert.Equal(1, post.RouteValues!["id"]);
 
-        [Fact]
-        public async Task SendCustomized_ArchivedModel_ReturnsNotFound()
-        {
-            using var db = TestDbContextFactory.CreateFreshContext(out _);
-            var model = NewModel(1, isGlobal: true);
-            model.IsArchived = true;
-            db.ProfessionalModels.Add(model);
-            db.SaveChanges();
-
-            var (controller, _) = CreateModelsController(db, CreateHttpContext(PartnerId));
-
-            Assert.IsType<NotFoundResult>(await controller.SendCustomized(1, new List<Guid>()));
+            Assert.Empty(drafts.Invocations);
         }
     }
 

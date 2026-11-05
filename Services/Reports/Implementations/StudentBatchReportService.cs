@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using QdratNew.Data;
+using QdratNew.Enums;
 using QdratNew.Services.Reports.Interfaces;
 using QdratNew.ViewModels.Partner.Reports;
 
@@ -83,7 +84,7 @@ namespace QdratNew.Services.Reports.Implementations
                 where ea.BatchId == batchId
                       && es.StudentId == studentId
                       && ea.IsSentToStudents
-                      && ea.Exam.OwnerPartnerId == null // PPL-S6: لها قسم مستقل في الصفحة
+                      && (ea.Exam.OwnerPartnerId == null || ea.Exam.Type != ExamType.LevelAssessment) // PPL-S6: تحديد مستوى الشريك له قسم مستقل في الصفحة
                 select new
                 {
                     ea.Id,

@@ -82,64 +82,6 @@ namespace QdratNew.Services.PartnerHomework
             );
         }
 
-        public void SendToStudentsWithQuestions(
-            int partnerId,
-            int subscriptionPeriodId,
-            int courseId,
-            string title,
-            List<Guid> questionIds)
-        {
-            if (questionIds == null || !questionIds.Any())
-                throw new InvalidOperationException("قائمة الأسئلة فارغة.");
-
-            var batches = _context.Batches
-                .Where(b => b.Branch.PartnerId == partnerId &&
-                            b.CourseId == courseId)
-                .ToList();
-
-            foreach (var batch in batches)
-            {
-                var homeworkSet = new HomeworkSet
-                {
-                    Title = title,
-                    BatchId = batch.Id,
-                    CreatedAt = DateTime.UtcNow,
-                    IsSent = true
-                };
-
-                _context.HomeworkSets.Add(homeworkSet);
-                _context.SaveChanges();
-
-                var studentIds = _context.StudentBatchEnrollments
-                    .Where(e => e.BatchId == batch.Id)
-                    .Select(e => e.StudentID)
-                    .ToList();
-
-                foreach (var studentId in studentIds)
-                {
-                    _context.HomeworkSetStudents.Add(new HomeworkSetStudent
-                    {
-                        HomeworkSetId = homeworkSet.Id,
-                        StudentId = studentId,
-                        IsSubmitted = false
-                    });
-
-                    foreach (var qId in questionIds)
-                    {
-                        _context.Homeworks.Add(new QdratNew.Entities.Homework
-                        {
-                            HomeworkSetId = homeworkSet.Id,
-                            StudentId = studentId,
-                            QuestionId = qId,
-                            AssignedAt = DateTime.UtcNow
-                        });
-                    }
-                }
-
-                _context.SaveChanges();
-            }
-        }
-
         private void SendDraftToStudents(
             QdratNew.Entities.HomeworkDraft draft,
             SendHomeworkDraftVM model,

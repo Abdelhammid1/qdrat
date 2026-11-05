@@ -41,6 +41,11 @@ namespace QdratNew.Areas.Partner.Controllers
         }
 
 
+        private Task<bool> OwnsDraftAsync(int draftId)
+            => _context.HomeworkDrafts
+                .AsNoTracking()
+                .AnyAsync(d => d.Id == draftId && d.PartnerId == ActivePartnerId);
+
         // =========================
         // 📄 Draft List
         // =========================
@@ -66,6 +71,9 @@ namespace QdratNew.Areas.Partner.Controllers
         [HttpGet]
         public async Task<IActionResult> AddQuestion(int draftId, int lessonId)
         {
+            if (!await OwnsDraftAsync(draftId))
+                return NotFound();
+
             var questions = await _draftService.GetAddCandidates(draftId, lessonId);
 
             var model = new AddHomeworkDraftQuestionVM
@@ -84,6 +92,9 @@ namespace QdratNew.Areas.Partner.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ConfirmAddQuestion(int draftId, Guid questionId)
         {
+            if (!await OwnsDraftAsync(draftId))
+                return NotFound();
+
             await _draftService.AddQuestion(draftId, questionId);
 
             TempData["Success"] = "تمت إضافة السؤال.";
@@ -98,6 +109,9 @@ namespace QdratNew.Areas.Partner.Controllers
         // =========================
         public async Task<IActionResult> Preview(int id)
         {
+            if (!await OwnsDraftAsync(id))
+                return NotFound();
+
             var draft = await _draftService.GetDraftForPreview(id);
             if (draft == null)
                 return NotFound();
@@ -112,6 +126,9 @@ namespace QdratNew.Areas.Partner.Controllers
             Guid oldQuestionId,
             int lessonId)
         {
+            if (!await OwnsDraftAsync(draftId))
+                return NotFound();
+
             var model = await _draftService.GetReplaceCandidates(
                 draftId,
                 oldQuestionId,
@@ -129,6 +146,9 @@ namespace QdratNew.Areas.Partner.Controllers
         public async Task<IActionResult> ConfirmReplaceQuestion(
             ReplaceHomeworkDraftQuestionVM model)
         {
+            if (!await OwnsDraftAsync(model.DraftId))
+                return NotFound();
+
             await _draftService.ReplaceQuestion(
                 model.DraftId,
                 model.OldQuestionId,

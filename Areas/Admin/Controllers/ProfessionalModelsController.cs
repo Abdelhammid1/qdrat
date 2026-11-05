@@ -628,12 +628,28 @@ namespace QdratNew.Areas.Admin.Controllers
 
             if (model == null) return NotFound();
 
-            // 🟠 نحذف الأسئلة المرتبطة من الجدول الوسيط
-            if (model.Questions != null && model.Questions.Any())
-                _context.ProfessionalModelQuestions.RemoveRange(model.Questions);
+            // PPM-S3: ما أُرسل من النموذج يبقى لدى الطلاب ويفقد ربطه بالمصدر فقط (المفتاح NoAction كان سيمنع الحذف)
+            var strategy = _context.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
 
-            _context.ProfessionalModels.Remove(model);
-            await _context.SaveChangesAsync();
+                await _context.HomeworkSets
+                    .Where(h => h.SourceProfessionalModelId == id)
+                    .ExecuteUpdateAsync(x => x.SetProperty(h => h.SourceProfessionalModelId, (int?)null));
+                await _context.Exams
+                    .Where(e => e.SourceProfessionalModelId == id)
+                    .ExecuteUpdateAsync(x => x.SetProperty(e => e.SourceProfessionalModelId, (int?)null));
+
+                // 🟠 نحذف الأسئلة المرتبطة من الجدول الوسيط
+                if (model.Questions != null && model.Questions.Any())
+                    _context.ProfessionalModelQuestions.RemoveRange(model.Questions);
+
+                _context.ProfessionalModels.Remove(model);
+                await _context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+            });
 
             TempData["SuccessMessage"] = "🗑️ تم حذف النموذج بنجاح.";
             return RedirectToAction(nameof(Index));

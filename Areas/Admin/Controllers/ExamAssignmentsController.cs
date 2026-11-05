@@ -636,6 +636,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 from eab in _context.ExamAssignmentsToBatches.AsNoTracking()
                 join ex in _context.Exams.AsNoTracking() on eab.ExamId equals ex.Id
                 where ex.Type != ExamType.LevelAssessment
+                      && ex.OwnerPartnerId == null // PPM-S5
                       && eab.IsArchived == archived
                       && (permittedBatchIds == null || permittedBatchIds.Contains(eab.BatchId))
                 select new
@@ -757,6 +758,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 where eab.BatchId == batchId
                       && eab.IsArchived == archived
                       && ex.Type != ExamType.LevelAssessment
+                      && ex.OwnerPartnerId == null // PPM-S5
                 orderby eab.CreatedAt descending
                 select new
                 {
@@ -841,7 +843,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 .Include(eab => eab.Exam)
                 .CountAsync(eab =>
                     eab.IsArchived &&
-                    (eab.Exam == null || eab.Exam.Type != ExamType.LevelAssessment));
+                    (eab.Exam == null || (eab.Exam.Type != ExamType.LevelAssessment && eab.Exam.OwnerPartnerId == null)));
 
             // للأرشيف: صلاحيات الأرشيف المحددة من المالك — لغيره: صلاحيات الدفعات العامة
             var examPermittedBatchIds = showArchived
@@ -856,6 +858,7 @@ namespace QdratNew.Areas.Admin.Controllers
                     .Include(e => e.Curriculum)
                 join ex in _context.Exams on eab.ExamId equals ex.Id
                 where ex.Type != ExamType.LevelAssessment // ❌ استبعاد اختبارات تحديد المستوى
+                      && ex.OwnerPartnerId == null // PPM-S5
                       && eab.IsArchived == showArchived
                       && (examPermittedBatchIds == null || examPermittedBatchIds.Contains(eab.BatchId))
                 select new
@@ -972,7 +975,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
             query = query.Where(x =>
                 x.IsArchived == showArchived &&
-                (x.Exam == null || x.Exam.Type != ExamType.LevelAssessment));
+                (x.Exam == null || (x.Exam.Type != ExamType.LevelAssessment && x.Exam.OwnerPartnerId == null)));
 
             if (batchId.HasValue)
                 query = query.Where(x => x.BatchId == batchId.Value);
@@ -1026,7 +1029,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 .Include(ea => ea.Exam)
                 .Where(ea =>
                     !ea.IsArchived &&
-                    (ea.Exam == null || ea.Exam.Type != ExamType.LevelAssessment))
+                    (ea.Exam == null || (ea.Exam.Type != ExamType.LevelAssessment && ea.Exam.OwnerPartnerId == null)))
                 .ToListAsync();
 
             var exams = allExams
@@ -1075,7 +1078,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 .Include(ea => ea.Exam)
                 .Where(ea =>
                     ea.IsArchived &&
-                    (ea.Exam == null || ea.Exam.Type != ExamType.LevelAssessment))
+                    (ea.Exam == null || (ea.Exam.Type != ExamType.LevelAssessment && ea.Exam.OwnerPartnerId == null)))
                 .ToListAsync();
 
             var exams = allExams
@@ -2677,6 +2680,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 join b in _context.Batches on ea.BatchId equals b.Id
                 join e in _context.Exams on ea.ExamId equals e.Id
                 where e.IsFromProfessionalModel == true
+                      && e.OwnerPartnerId == null // PPM-S5
                 orderby ea.CreatedAt descending
                 select new ModelAssignmentViewModel
                 {
@@ -2742,7 +2746,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 .Include(e => e.Exam)
                 .AnyAsync(e => e.BatchId == batchId &&
                                e.IsArchived &&
-                               (e.Exam == null || e.Exam.Type != ExamType.LevelAssessment));
+                               (e.Exam == null || (e.Exam.Type != ExamType.LevelAssessment && e.Exam.OwnerPartnerId == null)));
 
             if (!hasArchivedExams)
             {

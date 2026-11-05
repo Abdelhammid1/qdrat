@@ -140,7 +140,7 @@ namespace QdratNew.Areas.Partner.Controllers
         // CreateFromProfessionalModel
         // =====================================================
         [HttpGet]
-        public async Task<IActionResult> CreateFromProfessionalModel()
+        public async Task<IActionResult> CreateFromProfessionalModel(int? modelId = null)
         {
             if (SubscriptionContext?.CanUseProfessionalModels != true)
             {
@@ -149,6 +149,11 @@ namespace QdratNew.Areas.Partner.Controllers
             }
 
             var vm = await _managementService.GetCreateFromModelAsync(Scope, HttpContext.RequestAborted);
+
+            // PPM-S5.2: رابط «تحديد مستوى من هذا النموذج». القائمة نفسها هي حد الإتاحة
+            if (modelId.HasValue && vm.AvailableModels.Any(m => m.Value == modelId.Value.ToString()))
+                vm.SelectedModelId = modelId.Value;
+
             return View(vm);
         }
 

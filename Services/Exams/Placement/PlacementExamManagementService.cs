@@ -494,6 +494,7 @@ namespace QdratNew.Services.Exams.Placement
                         TotalQuestions = model.Questions.Count,
                         IsActive = true,
                         IsFromProfessionalModel = true,
+                        SourceProfessionalModelId = model.Id, // PPM-S3
                         OwnerPartnerId = scope.PartnerId
                     };
 

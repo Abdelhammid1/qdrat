@@ -272,6 +272,8 @@ namespace QdratNew.Services.Implementations
             .OrderByDescending(x => x.AssignedAt)
             .ToList();
 
+            await ShowPartnerExamDatesInSaudiTimeAsync(ctx, studentId, activeCourseId, validBatchId, result);
+
             return result;
         }
         // ======================================================
@@ -294,6 +296,8 @@ namespace QdratNew.Services.Implementations
                 select MapToCard(e, status)
             ).AsNoTracking().ToListAsync();
 
+            await ShowPartnerExamDatesInSaudiTimeAsync(ctx, studentId, activeCourseId, activeBatchId, data);
+
             return data;
         }
 
@@ -314,6 +318,8 @@ namespace QdratNew.Services.Implementations
                 where s.StudentId == studentId && s.IsSubmitted
                 select MapToCard(e, s)
             ).AsNoTracking().ToListAsync();
+
+            await ShowPartnerExamDatesInSaudiTimeAsync(ctx, studentId, activeCourseId, activeBatchId, data);
 
             return data;
         }
@@ -339,6 +345,8 @@ namespace QdratNew.Services.Implementations
                       && s.EndAt < now
                 select MapToCard(e, s)
             ).AsNoTracking().ToListAsync();
+
+            await ShowPartnerExamDatesInSaudiTimeAsync(ctx, studentId, activeCourseId, activeBatchId, data);
 
             return data;
         }
@@ -417,6 +425,34 @@ namespace QdratNew.Services.Implementations
 
             return query;
         }
+        // PPM-S5/S6: ما يرسله الشريك أو الأدمن عبر خدمة الإرسال من نموذج يُخزن UTC، وهذه الصفحات تعرض التاريخ كما هو.
+        // (مسودات الشريك تخزن الوقت المحلي. وإرسالات الأدمن القديمة بلا SourceProfessionalModelId تبقى كما كانت،
+        // لأن تعديلها من EditProfessionalExam يخزن الوقت كما أُدخل فلا يمكن الجزم بتوقيتها)
+        private async Task ShowPartnerExamDatesInSaudiTimeAsync(
+            ApplicationDbContext ctx,
+            int studentId,
+            int courseId,
+            int batchId,
+            List<StudentExamCardViewModel> cards)
+        {
+            if (cards.Count == 0)
+                return;
+
+            var utcExamIds = (await BaseQuery(ctx, studentId, courseId, batchId)
+                .Where(e => e.Exam.OwnerPartnerId != null || e.Exam.SourceProfessionalModelId != null)
+                .Select(e => e.Id)
+                .ToListAsync())
+                .ToHashSet();
+
+            foreach (var card in cards.Where(c => utcExamIds.Contains(c.ExamAssignmentId)))
+            {
+                card.AssignedAt = _time.ConvertToSaudi(card.AssignedAt);
+
+                if (card.EndAt.HasValue)
+                    card.EndAt = _time.ConvertToSaudi(card.EndAt.Value);
+            }
+        }
+
         // ======================================================
         // 🧱 CARD MAPPER
         // ======================================================

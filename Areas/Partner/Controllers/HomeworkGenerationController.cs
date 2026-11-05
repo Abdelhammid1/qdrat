@@ -1,5 +1,4 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
 using QdratNew.Data;
 using QdratNew.Enums;
 using QdratNew.Interfaces;
@@ -43,19 +42,8 @@ namespace QdratNew.Areas.Partner.Controllers
                 return RedirectToAction("Index", "ProfessionalModels");
             }
 
-            var model = new HomeworkGenerateFromProfessionalModelVM
-            {
-                ProfessionalModelId = modelId,
-                Courses = AllowedCourses
-                    .Select(c => new SelectListItem
-                    {
-                        Value = c.CourseId.ToString(),
-                        Text = c.CourseName
-                    })
-                    .ToList()
-            };
-
-            return View(model);
+            // PPM-S4.2: الإرسال المباشر حل محل المسودة
+            return RedirectToAction("SendHomework", "ProfessionalModels", new { id = modelId });
         }
 
         [HttpPost]
@@ -72,18 +60,7 @@ namespace QdratNew.Areas.Partner.Controllers
                 return RedirectToAction("Index", "ProfessionalModels");
             }
 
-            if (!ModelState.IsValid)
-                return View(model);
-
-            var draftId = await _draftService.GenerateDraftFromProfessionalModel(
-                ActivePartnerId,
-                ActiveSubscriptionPeriodId,
-                model);
-
-            return RedirectToAction(
-                "Preview",
-                "HomeworkDrafts",
-                new { id = draftId });
+            return RedirectToAction("SendHomework", "ProfessionalModels", new { id = model.ProfessionalModelId });
         }
 
         // =========================

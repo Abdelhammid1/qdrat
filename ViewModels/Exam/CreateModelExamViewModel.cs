@@ -1,5 +1,7 @@
-﻿using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
+﻿using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
 using Microsoft.AspNetCore.Mvc.Rendering;
+using QdratNew.Services.ProfessionalModels;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 
@@ -20,7 +22,7 @@ namespace QdratNew.ViewModels.Exam
         [Required]
         public List<int> SelectedBatchIds { get; set; } = new List<int>();
 
-        public string Title { get; set; }
+        public string? Title { get; set; } // اختياري كما في الشاشة: كان Required ضمنيًا فيمنع المتصفح الإرسال بلا عنوان
 
         public DateTime? StartAt { get; set; }
         public DateTime? EndAt { get; set; }
@@ -39,6 +41,11 @@ namespace QdratNew.ViewModels.Exam
         public bool IsInLab { get; set; } = false;  // اختياري – حضوري أو لا
         public bool RandomizeQuestions { get; set; } = true;
 
+        // تأكيد تحذيرات التكرار (PPM-S6.2)
+        public bool ConfirmWarnings { get; set; }
 
+        [BindNever]
+        [ValidateNever]
+        public ModelSendPreview? SendPreview { get; set; }
     }
 }

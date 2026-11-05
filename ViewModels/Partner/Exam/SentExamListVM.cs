@@ -19,6 +19,10 @@ namespace QdratNew.ViewModels.Partner.Exam
 
         public DateTime SentAt { get; set; }
 
+        // PPM-S5.3: أُرسل من نموذج احترافي
+        public bool IsFromModel { get; set; }
+
+        public string? SourceModelTitle { get; set; }
 
     }
 }

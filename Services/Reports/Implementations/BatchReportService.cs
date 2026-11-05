@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using QdratNew.Data;
+using QdratNew.Enums;
 using QdratNew.Services.Reports.Interfaces;
 using QdratNew.ViewModels.Partner.Reports;
 
@@ -73,7 +74,7 @@ namespace QdratNew.Services.Reports.Implementations
             ).ToList();
 
             var totalExamAssignments = _context.ExamAssignmentsToBatches
-                .Count(e => e.BatchId == batchId && e.IsSentToStudents && e.Exam.OwnerPartnerId == null); // PPL-S5
+                .Count(e => e.BatchId == batchId && e.IsSentToStudents && (e.Exam.OwnerPartnerId == null || e.Exam.Type != ExamType.LevelAssessment)); // PPL-S5
 
             var submittedExams = examStats.Count(x => x.IsSubmitted);
 
@@ -236,7 +237,7 @@ namespace QdratNew.Services.Reports.Implementations
             // =========================
             var exams = _context.ExamAssignmentsToBatches
                 .AsNoTracking()
-                .Where(e => e.BatchId == batchId && e.IsSentToStudents && e.Exam.OwnerPartnerId == null) // PPL-S5
+                .Where(e => e.BatchId == batchId && e.IsSentToStudents && (e.Exam.OwnerPartnerId == null || e.Exam.Type != ExamType.LevelAssessment)) // PPL-S5
                 .OrderByDescending(e => e.AssignedAt)
                 .Select(e => new
                 {

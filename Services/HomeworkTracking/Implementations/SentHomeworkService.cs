@@ -66,6 +66,15 @@ namespace QdratNew.Services.HomeworkTracking.Implementations
             // ===============================
             var courses = _context.Courses.ToList();
 
+            // PPM-S4.3: عناوين النماذج الحالية. النموذج المحذوف فُك ربطه ويبقى عنوانه في CompletionTitle
+            var modelTitles = (
+                from hs in _context.HomeworkSets
+                join b in _context.Batches on hs.BatchId equals b.Id
+                join m in _context.ProfessionalModels on hs.SourceProfessionalModelId equals m.Id
+                where hs.IsSent && !hs.IsArchived && b.Branch.PartnerId == partnerId
+                select new { hs.Id, m.Title }
+            ).ToDictionary(x => x.Id, x => x.Title);
+
             // ===============================
             // 6️⃣ بناء ViewModel (كل الربط في الذاكرة)
             // ===============================
@@ -91,7 +100,12 @@ namespace QdratNew.Services.HomeworkTracking.Implementations
                         SubmittedStudents = states.Count(s => s.IsSubmitted),
                         PendingStudents = states.Count(s => !s.IsSubmitted),
 
-                        SentAt = hs.CreatedAt
+                        SentAt = hs.CreatedAt,
+
+                        IsFromModel = hs.IsFromProfessionalModel,
+                        SourceModelTitle = hs.IsFromProfessionalModel
+                            ? modelTitles.GetValueOrDefault(hs.Id, hs.CompletionTitle)
+                            : null
                     };
                 })
                 .OrderByDescending(x => x.SentAt)

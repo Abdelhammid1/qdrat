@@ -58,6 +58,11 @@ namespace QdratNew.Tests.PartnerProfessionalModels
             using var scope = _factory.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
+            await db.Database.ExecuteSqlRawAsync("DELETE FROM HomeworkSets WHERE Title LIKE N'PPMS1%'");
+            await db.Database.ExecuteSqlRawAsync("DELETE FROM Exams WHERE Title LIKE N'PPMS1%'");
+            await db.Database.ExecuteSqlRawAsync("DELETE FROM Batches WHERE Name LIKE N'PPMS1%'");
+            await db.Database.ExecuteSqlRawAsync("DELETE FROM Branches WHERE Name LIKE N'PPMS1%'");
+            await db.Database.ExecuteSqlRawAsync("DELETE FROM Courses WHERE Name LIKE N'PPMS1%'");
             await db.Database.ExecuteSqlRawAsync("DELETE FROM ProfessionalModelPartners WHERE ProfessionalModelId IN (SELECT Id FROM ProfessionalModels WHERE Title LIKE 'PPMS1%')");
             await db.Database.ExecuteSqlRawAsync("DELETE FROM ProfessionalModels WHERE Title LIKE 'PPMS1%'");
             await db.Database.ExecuteSqlRawAsync("DELETE FROM PartnerSubscriptions WHERE PartnerId IN (SELECT Id FROM Partners WHERE Code LIKE 'PPMS1%')");
@@ -347,6 +352,51 @@ namespace QdratNew.Tests.PartnerProfessionalModels
 
             // شريك بلا عقد: لا يرى حتى النموذج العام
             Assert.False(await service.IsAvailableForPartnerAsync(allId, _partnerB, null));
+        }
+
+        // PPM-S3: المفتاح NoAction كان سيفشل الحذف بعد ملء SourceProfessionalModelId
+        [Fact]
+        public async Task Delete_ModelAlreadySent_KeepsSentItems_AndClearsTheirSource()
+        {
+            var modelId = await SeedModelAsync($"{Marker} محذوف", forPartners: true, type: ProfessionalModelType.Homework);
+
+            int setId;
+            int examId;
+            using (var seedScope = _factory.Services.CreateScope())
+            {
+                var db = seedScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                var branch = new Branch { Name = $"{Marker} فرع", Location = "-", City = "-", State = "-", Country = "-" };
+                var course = new Course { Name = $"{Marker} دورة", Description = "-", StartDate = DateTime.UtcNow, IsActive = true };
+                db.Branches.Add(branch);
+                db.Courses.Add(course);
+                await db.SaveChangesAsync();
+
+                var batch = new Batch { Name = $"{Marker} دفعة", BranchId = branch.Id, CourseId = course.Id, StartDate = DateTime.UtcNow };
+                db.Batches.Add(batch);
+                await db.SaveChangesAsync();
+
+                var set = new HomeworkSet { Title = $"{Marker} واجب", CompletionTitle = "-", BatchId = batch.Id, IsSent = true, IsFromProfessionalModel = true, SourceProfessionalModelId = modelId };
+                var exam = new Exam { Title = $"{Marker} اختبار", DurationMinutes = 30, IsFromProfessionalModel = true, SourceProfessionalModelId = modelId };
+                db.HomeworkSets.Add(set);
+                db.Exams.Add(exam);
+                await db.SaveChangesAsync();
+                setId = set.Id;
+                examId = exam.Id;
+            }
+
+            var response = await OwnerClient().SendAsync(Post($"/Admin/ProfessionalModels/Delete/{modelId}", new List<KeyValuePair<string, string>> { new("id", modelId.ToString()) }));
+            Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+
+            using var scope = _factory.Services.CreateScope();
+            var read = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            Assert.False(await read.ProfessionalModels.AnyAsync(m => m.Id == modelId));
+
+            var keptSet = await read.HomeworkSets.AsNoTracking().SingleAsync(h => h.Id == setId);
+            Assert.Null(keptSet.SourceProfessionalModelId);
+            Assert.True(keptSet.IsFromProfessionalModel);
+
+            var keptExam = await read.Exams.AsNoTracking().SingleAsync(e => e.Id == examId);
+            Assert.Null(keptExam.SourceProfessionalModelId);
         }
     }
 }

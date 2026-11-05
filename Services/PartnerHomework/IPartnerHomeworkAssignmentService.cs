@@ -12,17 +12,5 @@ namespace QdratNew.Services.PartnerHomework
             int partnerId,
             int subscriptionPeriodId
         );
-
-        /// <summary>
-        /// إرسال واجب مباشر اعتمادًا على قائمة أسئلة
-        /// (Professional Model / Auto / Manual)
-        /// </summary>
-        void SendToStudentsWithQuestions(
-            int partnerId,
-            int subscriptionPeriodId,
-            int courseId,
-            string title,
-            List<Guid> questionIds
-        );
     }
 }

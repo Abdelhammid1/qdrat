@@ -1,0 +1,317 @@
+@model QdratNew.ViewModels.Partner.SendFromModelVm
+@using QdratNew.ViewModels.Partner
+
+@functions {
+    string Fmt(int value) => NumberHelper.ToIndicNumbersSafe(value.ToString());
+}
+
+@{
+    const string dateFormat = "{0:yyyy-MM-ddTHH:mm}";
+    var preview = Model.Preview;
+    var canSend = Model.EligibleBatches.Any(b => b.ActiveStudents > 0) && Model.ModelQuestions.Any();
+    var excluded = Model.ExcludedQuestionIds.ToHashSet();
+    var examVm = Model as SendModelExamVm;
+}
+
+<div class="pp-page">
+    <partial name="~/Areas/Partner/Views/PlacementExams/_PlacementAlerts.cshtml" />
+    <link href="~/css/partner-model-send.css" rel="stylesheet" asp-append-version="true" />
+
+    <div class="pp-head">
+        <div>
+            <h1><i class="fa-solid fa-paper-plane" aria-hidden="true"></i> إرسال @Model.Noun من نموذج</h1>
+            <p>@Model.ModelTitle</p>
+        </div>
+
+        <div class="pp-head-actions">
+            <a asp-action="Preview" asp-route-id="@Model.ModelId" target="_blank" rel="noopener" class="pp-btn pp-btn-light">
+                <i class="fa-solid fa-eye" aria-hidden="true"></i>
+                معاينة النموذج كاملًا
+            </a>
+            <a asp-action="@Model.ListAction" class="pp-btn pp-btn-light">
+                <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                كل النماذج
+            </a>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="pp-alert @(preview != null ? "pp-alert-warn" : "pp-alert-danger")" role="alert">
+            <i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>
+            <span>@Model.ErrorMessage</span>
+        </div>
+    }
+
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="pp-alert pp-alert-danger" role="alert">
+            <i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>
+            <div asp-validation-summary="All" class="pms-validation"></div>
+        </div>
+    }
+
+    @if (!Model.ModelQuestions.Any())
+    {
+        <div class="pp-card">
+            <div class="pp-empty">
+                <i class="fa-solid fa-circle-question" aria-hidden="true"></i>
+                <h2>لا توجد أسئلة في هذا النموذج</h2>
+                <p>لا يمكن إرسال هذا النموذج حاليًا. تواصلوا مع المعهد.</p>
+                <a asp-action="@Model.ListAction" class="pp-btn pp-btn-primary">العودة للنماذج</a>
+            </div>
+        </div>
+    }
+    else if (!Model.EligibleBatches.Any())
+    {
+        <div class="pp-card">
+            <div class="pp-empty">
+                <i class="fa-solid fa-users-slash" aria-hidden="true"></i>
+                <h2>لا توجد دفعات مؤهلة لهذا النموذج</h2>
+                <p>تظهر هنا دفعاتكم التي تقع دورتها ضمن عقدكم وتشمل منهج النموذج.</p>
+                <a asp-action="@Model.ListAction" class="pp-btn pp-btn-primary">العودة للنماذج</a>
+            </div>
+        </div>
+    }
+    else
+    {
+        <form asp-action="@Model.FormAction" method="post" id="modelSendForm"
+              data-candidates-url="@Url.Action(Model.CandidatesAction, new { id = Model.ModelId })"
+              data-has-preview="@(preview != null ? "1" : "0")"
+              data-has-warnings="@(preview?.HasWarnings == true ? "1" : "0")">
+            <input type="hidden" asp-for="ModelId" />
+
+            <div class="pp-card">
+                <h2 class="pp-card-title"><i class="fa-solid fa-users" aria-hidden="true"></i> الدفعات</h2>
+                <p class="pp-card-sub">يصل @Model.NounDefinite إلى الطلاب النشطين فقط في الدفعات المختارة.</p>
+
+                <div class="pp-toolbar">
+                    <input type="search" class="pp-search" placeholder="ابحث باسم الدفعة" aria-label="البحث في الدفعات" data-search-target=".pms-batch" />
+                    <button type="button" class="pp-btn pp-btn-light pp-btn-sm" id="toggleBatches">تحديد الكل</button>
+                    <span class="pp-badge pp-badge-main" aria-live="polite">تم اختيار <span id="selectedBatchCount">٠</span> دفعة</span>
+                </div>
+
+                <div class="pms-batches">
+                    @foreach (var batch in Model.EligibleBatches)
+                    {
+                        var hasStudents = batch.ActiveStudents > 0;
+                        var inputId = $"batch-{batch.BatchId}";
+
+                        <label class="pms-batch @(hasStudents ? "" : "is-disabled")" for="@inputId" data-search="@batch.Name">
+                            <input class="form-check-input" type="checkbox" id="@inputId" name="BatchIds" value="@batch.BatchId"
+                                   checked="@(hasStudents && Model.BatchIds.Contains(batch.BatchId))" disabled="@(!hasStudents)" />
+                            <span class="pms-batch-text">
+                                <span class="pp-batch-name">@batch.Name</span>
+                                <span class="pp-batch-meta">
+                                    @if (hasStudents)
+                                    {
+                                        <span class="pp-badge pp-badge-muted">@Fmt(batch.ActiveStudents) طالب نشط</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="pp-badge pp-badge-bad">لا يوجد طلاب نشطون</span>
+                                    }
+
+                                    @if (batch.AlreadySentFromModel)
+                                    {
+                                        <span class="pp-badge pp-badge-warn">أُرسل سابقًا</span>
+                                    }
+                                </span>
+                            </span>
+                        </label>
+                    }
+                </div>
+            </div>
+
+            <div class="pp-card">
+                <h2 class="pp-card-title"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i> العنوان والمواعيد</h2>
+                <p class="pp-card-sub">
+                    المواعيد بتوقيت السعودية.
+                    @if (examVm != null)
+                    {
+                        <text>يبدأ عدّاد المدة عند دخول الطالب للاختبار.</text>
+                    }
+                </p>
+
+                <div class="row g-3">
+                    <div class="@(examVm != null ? "col-12" : "col-lg-6")">
+                        <label asp-for="Title" class="form-label">عنوان @Model.NounDefinite (اختياري)</label>
+                        <input asp-for="Title" class="form-control" maxlength="200" placeholder="@Model.Noun من النموذج @Model.ModelTitle" />
+                    </div>
+                    <div class="col-lg-3 col-sm-6">
+                        <label asp-for="StartAtLocal" class="form-label">موعد البداية</label>
+                        <input asp-for="StartAtLocal" asp-format="@dateFormat" type="datetime-local" class="form-control" required />
+                    </div>
+                    <div class="col-lg-3 col-sm-6">
+                        <label asp-for="EndAtLocal" class="form-label">موعد النهاية</label>
+                        <input asp-for="EndAtLocal" asp-format="@dateFormat" type="datetime-local" class="form-control" required />
+                    </div>
+                    @if (examVm != null)
+                    {
+                        <div class="col-lg-3 col-sm-6">
+                            <label for="DurationMinutes" class="form-label">مدة الاختبار (دقيقة)</label>
+                            <input id="DurationMinutes" name="DurationMinutes" type="number" class="form-control" required
+                                   min="@SendModelExamVm.MinDurationMinutes" max="@SendModelExamVm.MaxDurationMinutes" value="@examVm.DurationMinutes" />
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="pp-card">
+                <h2 class="pp-card-title"><i class="fa-solid fa-list-check" aria-hidden="true"></i> الأسئلة</h2>
+                <p class="pp-card-sub">
+                    يُرسل <b id="finalQuestionCount">@Fmt(Model.ModelQuestions.Count(q => !excluded.Contains(q.QuestionId)))</b>
+                    من أصل @Fmt(Model.ModelQuestions.Count) سؤال. يمكنك استبعاد سؤال أو استبداله بسؤال من نفس الدرس.
+                </p>
+
+                @foreach (var question in Model.ModelQuestions)
+                {
+                    var isExcluded = excluded.Contains(question.QuestionId);
+                    var hasReplacement = Model.Replacements.TryGetValue(question.QuestionId, out var replacementId);
+                    Model.ChosenSubstitutes.TryGetValue(question.QuestionId, out var substitute);
+
+                    <div class="pp-question pms-question @(isExcluded ? "is-excluded" : "") @(hasReplacement ? "is-replaced" : "")" data-question="@question.QuestionId">
+                        <div class="pp-question-head">
+                            <span class="pp-qnum">@Fmt(question.OrderNumber)</span>
+                            <span class="pp-badge pp-badge-muted">@question.LessonTitle</span>
+                            <span class="pp-badge pp-badge-bad pms-excluded-tag">مستبعد</span>
+                            <span class="pp-badge pp-badge-warn pms-replaced-tag">مُستبدل</span>
+                        </div>
+
+                        <div class="pms-original">
+                            <partial name="_ModelQuestionBody" model="question" />
+                        </div>
+
+                        <div class="pms-substitute" data-role="substitute">
+                            <div class="pp-answer-label">السؤال البديل</div>
+                            <div data-role="substitute-body">
+                                @if (substitute != null)
+                                {
+                                    <partial name="_ModelQuestionBody" model="substitute" />
+                                }
+                            </div>
+                            @if (hasReplacement)
+                            {
+                                <input type="hidden" name="Replacements[@question.QuestionId]" value="@replacementId" data-role="substitute-id" />
+                            }
+                        </div>
+
+                        <div class="pp-actions">
+                            <label class="pms-exclude">
+                                <input class="form-check-input" type="checkbox" name="ExcludedQuestionIds" value="@question.QuestionId" checked="@isExcluded" />
+                                استبعاد
+                            </label>
+                            <button type="button" class="pp-btn pp-btn-light pp-btn-sm" data-replace>
+                                <i class="fa-solid fa-right-left" aria-hidden="true"></i>
+                                استبدال
+                            </button>
+                            <button type="button" class="pp-btn pp-btn-danger pp-btn-sm" data-cancel-replace>
+                                إلغاء الاستبدال
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            @if (preview != null)
+            {
+                <div class="pp-card" id="sendReview">
+                    <h2 class="pp-card-title"><i class="fa-solid fa-clipboard-check" aria-hidden="true"></i> مراجعة الإرسال</h2>
+                    <p class="pp-card-sub">سيُرسل @Fmt(preview.Questions.Count) سؤال إلى الدفعات التالية:</p>
+
+                    <div class="pp-table-wrap">
+                        <table class="pp-table pp-table-cards">
+                            <thead>
+                                <tr>
+                                    <th>الدفعة</th>
+                                    <th>الطلاب النشطون</th>
+                                    <th>أسئلة سبق إرسالها</th>
+                                    <th>الحالة</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var batch in preview.Batches)
+                                {
+                                    <tr>
+                                        <td data-label="الدفعة">@batch.Name</td>
+                                        <td data-label="الطلاب النشطون">@Fmt(batch.StudentCount)</td>
+                                        <td data-label="أسئلة سبق إرسالها">@Fmt(batch.RepeatedQuestionCount)</td>
+                                        <td data-label="الحالة">
+                                            @if (batch.StudentCount == 0)
+                                            {
+                                                <span class="pp-badge pp-badge-bad">تُتخطى: لا طلاب نشطون</span>
+                                            }
+                                            else if (batch.AlreadySentFromModel)
+                                            {
+                                                <span class="pp-badge pp-badge-warn">أُرسل هذا النموذج سابقًا</span>
+                                            }
+                                            else if (batch.RepeatedQuestionCount > 0)
+                                            {
+                                                <span class="pp-badge pp-badge-warn">أسئلة مكررة</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="pp-badge pp-badge-ok">جاهزة</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    @if (preview.HasWarnings)
+                    {
+                        <div class="pp-alert pp-alert-warn pms-confirm" role="status">
+                            <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+                            <label>
+                                <input class="form-check-input" type="checkbox" name="ConfirmWarnings" value="true" id="confirmWarnings" />
+                                راجعت التحذيرات أعلاه وأؤكد الإرسال رغم التكرار.
+                            </label>
+                        </div>
+                    }
+
+                    <div class="pp-alert pp-alert-warn pms-stale" id="stalePreview" role="status">
+                        <i class="fa-solid fa-rotate" aria-hidden="true"></i>
+                        <span>تغيرت اختياراتك بعد المعاينة. أعد المعاينة قبل الإرسال.</span>
+                    </div>
+                </div>
+            }
+
+            <div class="pp-form-actions">
+                <a asp-action="@Model.ListAction" class="pp-btn pp-btn-light">
+                    <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                    إلغاء
+                </a>
+
+                <button type="submit" name="Intent" value="@SendFromModelVm.IntentPreview" class="pp-btn @(preview == null ? "pp-btn-primary" : "pp-btn-light")" disabled="@(!canSend)">
+                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                    معاينة الإرسال
+                </button>
+
+                @if (preview != null)
+                {
+                    <button type="submit" name="Intent" value="@SendFromModelVm.IntentSend" class="pp-btn pp-btn-primary" id="sendButton">
+                        <i class="fa-solid fa-paper-plane" aria-hidden="true"></i>
+                        إرسال @Model.NounDefinite
+                    </button>
+                }
+            </div>
+        </form>
+
+        <div class="modal fade" id="replacementModal" tabindex="-1" dir="rtl" aria-labelledby="replacementModalTitle" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="replacementModalTitle">
+                            <i class="fa-solid fa-right-left" aria-hidden="true"></i>
+                            اختيار سؤال بديل من نفس الدرس
+                        </h5>
+                        <button type="button" class="btn-close ms-0" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+                    </div>
+                    <div class="modal-body pp-page pms-modal-body"></div>
+                </div>
+            </div>
+        </div>
+    }
+</div>

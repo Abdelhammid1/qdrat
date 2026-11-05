@@ -18,6 +18,7 @@ using QdratNew.ViewModels.EnhancementSkills;
 using QdratNew.ViewModels.Exam;
 using QdratNew.ViewModels.Homework;
 using System.Security.Claims;
+using QdratNew.Services.ProfessionalModels;
 
 namespace QdratNew.Areas.Admin.Controllers
 {
@@ -31,11 +32,11 @@ namespace QdratNew.Areas.Admin.Controllers
         private readonly IAdvancedNotificationService _notificationService;
         private readonly IAutoExamGenerationService _autoExamGenerationService;
         private readonly ITimeZoneService _timeZoneService;
-        private readonly ICurriculumExamGeneratorService _curriculumExamGeneratorService;
+        private readonly IProfessionalModelSendService _modelSendService;
 
         public AdminLessonCompletionsController(ApplicationDbContext context, ILessonCompletionService lessonCompletionService, IStudentSectionExamService sectionExamService, IAdminActivityLogger logger,
     IAdvancedNotificationService notificationService // ✅ أضف هذا
-, IAutoExamGenerationService autoExamGenerationService, ITimeZoneService timeZoneService, ICurriculumExamGeneratorService curriculumExamGeneratorService)
+, IAutoExamGenerationService autoExamGenerationService, ITimeZoneService timeZoneService, IProfessionalModelSendService modelSendService)
         {
             _context = context;
             _lessonCompletionService = lessonCompletionService;
@@ -44,7 +45,7 @@ namespace QdratNew.Areas.Admin.Controllers
             _notificationService = notificationService; // ✅ وربطها هنا
             _autoExamGenerationService = autoExamGenerationService;
             _timeZoneService = timeZoneService;
-            _curriculumExamGeneratorService = curriculumExamGeneratorService;
+            _modelSendService = modelSendService;
         }
 
         [HttpGet]
@@ -253,6 +254,9 @@ namespace QdratNew.Areas.Admin.Controllers
             if (assignment == null)
                 return NotFound("❌ لم يتم العثور على هذا الاختبار.");
 
+            // PPM-S6: ما أُرسل عبر خدمة الإرسال يُخزن UTC، والقديم يبقى كما كان
+            var storedAsUtc = assignment.Exam?.SourceProfessionalModelId != null;
+
             var vm = new EditProfessionalExamVm
             {
                 Id              = assignment.Id,
@@ -261,8 +265,8 @@ namespace QdratNew.Areas.Admin.Controllers
                 BatchName       = assignment.Batch?.Name ?? "-",
                 TotalQuestions  = assignment.TotalQuestions,
                 DurationMinutes = assignment.DurationMinutes,
-                StartAt         = assignment.ScheduledDate,
-                EndAt           = assignment.EndAt,
+                StartAt         = storedAsUtc && assignment.ScheduledDate.HasValue ? _timeZoneService.ConvertToSaudi(assignment.ScheduledDate.Value) : assignment.ScheduledDate,
+                EndAt           = storedAsUtc && assignment.EndAt.HasValue ? _timeZoneService.ConvertToSaudi(assignment.EndAt.Value) : assignment.EndAt,
                 IsOnline        = assignment.IsOnline,
                 IsInLab         = assignment.IsInLab,
                 ReferenceCode   = assignment.Exam?.ReferenceCode,
@@ -309,10 +313,13 @@ namespace QdratNew.Areas.Admin.Controllers
                 assignment.TotalQuestions = vm.TotalQuestions;
                 assignment.DurationMinutes = vm.DurationMinutes;
 
-                if (vm.StartAt.HasValue)
-                    assignment.ScheduledDate = vm.StartAt.Value;
+                var storedAsUtc = assignment.Exam?.SourceProfessionalModelId != null;
 
-                assignment.EndAt = vm.EndAt ?? assignment.ScheduledDate?.AddMinutes(vm.DurationMinutes);
+                if (vm.StartAt.HasValue)
+                    assignment.ScheduledDate = storedAsUtc ? _timeZoneService.ConvertToUtc(vm.StartAt.Value) : vm.StartAt.Value;
+
+                var editedEndAt = vm.EndAt.HasValue && storedAsUtc ? _timeZoneService.ConvertToUtc(vm.EndAt.Value) : vm.EndAt;
+                assignment.EndAt = editedEndAt ?? assignment.ScheduledDate?.AddMinutes(vm.DurationMinutes);
 
                 // ============================================================
                 // 2) نوع الاختبار: Online or حضوري
@@ -413,6 +420,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 join b in _context.Batches on ea.BatchId equals b.Id
                 join e in _context.Exams on ea.ExamId equals e.Id
                 where e.IsFromProfessionalModel == true
+                      && e.OwnerPartnerId == null // PPM-S5
                 orderby ea.CreatedAt descending
                 select new ModelAssignmentViewModel
                 {
@@ -512,6 +520,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 join b in _context.Batches.AsNoTracking() on ea.BatchId equals b.Id
                 join e in _context.Exams.AsNoTracking() on ea.ExamId equals e.Id
                 where e.IsFromProfessionalModel == true
+                      && e.OwnerPartnerId == null // PPM-S5
                       && !ea.IsArchived
                       && ea.BatchId == batchId
                 orderby ea.CreatedAt descending
@@ -590,6 +599,7 @@ namespace QdratNew.Areas.Admin.Controllers
                 join b in _context.Batches.AsNoTracking() on ea.BatchId equals b.Id
                 join e in _context.Exams.AsNoTracking() on ea.ExamId equals e.Id
                 where e.IsFromProfessionalModel == true
+                      && e.OwnerPartnerId == null // PPM-S5
                       && ea.IsArchived
                       && ea.BatchId == batchId
                 orderby ea.CreatedAt descending
@@ -673,7 +683,7 @@ namespace QdratNew.Areas.Admin.Controllers
         {
             var assignment = await _context.ExamAssignmentsToBatches
                 .Include(ea => ea.Exam)
-                .FirstOrDefaultAsync(ea => ea.Id == id && ea.Exam != null && ea.Exam.IsFromProfessionalModel);
+                .FirstOrDefaultAsync(ea => ea.Id == id && ea.Exam != null && ea.Exam.IsFromProfessionalModel && ea.Exam.OwnerPartnerId == null);
 
             if (assignment == null)
             {
@@ -698,7 +708,7 @@ namespace QdratNew.Areas.Admin.Controllers
         {
             var assignment = await _context.ExamAssignmentsToBatches
                 .Include(ea => ea.Exam)
-                .FirstOrDefaultAsync(ea => ea.Id == id && ea.Exam != null && ea.Exam.IsFromProfessionalModel);
+                .FirstOrDefaultAsync(ea => ea.Id == id && ea.Exam != null && ea.Exam.IsFromProfessionalModel && ea.Exam.OwnerPartnerId == null);
 
             if (assignment == null)
             {
@@ -777,6 +787,7 @@ namespace QdratNew.Areas.Admin.Controllers
                     .Where(ea =>
                         ea.Exam != null &&
                         ea.Exam.IsFromProfessionalModel &&
+                        ea.Exam.OwnerPartnerId == null && // PPM-S5
                         !ea.IsArchived)
                     .ToListAsync();
 
@@ -855,6 +866,7 @@ namespace QdratNew.Areas.Admin.Controllers
                     .Where(ea =>
                         ea.Exam != null &&
                         ea.Exam.IsFromProfessionalModel &&
+                        ea.Exam.OwnerPartnerId == null && // PPM-S5
                         ea.IsArchived)
                     .ToListAsync();
 
@@ -1062,168 +1074,55 @@ namespace QdratNew.Areas.Admin.Controllers
                 return View(vm);
             }
 
-            var model = await _context.ProfessionalModels
-                .Include(m => m.Questions)
-                .ThenInclude(mq => mq.Question)
-                .FirstOrDefaultAsync(m => m.Id == vm.ModelId && !m.IsArchived);
+            if (vm.IsLinkedToLecture && (!vm.LectureId.HasValue || vm.LectureId.Value <= 0))
+            {
+                TempData["Error"] = "⚠️ اختر المحاضرة المرتبطة بالواجب.";
+                await PopulateCreateModelHomeworkListsAsync(vm);
+                return View(vm);
+            }
 
-            if (model == null)
+            // PPM-S6.1: نفس خدمة الإرسال التي يستخدمها الشريك
+            var result = await _modelSendService.SendHomeworkAsync(AdminSendScope(), new SendModelHomeworkRequest
+            {
+                ModelId = vm.ModelId,
+                BatchIds = vm.SelectedBatchIds,
+                Title = vm.Title,
+                StartAtLocal = vm.StartAt,
+                EndAtLocal = vm.EndAt,
+                LectureId = vm.IsLinkedToLecture ? vm.LectureId : null,
+                ConfirmWarnings = vm.ConfirmWarnings
+            });
+
+            if (result.IsNotFound)
             {
                 TempData["Error"] = "❌ النموذج غير موجود.";
                 return RedirectToAction(nameof(CreateModelHomework));
             }
 
-            var availableBatchIds = await _context.Batches
-                .AsNoTracking()
-                .Where(b => !b.IsDeleted && !b.IsArchived)
-                .Select(b => b.Id)
-                .ToListAsync();
-
-            vm.SelectedBatchIds = vm.SelectedBatchIds
-                .Where(batchId => availableBatchIds.Any(id => id == batchId))
-                .Distinct()
-                .ToList();
-
-            if (!vm.SelectedBatchIds.Any())
+            if (!result.Succeeded)
             {
-                TempData["Error"] = "⚠️ الدفعات المحددة غير متاحة أو مؤرشفة.";
-                return RedirectToAction(nameof(CreateModelHomework));
+                TempData["Error"] = result.Message;
+                vm.SendPreview = result.Preview;
+                vm.ConfirmWarnings = false;
+                ModelState.Remove(nameof(vm.ConfirmWarnings));
+                await PopulateCreateModelHomeworkListsAsync(vm);
+                return View(vm);
             }
 
-            int? linkedLectureId = null;
-            if (vm.IsLinkedToLecture)
-            {
-                if (!vm.LectureId.HasValue || vm.LectureId.Value <= 0)
-                {
-                    TempData["Error"] = "⚠️ اختر المحاضرة المرتبطة بالواجب.";
-                    await PopulateCreateModelHomeworkListsAsync(vm);
-                    return View(vm);
-                }
-
-                if (vm.SelectedBatchIds.Count != 1)
-                {
-                    TempData["Error"] = "⚠️ ربط الواجب بمحاضرة يتطلب اختيار دفعة واحدة فقط.";
-                    await PopulateCreateModelHomeworkListsAsync(vm);
-                    return View(vm);
-                }
-
-                var selectedBatchId = vm.SelectedBatchIds[0];
-                var lectureExists = await _context.Lecture
-                    .AsNoTracking()
-                    .AnyAsync(l => l.Id == vm.LectureId.Value && l.BatchId == selectedBatchId);
-
-                if (!lectureExists)
-                {
-                    TempData["Error"] = "⚠️ المحاضرة المختارة لا تنتمي للدفعة المحددة.";
-                    await PopulateCreateModelHomeworkListsAsync(vm);
-                    return View(vm);
-                }
-
-                linkedLectureId = vm.LectureId.Value;
-            }
-
-            // 🕐 تحويل التواريخ إلى UTC
-            if (vm.StartAt.HasValue)
-                vm.StartAt = _timeZoneService.ConvertToUtc(vm.StartAt.Value);
-            if (vm.EndAt.HasValue)
-                vm.EndAt = _timeZoneService.ConvertToUtc(vm.EndAt.Value);
-
-            // 🔁 إرسال النموذج إلى كل دفعة
-            foreach (var batchId in vm.SelectedBatchIds)
-            {
-                // جلب الطلاب داخل الدفعة
-                var studentIds = await _context.StudentBatchEnrollments
-                    .Where(e => e.BatchId == batchId)
-                    .Select(e => e.StudentID)
-                    .ToListAsync();
-
-                if (!studentIds.Any())
-                    continue;
-
-                // إنشاء HomeworkSet جديد لكل دفعة
-                var set = new HomeworkSet
-                {
-                    BatchId = batchId,
-                    Title = string.IsNullOrEmpty(vm.Title)
-                        ? $"واجب من النموذج {model.Title}"
-                        : vm.Title.Trim(),
-                    CompletionTitle = model.Title,
-                    CreatedAt = _timeZoneService.GetNowUtc(),
-                    StartAt = vm.StartAt,
-                    EndAt = vm.EndAt,
-                    IsExtra = !linkedLectureId.HasValue,
-                    LectureId = linkedLectureId,
-                    IsFromProfessionalModel = true,
-                    AssignedByUserId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value,
-                    IsSent = true
-                };
-                _context.HomeworkSets.Add(set);
-                await _context.SaveChangesAsync();
-
-                var assignedAt = _timeZoneService.GetNowUtc();
-                var homeworkSetStudents = studentIds
-                    .Distinct()
-                    .Select(studentId => new HomeworkSetStudent
-                    {
-                        HomeworkSetId = set.Id,
-                        StudentId = studentId,
-                        AssignedAt = assignedAt,
-                        LastUpdated = assignedAt,
-                        NotificationSent = true
-                    })
-                    .ToList();
-
-                _context.HomeworkSetStudents.AddRange(homeworkSetStudents);
-
-                // ربط الأسئلة بالطلاب
-                var homeworks = new List<Homework>();
-                foreach (var q in model.Questions.OrderBy(x => x.OrderNumber))
-                {
-                    foreach (var studentId in studentIds)
-                    {
-                        homeworks.Add(new Homework
-                        {
-                            StudentId = studentId,
-                            QuestionId = q.QuestionId.Value,
-                            LessonId = q.Question.LessonId,
-                            LectureId = linkedLectureId,
-                            HomeworkSetId = set.Id,
-                            AssignedAt = assignedAt,
-                            Status = HomeworkStatus.Pending,
-                            IsSent = true
-                        });
-                    }
-                }
-
-                _context.Homeworks.AddRange(homeworks);
-                await _context.SaveChangesAsync();
-
-                // إشعار الطلاب
-                await _notificationService.SendToStudentsAsync(
-                    studentIds,
-                    $"📘 تم إرسال واجب جديد من النموذج {model.Title}. آخر موعد: {vm.EndAt:yyyy-MM-dd HH:mm}",
-                    NotificationCategory.Homework,
-                    "/Students/Homeworks"
-                );
-
-                // إشعار المدرب المرتبط بالدفعة
-                var instructorId = await _context.InstructorCurriculumBatches
-                    .Where(x => x.BatchId == batchId)
-                    .Select(x => x.InstructorId)
-                    .FirstOrDefaultAsync();
-                if (instructorId > 0)
-                {
-                    await _notificationService.SendToInstructorAsync(
-                        instructorId,
-                        $"📢 تم إرسال واجب من النموذج {model.Title} للدفعة {batchId}.",
-                        NotificationCategory.Homework,
-                        "/Instructors/HomeworkDashboard"
-                    );
-                }
-            }
-
-            TempData["Success"] = "✅ تم إرسال واجب النموذج لجميع الدفعات المحددة بنجاح.";
+            TempData["Success"] = ModelSendSuccessMessage(result, vm.SelectedBatchIds, "✅ تم إرسال واجب النموذج لجميع الدفعات المحددة بنجاح.");
             return RedirectToAction("ModelAssignments");
+        }
+
+        private ModelSendScope AdminSendScope()
+            => ModelSendScope.Admin(User.FindFirstValue(ClaimTypes.NameIdentifier), User.Identity?.Name);
+
+        // بلا أسماء الدفعات لأن ModelAssignments يطبع الرسالة داخل script
+        private static string ModelSendSuccessMessage(ModelSendResult result, List<int> requestedBatchIds, string allSentMessage)
+        {
+            var skipped = requestedBatchIds.Distinct().Count() - result.BatchesSent;
+            return skipped == 0
+                ? allSentMessage
+                : $"✅ تم الإرسال إلى {result.BatchesSent} دفعة، وتم تخطي {skipped} دفعة بلا طلاب نشطين مستهدفين.";
         }
 
         private async Task PopulateCreateModelHomeworkListsAsync(CreateModelHomeworkViewModel vm)
@@ -1307,7 +1206,8 @@ namespace QdratNew.Areas.Admin.Controllers
                 Students    = students,
                 StartAt     = DateTime.Now,
                 EndAt       = DateTime.Now.AddDays(1),
-                DurationMinutes = 30
+                DurationMinutes = 30,
+                SendToBatch = true
             };
 
             return View(vm);
@@ -1320,185 +1220,80 @@ namespace QdratNew.Areas.Admin.Controllers
 
         public async Task<IActionResult> CreateModelExam(CreateModelExamViewModel vm)
         {
-            try
+            if (vm.SelectedBatchIds == null || !vm.SelectedBatchIds.Any())
             {
-                if (vm.SelectedBatchIds == null || !vm.SelectedBatchIds.Any())
-                {
-                    TempData["Error"] = "⚠️ لم يتم اختيار أي دفعات.";
-                    return RedirectToAction(nameof(CreateModelExam));
-                }
-
-                var availableBatchIds = await _context.Batches
-                    .AsNoTracking()
-                    .Where(b => !b.IsDeleted && !b.IsArchived)
-                    .Select(b => b.Id)
-                    .ToListAsync();
-
-                vm.SelectedBatchIds = vm.SelectedBatchIds
-                    .Where(batchId => availableBatchIds.Any(id => id == batchId))
-                    .Distinct()
-                    .ToList();
-
-                if (!vm.SelectedBatchIds.Any())
-                {
-                    TempData["Error"] = "⚠️ الدفعات المحددة غير متاحة أو مؤرشفة.";
-                    return RedirectToAction(nameof(CreateModelExam));
-                }
-
-                if (vm.ModelId <= 0)
-                {
-                    TempData["Error"] = "⚠️ لم يتم اختيار النموذج.";
-                    return RedirectToAction(nameof(CreateModelExam));
-                }
-
-                // 🔹 اجلب النموذج
-                var model = await _context.ProfessionalModels
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(m => m.Id == vm.ModelId && !m.IsArchived);
-
-                if (model == null)
-                {
-                    TempData["Error"] = "❌ النموذج المحدد غير موجود.";
-                    return RedirectToAction(nameof(CreateModelExam));
-                }
-
-                // 🔹 اجلب الأسئلة المرتبطة بالنموذج
-                var modelQuestions = await _context.ProfessionalModelQuestions
-                    .Where(mq => mq.ModelId == model.Id)
-                    .Select(mq => new { mq.QuestionId, mq.OrderNumber })
-                    .AsNoTracking()
-                    .ToListAsync();
-
-                if (!modelQuestions.Any())
-                {
-                    TempData["Error"] = "❌ النموذج لا يحتوي على أسئلة مرتبطة.";
-                    return RedirectToAction(nameof(CreateModelExam));
-                }
-
-                // ✅ تحديد وقت البدء والانتهاء بشكل مضمون
-                DateTime utcStart = vm.StartAt.HasValue
-                    ? _timeZoneService.ConvertToUtc(vm.StartAt.Value)
-                    : _timeZoneService.GetNowUtc();
-
-                DateTime utcEnd = vm.EndAt.HasValue
-                    ? _timeZoneService.ConvertToUtc(vm.EndAt.Value)
-                    : utcStart.AddMinutes(vm.DurationMinutes);
-
-                // 🔹 إنشاء الاختبار الرئيسي
-                var exam = new Exam
-                {
-                    Title = string.IsNullOrEmpty(vm.Title)
-             ? $"اختبار من النموذج {model.Title}"
-             : vm.Title.Trim(),
-                    Type = ExamType.Manual,
-                    TotalQuestions = modelQuestions.Count,
-                    DurationMinutes = vm.DurationMinutes,
-                    CreatedAt = _timeZoneService.GetNowUtc(),
-                    IsActive = true,
-                    IsFromProfessionalModel = true,
-                    ReferenceCode = vm.IsInLab ? GenerateNumericReferenceCode() : null,
-                    RandomizeQuestions = vm.RandomizeQuestions
-                };
-
-
-
-                _context.Exams.Add(exam);
-                await _context.SaveChangesAsync();
-
-                // 🔹 إنشاء الربط مع الدفعات
-                foreach (var batchId in vm.SelectedBatchIds)
-                {
-                    var assignment = new ExamAssignmentToBatch
-                    {
-                        ExamId = exam.Id,
-                        BatchId = batchId,
-                        Title = exam.Title,
-                        CreatedAt = _timeZoneService.GetNowUtc(),
-                        ScheduledDate = utcStart,
-                        EndAt = utcEnd,
-                        DurationMinutes = vm.DurationMinutes,
-                        TotalQuestions = exam.TotalQuestions,
-                        IsSentToStudents = true,
-                        IsOnline = !vm.IsInLab,
-                        IsInLab = vm.IsInLab
-                    };
-
-
-                    _context.ExamAssignmentsToBatches.Add(assignment);
-                    await _context.SaveChangesAsync();
-
-                    // 🔹 إضافة الأسئلة
-                    int order = 1;
-                    foreach (var q in modelQuestions.OrderBy(x => x.OrderNumber))
-                    {
-                        _context.ExamQuestions.Add(new ExamQuestion
-                        {
-                            ExamId = exam.Id,
-                            ExamAssignmentId = assignment.Id,
-                            QuestionId = q.QuestionId ?? Guid.Empty,
-                            Order = order++,
-                            IsManuallySelected = true
-                        });
-                    }
-                    await _context.SaveChangesAsync();
-
-                    // ✅ جلب الطلاب بناءً على طريقة الإرسال
-                    List<int> studentIds;
-                    if (vm.SendToBatch)
-                    {
-                        studentIds = await _context.StudentBatchEnrollments
-                            .Where(e => e.BatchId == batchId)
-                            .Select(e => e.StudentID)
-                            .ToListAsync();
-                    }
-                    else
-                    {
-                        studentIds = await (
-                            from e in _context.StudentBatchEnrollments
-                            join s in vm.SelectedStudentIds on e.StudentID equals s
-                            where e.BatchId == batchId
-                            select e.StudentID
-                        ).ToListAsync();
-                    }
-
-                    // ✅ ربط الاختبار بالطلاب المحددين
-                    await _curriculumExamGeneratorService.AssignExamToSpecificStudentsAsync(assignment.Id, studentIds);
-
-                    // ✅ إرسال إشعار للطلاب
-                    if (studentIds.Any())
-                    {
-                        await _notificationService.SendToStudentsAsync(
-                            studentIds,
-                            $"📘 تم إرسال اختبار جديد من النموذج {model.Title}. ينتهي في {utcEnd:yyyy-MM-dd HH:mm}.",
-                            NotificationCategory.Exam,
-                            "/Students/Exams");
-                    }
-
-                    // ✅ إشعار المدرب
-                    var instructorId = await _context.InstructorCurriculumBatches
-                        .Where(x => x.BatchId == batchId)
-                        .Select(x => x.InstructorId)
-                        .FirstOrDefaultAsync();
-
-                    if (instructorId > 0)
-                    {
-                        await _notificationService.SendToInstructorAsync(
-                            instructorId,
-                            $"📢 تم إرسال اختبار من النموذج {model.Title} للدفعة {batchId}.",
-                            NotificationCategory.Exam,
-                            "/Instructors/ExamDashboard");
-                    }
-                }
-
-                TempData["Success"] = "✅ تم إنشاء وإرسال اختبار النموذج بنجاح.";
-                return RedirectToAction("ModelAssignments");
-            }
-            catch (Exception ex)
-            {
-                var message = ex.InnerException?.Message ?? ex.Message;
-                TempData["Error"] = "❌ حدث خطأ أثناء توليد الاختبار: " + message;
+                TempData["Error"] = "⚠️ لم يتم اختيار أي دفعات.";
                 return RedirectToAction(nameof(CreateModelExam));
             }
+
+            if (vm.ModelId <= 0)
+            {
+                TempData["Error"] = "⚠️ لم يتم اختيار النموذج.";
+                return RedirectToAction(nameof(CreateModelExam));
+            }
+
+            // PPM-S6.2: نفس خدمة الإرسال التي يستخدمها الشريك
+            var result = await _modelSendService.SendExamAsync(AdminSendScope(), new SendModelExamRequest
+            {
+                ModelId = vm.ModelId,
+                BatchIds = vm.SelectedBatchIds,
+                Title = vm.Title,
+                StartAtLocal = vm.StartAt,
+                EndAtLocal = vm.EndAt,
+                DurationMinutes = vm.DurationMinutes,
+                IsInLab = vm.IsInLab,
+                RandomizeQuestions = vm.RandomizeQuestions,
+                StudentIds = vm.SendToBatch ? null : vm.SelectedStudentIds ?? new List<int>(),
+                ConfirmWarnings = vm.ConfirmWarnings
+            });
+
+            if (result.IsNotFound)
+            {
+                TempData["Error"] = "❌ النموذج المحدد غير موجود.";
+                return RedirectToAction(nameof(CreateModelExam));
+            }
+
+            if (!result.Succeeded)
+            {
+                TempData["Error"] = result.Message;
+                vm.SendPreview = result.Preview;
+                vm.ConfirmWarnings = false;
+
+                // هذا المسار لا يعتمد ModelState، فلا تظهر للمستخدم أخطاء حقول اختيارية عند إعادة العرض
+                ModelState.Clear();
+                await PopulateCreateModelExamListsAsync(vm);
+                return View(vm);
+            }
+
+            TempData["Success"] = ModelSendSuccessMessage(result, vm.SelectedBatchIds, "✅ تم إنشاء وإرسال اختبار النموذج بنجاح.");
+            return RedirectToAction("ModelAssignments");
+        }
+
+        private async Task PopulateCreateModelExamListsAsync(CreateModelExamViewModel vm)
+        {
+            vm.Curriculums = await GetCurriculumsSelectListAsync();
+            vm.Models = await GetModelsSelectListAsync(ProfessionalModelType.Exam, vm.CurriculumId);
+
+            vm.Batches = await _context.Batches
+                .AsNoTracking()
+                .Where(b => !b.IsDeleted && !b.IsArchived)
+                .OrderBy(b => b.Name)
+                .Select(b => new SelectListItem { Value = b.Id.ToString(), Text = b.Name })
+                .ToListAsync();
+
+            // قائمة الطلاب تُحمَّل بـ AJAX، فتُعاد المختارة منها حتى لا يضيع اختيارها عند إعادة العرض
+            var selectedStudentIds = vm.SendToBatch
+                ? new List<int>()
+                : vm.SelectedStudentIds?.Distinct().ToList() ?? new List<int>();
+
+            vm.Students = selectedStudentIds.Count == 0
+                ? new List<SelectListItem>()
+                : await _context.Students
+                    .AsNoTracking()
+                    .Where(s => selectedStudentIds.Contains(s.StudentID))
+                    .OrderBy(s => s.FullName)
+                    .Select(s => new SelectListItem { Value = s.StudentID.ToString(), Text = s.FullName })
+                    .ToListAsync();
         }
 
 
@@ -2555,12 +2350,6 @@ namespace QdratNew.Areas.Admin.Controllers
 
    
 
-        private string GenerateNumericReferenceCode()
-        {
-            var random = new Random();
-            return random.Next(100000, 999999).ToString();
-        }
-
         // ===================== حذف اختبار نموذج =====================
         [HttpPost]
         [ValidateAntiForgeryToken]
@@ -2571,7 +2360,7 @@ namespace QdratNew.Areas.Admin.Controllers
             {
                 var assignment = await _context.ExamAssignmentsToBatches
                     .Include(ea => ea.Exam)
-                    .FirstOrDefaultAsync(ea => ea.Id == id && ea.Exam.IsFromProfessionalModel == true);
+                    .FirstOrDefaultAsync(ea => ea.Id == id && ea.Exam.IsFromProfessionalModel == true && ea.Exam.OwnerPartnerId == null);
 
                 if (assignment == null)
                 {
