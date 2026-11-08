@@ -247,6 +247,12 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<MinistrySimExamStudentStageProgress> MinistrySimExamStudentStageProgresses { get; set; }
     public DbSet<MinistrySimExamStudentAnswer> MinistrySimExamStudentAnswers { get; set; }
 
+    // OLC-S1 — المحتوى التعليمي أونلاين (العقد الموحَّد v1.1)
+    public DbSet<LectureContent> LectureContents { get; set; }
+    public DbSet<LectureContentItem> LectureContentItems { get; set; }
+    public DbSet<LectureContentProgress> LectureContentProgress { get; set; }
+    public DbSet<LectureContentItemProgress> LectureContentItemProgress { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -1818,6 +1824,56 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             e.HasIndex(x => new { x.EnrollmentId, x.CompletedAtUtc }).HasDatabaseName("IX_RemedialTrackAddendumProgresses_Enrollment_CompletedAt");
             e.HasOne(x => x.Addendum).WithMany(a => a.Progresses).HasForeignKey(x => x.AddendumId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Enrollment).WithMany().HasForeignKey(x => x.EnrollmentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ==== OLC-S1 — المحتوى التعليمي أونلاين (العقد الموحَّد v1.1 — C.2/C.3: الأسماء والأطوال حرفية) ====
+        // ملاحظة: جدول المحاضرات الفعلي هنا اسمه [Lecture] (مفرد) — الـ FK يشير إليه.
+        modelBuilder.Entity<Batch>(e =>
+        {
+            e.Property(x => x.IsOnlineLearning).HasDefaultValue(false);
+        });
+
+        modelBuilder.Entity<LectureContent>(e =>
+        {
+            e.ToTable("LectureContents");
+            // محتوى واحد لكل محاضرة — عند الحذف الناعم يُعاد تفعيل الصف بدل إنشاء صف جديد
+            e.HasIndex(x => x.LectureId).IsUnique();
+            e.HasOne(x => x.Lecture).WithMany().HasForeignKey(x => x.LectureId).OnDelete(DeleteBehavior.Restrict);
+            e.Property(x => x.ContentMode).HasConversion<int>();
+            e.Property(x => x.Status).HasConversion<int>().HasDefaultValue(QdratNew.Enums.LectureContentStatus.Draft);
+            e.Property(x => x.VideoProvider).HasConversion<int?>();
+            e.Property(x => x.IsDeleted).HasDefaultValue(false);
+            e.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<LectureContentItem>(e =>
+        {
+            e.ToTable("LectureContentItems");
+            e.HasIndex(x => new { x.LectureContentId, x.LessonId }).IsUnique();
+            e.HasIndex(x => new { x.LectureContentId, x.SortOrder });
+            e.HasOne(x => x.LectureContent).WithMany(c => c.Items).HasForeignKey(x => x.LectureContentId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Lesson).WithMany().HasForeignKey(x => x.LessonId).OnDelete(DeleteBehavior.Restrict);
+            e.Property(x => x.SortOrder).HasDefaultValue(0);
+            e.Property(x => x.SourceVideoKind).HasConversion<int>().HasDefaultValue(QdratNew.Enums.LectureContentSourceKind.Manual);
+            e.Property(x => x.VideoProvider).HasConversion<int?>();
+            e.Property(x => x.IsDeleted).HasDefaultValue(false);
+            e.HasQueryFilter(x => !x.IsDeleted);
+        });
+
+        modelBuilder.Entity<LectureContentProgress>(e =>
+        {
+            e.ToTable("LectureContentProgress");
+            e.HasIndex(x => new { x.LectureContentId, x.StudentId }).IsUnique();
+            e.HasOne(x => x.LectureContent).WithMany().HasForeignKey(x => x.LectureContentId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Student).WithMany().HasForeignKey(x => x.StudentId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<LectureContentItemProgress>(e =>
+        {
+            e.ToTable("LectureContentItemProgress");
+            e.HasIndex(x => new { x.LectureContentItemId, x.StudentId }).IsUnique();
+            e.HasOne(x => x.LectureContentItem).WithMany().HasForeignKey(x => x.LectureContentItemId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Student).WithMany().HasForeignKey(x => x.StudentId).OnDelete(DeleteBehavior.Restrict);
         });
 
     }

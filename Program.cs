@@ -1123,6 +1123,9 @@ builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackParent
 builder.Services.AddScoped<QdratNew.Services.RemedialTracks.IRemedialTrackFeatureService,
                            QdratNew.Services.RemedialTracks.RemedialTrackFeatureService>();
 builder.Services.AddScoped<QdratNew.Filters.RemedialTrackEnabledFilter>();
+// OLC-S1.3: مفتاح المحتوى التعليمي أونلاين (SystemSettings: OnlineLectureContent.Enabled — مغلق افتراضيًا)
+builder.Services.AddScoped<QdratNew.Services.OnlineLecture.IOnlineLectureFeatureService,
+                           QdratNew.Services.OnlineLecture.OnlineLectureFeatureService>();
 builder.Services.AddScoped<ILectureInstructorSyncService, LectureInstructorSyncService>();
 builder.Services.AddScoped<IEmployeeBatchAccessService, EmployeeBatchAccessService>();
 builder.Services.AddScoped<QdratNew.Services.Admin.EmployeeDashboard.IEmployeeDashboardService,

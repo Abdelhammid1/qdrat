@@ -43,6 +43,11 @@ namespace QdratNew.Entities
 
         public bool IsActive { get; set; } = true;
 
+        // OLC-S1 (العقد C.2): دفعة «أونلاين» — طلابها فقط يرون قسم «المحتوى التعليمي»
+        public bool IsOnlineLearning { get; set; } = false;
+        /// <summary>آخر تفعيل للتعليم أونلاين (UTC).</summary>
+        public DateTime? OnlineLearningEnabledAt { get; set; }
+
         [InverseProperty(nameof(StudentBatchEnrollment.Batch))]
         public ICollection<StudentBatchEnrollment> StudentBatchEnrollments { get; set; }
         = new List<StudentBatchEnrollment>();

@@ -325,3 +325,28 @@ UPDATE PartnerSubscriptions SET CanUsePlacementExams = 0;   -- سجّل القي
 
 ### 5) الاختبارات
 - `QDRAT_TEST_SQL` على قاعدة اسمها يحوي `Test`، و`QDRAT_E2E_DLL` لبناء Debug منفصل إن كان الـ dll مقفولًا: `dotnet test QdratNew.Tests -c Release --filter "FullyQualifiedName~PartnerPlacement"`.
+
+---
+
+## 📋 نشر Epic OLC (المحتوى التعليمي أونلاين للمحاضرات) — OLC-S1 (الأساس)
+
+> S1 يضيف الجداول ومفتاح الميزة فقط — لا واجهة ولا سلوك جديد للمستخدمين. الميزة **مغلقة** (`OnlineLectureContent.Enabled = false`).
+> يُستكمل هذا القسم في OLC-S7.3 قبل الإطلاق.
+
+### 1) قبل نشر الكود (Backup إلزامي)
+```sql
+BACKUP DATABASE [QdratNewDB] TO DISK = N'/var/opt/mssql/backup/QdratNewDB_before_OLC_S1.bak' WITH INIT, COMPRESSION;
+```
+ثم شغّل `Migrations/Scripts/OLC_AddOnlineLectureContent.sql` (Idempotent؛ يفترض تطبيق `APD_MinistrySimPartnerHidden.sql` قبله).
+يضيف: `Batches.IsOnlineLearning` (افتراضي 0) و`Batches.OnlineLearningEnabledAt`، والجداول `LectureContents` و`LectureContentItems` و`LectureContentProgress` و`LectureContentItemProgress`، وصف `SystemSettings` بالمفتاح `OnlineLectureContent.Enabled = false`.
+
+### 2) التحقق بعد السكربت
+```sql
+SELECT name FROM sys.tables WHERE name LIKE 'LectureContent%';            -- 4 جداول
+SELECT COUNT(*) FROM Batches WHERE IsOnlineLearning = 1;                  -- 0
+SELECT [Value] FROM SystemSettings WHERE [Key] = N'OnlineLectureContent.Enabled';  -- false
+SELECT MigrationId FROM __EFMigrationsHistory WHERE MigrationId LIKE '%OLC_AddOnlineLectureContent';
+```
+
+### 3) خطة التراجع
+- لا حاجة لتراجع عن S1 وحده (إضافات فقط، الميزة مغلقة). عند الضرورة: اسحب كود OLC أولًا، ثم `Migrations/Scripts/OLC_AddOnlineLectureContent_Rollback.sql` (⚠ يحذف كل محتوى OLC وتقدّم الطلاب فيه).
