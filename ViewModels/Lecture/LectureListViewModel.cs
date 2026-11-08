@@ -14,6 +14,9 @@
         public string CourseName { get; set; } = "غير محدد";
         public string Location { get; set; }
         public string BatchName { get; set; } = "غير محدد";
+
+        /// <summary>OLC-S2.3: حالة المحتوى أونلاين (null = لا يوجد) — تُعرض لدفعات الأونلاين فقط.</summary>
+        public QdratNew.Enums.LectureContentStatus? OnlineContentStatus { get; set; }
     }
 
 }

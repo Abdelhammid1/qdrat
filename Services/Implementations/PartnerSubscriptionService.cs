@@ -153,6 +153,20 @@ namespace QdratNew.Implementations
             return sub != null && sub.CanAccessEducationalContent;
         }
 
+        // OLC-S4.1: نفس قواعد IPartnerEducationalContentPolicy (تعبيرات PartnerEducationalContentRules)
+        public Task<bool> CanAccessEducationalContentAsync(int partnerId, bool forStudents, CancellationToken ct = default)
+        {
+            var today = DateTime.Today;
+            var query = _context.PartnerSubscriptions.AsNoTracking()
+                .Where(s => s.PartnerId == partnerId && s.CanAccessEducationalContent);
+
+            query = forStudents
+                ? query.Where(QdratNew.Services.OnlineLecture.PartnerEducationalContentRules.StudentWindow(today))
+                : query.Where(QdratNew.Services.OnlineLecture.PartnerEducationalContentRules.ActiveNow(today));
+
+            return query.AnyAsync(ct);
+        }
+
         // =====================================================
         // 🔹 الذكاء الاصطناعي
         // =====================================================

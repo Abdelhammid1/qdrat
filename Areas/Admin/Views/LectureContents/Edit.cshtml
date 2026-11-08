@@ -1,0 +1,740 @@
+@model QdratNew.ViewModels.OnlineLecture.LectureContentEditVm
+@using QdratNew.Enums
+@using QdratNew.Services.OnlineLecture
+@inject QdratNew.Services.Interfaces.ITimeZoneService Tz
+@{
+    ViewData["Title"] = "المحتوى التعليمي أونلاين — " + Model.LectureTitle;
+
+    string StatusText(LectureContentStatus? s) => s switch
+    {
+        LectureContentStatus.Draft => "مسودة",
+        LectureContentStatus.Published => "منشور",
+        LectureContentStatus.Hidden => "مخفي",
+        _ => "لا يوجد محتوى"
+    };
+    string StatusCss(LectureContentStatus? s) => s switch
+    {
+        LectureContentStatus.Draft => "olc-badge--draft",
+        LectureContentStatus.Published => "olc-badge--published",
+        LectureContentStatus.Hidden => "olc-badge--hidden",
+        _ => "olc-badge--none"
+    };
+    string ModeText(LectureContentMode? m) => m switch
+    {
+        LectureContentMode.FullVideo => "فيديو كامل",
+        LectureContentMode.IndicatorVideos => "فيديوهات المؤشرات",
+        _ => "—"
+    };
+    string Saudi(DateTime? utc) => utc.HasValue ? Tz.ConvertToSaudi(utc.Value).ToString("yyyy/MM/dd HH:mm") : "—";
+
+    string ProviderText(LectureVideoProvider? p) => p switch
+    {
+        LectureVideoProvider.YouTube => "YouTube",
+        LectureVideoProvider.Vimeo => "Vimeo",
+        _ => "—"
+    };
+
+    var successMessage = TempData["OlcSuccess"] as string;
+    var errorMessage = TempData["OlcError"] as string;
+    var hasErrors = !ViewData.ModelState.IsValid;
+    var isPublished = Model.Status == LectureContentStatus.Published;
+    var editable = Model.HasContent && Model.CanEdit;
+    var selectedMode = Model.Input.ContentMode ?? Model.ContentMode ?? LectureContentMode.FullVideo;
+    var contentTabActive = Model.ActiveTab == "content";
+    var usedLessonIds = Model.Items.Select(i => i.LessonId).ToHashSet();
+    var availableLessons = Model.LessonOptions.Where(l => !usedLessonIds.Contains(l.Id) && (l.IsActive || l.Id == Model.AddInput.LessonId)).ToList();
+    var orderedIds = Model.Items.Select(i => i.Id).ToList();
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/admin-olc.css" asp-append-version="true" />
+}
+
+<div class="olc-page py-3" dir="rtl">
+
+    @* ════ الرأس ════ *@
+    <section class="olc-hero">
+        <div class="olc-hero__top">
+            <div>
+                <div class="olc-hero__label"><i class="fas fa-laptop-house"></i> المحتوى التعليمي أونلاين</div>
+                <h1>@Model.LectureTitle</h1>
+                <p>@Model.BatchName · المحور: @Model.SectionTitle</p>
+                <div class="olc-hero__meta">
+                    <span class="olc-hero__chip">@Model.LectureDate.ToString("yyyy/MM/dd")@(Model.ScheduledTime.HasValue ? " · " + Model.ScheduledTime.Value.ToString(@"hh\:mm") : "")</span>
+                    <span class="olc-hero__chip">الحالة: @StatusText(Model.Status)</span>
+                    @if (Model.HasContent)
+                    {
+                        <span class="olc-hero__chip">الوضع: @ModeText(Model.ContentMode)</span>
+                    }
+                </div>
+            </div>
+            <div class="olc-hero__actions">
+                <a class="olc-btn olc-btn--light" asp-area="Admin" asp-controller="Lectures" asp-action="Details" asp-route-id="@Model.LectureId">
+                    <i class="fas fa-chalkboard"></i> تفاصيل المحاضرة
+                </a>
+                <a class="olc-btn olc-btn--light" asp-area="Admin" asp-controller="Lectures" asp-action="Lectures" asp-route-batchId="@Model.BatchId">
+                    <i class="fas fa-arrow-right"></i> محاضرات الدفعة
+                </a>
+            </div>
+        </div>
+    </section>
+
+    @* ════ التنبيهات ════ *@
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="olc-alert olc-alert--ok" role="status"><i class="fas fa-check-circle"></i> @successMessage</div>
+    }
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="olc-alert olc-alert--err" role="alert"><i class="fas fa-exclamation-triangle"></i> @errorMessage</div>
+    }
+    @if (hasErrors)
+    {
+        <div class="olc-alert olc-alert--err" role="alert">
+            <strong><i class="fas fa-exclamation-triangle"></i> لم يتم الحفظ:</strong>
+            <ul>
+                @foreach (var error in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+                {
+                    <li>@error.ErrorMessage</li>
+                }
+            </ul>
+        </div>
+    }
+    @if (!Model.FeatureEnabled)
+    {
+        <div class="olc-alert olc-alert--info">
+            <i class="fas fa-info-circle"></i>
+            الميزة مغلقة حاليًا للطلاب (المفتاح <span class="olc-ltr">OnlineLectureContent.Enabled</span>). يمكنك تجهيز المحتوى الآن، ولن يراه الطلاب قبل تفعيل المفتاح.
+        </div>
+    }
+    @if (!Model.BatchIsOnline)
+    {
+        <div class="olc-alert olc-alert--warn">
+            <i class="fas fa-exclamation-circle"></i>
+            @if (Model.HasContent)
+            {
+                <text>الدفعة «@Model.BatchName» غير مفعّل لها التعليم أونلاين حاليًا، لذلك هذا المحتوى لا يظهر لطلابها. المحتوى محفوظ كما هو.</text>
+            }
+            else
+            {
+                <text>لا يمكن إنشاء محتوى أونلاين لهذه المحاضرة لأن الدفعة «@Model.BatchName» غير مفعّل لها التعليم أونلاين. فعّله من شاشة تعديل الدفعة أولًا.</text>
+            }
+        </div>
+    }
+
+    @if (!Model.HasContent)
+    {
+        @* ════ لا يوجد محتوى: إنشاء المسودة بعد تأكيد ════ *@
+        <section class="olc-panel">
+            <div class="olc-empty">
+                <i class="fas fa-photo-video"></i>
+                <div class="fw-bold mb-1">لا يوجد محتوى أونلاين لهذه المحاضرة بعد</div>
+                <div>أنشئ مسودة ثم أضف الفيديو. لن يراها الطلاب حتى تُنشر.</div>
+            </div>
+
+            @if (Model.BatchIsOnline && Model.CanCreate)
+            {
+                <form asp-action="Create" asp-route-lectureId="@Model.LectureId" method="post" class="js-olc-form" novalidate>
+                    <div class="olc-grid">
+                        <div class="olc-field olc-field--full">
+                            <label for="CreateInput_Title">عنوان المحتوى</label>
+                            <input asp-for="CreateInput.Title" class="form-control" maxlength="200" required />
+                            <span asp-validation-for="CreateInput.Title" class="text-danger small"></span>
+                        </div>
+                        <div class="olc-field olc-field--full">
+                            <label>وضع المحتوى</label>
+                            <div class="olc-modes">
+                                <label class="olc-mode">
+                                    <input type="radio" asp-for="CreateInput.ContentMode" value="@LectureContentMode.FullVideo" />
+                                    <strong>فيديو كامل</strong>
+                                    <span>فيديو المحاضرة كاملًا من YouTube/Vimeo، ويُقسَّم لاحقًا إلى فصول بحسب المؤشرات.</span>
+                                </label>
+                                <label class="olc-mode">
+                                    <input type="radio" asp-for="CreateInput.ContentMode" value="@LectureContentMode.IndicatorVideos" />
+                                    <strong>فيديوهات المؤشرات</strong>
+                                    <span>قائمة تشغيل مرتبة: لكل مؤشر فيديو مستقل من فيديوهات المؤشرات أو برابط يدوي.</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="olc-actions">
+                        <button type="submit" class="olc-btn js-olc-submit"><i class="fas fa-plus"></i> إنشاء مسودة المحتوى</button>
+                    </div>
+                </form>
+            }
+            else if (Model.BatchIsOnline)
+            {
+                <div class="olc-alert olc-alert--info mb-0">ليست لديك صلاحية إنشاء المحتوى (LectureContents ← إنشاء).</div>
+            }
+        </section>
+    }
+    else
+    {
+        @* ════ حقائق سريعة ════ *@
+        <section class="olc-panel">
+            <div class="olc-facts">
+                <div class="olc-fact"><span>الحالة</span><strong><span class="olc-badge @StatusCss(Model.Status)">@StatusText(Model.Status)</span></strong></div>
+                <div class="olc-fact"><span>الوضع</span><strong>@ModeText(Model.ContentMode)</strong></div>
+                <div class="olc-fact"><span>العناصر</span><strong>@Model.ActiveItemsCount</strong></div>
+                <div class="olc-fact"><span>آخر تعديل</span><strong>@Saudi(Model.UpdatedAt ?? Model.CreatedAt)</strong></div>
+            </div>
+        </section>
+
+        @* ════ OLC-S3.3 — النشر: Draft → Published → Hidden ════ *@
+        <section class="olc-panel olc-publish">
+            <div class="olc-publish__head">
+                <div>
+                    <h2 class="mb-1"><i class="fas fa-bullhorn"></i> النشر للطلاب</h2>
+                    <p class="olc-panel__hint mb-0">
+                        @if (isPublished)
+                        {
+                            <text>منشور منذ @Saudi(Model.PublishedAt) — يراه طلاب الدفعة @(Model.FeatureEnabled ? "الآن" : "عند تفعيل المفتاح").</text>
+                        }
+                        else if (Model.Status == LectureContentStatus.Hidden)
+                        {
+                            <text>مخفي عن الطلاب@(Model.PublishedAt.HasValue ? " (أول نشر: " + Saudi(Model.PublishedAt) + ")" : ""). تقدّمهم محفوظ ويعود عند إعادة النشر.</text>
+                        }
+                        else
+                        {
+                            <text>مسودة — لا يراها الطلاب حتى تُنشر.</text>
+                        }
+                    </p>
+                </div>
+                @if (Model.CanEdit)
+                {
+                    <div class="olc-publish__actions">
+                        @if (isPublished)
+                        {
+                            <form asp-action="Hide" asp-route-id="@Model.ContentId" method="post" class="js-olc-form"
+                                  data-confirm="إخفاء المحتوى عن طلاب الدفعة؟ تقدّمهم يبقى محفوظًا.">
+                                <button type="submit" class="olc-btn olc-btn--danger js-olc-submit" data-busy-text="جارٍ الإخفاء…"><i class="fas fa-eye-slash"></i> إخفاء عن الطلاب</button>
+                            </form>
+                        }
+                        else
+                        {
+                            <form asp-action="Publish" asp-route-id="@Model.ContentId" method="post" class="js-olc-form"
+                                  data-confirm="نشر المحتوى لطلاب الدفعة؟">
+                                <button type="submit" class="olc-btn js-olc-submit" data-busy-text="جارٍ النشر…" @(Model.CanPublish ? "" : "disabled")>
+                                    <i class="fas fa-paper-plane"></i> @(Model.Status == LectureContentStatus.Hidden ? "إعادة النشر" : "نشر")
+                                </button>
+                            </form>
+                        }
+                    </div>
+                }
+            </div>
+
+            @if (!isPublished && Model.PublishIssues.Count > 0)
+            {
+                <div class="olc-alert olc-alert--err mt-3 mb-0">
+                    <strong><i class="fas fa-ban"></i> قبل النشر:</strong>
+                    <ul>
+                        @foreach (var issue in Model.PublishIssues)
+                        {
+                            <li>@issue</li>
+                        }
+                    </ul>
+                </div>
+            }
+            else if (!isPublished)
+            {
+                <div class="olc-alert olc-alert--ok mt-3 mb-0"><i class="fas fa-check"></i> المحتوى جاهز للنشر.</div>
+            }
+            @if (isPublished && Model.PublishIssues.Count > 0)
+            {
+                <div class="olc-alert olc-alert--warn mt-3 mb-0">
+                    <strong><i class="fas fa-exclamation-circle"></i> المحتوى منشور لكن فيه ما يحتاج مراجعة:</strong>
+                    <ul>
+                        @foreach (var issue in Model.PublishIssues)
+                        {
+                            <li>@issue</li>
+                        }
+                    </ul>
+                </div>
+            }
+            @if (Model.PublishWarnings.Count > 0)
+            {
+                <div class="olc-alert olc-alert--info mt-3 mb-0">
+                    <ul class="mt-0">
+                        @foreach (var warning in Model.PublishWarnings)
+                        {
+                            <li>@warning</li>
+                        }
+                    </ul>
+                </div>
+            }
+        </section>
+
+        @* ════ التبويبان ════ *@
+        <div class="olc-tabs" role="tablist">
+            <button type="button" class="olc-tab" role="tab" id="olc-tab-basic" aria-controls="olc-panel-basic" aria-selected="@(contentTabActive ? "false" : "true")">البيانات والوضع</button>
+            <button type="button" class="olc-tab" role="tab" id="olc-tab-content" aria-controls="olc-panel-content" aria-selected="@(contentTabActive ? "true" : "false")">المحتوى</button>
+        </div>
+
+        <section id="olc-panel-basic" class="olc-tabpanel" role="tabpanel" aria-labelledby="olc-tab-basic" @(contentTabActive ? "hidden" : "")>
+            <form asp-action="Save" asp-route-id="@Model.ContentId" method="post" class="olc-panel js-olc-form" id="olcSaveForm"
+                  data-original-mode="@((int)(Model.ContentMode ?? LectureContentMode.FullVideo))"
+                  data-items-count="@Model.ActiveItemsCount"
+                  novalidate>
+                <fieldset @(editable ? "" : "disabled")>
+                    <h2><i class="fas fa-pen"></i> البيانات الأساسية</h2>
+                    <div class="olc-grid">
+                        <div class="olc-field olc-field--full">
+                            <label for="Input_Title">عنوان المحتوى</label>
+                            <input asp-for="Input.Title" class="form-control" maxlength="200" required />
+                            <span asp-validation-for="Input.Title" class="text-danger small"></span>
+                        </div>
+                        <div class="olc-field olc-field--full">
+                            <label for="Input_Description">الوصف <small>(اختياري)</small></label>
+                            <textarea asp-for="Input.Description" class="form-control" rows="3" maxlength="1000"></textarea>
+                            <span asp-validation-for="Input.Description" class="text-danger small"></span>
+                        </div>
+                        <div class="olc-field olc-field--full">
+                            <label for="Input_ThumbnailUrl">رابط الصورة المصغّرة <small>(اختياري، https)</small></label>
+                            <input asp-for="Input.ThumbnailUrl" class="form-control olc-ltr" maxlength="500" inputmode="url" placeholder="https://" />
+                            <span asp-validation-for="Input.ThumbnailUrl" class="text-danger small"></span>
+                        </div>
+                    </div>
+
+                    <h2 class="mt-4"><i class="fas fa-random"></i> وضع المحتوى</h2>
+                    @if (isPublished)
+                    {
+                        <p class="olc-panel__hint">المحتوى منشور — لا يمكن تغيير الوضع قبل إخفائه.</p>
+                    }
+                    <div class="olc-modes">
+                        <label class="olc-mode">
+                            <input type="radio" name="Input.ContentMode" value="@((int)LectureContentMode.FullVideo)" class="js-olc-mode"
+                                   @(selectedMode == LectureContentMode.FullVideo ? "checked" : "") @(isPublished && selectedMode != LectureContentMode.FullVideo ? "disabled" : "") />
+                            <strong>فيديو كامل</strong>
+                            <span>فيديو واحد للمحاضرة، والفصول (المؤشرات) بتوقيتات داخله.</span>
+                        </label>
+                        <label class="olc-mode">
+                            <input type="radio" name="Input.ContentMode" value="@((int)LectureContentMode.IndicatorVideos)" class="js-olc-mode"
+                                   @(selectedMode == LectureContentMode.IndicatorVideos ? "checked" : "") @(isPublished && selectedMode != LectureContentMode.IndicatorVideos ? "disabled" : "") />
+                            <strong>فيديوهات المؤشرات</strong>
+                            <span>قائمة تشغيل مرتبة من فيديوهات المؤشرات.</span>
+                        </label>
+                    </div>
+
+                    <div class="olc-alert olc-alert--warn mt-3 js-olc-mode-confirm" hidden>
+                        <label class="d-flex gap-2 align-items-start mb-0">
+                            <input type="checkbox" name="Input.ConfirmModeChange" value="true" class="mt-1" @(Model.Input.ConfirmModeChange ? "checked" : "") />
+                            <span>أفهم أن تغيير الوضع سيحذف <strong>@Model.ActiveItemsCount</strong> عنصر من الوضع الحالي (حذفًا ناعمًا).</span>
+                        </label>
+                    </div>
+
+                    <div class="js-olc-fullvideo mt-4" @(selectedMode == LectureContentMode.FullVideo ? "" : "hidden")>
+                        <h2><i class="fas fa-film"></i> الفيديو الكامل</h2>
+                        <div class="olc-alert olc-alert--info">
+                            <i class="fas fa-shield-alt"></i>
+                            YouTube: اجعل الفيديو «غير مدرج» (Unlisted). Vimeo: فعّل «الإخفاء عن Vimeo» وقيّد التضمين لنطاق المنصة فقط.
+                        </div>
+                        <div class="olc-grid">
+                            <div class="olc-field olc-field--full">
+                                <label for="Input_VideoUrl">رابط الفيديو <small>(YouTube أو Vimeo — https)</small></label>
+                                <input asp-for="Input.VideoUrl" class="form-control olc-ltr" maxlength="500" inputmode="url"
+                                       placeholder="https://www.youtube.com/watch?v=… أو https://vimeo.com/123456789" />
+                                <small>يُستخرج معرّف الفيديو على الخادم، ويُبنى رابط التشغيل منه فقط.</small>
+                                <span asp-validation-for="Input.VideoUrl" class="text-danger small"></span>
+                            </div>
+                            <div class="olc-field">
+                                <label for="Input_DurationText">مدة الفيديو <small>(mm:ss أو hh:mm:ss)</small></label>
+                                <input asp-for="Input.DurationText" class="form-control olc-ltr" maxlength="12" placeholder="1:25:30" />
+                                <small>تُستخدم لاحتساب نسبة المشاهدة المطلوبة (80%).</small>
+                            </div>
+                        </div>
+                    </div>
+                </fieldset>
+
+                @if (editable)
+                {
+                    <div class="olc-actions">
+                        <button type="submit" class="olc-btn js-olc-submit"><i class="fas fa-save"></i> حفظ</button>
+                    </div>
+                }
+                else
+                {
+                    <div class="olc-alert olc-alert--info mt-3 mb-0">عرض فقط — ليست لديك صلاحية تعديل المحتوى (LectureContents ← تعديل).</div>
+                }
+            </form>
+        </section>
+
+        <section id="olc-panel-content" class="olc-tabpanel" role="tabpanel" aria-labelledby="olc-tab-content" @(contentTabActive ? "" : "hidden")>
+            @if (Model.ContentMode == LectureContentMode.FullVideo)
+            {
+                <div class="olc-panel">
+                    <h2><i class="fas fa-play-circle"></i> معاينة الفيديو الكامل</h2>
+                    @if (Model.EmbedPreviewUrl is not null)
+                    {
+                        <div class="olc-preview">
+                            <iframe src="@Model.EmbedPreviewUrl" title="معاينة فيديو المحاضرة" loading="lazy"
+                                    allow="encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+                        </div>
+                        <p class="olc-panel__hint mt-2 mb-0">المعاينة للأدمن فقط. الطالب يشاهد في المشغّل المحمي (علامة مائية، لا تقديم).</p>
+                    }
+                    else
+                    {
+                        <div class="olc-empty"><i class="fas fa-link"></i>لم يُضف رابط الفيديو بعد. أضفه من تبويب «البيانات والوضع».</div>
+                    }
+                </div>
+                @* ════ OLC-S3.1 — محرر الفصول ════ *@
+                <form asp-action="SaveChapters" asp-route-id="@Model.ContentId" method="post" class="olc-panel js-olc-form" novalidate>
+                    <h2><i class="fas fa-list-ol"></i> الفصول (المؤشرات)</h2>
+                    <p class="olc-panel__hint">
+                        المؤشرات المقترحة هي مؤشرات محور المحاضرة «@Model.SectionTitle». اختر المؤشرات التي شُرحت في الفيديو وحدد بداية ونهاية كل منها
+                        بالصيغة <span class="olc-ltr">mm:ss</span> أو <span class="olc-ltr">hh:mm:ss</span>. الفصول اختيارية، وتُرتَّب تلقائيًا بتوقيت البداية، ولا تتداخل.
+                        @if (Model.DurationSeconds.HasValue)
+                        {
+                            <text>مدة الفيديو: <strong class="olc-ltr">@LectureTimeFormat.Format(Model.DurationSeconds)</strong>.</text>
+                        }
+                        else
+                        {
+                            <strong>أدخل مدة الفيديو أولًا من تبويب «البيانات والوضع».</strong>
+                        }
+                    </p>
+
+                    @if (Model.Chapters.Count == 0)
+                    {
+                        <div class="olc-empty"><i class="fas fa-inbox"></i>لا توجد مؤشرات نشطة في محور هذه المحاضرة.</div>
+                    }
+                    else
+                    {
+                        <fieldset @(editable ? "" : "disabled")>
+                            <div class="olc-chapters">
+                                @for (var i = 0; i < Model.Chapters.Count; i++)
+                                {
+                                    var row = Model.Chapters[i];
+                                    <div class="olc-chapter @(row.Include ? "is-on" : "") @(row.OutsideSection ? "is-outside" : "")">
+                                        <input type="hidden" name="Chapters[@i].LessonId" value="@row.LessonId" />
+                                        <label class="olc-chapter__pick">
+                                            <input type="checkbox" name="Chapters[@i].Include" value="true" class="js-olc-chapter-include" @(row.Include ? "checked" : "") />
+                                            <span>
+                                                <strong>@row.LessonTitle</strong>
+                                                @if (!string.IsNullOrWhiteSpace(row.UnitTitle))
+                                                {
+                                                    <small>@row.UnitTitle</small>
+                                                }
+                                                @if (row.OutsideSection)
+                                                {
+                                                    <small class="olc-text-danger">خارج محور المحاضرة — ألغِ اختياره (R7)</small>
+                                                }
+                                            </span>
+                                        </label>
+                                        <div class="olc-chapter__fields">
+                                            <div class="olc-field">
+                                                <label for="ch-title-@i">عنوان العرض <small>(اختياري)</small></label>
+                                                <input id="ch-title-@i" name="Chapters[@i].Title" value="@row.Title" class="form-control" maxlength="200" placeholder="@row.LessonTitle" />
+                                            </div>
+                                            <div class="olc-field">
+                                                <label for="ch-start-@i">البداية</label>
+                                                <input id="ch-start-@i" name="Chapters[@i].StartText" value="@row.StartText" class="form-control olc-ltr" maxlength="12" placeholder="0:00" inputmode="numeric" />
+                                            </div>
+                                            <div class="olc-field">
+                                                <label for="ch-end-@i">النهاية</label>
+                                                <input id="ch-end-@i" name="Chapters[@i].EndText" value="@row.EndText" class="form-control olc-ltr" maxlength="12" placeholder="12:30" inputmode="numeric" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </fieldset>
+                        @if (editable)
+                        {
+                            <div class="olc-actions">
+                                <button type="submit" class="olc-btn js-olc-submit"><i class="fas fa-save"></i> حفظ الفصول</button>
+                            </div>
+                        }
+                    }
+                </form>
+            }
+            else
+            {
+                @* ════ OLC-S3.2 — قائمة فيديوهات المؤشرات ════ *@
+                <div class="olc-panel">
+                    <h2><i class="fas fa-list"></i> قائمة فيديوهات المؤشرات</h2>
+                    <p class="olc-panel__hint">يشاهدها الطالب بهذا الترتيب، ولا يُفتح فيديو إلا بعد إتمام الذي قبله. الفيديو المختار من فيديوهات المؤشر يُحفظ كلقطة — تعديل المصدر لاحقًا لا يغيّر المحتوى إلا بزر «تحديث من المصدر».</p>
+
+                    @if (Model.Items.Count == 0)
+                    {
+                        <div class="olc-empty"><i class="fas fa-film"></i>القائمة فارغة. أضف فيديو المؤشر الأول من النموذج أدناه.</div>
+                    }
+                    else
+                    {
+                        <ol class="olc-items">
+                            @for (var i = 0; i < Model.Items.Count; i++)
+                            {
+                                var item = Model.Items[i];
+                                <li class="olc-item @(item.OutsideSection ? "is-outside" : "")">
+                                    <div class="olc-item__order">@(i + 1)</div>
+                                    <div class="olc-item__body">
+                                        <strong>@(string.IsNullOrWhiteSpace(item.Title) ? item.LessonTitle : item.Title)</strong>
+                                        <div class="olc-item__meta">
+                                            @if (!string.IsNullOrWhiteSpace(item.Title))
+                                            {
+                                                <span>المؤشر: @item.LessonTitle</span>
+                                            }
+                                            <span class="olc-badge">@ProviderText(item.VideoProvider)</span>
+                                            <span class="olc-badge">@(item.SourceVideoKind == LectureContentSourceKind.RemedialVideo ? "من فيديوهات المؤشر" : "رابط يدوي")</span>
+                                            <span>المدة: <span class="olc-ltr">@(item.DurationSeconds.HasValue ? LectureTimeFormat.Format(item.DurationSeconds) : "—")</span></span>
+                                            @if (item.SourceChanged)
+                                            {
+                                                <span class="olc-badge olc-badge--draft"><i class="fas fa-sync"></i> تغيّر المصدر بعد الإضافة</span>
+                                            }
+                                            @if (item.SourceUnavailable)
+                                            {
+                                                <span class="olc-badge olc-badge--hidden">المصدر لم يعد متاحًا — اللقطة تعمل</span>
+                                            }
+                                            @if (item.OutsideSection)
+                                            {
+                                                <span class="olc-badge olc-text-danger">خارج محور المحاضرة (R7)</span>
+                                            }
+                                        </div>
+                                        @if (item.EmbedUrl is not null)
+                                        {
+                                            <details class="olc-item__preview">
+                                                <summary>معاينة</summary>
+                                                <div class="olc-preview mt-2">
+                                                    <iframe data-src="@item.EmbedUrl" title="معاينة فيديو المؤشر" loading="lazy"
+                                                            allow="encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+                                                </div>
+                                            </details>
+                                        }
+                                    </div>
+                                    @if (Model.CanEdit || Model.CanDelete)
+                                    {
+                                        <div class="olc-item__actions">
+                                            @if (Model.CanEdit && i > 0)
+                                            {
+                                                var up = orderedIds.ToList();
+                                                (up[i - 1], up[i]) = (up[i], up[i - 1]);
+                                                <form asp-action="Reorder" asp-route-id="@Model.ContentId" method="post" class="js-olc-form">
+                                                    @foreach (var oid in up)
+                                                    {
+                                                        <input type="hidden" name="orderedItemIds" value="@oid" />
+                                                    }
+                                                    <button type="submit" class="olc-btn olc-btn--outline olc-btn--sm js-olc-submit" data-busy-text="…" title="تحريك لأعلى" aria-label="تحريك لأعلى"><i class="fas fa-arrow-up"></i></button>
+                                                </form>
+                                            }
+                                            @if (Model.CanEdit && i < Model.Items.Count - 1)
+                                            {
+                                                var down = orderedIds.ToList();
+                                                (down[i + 1], down[i]) = (down[i], down[i + 1]);
+                                                <form asp-action="Reorder" asp-route-id="@Model.ContentId" method="post" class="js-olc-form">
+                                                    @foreach (var oid in down)
+                                                    {
+                                                        <input type="hidden" name="orderedItemIds" value="@oid" />
+                                                    }
+                                                    <button type="submit" class="olc-btn olc-btn--outline olc-btn--sm js-olc-submit" data-busy-text="…" title="تحريك لأسفل" aria-label="تحريك لأسفل"><i class="fas fa-arrow-down"></i></button>
+                                                </form>
+                                            }
+                                            @if (Model.CanEdit && item.SourceVideoKind == LectureContentSourceKind.RemedialVideo && item.SourceChanged)
+                                            {
+                                                <form asp-action="RefreshItem" asp-route-itemId="@item.Id" method="post" class="js-olc-form"
+                                                      data-confirm="استبدال رابط هذا الفيديو بالرابط الحالي في المصدر؟@(isPublished ? " المحتوى منشور وسيتغيّر للطلاب فورًا." : "")">
+                                                    <button type="submit" class="olc-btn olc-btn--outline olc-btn--sm js-olc-submit" data-busy-text="…"><i class="fas fa-sync"></i> تحديث من المصدر</button>
+                                                </form>
+                                            }
+                                            @if (Model.CanDelete)
+                                            {
+                                                <form asp-action="RemoveItem" asp-route-itemId="@item.Id" method="post" class="js-olc-form"
+                                                      data-confirm="حذف هذا الفيديو من القائمة؟">
+                                                    <button type="submit" class="olc-btn olc-btn--danger olc-btn--sm js-olc-submit" data-busy-text="…" title="حذف" aria-label="حذف"><i class="fas fa-trash-alt"></i></button>
+                                                </form>
+                                            }
+                                        </div>
+                                    }
+                                </li>
+                            }
+                        </ol>
+                    }
+                </div>
+
+                @if (Model.CanEdit)
+                {
+                    <form asp-action="AddItem" asp-route-id="@Model.ContentId" method="post" class="olc-panel js-olc-form" id="olcAddItemForm" novalidate>
+                        <h2><i class="fas fa-plus-circle"></i> إضافة فيديو مؤشر</h2>
+                        @if (availableLessons.Count == 0)
+                        {
+                            <div class="olc-empty"><i class="fas fa-check-double"></i>كل مؤشرات محور «@Model.SectionTitle» مضافة إلى القائمة.</div>
+                        }
+                        else
+                        {
+                            <div class="olc-grid">
+                                <div class="olc-field olc-field--full">
+                                    <label for="AddInput_LessonId">المؤشر <small>(من محور «@Model.SectionTitle»)</small></label>
+                                    <select id="AddInput_LessonId" name="AddInput.LessonId" class="form-select js-olc-add-lesson" required>
+                                        <option value="">— اختر المؤشر —</option>
+                                        @foreach (var lesson in availableLessons)
+                                        {
+                                            <option value="@lesson.Id" selected="@(Model.AddInput.LessonId == lesson.Id)">@lesson.Title@(string.IsNullOrWhiteSpace(lesson.UnitTitle) ? "" : " — " + lesson.UnitTitle)</option>
+                                        }
+                                    </select>
+                                </div>
+
+                                <div class="olc-field olc-field--full">
+                                    <label>مصدر الفيديو</label>
+                                    <div class="olc-modes">
+                                        <label class="olc-mode">
+                                            <input type="radio" name="AddInput.SourceKind" value="@((int)LectureContentSourceKind.RemedialVideo)" class="js-olc-add-source"
+                                                   @(Model.AddInput.SourceKind != LectureContentSourceKind.Manual ? "checked" : "") />
+                                            <strong>من فيديوهات المؤشر</strong>
+                                            <span>الفيديوهات النشطة المرتبطة بالمؤشر (روابط YouTube/Vimeo الصالحة فقط).</span>
+                                        </label>
+                                        <label class="olc-mode">
+                                            <input type="radio" name="AddInput.SourceKind" value="@((int)LectureContentSourceKind.Manual)" class="js-olc-add-source"
+                                                   @(Model.AddInput.SourceKind == LectureContentSourceKind.Manual ? "checked" : "") />
+                                            <strong>رابط يدوي</strong>
+                                            <span>رابط YouTube أو Vimeo (https).</span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="olc-field olc-field--full js-olc-add-remedial">
+                                    <label for="AddInput_SourceVideoId">فيديو المؤشر</label>
+                                    <select id="AddInput_SourceVideoId" name="AddInput.SourceVideoId" class="form-select js-olc-add-video">
+                                        <option value="">— اختر الفيديو —</option>
+                                        @foreach (var video in Model.IndicatorVideoOptions)
+                                        {
+                                            <option value="@video.Id" data-lesson="@video.LessonId" selected="@(Model.AddInput.SourceVideoId == video.Id)">@video.Title (@ProviderText(video.Provider))</option>
+                                        }
+                                    </select>
+                                    <small class="js-olc-add-novideo" hidden>لا توجد فيديوهات نشطة صالحة لهذا المؤشر — استخدم «رابط يدوي».</small>
+                                </div>
+
+                                <div class="olc-field olc-field--full js-olc-add-manual">
+                                    <label for="AddInput_VideoUrl">رابط الفيديو</label>
+                                    <input id="AddInput_VideoUrl" name="AddInput.VideoUrl" value="@Model.AddInput.VideoUrl" class="form-control olc-ltr" maxlength="500" inputmode="url"
+                                           placeholder="https://www.youtube.com/watch?v=… أو https://vimeo.com/123456789" />
+                                    <small>YouTube: «غير مدرج». Vimeo: قيّد التضمين لنطاق المنصة.</small>
+                                </div>
+
+                                <div class="olc-field">
+                                    <label for="AddInput_Title">عنوان العرض <small>(اختياري — وإلا عنوان المؤشر)</small></label>
+                                    <input id="AddInput_Title" name="AddInput.Title" value="@Model.AddInput.Title" class="form-control" maxlength="200" />
+                                </div>
+                                <div class="olc-field">
+                                    <label for="AddInput_DurationText">المدة <small>(اختياري — mm:ss)</small></label>
+                                    <input id="AddInput_DurationText" name="AddInput.DurationText" value="@Model.AddInput.DurationText" class="form-control olc-ltr" maxlength="12" placeholder="8:45" />
+                                    <small>تُستخدم لاحتساب نسبة المشاهدة المطلوبة (80%).</small>
+                                </div>
+                            </div>
+                            <div class="olc-actions">
+                                <button type="submit" class="olc-btn js-olc-submit" data-busy-text="جارٍ الإضافة…"><i class="fas fa-plus"></i> إضافة إلى القائمة</button>
+                            </div>
+                        }
+                    </form>
+                }
+            }
+        </section>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            'use strict';
+            if (window.__olcAdminEditBound) return;   // منع الربط المكرر
+            window.__olcAdminEditBound = true;
+
+            // ── التبويبان ──
+            var tabs = document.querySelectorAll('.olc-tab');
+            tabs.forEach(function (tab) {
+                tab.addEventListener('click', function () {
+                    tabs.forEach(function (t) {
+                        var selected = t === tab;
+                        t.setAttribute('aria-selected', selected ? 'true' : 'false');
+                        var panel = document.getElementById(t.getAttribute('aria-controls'));
+                        if (panel) panel.hidden = !selected;
+                    });
+                });
+            });
+
+            // ── الوضع: إظهار حقول الفيديو الكامل + طلب التأكيد عند وجود عناصر ──
+            var form = document.getElementById('olcSaveForm');
+            if (form) {
+                var originalMode = form.getAttribute('data-original-mode');
+                var itemsCount = parseInt(form.getAttribute('data-items-count') || '0', 10);
+                var fullVideo = form.querySelector('.js-olc-fullvideo');
+                var confirmBox = form.querySelector('.js-olc-mode-confirm');
+                var fullVideoValue = '@((int)LectureContentMode.FullVideo)';
+
+                function currentMode() {
+                    var checked = form.querySelector('.js-olc-mode:checked');
+                    return checked ? checked.value : originalMode;
+                }
+                function sync() {
+                    var mode = currentMode();
+                    if (fullVideo) fullVideo.hidden = mode !== fullVideoValue;
+                    if (confirmBox) confirmBox.hidden = !(itemsCount > 0 && mode !== originalMode);
+                }
+                form.querySelectorAll('.js-olc-mode').forEach(function (r) { r.addEventListener('change', sync); });
+                sync();
+            }
+
+            // ── الفصول: تمييز الصف المختار ──
+            document.querySelectorAll('.js-olc-chapter-include').forEach(function (cb) {
+                cb.addEventListener('change', function () {
+                    var row = cb.closest('.olc-chapter');
+                    if (row) row.classList.toggle('is-on', cb.checked);
+                });
+            });
+
+            // ── معاينة فيديو المؤشر: لا يُحمَّل الـ iframe إلا عند فتح المعاينة ──
+            document.querySelectorAll('.olc-item__preview').forEach(function (d) {
+                d.addEventListener('toggle', function () {
+                    var frame = d.querySelector('iframe[data-src]');
+                    if (d.open && frame && !frame.getAttribute('src')) frame.setAttribute('src', frame.getAttribute('data-src'));
+                });
+            });
+
+            // ── إضافة فيديو مؤشر: المصدر + تصفية فيديوهات المؤشر المختار ──
+            var addForm = document.getElementById('olcAddItemForm');
+            if (addForm) {
+                var lessonSelect = addForm.querySelector('.js-olc-add-lesson');
+                var videoSelect = addForm.querySelector('.js-olc-add-video');
+                var remedialBox = addForm.querySelector('.js-olc-add-remedial');
+                var manualBox = addForm.querySelector('.js-olc-add-manual');
+                var noVideo = addForm.querySelector('.js-olc-add-novideo');
+                var manualValue = '@((int)LectureContentSourceKind.Manual)';
+
+                function syncAdd() {
+                    var src = addForm.querySelector('.js-olc-add-source:checked');
+                    var manual = src && src.value === manualValue;
+                    if (remedialBox) remedialBox.hidden = manual;
+                    if (manualBox) manualBox.hidden = !manual;
+
+                    if (videoSelect && lessonSelect) {
+                        var lesson = lessonSelect.value, visible = 0;
+                        Array.prototype.forEach.call(videoSelect.options, function (o) {
+                            if (!o.value) return;
+                            var match = lesson !== '' && o.getAttribute('data-lesson') === lesson;
+                            o.hidden = !match;
+                            o.disabled = !match;
+                            if (match) visible++;
+                            else if (o.selected) videoSelect.value = '';
+                        });
+                        if (noVideo) noVideo.hidden = !(lesson !== '' && visible === 0);
+                    }
+                }
+                addForm.querySelectorAll('.js-olc-add-source').forEach(function (r) { r.addEventListener('change', syncAdd); });
+                if (lessonSelect) lessonSelect.addEventListener('change', syncAdd);
+                syncAdd();
+            }
+
+            // ── التأكيد + حالة التحميل ومنع الإرسال المزدوج ──
+            document.querySelectorAll('.js-olc-form').forEach(function (f) {
+                f.addEventListener('submit', function (e) {
+                    if (f.dataset.busy === '1') { e.preventDefault(); return; }
+                    var question = f.getAttribute('data-confirm');
+                    if (question && !window.confirm(question)) { e.preventDefault(); return; }
+                    f.dataset.busy = '1';
+                    var btn = f.querySelector('.js-olc-submit');
+                    if (btn) {
+                        btn.classList.add('is-busy');
+                        btn.setAttribute('aria-busy', 'true');
+                        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + (btn.getAttribute('data-busy-text') || 'جارٍ الحفظ…');
+                    }
+                });
+            });
+        })();
+    </script>
+}

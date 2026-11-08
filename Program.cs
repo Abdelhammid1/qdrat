@@ -346,6 +346,22 @@ builder.Services.AddAuthorization(options =>
             policy => policy.Requirements.Add(new AdminPermissionAuthorizationRequirement(policyName)));
     }
 
+    // OLC-S2.3 — المحتوى التعليمي أونلاين
+    foreach (var olcPolicy in new[]
+    {
+        AdminPermissionPolicies.LectureContents_Read,
+        AdminPermissionPolicies.LectureContents_Create,
+        AdminPermissionPolicies.LectureContents_Edit,
+        AdminPermissionPolicies.LectureContents_Delete,
+        AdminPermissionPolicies.LectureContents_ManagePartners // OLC-S4.2
+    })
+    {
+        var policyName = olcPolicy;
+        options.AddPolicy(
+            policyName,
+            policy => policy.Requirements.Add(new AdminPermissionAuthorizationRequirement(policyName)));
+    }
+
 
     // ===============================
     // 🧪 Placement Exams (Level Assessment)
@@ -1126,6 +1142,14 @@ builder.Services.AddScoped<QdratNew.Filters.RemedialTrackEnabledFilter>();
 // OLC-S1.3: مفتاح المحتوى التعليمي أونلاين (SystemSettings: OnlineLectureContent.Enabled — مغلق افتراضيًا)
 builder.Services.AddScoped<QdratNew.Services.OnlineLecture.IOnlineLectureFeatureService,
                            QdratNew.Services.OnlineLecture.OnlineLectureFeatureService>();
+// OLC-S2: إدارة المحتوى التعليمي أونلاين من الأدمن (تفعيل الدفعة + المسودة + الوضع + الفيديو الكامل)
+builder.Services.AddScoped<QdratNew.Services.OnlineLecture.ILectureContentAdminService,
+                           QdratNew.Services.OnlineLecture.LectureContentAdminService>();
+// OLC-S4: بند «المحتوى التعليمي» في عقد الشريك (R16/R17/R19) + متابعة الشريك للقراءة فقط
+builder.Services.AddScoped<QdratNew.Services.OnlineLecture.IPartnerEducationalContentPolicy,
+                           QdratNew.Services.OnlineLecture.PartnerEducationalContentPolicy>();
+builder.Services.AddScoped<QdratNew.Services.OnlineLecture.IPartnerLearningContentService,
+                           QdratNew.Services.OnlineLecture.PartnerLearningContentService>();
 builder.Services.AddScoped<ILectureInstructorSyncService, LectureInstructorSyncService>();
 builder.Services.AddScoped<IEmployeeBatchAccessService, EmployeeBatchAccessService>();
 builder.Services.AddScoped<QdratNew.Services.Admin.EmployeeDashboard.IEmployeeDashboardService,

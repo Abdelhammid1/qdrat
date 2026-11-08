@@ -272,6 +272,17 @@
                     new AdminActionDescriptor { Key = "ReadLog", DisplayNameAr = "عرض سجل الإرسال للمدارس الشريكة" }
                 },
 
+                // OLC-S2.3: المحتوى التعليمي أونلاين للمحاضرات (R10 — الأدمن فقط بصلاحية صريحة)
+                "LectureContents" => new[]
+                {
+                    new AdminActionDescriptor { Key = "Read", DisplayNameAr = "عرض المحتوى التعليمي أونلاين للمحاضرات" },
+                    new AdminActionDescriptor { Key = "Create", DisplayNameAr = "إنشاء محتوى أونلاين لمحاضرة (مسودة)" },
+                    new AdminActionDescriptor { Key = "Edit", DisplayNameAr = "تعديل المحتوى: البيانات والوضع والفيديو والفصول وقائمة الفيديوهات والنشر/الإخفاء" },
+                    new AdminActionDescriptor { Key = "Delete", DisplayNameAr = "حذف فصول/فيديوهات من المحتوى أونلاين" },
+                    // OLC-S4.2 (R18): بدونها لا تظهر دفعات الشركاء ويُرفض أي طلب يمسها
+                    new AdminActionDescriptor { Key = "ManagePartners", DisplayNameAr = "إدارة التعليم أونلاين لدفعات المدارس الشريكة (تفعيل الدفعة والمحتوى والمتابعة)" }
+                },
+
                 "IntegrityViolations" => new[]
                 {
                     new AdminActionDescriptor { Key = "Read", DisplayNameAr = "عرض مخالفات النزاهة" },

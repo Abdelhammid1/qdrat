@@ -266,10 +266,17 @@ namespace QdratNew.Areas.Admin.Controllers
                 CanAccessEducationalContent = subscription.CanAccessEducationalContent,
                 AccessUntilDate = subscription.AccessUntilDate,
                 CanUseProfessionalModels = subscription.CanUseProfessionalModels,
+                OnlineBatchesCount = CountOnlineBatches(subscription.PartnerId), // OLC-S4.4
 
                 Courses = courses
             });
         }
+
+        // OLC-S4.4: دفعات الشريك المفعّل لها التعليم أونلاين — للتنبيه عند إلغاء بند «المحتوى التعليمي»
+        private int CountOnlineBatches(int partnerId)
+            => _context.Batches
+                .AsNoTracking()
+                .Count(b => !b.IsDeleted && b.IsOnlineLearning && b.Branch.PartnerId == partnerId);
 
         // =====================================================
         // ✏️ EDIT – POST
@@ -278,6 +285,8 @@ namespace QdratNew.Areas.Admin.Controllers
         [ValidateAntiForgeryToken]
         public IActionResult Edit(PartnerSubscriptionEditViewModel model)
         {
+            model.OnlineBatchesCount = CountOnlineBatches(model.PartnerId); // OLC-S4.4 (عرض فقط)
+
             if (!ModelState.IsValid)
                 return View(model);
 
@@ -312,6 +321,8 @@ namespace QdratNew.Areas.Admin.Controllers
             subscription.CanUseReinforcementSkills = model.CanUseReinforcementSkills;
             subscription.CanUseRemedialPlans = model.CanUseRemedialPlans;
             subscription.CanUseRemedialSessions = model.CanUseRemedialSessions;
+            // OLC-S4.4: إلغاء البند وعلى الشريك دفعات أونلاين ⇒ تنبيه بعد الحفظ (البيانات لا تُحذف)
+            var educationalClauseRemoved = subscription.CanAccessEducationalContent && !model.CanAccessEducationalContent;
             subscription.CanAccessEducationalContent = model.CanAccessEducationalContent;
             subscription.AccessUntilDate = model.AccessUntilDate;
             subscription.CanUseProfessionalModels = model.CanUseProfessionalModels;
@@ -330,6 +341,11 @@ namespace QdratNew.Areas.Admin.Controllers
             _context.SaveChanges();
 
             TempData["Success"] = "تم تحديث عقد الشراكة بنجاح.";
+
+            var onlineBatches = educationalClauseRemoved ? CountOnlineBatches(subscription.PartnerId) : 0;
+            if (onlineBatches > 0)
+                TempData["Success"] += $" تنبيه: أُلغي بند «المحتوى التعليمي» وللشريك {onlineBatches} دفعة أونلاين — توقف وصول طلابها للمحتوى ولا تُفعَّل دفعات جديدة، ويبقى المحتوى والتقدّم محفوظين ويعودان بإعادة تفعيل البند.";
+
             return RedirectToAction(nameof(Index), new { partnerId = subscription.PartnerId });
         }
 

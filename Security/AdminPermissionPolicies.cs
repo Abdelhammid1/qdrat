@@ -240,5 +240,15 @@
         public const string PartnerDispatch_Send = "PartnerDispatch:Send";
         public const string PartnerDispatch_Override = "PartnerDispatch:Override";
         public const string PartnerDispatch_ReadLog = "PartnerDispatch:ReadLog";
+
+        // ===============================
+        // OLC — المحتوى التعليمي أونلاين (OLC-S2.3)
+        // ===============================
+        public const string LectureContents_Read = "LectureContents:Read";
+        public const string LectureContents_Create = "LectureContents:Create";
+        public const string LectureContents_Edit = "LectureContents:Edit";
+        public const string LectureContents_Delete = "LectureContents:Delete";
+        // OLC-S4.2 (R18): إدارة محتوى دفعات الشركاء — مطلوبة فوق Read/Create/Edit/Delete لكل مسار يمس دفعة شريك
+        public const string LectureContents_ManagePartners = "LectureContents:ManagePartners";
     }
 }

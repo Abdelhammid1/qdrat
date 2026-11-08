@@ -1,0 +1,200 @@
+@model QdratNew.ViewModels.OnlineLecture.OnlineBatchesPageVm
+@using QdratNew.Enums
+@using QdratNew.ViewModels.OnlineLecture
+@inject QdratNew.Services.Interfaces.ITimeZoneService Tz
+@*
+    OLC-S4.2 — «الدفعات الأونلاين»: جمهور «المنصة» أو «الشركاء» (عدة شركاء + حالة البند لكل شريك) بنفس فكرة
+    _DispatchAudiencePicker في APD، لكن كفلتر GET بسيط بلا AJAX (لا إرسال هنا). خيار «الشركاء» يظهر فقط لمن لديه
+    LectureContents:ManagePartners (R18) — والخادم يرفض الطلب المصطنع بـ 403.
+*@
+@{
+    ViewData["Title"] = "الدفعات الأونلاين";
+    var isPartners = Model.Audience == DispatchAudience.Partners;
+    string Saudi(DateTime? utc) => utc.HasValue ? Tz.ConvertToSaudi(utc.Value).ToString("yyyy/MM/dd") : "—";
+    var onlineCount = Model.Batches.Count(b => b.IsOnlineLearning);
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/admin-olc.css" asp-append-version="true" />
+}
+
+<div class="olc-page py-3" dir="rtl">
+
+    <section class="olc-hero">
+        <div class="olc-hero__top">
+            <div>
+                <div class="olc-hero__label"><i class="fas fa-laptop-house"></i> المحتوى التعليمي أونلاين</div>
+                <h1>الدفعات الأونلاين</h1>
+                <p>كل دفعة مفعّل لها التعليم أونلاين ومحتوى محاضراتها. التفعيل والإلغاء من بطاقة «التعليم أونلاين» في تفاصيل الدفعة.</p>
+            </div>
+        </div>
+        <div class="olc-hero__meta">
+            <span class="olc-hero__chip">@(isPartners ? "المدارس الشريكة" : "دفعات المنصة")</span>
+            <span class="olc-hero__chip">@onlineCount دفعة أونلاين</span>
+            @if (!Model.FeatureEnabled)
+            {
+                <span class="olc-hero__chip"><i class="fas fa-lock"></i> الميزة مغلقة للطلاب حاليًا</span>
+            }
+        </div>
+    </section>
+
+    <form method="get" asp-action="Batches" class="olc-panel olc-audience" data-olc-audience>
+        <h2><i class="fas fa-users"></i> الجمهور</h2>
+
+        <div class="olc-audience__options" role="radiogroup" aria-label="الجمهور">
+            <label class="olc-audience__option">
+                <input type="radio" class="form-check-input" name="Audience" value="@((int)DispatchAudience.Platform)" data-olc-audience-radio @(isPartners ? "" : "checked") />
+                <span><strong>دفعات المنصة</strong><small>دفعات المعهد فقط</small></span>
+            </label>
+            @if (Model.CanManagePartners)
+            {
+                <label class="olc-audience__option">
+                    <input type="radio" class="form-check-input" name="Audience" value="@((int)DispatchAudience.Partners)" data-olc-audience-radio @(isPartners ? "checked" : "") />
+                    <span><strong>المدارس الشريكة</strong><small>دفعات الشركاء — مشروطة ببند «المحتوى التعليمي» في العقد</small></span>
+                </label>
+            }
+        </div>
+
+        @if (Model.CanManagePartners)
+        {
+            <div class="olc-audience__partners" data-olc-partners @(isPartners ? "" : "hidden")>
+                @if (!isPartners)
+                {
+                    <p class="olc-panel__hint mb-0">اختر «المدارس الشريكة» ثم «عرض» لتحميل الشركاء وحالة البند لكل منهم.</p>
+                }
+                else if (Model.Partners.Count == 0)
+                {
+                    <div class="olc-empty">لا يوجد شركاء بعقود أو شراكات سارية.</div>
+                }
+                else
+                {
+                    <p class="olc-panel__hint">اختر شريكًا أو أكثر — بلا اختيار تُعرض دفعات كل الشركاء.</p>
+                    <ul class="olc-partner-list">
+                        @foreach (var p in Model.Partners)
+                        {
+                            var inputId = $"olc-partner-{p.PartnerId}";
+                            <li>
+                                <input type="checkbox" class="form-check-input" id="@inputId" name="PartnerIds" value="@p.PartnerId" @(p.IsSelected ? "checked" : "") />
+                                <label for="@inputId">@p.Name</label>
+                                <span class="olc-badge @PartnerEducationalContentStateText.Css(p.State)">@PartnerEducationalContentStateText.Label(p.State)</span>
+                                <span class="olc-partner-list__count">@p.OnlineBatchesCount دفعة أونلاين</span>
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+        }
+
+        <div class="olc-audience__footer">
+            <label class="form-check-label">
+                <input type="checkbox" class="form-check-input" name="IncludeInactive" value="true" @(Model.IncludeInactive ? "checked" : "") />
+                إظهار الدفعات غير المفعّلة أيضًا
+            </label>
+            <button type="submit" class="olc-btn olc-btn--sm"><i class="fas fa-filter"></i> عرض</button>
+        </div>
+    </form>
+
+    <section class="olc-panel">
+        <h2><i class="fas fa-layer-group"></i> الدفعات (@Model.Batches.Count)</h2>
+
+        @if (Model.Batches.Count == 0)
+        {
+            <div class="olc-empty">
+                @(Model.IncludeInactive
+                    ? "لا توجد دفعات مطابقة."
+                    : "لا توجد دفعات مفعّل لها التعليم أونلاين لهذا الجمهور. فعّل «إظهار الدفعات غير المفعّلة» للوصول لبطاقة التفعيل.")
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-sm align-middle olc-table">
+                    <thead>
+                        <tr>
+                            <th>الدفعة</th>
+                            @if (isPartners)
+                            {
+                                <th>الشريك / البند</th>
+                            }
+                            <th>الحالة</th>
+                            <th class="text-center">الطلاب</th>
+                            <th class="text-center">المحاضرات</th>
+                            <th class="text-center">المحتوى (منشور)</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var b in Model.Batches)
+                        {
+                            <tr>
+                                <td>
+                                    <strong>@b.Name</strong>
+                                    <div class="small text-muted">@b.CourseName · @b.BranchName</div>
+                                </td>
+                                @if (isPartners)
+                                {
+                                    <td>
+                                        @b.PartnerName
+                                        <div><span class="olc-badge @PartnerEducationalContentStateText.Css(b.ContractState)">@PartnerEducationalContentStateText.Label(b.ContractState)</span></div>
+                                    </td>
+                                }
+                                <td>
+                                    @if (b.IsOnlineLearning)
+                                    {
+                                        <span class="olc-badge olc-badge--online">أونلاين</span>
+                                        <div class="small text-muted">منذ @Saudi(b.OnlineLearningEnabledAt)</div>
+                                    }
+                                    else
+                                    {
+                                        <span class="olc-badge olc-badge--none">غير مفعّل</span>
+                                    }
+                                    @if (b.IsArchived)
+                                    {
+                                        <span class="olc-badge olc-badge--hidden">مؤرشفة</span>
+                                    }
+                                </td>
+                                <td class="text-center">@b.ActiveStudents</td>
+                                <td class="text-center">@b.LecturesCount</td>
+                                <td class="text-center">@b.ContentsCount (@b.PublishedCount)</td>
+                                <td class="text-nowrap">
+                                    <a class="olc-btn olc-btn--outline olc-btn--sm" asp-area="Admin" asp-controller="Lectures" asp-action="Lectures" asp-route-batchId="@b.BatchId">
+                                        <i class="fas fa-list"></i> المحاضرات
+                                    </a>
+                                    <a class="olc-btn olc-btn--light olc-btn--sm" asp-area="Admin" asp-controller="Batches" asp-action="Details" asp-route-id="@b.BatchId" asp-fragment="olc-online-learning">
+                                        <i class="fas fa-toggle-on"></i> التفعيل
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+</div>
+
+@section Scripts {
+    <script>
+        // إظهار قائمة الشركاء عند اختيار «المدارس الشريكة» (بلا JS تبقى القائمة كما رسمها الخادم)
+        (function () {
+            var form = document.querySelector('[data-olc-audience]');
+            var panel = form && form.querySelector('[data-olc-partners]');
+            if (!form || !panel || form.dataset.olcBound) return;
+            form.dataset.olcBound = '1';
+            form.querySelectorAll('[data-olc-audience-radio]').forEach(function (radio) {
+                radio.addEventListener('change', function () {
+                    panel.hidden = radio.value !== '@((int)DispatchAudience.Partners)' || !radio.checked;
+                });
+            });
+            form.addEventListener('submit', function () {
+                var btn = form.querySelector('button[type=submit]');
+                if (btn) { btn.disabled = true; btn.classList.add('is-busy'); }
+            });
+            // الرجوع من صفحة أخرى (bfcache) يعيد الزر لحالته
+            window.addEventListener('pageshow', function () {
+                var btn = form.querySelector('button[type=submit]');
+                if (btn) { btn.disabled = false; btn.classList.remove('is-busy'); }
+            });
+        })();
+    </script>
+}

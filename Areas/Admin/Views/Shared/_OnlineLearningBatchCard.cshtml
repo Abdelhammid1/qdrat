@@ -1,0 +1,111 @@
+@model QdratNew.ViewModels.OnlineLecture.BatchOnlineLearningSummaryVm
+@inject QdratNew.Services.Interfaces.ITimeZoneService Tz
+@* OLC-S2.1 — بطاقة «التعليم أونلاين» في شاشتي تعديل/تفاصيل الدفعة. التفعيل POST مستقل (Batches/Edit) خارج نموذج التعديل. *@
+@{
+    var ok = TempData["OlcBatchSuccess"] as string;
+    var err = TempData["OlcBatchError"] as string;
+}
+<link rel="stylesheet" href="~/css/admin-olc.css" asp-append-version="true" />
+
+<section class="olc-batch-card" dir="rtl" id="olc-online-learning">
+    <div>
+        <h3>
+            <i class="fas fa-laptop-house"></i> التعليم أونلاين
+            @if (Model.IsOnlineLearning)
+            {
+                <span class="olc-badge olc-badge--online">مفعّل</span>
+            }
+            else
+            {
+                <span class="olc-badge olc-badge--none">غير مفعّل</span>
+            }
+        </h3>
+        @if (Model.IsOnlineLearning)
+        {
+            <p>
+                طلاب الدفعة يرون قسم «المحتوى التعليمي». المحتوى: @Model.ContentsCount من @Model.LecturesCount محاضرة (منشور @Model.PublishedCount).
+                @if (Model.OnlineLearningEnabledAt.HasValue)
+                {
+                    <span>· فُعّل في @Tz.ConvertToSaudi(Model.OnlineLearningEnabledAt.Value).ToString("yyyy/MM/dd HH:mm")</span>
+                }
+            </p>
+        }
+        else
+        {
+            <p>
+                فعّله لتتمكن من إضافة فيديو لكل محاضرة من صفحة المحاضرة، ويظهر لطلاب الدفعة قسم «المحتوى التعليمي».
+                @if (Model.ContentsCount > 0)
+                {
+                    <span>يوجد @Model.ContentsCount محتوى محفوظ سيعود للظهور عند التفعيل.</span>
+                }
+            </p>
+        }
+        @if (Model.IsPartnerBatch)
+        {
+            @* OLC-S4.2 — دفعة شريك: التفعيل مشروط ببند «المحتوى التعليمي» في عقد نشط (R16) *@
+            <p class="mt-1">
+                <i class="fas fa-handshake"></i> دفعة الشريك «@Model.PartnerName» — بند المحتوى التعليمي:
+                <span class="olc-badge @QdratNew.ViewModels.OnlineLecture.PartnerEducationalContentStateText.Css(Model.PartnerContractState)">@QdratNew.ViewModels.OnlineLecture.PartnerEducationalContentStateText.Label(Model.PartnerContractState)</span>
+            </p>
+            @if (Model.IsOnlineLearning && Model.PartnerBlockReason != null)
+            {
+                <p class="mt-1 olc-text-danger"><i class="fas fa-exclamation-triangle"></i> @(Model.PartnerContractState == QdratNew.Services.OnlineLecture.PartnerEducationalContentState.NotInContract
+    ? "عقد الشريك النشط لا يشمل البند: طلاب الدفعة لا يصلون للمحتوى الآن."
+    : "لا عقد نشط للشريك: يصل الطلاب للمحتوى فقط حتى تاريخ «الوصول بعد الانتهاء» إن كان البند مشمولًا في آخر عقد.")
+                التقدّم محفوظ ويعود عند التجديد.</p>
+            }
+            else if (!Model.IsOnlineLearning && Model.PartnerBlockReason != null)
+            {
+                <p class="mt-1 olc-text-danger"><i class="fas fa-ban"></i> @Model.PartnerBlockReason</p>
+            }
+        }
+        @if (!Model.FeatureEnabled)
+        {
+            <p class="mt-1"><i class="fas fa-info-circle"></i> الميزة مغلقة للطلاب حاليًا على مستوى المنصة — يمكن التجهيز مسبقًا.</p>
+        }
+        @if (!string.IsNullOrEmpty(ok))
+        {
+            <div class="olc-alert olc-alert--ok mt-2 mb-0" role="status">@ok</div>
+        }
+        @if (!string.IsNullOrEmpty(err))
+        {
+            <div class="olc-alert olc-alert--err mt-2 mb-0" role="alert">@err</div>
+        }
+    </div>
+
+    @if (Model.CanToggle)
+    {
+        <div class="d-flex gap-2 flex-wrap">
+            @if (Model.IsOnlineLearning)
+            {
+                <a class="olc-btn olc-btn--outline olc-btn--sm" asp-area="Admin" asp-controller="Lectures" asp-action="Lectures" asp-route-batchId="@Model.BatchId">
+                    <i class="fas fa-list"></i> محاضرات الدفعة
+                </a>
+                <form asp-area="Admin" asp-controller="Batches" asp-action="SetOnlineLearning" method="post"
+                      onsubmit="return confirm('إلغاء التعليم أونلاين يُخفي قسم «المحتوى التعليمي» عن طلاب الدفعة. لن يُحذف أي محتوى أو تقدّم. متابعة؟');">
+                    <input type="hidden" name="id" value="@Model.BatchId" />
+                    <input type="hidden" name="enable" value="false" />
+                    <input type="hidden" name="returnTo" value="@Model.ReturnTo" />
+                    <button type="submit" class="olc-btn olc-btn--danger olc-btn--sm"><i class="fas fa-toggle-off"></i> إلغاء التعليم أونلاين</button>
+                </form>
+            }
+            else if (Model.IsArchived)
+            {
+                <span class="olc-badge olc-badge--hidden">الدفعة مؤرشفة — لا يمكن التفعيل</span>
+            }
+            else if (Model.PartnerBlockReason != null)
+            {
+                <span class="olc-badge olc-badge--hidden" title="@Model.PartnerBlockReason">لا يمكن التفعيل — @QdratNew.ViewModels.OnlineLecture.PartnerEducationalContentStateText.Label(Model.PartnerContractState)</span>
+            }
+            else
+            {
+                <form asp-area="Admin" asp-controller="Batches" asp-action="SetOnlineLearning" method="post">
+                    <input type="hidden" name="id" value="@Model.BatchId" />
+                    <input type="hidden" name="enable" value="true" />
+                    <input type="hidden" name="returnTo" value="@Model.ReturnTo" />
+                    <button type="submit" class="olc-btn olc-btn--sm"><i class="fas fa-toggle-on"></i> تفعيل التعليم أونلاين</button>
+                </form>
+            }
+        </div>
+    }
+</section>

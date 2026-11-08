@@ -56,6 +56,10 @@ namespace QdratNew.Interfaces
         // =========================================
         bool CanAccessEducationalContent(int partnerId);
 
+        // OLC-S4.1: النسخة async — forStudents=false ⇒ عقد نشط الآن يشمل البند (R16)،
+        // forStudents=true ⇒ البند + العقد ما زال ساريًا للطلاب حتى AccessUntilDate ?? EndDate (R17)
+        Task<bool> CanAccessEducationalContentAsync(int partnerId, bool forStudents, CancellationToken ct = default);
+
         // =========================================
         // 🔹 صلاحيات عامة
         // =========================================

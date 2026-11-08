@@ -53,6 +53,10 @@ namespace QdratNew.ViewModels.PartnerSubscriptions
 
         public bool CanAccessEducationalContent { get; set; }
 
+        // OLC-S4.4: عدد دفعات الشريك المفعّل لها التعليم أونلاين — للتنبيه عند إلغاء البند (للعرض فقط)
+        [Microsoft.AspNetCore.Mvc.ModelBinding.BindNever]
+        public int OnlineBatchesCount { get; set; }
+
         // =========================
         // 🔹 وصول بعد انتهاء العقد
         // =========================

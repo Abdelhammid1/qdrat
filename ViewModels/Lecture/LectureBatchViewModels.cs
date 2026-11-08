@@ -41,5 +41,9 @@ namespace QdratNew.ViewModels.Lecture
         public int UpcomingLectures { get; set; }
 
         public List<LectureListViewModel> Lectures { get; set; } = new();
+
+        // OLC-S2.3: رابط «المحتوى أونلاين» لكل محاضرة — لدفعات الأونلاين ولمن لديه LectureContents:Read فقط
+        public bool IsOnlineLearning { get; set; }
+        public bool CanViewOnlineContent { get; set; }
     }
 }

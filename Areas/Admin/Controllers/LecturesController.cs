@@ -6,6 +6,8 @@ using QdratNew.Data;
 using QdratNew.Entities;
 using QdratNew.Enums;
 using QdratNew.Security;
+using QdratNew.Security.AdminPermissions;
+using QdratNew.Services.OnlineLecture;
 using QdratNew.ViewModels.Lecture;
 
 namespace QdratNew.Areas.Admin.Controllers
@@ -15,10 +17,29 @@ namespace QdratNew.Areas.Admin.Controllers
     public class LecturesController : Controller
     {
         private readonly ApplicationDbContext _context;
+        private readonly ILectureContentAdminService _lectureContentAdmin; // OLC-S2.3
+        private readonly IAuthorizationService _authorization;
 
-        public LecturesController(ApplicationDbContext context)
+        public LecturesController(
+            ApplicationDbContext context,
+            ILectureContentAdminService lectureContentAdmin,
+            IAuthorizationService authorization)
         {
             _context = context;
+            _lectureContentAdmin = lectureContentAdmin;
+            _authorization = authorization;
+        }
+
+        private async Task<bool> CanViewOnlineContentAsync(int batchId)
+        {
+            if (!(await _authorization.AuthorizeAsync(User, AdminPermissionPolicies.LectureContents_Read)).Succeeded)
+                return false;
+
+            // OLC-S4.2 (R18): روابط المحتوى لدفعة شريك تظهر فقط لمن لديه LectureContents:ManagePartners
+            if (await _lectureContentAdmin.GetBatchPartnerIdAsync(batchId, HttpContext.RequestAborted) is null)
+                return true;
+
+            return (await _authorization.AuthorizeAsync(User, AdminPermissionPolicies.LectureContents_ManagePartners)).Succeeded;
         }
 
         // =====================================================
@@ -178,8 +199,21 @@ namespace QdratNew.Areas.Admin.Controllers
                 TodayLectures = lectures.Count(l => l.Date.Date == today),
                 UpcomingLectures = lectures.Count(l => l.Date.Date > today),
 
-                Lectures = lectures
+                Lectures = lectures,
+                IsOnlineLearning = batch.IsOnlineLearning
             };
+
+            // OLC-S2.3: حالة المحتوى أونلاين لكل محاضرة (استعلام واحد) — لدفعات الأونلاين فقط
+            if (batch.IsOnlineLearning)
+            {
+                model.CanViewOnlineContent = await CanViewOnlineContentAsync(batchId);
+                if (model.CanViewOnlineContent)
+                {
+                    var statuses = await _lectureContentAdmin.GetStatusesForBatchAsync(batchId, HttpContext.RequestAborted);
+                    foreach (var row in lectures)
+                        row.OnlineContentStatus = statuses.TryGetValue(row.Id, out var status) ? status : null;
+                }
+            }
 
             return View(model);
         }
@@ -543,8 +577,20 @@ namespace QdratNew.Areas.Admin.Controllers
                 PresentCount = attendanceRows.Count(r => r.IsPresent),
                 AbsentCount = attendanceRows.Count(r => !r.IsPresent),
                 AttendanceRecords = attendanceRows,
-                LessonTitles = lecture.Lessons.Select(l => l.Title).ToList()
+                LessonTitles = lecture.Lessons.Select(l => l.Title).ToList(),
+                BatchIsOnlineLearning = lecture.Batch?.IsOnlineLearning == true
             };
+
+            // OLC-S2.3: بطاقة «المحتوى التعليمي أونلاين» — لدفعات الأونلاين فقط
+            if (model.BatchIsOnlineLearning)
+            {
+                model.CanViewOnlineContent = await CanViewOnlineContentAsync(lecture.BatchId);
+                if (model.CanViewOnlineContent)
+                {
+                    var statuses = await _lectureContentAdmin.GetStatusesForBatchAsync(lecture.BatchId, HttpContext.RequestAborted);
+                    model.OnlineContentStatus = statuses.TryGetValue(lecture.Id, out var status) ? status : null;
+                }
+            }
 
             return View(model);
         }
@@ -581,6 +627,13 @@ namespace QdratNew.Areas.Admin.Controllers
                 return RedirectToAction(nameof(Index));
 
             var batchId = lecture.BatchId;
+
+            // OLC-S2.3: LectureContents.LectureId مقيّد (Restrict) — لا نحذف محاضرة لها محتوى أونلاين حتى لا يضيع تقدّم الطلاب
+            if (await _lectureContentAdmin.LectureHasContentAsync(id, HttpContext.RequestAborted))
+            {
+                TempData["OlcLectureError"] = "لا يمكن حذف هذه المحاضرة لأن لها محتوى تعليميًا أونلاين (قد يكون عليه تقدّم طلاب). أخفِ المحتوى بدل حذف المحاضرة.";
+                return RedirectToAction(nameof(Details), new { id });
+            }
 
             _context.Lecture.Remove(lecture);
             await _context.SaveChangesAsync();

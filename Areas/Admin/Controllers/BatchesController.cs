@@ -8,6 +8,8 @@ using QdratNew.Entities;
 using QdratNew.Security;
 using QdratNew.Services.Admin;
 using QdratNew.Services.Batches;
+using QdratNew.Services.OnlineLecture;
+using QdratNew.Security.AdminPermissions;
 using QdratNew.ViewModels;
 using QdratNew.ViewModels.Batch;
 using System.Linq;
@@ -23,17 +25,44 @@ namespace QdratNew.Areas.Admin.Controllers
         private readonly IBatchLectureAutoGenerationService _batchLectureAutoGenerationService;
         private readonly IEmployeeBatchAccessService _batchAccess;
         private readonly UserManager<ApplicationUser> _userManager;
+        private readonly ILectureContentAdminService _lectureContentAdmin;   // OLC-S2.1
+        private readonly IOnlineLectureFeatureService _onlineLectureFeature; // OLC-S2.1
+        private readonly IAuthorizationService _authorization;
 
         public BatchesController(
             ApplicationDbContext context,
             IBatchLectureAutoGenerationService batchLectureAutoGenerationService,
             IEmployeeBatchAccessService batchAccess,
-            UserManager<ApplicationUser> userManager)
+            UserManager<ApplicationUser> userManager,
+            ILectureContentAdminService lectureContentAdmin,
+            IOnlineLectureFeatureService onlineLectureFeature,
+            IAuthorizationService authorization)
         {
             _context = context;
             _batchLectureAutoGenerationService = batchLectureAutoGenerationService;
             _batchAccess = batchAccess;
             _userManager = userManager;
+            _lectureContentAdmin = lectureContentAdmin;
+            _onlineLectureFeature = onlineLectureFeature;
+            _authorization = authorization;
+        }
+
+        /// <summary>OLC-S2.1: بطاقة «التعليم أونلاين» لشاشتي التعديل والتفاصيل.</summary>
+        private async Task<QdratNew.ViewModels.OnlineLecture.BatchOnlineLearningSummaryVm?> BuildOnlineLearningCardAsync(int batchId, string returnTo)
+        {
+            var summary = await _lectureContentAdmin.GetBatchOnlineSummaryAsync(batchId, HttpContext.RequestAborted);
+            if (summary == null)
+                return null;
+
+            summary.ReturnTo = returnTo;
+            summary.FeatureEnabled = await _onlineLectureFeature.IsEnabledAsync(HttpContext.RequestAborted);
+            summary.CanToggle = (await _authorization.AuthorizeAsync(User, AdminPermissionPolicies.Batches_Edit)).Succeeded;
+
+            // OLC-S4.2 (R18): دفعة الشريك تتطلب LectureContents:ManagePartners فوق Batches:Edit
+            if (summary.CanToggle && summary.IsPartnerBatch)
+                summary.CanToggle = (await _authorization.AuthorizeAsync(User, AdminPermissionPolicies.LectureContents_ManagePartners)).Succeeded;
+
+            return summary;
         }
 
         // ─── Archive helpers ──────────────────────────────────────────
@@ -201,6 +230,7 @@ namespace QdratNew.Areas.Admin.Controllers
                     BranchId = b.BranchId,
                     Gender = b.Gender,
                     IsArchived = b.IsArchived,
+                    IsOnlineLearning = b.IsOnlineLearning, // OLC-S2.1: شارة «أونلاين»
                     LecturesCount = lectureCounts.TryGetValue(b.Id, out var lecturesCount) ? lecturesCount : 0,
                     StudentsCount = studentCounts.TryGetValue(b.Id, out var studentsCount) ? studentsCount : 0,
 
@@ -580,12 +610,12 @@ namespace QdratNew.Areas.Admin.Controllers
 
 
         [AdminPermission("Batches", "Edit")]
-        public IActionResult Edit(int id)
+        public async Task<IActionResult> Edit(int id)
         {
-            var batch = _context.Batches
+            var batch = await _context.Batches
                 .Include(b => b.Course)
                 .Include(b => b.Branch)
-                .FirstOrDefault(b => b.Id == id);
+                .FirstOrDefaultAsync(b => b.Id == id);
 
             if (batch == null)
                 return NotFound();
@@ -598,12 +628,42 @@ namespace QdratNew.Areas.Admin.Controllers
                 EndDate = batch.EndDate,
                 CourseId = batch.CourseId,
                 BranchId = batch.BranchId, // ✅ مباشرة
-                Gender = batch.Gender
+                Gender = batch.Gender,
+                IsOnlineLearning = batch.IsOnlineLearning
             };
 
             PopulateDropdowns(model); // ✅ ضروري
+            model.OnlineLearning = await BuildOnlineLearningCardAsync(batch.Id, "Edit"); // OLC-S2.1
 
             return View(model);
+        }
+
+        // =====================================================
+        // OLC-S2.1 — تفعيل/إلغاء التعليم أونلاين للدفعة
+        // (الإلغاء لا يحذف محتوى ولا تقدّمًا؛ يُخفي القسم عن طلاب الدفعة فقط)
+        // =====================================================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [AdminPermission("Batches", "Edit")]
+        public async Task<IActionResult> SetOnlineLearning(int id, bool enable, string? returnTo)
+        {
+            if (!await CanAccessArchivedBatchAsync(id))
+                return BatchArchiveAccessDenied();
+
+            // OLC-S4.2 (R18): تفعيل/إلغاء دفعة شريك يتطلب LectureContents:ManagePartners (والبند R16 يُفحص في الخدمة)
+            if (await _lectureContentAdmin.GetBatchPartnerIdAsync(id, HttpContext.RequestAborted) is not null
+                && !(await _authorization.AuthorizeAsync(User, AdminPermissionPolicies.LectureContents_ManagePartners)).Succeeded)
+                return Forbid();
+
+            var result = await _lectureContentAdmin.SetBatchOnlineLearningAsync(id, enable, HttpContext.RequestAborted);
+            if (result.NotFound)
+                return NotFound();
+
+            TempData[result.Success ? "OlcBatchSuccess" : "OlcBatchError"] = result.Message;
+
+            return string.Equals(returnTo, "Details", StringComparison.Ordinal)
+                ? RedirectToAction(nameof(Details), new { id })
+                : RedirectToAction(nameof(Edit), new { id });
         }
 
 
@@ -1120,6 +1180,7 @@ namespace QdratNew.Areas.Admin.Controllers
             model.DiagnosisItems = BuildDiagnosis(model);
             model.AttendanceCalendar = BuildAttendanceCalendar(monthStart, nextMonthStart, attendanceRecords, today);
             model.HeatmapWeeks = BuildHeatmap(today, lectures, homeworkSets, examRows);
+            model.OnlineLearning = await BuildOnlineLearningCardAsync(batch.Id, "Details"); // OLC-S2.1
 
             return View(model);
         }

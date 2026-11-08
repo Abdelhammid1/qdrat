@@ -1,4 +1,5 @@
 ﻿// المسار: ViewModels/BatchViewModel.cs
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using QdratNew.Entities;
@@ -50,6 +51,13 @@ namespace QdratNew.ViewModels.Batch
 
         [ValidateNever] // ✅ تجاهل التحقق لهذا الحقل
         public IEnumerable<SelectListItem> Branches { get; set; } // ✅ الجديد
+
+        // OLC-S2.1: للعرض فقط (شارة «أونلاين» + بطاقة التفعيل) — لا تُقرأ من الطلب؛ التفعيل عبر SetOnlineLearning
+        [BindNever, ValidateNever]
+        public bool IsOnlineLearning { get; set; }
+
+        [BindNever, ValidateNever]
+        public QdratNew.ViewModels.OnlineLecture.BatchOnlineLearningSummaryVm? OnlineLearning { get; set; }
 
     }
 }

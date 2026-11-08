@@ -32,6 +32,11 @@ namespace QdratNew.ViewModels.Lecture
         public List<LectureAttendanceStudentRow> AttendanceRecords { get; set; } = new();
         public List<string> LessonTitles { get; set; } = new();
 
+        // OLC-S2.3: المحتوى التعليمي أونلاين
+        public bool BatchIsOnlineLearning { get; set; }
+        public QdratNew.Enums.LectureContentStatus? OnlineContentStatus { get; set; }
+        public bool CanViewOnlineContent { get; set; }
+
         public bool IsCompleted => ActualEndTime.HasValue;
         public bool IsStarted => ActualStartTime.HasValue;
 

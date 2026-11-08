@@ -7,6 +7,9 @@ namespace QdratNew.ViewModels.Batch
     {
         public int Id { get; set; }
 
+        /// <summary>OLC-S2.1: بطاقة «التعليم أونلاين» (null إن تعذّر تحميلها).</summary>
+        public QdratNew.ViewModels.OnlineLecture.BatchOnlineLearningSummaryVm? OnlineLearning { get; set; }
+
         public string Name { get; set; } = string.Empty;
 
         public string CourseName { get; set; } = "غير محدد";
