@@ -259,6 +259,206 @@ namespace QdratNew.Tests.OnlineLecture
             Assert.Contains(link, on);
         }
 
+        // ───────────── OLC-S6: المشغّل المحمي ─────────────
+
+        private async Task<(HttpStatusCode Status, string Html, string? Location)> GetRawAsync(HttpClient client, string url)
+        {
+            var response = await client.GetAsync(url);
+            return (response.StatusCode, WebUtility.HtmlDecode(await response.Content.ReadAsStringAsync()), response.Headers.Location?.OriginalString);
+        }
+
+        [Fact]
+        public async Task Watch_OpenFullVideo_RendersProtectedPlayer_WithServerWatermark_AndNoStore()
+        {
+            var client = StudentClient(_studentAUser);
+            var response = await client.GetAsync($"/Students/OnlineLearning/Watch/{_content1}");
+            var html = WebUtility.HtmlDecode(await response.Content.ReadAsStringAsync());
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Contains("no-store", response.Headers.CacheControl?.ToString() ?? string.Empty);
+
+            var who = await WithDbAsync(db => db.Students.AsNoTracking()
+                .Where(s => s.StudentID == _seed.ActiveStudentA).Select(s => new { s.FullName, s.NationalID }).FirstAsync());
+            Assert.Contains(who.FullName, html);                         // P1
+            Assert.Contains(who.NationalID.Trim(), html);
+            Assert.Contains("olc-watermark-a", html);
+            Assert.Contains("olc-watermark-b", html);
+            Assert.Contains("olcPlayerShield", html);                    // P2
+            Assert.Contains("online-lecture-player.js", html);
+            Assert.Contains($"data-external-id=\"{FullVideoId}\"", html); // المحاضرة المفتوحة فقط
+            Assert.Contains($"https://www.youtube-nocookie.com/embed/{FullVideoId}", html);   // R8 من الخادم
+            Assert.DoesNotContain(ItemVideoId, html);                    // P6: المحاضرة المقفلة لا تُكشف
+            Assert.DoesNotContain("وضع المراجعة", html);
+        }
+
+        [Fact]
+        public async Task Watch_LockedLecture_RedirectsWithMessage_AndLeaksNoSource()
+        {
+            var client = StudentClient(_studentAUser);
+
+            var (status, html, location) = await GetRawAsync(client, $"/Students/OnlineLearning/Watch/{_content2}");
+            Assert.Equal(HttpStatusCode.Redirect, status);                // R15
+            Assert.Equal("/Students/OnlineLearning", location);
+            Assert.DoesNotContain(ItemVideoId, html);
+            Assert.DoesNotContain("vimeo", html, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task Watch_AfterCompletion_PreviousInReview_NextOpensWithItemSource()
+        {
+            await DbAsync(async db =>
+            {
+                db.LectureContentProgress.Add(new LectureContentProgress
+                {
+                    LectureContentId = _content1, StudentId = _seed.ActiveStudentA, WatchedSeconds = 600, MaxPositionSeconds = 600,
+                    DurationSeconds = 600, EndedSeen = true, IsCompleted = true, CompletedAtUtc = DateTime.UtcNow, CreatedAt = DateTime.UtcNow
+                });
+                await db.SaveChangesAsync();
+            });
+            var client = StudentClient(_studentAUser);
+
+            var (status, review) = await GetAsync(client, $"/Students/OnlineLearning/Watch/{_content1}");
+            Assert.Equal(HttpStatusCode.OK, status);
+            Assert.Contains("وضع المراجعة", review);                       // P11
+            Assert.Contains("data-review=\"1\"", review);
+            Assert.Contains($"/Students/OnlineLearning/Watch/{_content2}", review);   // المحاضرة التالية مفتوحة
+
+            (status, var items) = await GetAsync(client, $"/Students/OnlineLearning/Watch/{_content2}");
+            Assert.Equal(HttpStatusCode.OK, status);
+            Assert.Contains("olcItemList", items);
+            Assert.Contains($"data-external-id=\"{ItemVideoId}\"", items);
+            Assert.Contains($"https://player.vimeo.com/video/{ItemVideoId}", items);
+        }
+
+        [Fact]
+        public async Task Watch_OtherBatchContent_Withdrawn_AndFeatureOff_Return404()
+        {
+            var otherBatchContent = await WithDbAsync(db => db.LectureContents.AsNoTracking()
+                .Where(c => c.Title == "OLCS5 محتوى دفعة B").Select(c => c.Id).FirstAsync());
+
+            var (status, _) = await GetAsync(StudentClient(_studentAUser), $"/Students/OnlineLearning/Watch/{otherBatchContent}");
+            Assert.Equal(HttpStatusCode.NotFound, status);                 // IDOR: دفعة أخرى
+            (status, _) = await GetAsync(StudentClient(_withdrawnUser), $"/Students/OnlineLearning/Watch/{_content1}");
+            Assert.Equal(HttpStatusCode.NotFound, status);                 // تسجيل غير نشط
+            (status, _) = await GetAsync(StudentClient(_studentAUser), "/Students/OnlineLearning/Watch/999999999");
+            Assert.Equal(HttpStatusCode.NotFound, status);
+
+            await DbAsync(db => db.SystemSettings.Where(s => s.Key == FeatureKey)
+                .ExecuteUpdateAsync(s => s.SetProperty(x => x.Value, "false")));
+            ResetCaches();
+            (status, _) = await GetAsync(StudentClient(_studentAUser), $"/Students/OnlineLearning/Watch/{_content1}");
+            Assert.Equal(HttpStatusCode.NotFound, status);
+            await DbAsync(db => db.SystemSettings.Where(s => s.Key == FeatureKey)
+                .ExecuteUpdateAsync(s => s.SetProperty(x => x.Value, "true")));
+            ResetCaches();
+        }
+
+        [Fact]
+        public async Task Index_ShowsWatchLinks_ForOpenLecturesOnly()
+        {
+            var (status, html) = await GetAsync(StudentClient(_studentAUser), "/Students/OnlineLearning");
+            Assert.Equal(HttpStatusCode.OK, status);
+            Assert.Contains($"href=\"/Students/OnlineLearning/Watch/{_content1}\"", html);
+            Assert.DoesNotContain($"/Students/OnlineLearning/Watch/{_content2}", html);   // المقفلة بلا رابط
+        }
+
+        // ───────────── OLC-S7.1: النبضة عبر HTTP (AntiForgery + R2/R13 + التحديث الذرّي على SQL Server) ─────────────
+
+        private async Task<(HttpStatusCode Status, System.Text.Json.JsonElement Body)> PingAsync(
+            string userId, object body, bool withToken = true)
+        {
+            var client = StudentClient(userId);
+            var request = new HttpRequestMessage(HttpMethod.Post, "/Students/OnlineLearning/Ping")
+            {
+                Content = new StringContent(System.Text.Json.JsonSerializer.Serialize(body), System.Text.Encoding.UTF8, "application/json")
+            };
+            if (withToken)
+            {
+                var (cookie, token) = _factory.CreateValidAntiForgeryTokens(userId);
+                request.Headers.Add("Cookie", cookie);
+                request.Headers.Add("RequestVerificationToken", token);
+            }
+            var response = await client.SendAsync(request);
+            var text = await response.Content.ReadAsStringAsync();
+            var json = string.IsNullOrWhiteSpace(text) || !text.TrimStart().StartsWith("{")
+                ? default
+                : System.Text.Json.JsonDocument.Parse(text).RootElement.Clone();
+            return (response.StatusCode, json);
+        }
+
+        [Fact]
+        public async Task Ping_RejectsWithoutAntiForgery_LockedIs409_OtherBatchIs404_WithoutWrites()
+        {
+            var (status, _) = await PingAsync(_studentAUser, new { lectureContentId = _content1, state = "playing", position = 0, duration = 600 }, withToken: false);
+            Assert.Equal(HttpStatusCode.BadRequest, status);                               // CSRF
+
+            (status, var locked) = await PingAsync(_studentAUser, new { lectureContentId = _content2, itemId = 1, state = "playing", position = 0, duration = 100 });
+            Assert.Equal(HttpStatusCode.Conflict, status);                                 // R13 على الخادم
+            Assert.Equal("locked", locked.GetProperty("reason").GetString());
+
+            var otherBatchContent = await WithDbAsync(db => db.LectureContents.AsNoTracking()
+                .Where(c => c.Title == "OLCS5 محتوى دفعة B").Select(c => c.Id).FirstAsync());
+            (status, var missing) = await PingAsync(_studentAUser, new { lectureContentId = otherBatchContent, state = "playing", position = 0, duration = 600 });
+            Assert.Equal(HttpStatusCode.NotFound, status);                                 // IDOR
+            Assert.Equal("notfound", missing.GetProperty("reason").GetString());
+
+            (status, _) = await PingAsync(_withdrawnUser, new { lectureContentId = _content1, state = "playing", position = 0, duration = 600 });
+            Assert.Equal(HttpStatusCode.NotFound, status);
+
+            var rows = await WithDbAsync(db => db.LectureContentProgress.AsNoTracking().CountAsync(p => p.LectureContentId == _content1));
+            var itemRows = await WithDbAsync(db => db.LectureContentItemProgress.AsNoTracking()
+                .CountAsync(p => p.LectureContentItem.LectureContentId == _content2));
+            Assert.Equal(0, rows);
+            Assert.Equal(0, itemRows);
+        }
+
+        [Fact]
+        public async Task Ping_RecordsServerTimedProgress_ThenCompletion_UnlocksNextLecture()
+        {
+            // أول نبضة تُنشئ الصف، والثانية تمر على ExecuteUpdate بشرط LastPingAtUtc
+            var (status, first) = await PingAsync(_studentAUser, new { lectureContentId = _content1, state = "playing", position = 0, duration = 600 });
+            Assert.Equal(HttpStatusCode.OK, status);
+            Assert.True(first.GetProperty("ok").GetBoolean());
+            Assert.Equal(480, first.GetProperty("requiredSeconds").GetInt32());
+
+            (status, var paused) = await PingAsync(_studentAUser, new { lectureContentId = _content1, state = "paused", position = 590, duration = 600 });
+            Assert.Equal(HttpStatusCode.OK, status);
+            Assert.False(paused.GetProperty("completed").GetBoolean());
+
+            var row = await WithDbAsync(db => db.LectureContentProgress.AsNoTracking()
+                .SingleAsync(p => p.LectureContentId == _content1 && p.StudentId == _seed.ActiveStudentA));
+            Assert.True(row.MaxPositionSeconds < 10);                                      // P4: الموضع المزيّف لا يُقبل
+            Assert.Equal("paused", row.LastPingState);
+            Assert.NotNull(row.UpdatedAt);
+
+            // محاكاة مشاهدة طويلة سابقة: آخر نبضة playing قبل 15ث ورصيد 470ث
+            var lastPing = DateTime.UtcNow.AddSeconds(-15);
+            await DbAsync(db => db.LectureContentProgress.Where(p => p.Id == row.Id).ExecuteUpdateAsync(s => s
+                .SetProperty(p => p.WatchedSeconds, 470)
+                .SetProperty(p => p.MaxPositionSeconds, 588)
+                .SetProperty(p => p.LastPingState, "playing")
+                .SetProperty(p => p.LastPingAtUtc, (DateTime?)lastPing)));
+
+            (status, var done) = await PingAsync(_studentAUser, new { lectureContentId = _content1, state = "ended", position = 600, duration = 600 });
+            Assert.Equal(HttpStatusCode.OK, status);
+            Assert.True(done.GetProperty("completed").GetBoolean());
+            Assert.True(done.GetProperty("lectureCompleted").GetBoolean());
+            Assert.True(done.GetProperty("nextLectureUnlocked").GetBoolean());
+
+            // الخادم فتح التالية فعلًا (R15) ونبضة الإعادة idempotent
+            var (watchStatus, _) = await GetAsync(StudentClient(_studentAUser), $"/Students/OnlineLearning/Watch/{_content2}");
+            Assert.Equal(HttpStatusCode.OK, watchStatus);
+            (status, var again) = await PingAsync(_studentAUser, new { lectureContentId = _content1, state = "playing", position = 10, duration = 600 });
+            Assert.Equal(HttpStatusCode.OK, status);
+            Assert.True(again.GetProperty("completed").GetBoolean());
+        }
+
+        private async Task<T> WithDbAsync<T>(Func<ApplicationDbContext, Task<T>> action)
+        {
+            using var scope = _factory.Services.CreateScope();
+            return await action(scope.ServiceProvider.GetRequiredService<ApplicationDbContext>());
+        }
+
         [Fact]
         public async Task FeatureOff_Returns404_AndHidesMenuLink()
         {

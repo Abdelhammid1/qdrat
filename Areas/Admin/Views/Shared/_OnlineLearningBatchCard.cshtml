@@ -108,4 +108,62 @@
             }
         </div>
     }
+
+    @if (Model.Kpis is { HasData: true } kpis)
+    {
+        @* OLC-S7.4 — مؤشرات الدفعة الأونلاين من البيانات الحقيقية فقط *@
+        <div class="olc-kpis" aria-label="مؤشرات التعليم أونلاين للدفعة">
+            <div class="olc-kpis__grid">
+                <div class="olc-kpi">
+                    <span>المحاضرات المنشورة</span>
+                    <strong>@kpis.PublishedPercent%</strong>
+                    <small>@kpis.PublishedCount من @kpis.LecturesCount محاضرة</small>
+                </div>
+                <div class="olc-kpi">
+                    <span>متوسط زمن النشر بعد المحاضرة</span>
+                    <strong>@DelayText(kpis.AveragePublishDelayHours)</strong>
+                    <small>@(kpis.PublishDelaySamples > 0 ? $"من {kpis.PublishDelaySamples} محاضرة منشورة (أول نشر)" : "لا توجد بيانات نشر بعد")</small>
+                </div>
+                <div class="olc-kpi">
+                    <span>الطلاب المسجّلون النشطون</span>
+                    <strong>@kpis.EnrolledCount</strong>
+                    <small>أساس نسب الإتمام</small>
+                </div>
+            </div>
+            @if (kpis.Curricula.Count > 0)
+            {
+                <h4 class="olc-kpis__title">نسبة الإتمام لكل منهج</h4>
+                <ul class="olc-kpis__list">
+                    @foreach (var cur in kpis.Curricula)
+                    {
+                        <li>
+                            <div class="olc-kpis__row">
+                                <span class="olc-kpis__name">@cur.Title</span>
+                                <span class="olc-kpis__pct">@cur.CompletionPercent%</span>
+                            </div>
+                            <div class="olc-kpis__bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@cur.CompletionPercent" aria-label="نسبة الإتمام في @cur.Title">
+                                <span style="width:@(cur.CompletionPercent)%"></span>
+                            </div>
+                            <small>@cur.PublishedLectures محاضرة منشورة · أتمّ كل المنشور: @cur.StudentsCompletedAll من @kpis.EnrolledCount طالب</small>
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    }
 </section>
+
+@functions {
+    // متوسط بالساعات ⇒ نص مقروء؛ السالب = نُشر قبل موعد المحاضرة
+    private static string DelayText(double? hours)
+    {
+        if (!hours.HasValue)
+            return "—";
+
+        var h = Math.Abs(hours.Value);
+        var amount = h < 1 ? $"{Math.Round(h * 60)} دقيقة"
+            : h < 48 ? $"{Math.Round(h, 1)} ساعة"
+            : $"{Math.Round(h / 24, 1)} يوم";
+        return hours.Value < 0 ? $"قبلها بـ {amount}" : amount;
+    }
+}

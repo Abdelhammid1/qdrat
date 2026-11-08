@@ -15,15 +15,18 @@ namespace QdratNew.Services.OnlineLecture
         private readonly ApplicationDbContext _db;
         private readonly ILogger<LectureContentAdminService> _logger;
         private readonly IPartnerEducationalContentPolicy _partnerPolicy; // OLC-S4.1 (R16)
+        private readonly QdratNew.Services.Interfaces.ITimeZoneService _tz; // OLC-S7.4: موعد المحاضرة (توقيت السعودية) ← UTC
 
         public LectureContentAdminService(
             ApplicationDbContext db,
             ILogger<LectureContentAdminService> logger,
-            IPartnerEducationalContentPolicy? partnerPolicy = null)
+            IPartnerEducationalContentPolicy? partnerPolicy = null,
+            QdratNew.Services.Interfaces.ITimeZoneService? timeZone = null)
         {
             _db = db;
             _logger = logger;
             _partnerPolicy = partnerPolicy ?? new PartnerEducationalContentPolicy(db);
+            _tz = timeZone ?? new QdratNew.Services.Implementations.TimeZoneService();
         }
 
         // ═══════════════════════════ القراءة ═══════════════════════════

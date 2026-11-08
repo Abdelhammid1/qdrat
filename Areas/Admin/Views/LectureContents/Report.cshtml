@@ -1,0 +1,261 @@
+@model QdratNew.ViewModels.OnlineLecture.LectureContentReportVm
+@using QdratNew.Enums
+@using QdratNew.ViewModels.OnlineLecture
+@inject QdratNew.Services.Interfaces.ITimeZoneService Tz
+@{
+    ViewData["Title"] = "تقرير المشاهدة — " + Model.LectureTitle;
+    var isFull = Model.Mode == LectureContentMode.FullVideo;
+
+    string Saudi(DateTime? utc) => utc.HasValue ? Tz.ConvertToSaudi(utc.Value).ToString("yyyy/MM/dd HH:mm") : "—";
+    string Fmt(int? seconds)
+    {
+        var s = Math.Max(0, seconds ?? 0);
+        return s >= 3600 ? $"{s / 3600}:{(s % 3600) / 60:00}:{s % 60:00}" : $"{s / 60}:{s % 60:00}";
+    }
+    string StatusText(LectureContentStatus s) => s switch
+    {
+        LectureContentStatus.Published => "منشور",
+        LectureContentStatus.Hidden => "مخفي",
+        _ => "مسودة"
+    };
+    string StatusCss(LectureContentStatus s) => s switch
+    {
+        LectureContentStatus.Published => "olc-badge--published",
+        LectureContentStatus.Hidden => "olc-badge--hidden",
+        _ => "olc-badge--draft"
+    };
+    var enrolled = Model.EnrolledCount;
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/admin-olc.css" asp-append-version="true" />
+}
+
+@* OLC-S7.3 — تقرير المشاهدة لمحاضرة: بيانات حقيقية من نبضات المشاهدة بزمن الخادم فقط (لا تقديرات). *@
+<div class="olc-page py-3" dir="rtl">
+
+    <section class="olc-hero">
+        <div class="olc-hero__top">
+            <div>
+                <div class="olc-hero__label"><i class="fas fa-chart-bar"></i> تقرير المشاهدة</div>
+                <h1>@Model.ContentTitle</h1>
+                <p>@Model.LectureTitle · @Model.BatchName</p>
+                <div class="olc-hero__meta">
+                    <span class="olc-hero__chip">@Model.LectureDate.ToString("yyyy/MM/dd")</span>
+                    @if (!string.IsNullOrWhiteSpace(Model.CurriculumTitle))
+                    {
+                        <span class="olc-hero__chip">المنهج: @Model.CurriculumTitle</span>
+                    }
+                    <span class="olc-hero__chip">المحور: @Model.SectionTitle</span>
+                    <span class="olc-hero__chip">@(isFull ? "فيديو كامل" : "فيديوهات المؤشرات")</span>
+                    @if (Model.SequenceCount > 0 && Model.SequencePosition > 0)
+                    {
+                        <span class="olc-hero__chip">ترتيبها في المنهج: @Model.SequencePosition من @Model.SequenceCount</span>
+                    }
+                </div>
+            </div>
+            <div class="olc-hero__actions">
+                <a class="olc-btn olc-btn--light" asp-area="Admin" asp-controller="LectureContents" asp-action="Edit" asp-route-lectureId="@Model.LectureId">
+                    <i class="fas fa-arrow-right"></i> المحتوى التعليمي
+                </a>
+                <a class="olc-btn olc-btn--light" asp-area="Admin" asp-controller="Lectures" asp-action="Lectures" asp-route-batchId="@Model.BatchId">
+                    <i class="fas fa-list"></i> محاضرات الدفعة
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <div class="olc-alert olc-alert--info" role="note">
+        <i class="fas fa-info-circle"></i>
+        الحالة: <span class="olc-badge @StatusCss(Model.Status)">@StatusText(Model.Status)</span>
+        @if (Model.PublishedAt.HasValue)
+        {
+            <text> · أول نشر: @Saudi(Model.PublishedAt)</text>
+        }
+        · الأرقام من نبضات المشاهدة المسجّلة على الخادم، و«المسجّلون» = تسجيل نشط في الدفعة لطالب نشط (نفس شرط وصول الطالب).
+        @if (!Model.IsPublished)
+        {
+            <div class="mt-1">المحتوى غير منشور الآن: لا يراه الطلاب، والتقدّم المعروض محفوظ من فترة النشر، ولا يُحسب «المتوقف عند القفل».</div>
+        }
+        @if (!Model.FeatureEnabled)
+        {
+            <div class="mt-1">الميزة مغلقة للطلاب على مستوى المنصة حاليًا.</div>
+        }
+    </div>
+
+    @* ════ المؤشرات ════ *@
+    <div class="olc-report-kpis">
+        <div class="olc-kpi">
+            <span>المسجّلون</span>
+            <strong>@enrolled</strong>
+            <small>طالب نشط في الدفعة</small>
+        </div>
+        <div class="olc-kpi">
+            <span>بدأوا المشاهدة</span>
+            <strong>@Model.StartedCount</strong>
+            <small>@LectureContentReportVm.Percent(Model.StartedCount, enrolled)% من المسجّلين</small>
+        </div>
+        <div class="olc-kpi olc-kpi--ok">
+            <span>أتمّوا المحاضرة</span>
+            <strong>@Model.CompletedCount</strong>
+            <small>@LectureContentReportVm.Percent(Model.CompletedCount, enrolled)% من المسجّلين</small>
+        </div>
+        <div class="olc-kpi olc-kpi--warn">
+            <span>متوقفون عند القفل</span>
+            <strong>@Model.LockedCount</strong>
+            <small>لم يُتمّوا محاضرة سابقة في المنهج</small>
+        </div>
+        <div class="olc-kpi">
+            <span>لم يبدأوا</span>
+            <strong>@Model.NotStartedCount</strong>
+            <small>المحاضرة مفتوحة لهم</small>
+        </div>
+    </div>
+
+    @* ════ الفصول / الفيديوهات ════ *@
+    <section class="olc-panel">
+        <h2 class="mb-2"><i class="fas @(isFull ? "fa-bookmark" : "fa-list-ol")"></i> @(isFull ? "الفصول" : "فيديوهات المؤشرات")</h2>
+        @if (Model.Items.Count == 0)
+        {
+            <div class="olc-empty">
+                <i class="fas fa-film fa-2x mb-2" aria-hidden="true"></i>
+                <p class="mb-0">@(isFull ? "هذه المحاضرة فيديو واحد بلا فصول — راجع جدول الطلاب أدناه." : "لا توجد فيديوهات نشطة في هذه المحاضرة.")</p>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-sm align-middle olc-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>@(isFull ? "الفصل" : "الفيديو")</th>
+                            @if (isFull)
+                            {
+                                <th>التوقيت</th>
+                            }
+                            <th title="من وصل داخل هذا الجزء">بدأوه</th>
+                            <th title="@(isFull ? "أبعد موضع ≥ نهاية الفصل − 3ث" : "شاهد النهاية (ended)")">وصلوا لنهايته</th>
+                            @if (!isFull)
+                            {
+                                <th title="ended + 80% من المدة">أتمّوه</th>
+                            }
+                            <th title="بدأ المحاضرة ولم يُتمّها وهذا أول جزء لم يصل لنهايته">متوقفون عنده</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var part in Model.Items)
+                        {
+                            <tr>
+                                <td>@part.Position</td>
+                                <td>
+                                    <strong>@part.Title</strong>
+                                    @if (!string.IsNullOrWhiteSpace(part.LessonTitle) && part.LessonTitle != part.Title)
+                                    {
+                                        <div class="olc-muted">@part.LessonTitle</div>
+                                    }
+                                </td>
+                                @if (isFull)
+                                {
+                                    <td><bdi dir="ltr">@Fmt(part.StartSeconds) – @Fmt(part.EndSeconds)</bdi></td>
+                                }
+                                <td>@part.StartedCount</td>
+                                <td>@part.ReachedEndCount <span class="olc-muted">(@LectureContentReportVm.Percent(part.ReachedEndCount, enrolled)%)</span></td>
+                                @if (!isFull)
+                                {
+                                    <td>@part.CompletedCount</td>
+                                }
+                                <td>@part.StoppedHereCount</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    @* ════ الطلاب ════ *@
+    <section class="olc-panel" id="olcReportStudents">
+        <h2 class="mb-2"><i class="fas fa-user-graduate"></i> الطلاب (@enrolled)</h2>
+        @if (Model.Students.Count == 0)
+        {
+            <div class="olc-empty">
+                <i class="fas fa-users-slash fa-2x mb-2" aria-hidden="true"></i>
+                <p class="mb-0">لا يوجد طلاب مسجّلون نشطون في هذه الدفعة.</p>
+            </div>
+        }
+        else
+        {
+            <div class="olc-report-filter" role="group" aria-label="تصفية الطلاب حسب الحالة">
+                <button type="button" data-filter="" aria-pressed="true">الكل (@enrolled)</button>
+                <button type="button" data-filter="@((int)LectureReportStudentState.InProgress)" aria-pressed="false">بدأ (@Model.InProgressCount)</button>
+                <button type="button" data-filter="@((int)LectureReportStudentState.Locked)" aria-pressed="false">متوقف عند القفل (@Model.LockedCount)</button>
+                <button type="button" data-filter="@((int)LectureReportStudentState.NotStarted)" aria-pressed="false">لم يبدأ (@Model.NotStartedCount)</button>
+                <button type="button" data-filter="@((int)LectureReportStudentState.Completed)" aria-pressed="false">أتمّ (@Model.CompletedCount)</button>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle olc-table olc-report-table">
+                    <thead>
+                        <tr>
+                            <th>الطالب</th>
+                            <th>الحالة</th>
+                            <th>التقدّم</th>
+                            <th>@(isFull ? "فصول وصل لنهايتها" : "فيديوهات مكتملة")</th>
+                            <th>المشاهدة المحتسبة</th>
+                            <th>توقف عند</th>
+                            <th>آخر نشاط</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var s in Model.Students)
+                        {
+                            <tr data-state="@((int)s.State)">
+                                <td>@s.FullName</td>
+                                <td><span class="olc-badge @LectureReportStudentStateText.Css(s.State)">@LectureReportStudentStateText.Label(s.State)</span></td>
+                                <td>
+                                    @s.ProgressPercent%
+                                    <span class="olc-report-bar" aria-hidden="true"><span style="width:@(s.ProgressPercent)%"></span></span>
+                                </td>
+                                <td>@s.CompletedParts@(Model.Items.Count > 0 ? " / " + Model.Items.Count : "")</td>
+                                <td><bdi dir="ltr">@Fmt(s.WatchedSeconds)</bdi></td>
+                                <td>@(s.StoppedAt ?? "—")</td>
+                                <td>
+                                    @Saudi(s.LastActivityUtc)
+                                    @if (s.CompletedAtUtc.HasValue)
+                                    {
+                                        <div class="olc-muted">أتمّ: @Saudi(s.CompletedAtUtc)</div>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <p class="olc-muted mb-0" id="olcReportEmptyFilter" hidden>لا يوجد طلاب بهذه الحالة.</p>
+        }
+    </section>
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            var root = document.getElementById('olcReportStudents');
+            if (!root || root.dataset.bound === '1') return;
+            root.dataset.bound = '1';
+            var empty = document.getElementById('olcReportEmptyFilter');
+            root.addEventListener('click', function (e) {
+                var btn = e.target.closest('.olc-report-filter button');
+                if (!btn) return;
+                var f = btn.dataset.filter;
+                root.querySelectorAll('.olc-report-filter button').forEach(function (b) { b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'); });
+                var shown = 0;
+                root.querySelectorAll('tbody tr[data-state]').forEach(function (tr) {
+                    var on = !f || tr.dataset.state === f;
+                    tr.hidden = !on;
+                    if (on) shown++;
+                });
+                if (empty) empty.hidden = shown > 0;
+            });
+        })();
+    </script>
+}

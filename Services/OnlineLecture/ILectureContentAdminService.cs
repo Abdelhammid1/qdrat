@@ -81,5 +81,13 @@ namespace QdratNew.Services.OnlineLecture
 
         /// <summary>شاشة «الدفعات الأونلاين»: «المنصة» أو «الشركاء» (عدة شركاء) مع حالة البند لكل شريك ودفعة.</summary>
         Task<OnlineBatchesPageVm> GetOnlineBatchesAsync(OnlineBatchesFilterVm filter, bool canManagePartners, CancellationToken ct = default);
+
+        // ═══════════════ OLC-S7.3/S7.4 — المتابعة (بيانات حقيقية فقط) ═══════════════
+
+        /// <summary>تقرير المشاهدة لمحتوى المحاضرة: المسجّلون/من بدأ/من أتم/المتوقف عند القفل + إحصاء كل فصل/فيديو + الطلاب. null = لا محتوى.</summary>
+        Task<LectureContentReportVm?> GetReportAsync(int lectureId, CancellationToken ct = default);
+
+        /// <summary>KPIs الدفعة الأونلاين: نسبة المنشور، متوسط زمن النشر بعد المحاضرة، نسبة الإتمام لكل منهج.</summary>
+        Task<OnlineBatchKpisVm> GetBatchKpisAsync(int batchId, CancellationToken ct = default);
     }
 }

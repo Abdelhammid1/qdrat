@@ -261,6 +261,24 @@ namespace QdratNew.Areas.Admin.Controllers
             return result.NotFound ? NotFound() : BackToBasic(lectureId.Value, result);
         }
 
+        // ═══════════════════════════ OLC-S7.3 — تقرير المشاهدة ═══════════════════════════
+
+        // GET /Admin/LectureContents/Report?lectureId=5 — قراءة فقط من بيانات التقدّم الحقيقية
+        [HttpGet]
+        [AdminPermission("LectureContents", "Read")]
+        public async Task<IActionResult> Report(int lectureId, CancellationToken ct)
+        {
+            if (await PartnerGuardAsync(lectureId, ct) is { } denied)
+                return denied;
+
+            var vm = await _service.GetReportAsync(lectureId, ct);
+            if (vm is null)
+                return NotFound();
+
+            vm.FeatureEnabled = await _feature.IsEnabledAsync(ct);
+            return View(vm);
+        }
+
         // ═══════════════════════════ OLC-S4.2 — «الدفعات الأونلاين» ═══════════════════════════
 
         // GET /Admin/LectureContents/Batches?audience=2&partnerIds=1&partnerIds=2

@@ -229,6 +229,9 @@ namespace QdratNew.ViewModels.OnlineLecture
         public string? PartnerBlockReason { get; set; }
         public bool IsPartnerBatch => PartnerId.HasValue;
 
+        /// <summary>OLC-S7.4: مؤشرات الدفعة (null = لا تُعرض: لا محتوى، أو دفعة شريك بلا ManagePartners).</summary>
+        public OnlineBatchKpisVm? Kpis { get; set; }
+
         // يملؤها الـ Controller
         public bool CanToggle { get; set; }
         public bool FeatureEnabled { get; set; }

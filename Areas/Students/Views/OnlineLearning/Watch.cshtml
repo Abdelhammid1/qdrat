@@ -1,0 +1,240 @@
+@using QdratNew.Enums
+@model QdratNew.ViewModels.OnlineLecture.StudentLectureWatchVm
+@{
+    ViewData["Title"] = Model.Title;
+    var isFull = Model.Mode == LectureContentMode.FullVideo;
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+    // OLC-S7.1: النبضة (POST JSON + AntiForgery). إن تعذّر بناء المسار يعمل المشغّل بلا تسجيل تقدّم ويظهر تنبيه بذلك
+    var pingUrl = Url.Action("Ping", "OnlineLearning", new { area = "Students" });
+    var indexUrl = Url.Action("Index", "OnlineLearning", new { area = "Students" });
+    var nextUrl = Model.NextLectureContentId.HasValue
+        ? Url.Action("Watch", "OnlineLearning", new { area = "Students", id = Model.NextLectureContentId.Value })
+        : null;
+    var hasPlayableSource = isFull ? Model.Embed is not null : Model.Items.Any(i => i.Embed is not null);
+    // P6: قائمة المؤشرات — أول عنصر مفتوح غير مكتمل (يُعرض عنوانه كـ«يُعرض الآن»)
+    var firstOpen = isFull ? null : Model.Items.FirstOrDefault(i => i.IsUnlocked && !i.IsCompleted && i.Embed is not null);
+
+    static string Fmt(int? seconds)
+    {
+        var s = Math.Max(0, seconds ?? 0);
+        return s >= 3600 ? $"{s / 3600}:{(s % 3600) / 60:00}:{s % 60:00}" : $"{s / 60}:{s % 60:00}";
+    }
+}
+@section Styles {
+    <link href="~/css/student-olc.css" rel="stylesheet" asp-append-version="true" />
+}
+
+@* OLC-S6 — المشغّل المحمي (معيار C.7). القفل (R15) والمراجعة (P11) والمصدر (P6) كلها محسوبة على الخادم؛ الواجهة تعرض فقط. *@
+<div class="olc-page olc-watch-page" dir="rtl">
+    <header class="olc-hero">
+        <a class="olc-back" href="@indexUrl"><i class="fas fa-arrow-right" aria-hidden="true"></i> العودة إلى المحتوى التعليمي</a>
+        <div class="olc-hero-chips">
+            @if (!string.IsNullOrWhiteSpace(Model.CurriculumTitle))
+            {
+                <span class="olc-chip"><i class="fas fa-book" aria-hidden="true"></i> @Model.CurriculumTitle</span>
+            }
+            <span class="olc-chip"><i class="fas fa-sitemap" aria-hidden="true"></i> @Model.SectionTitle</span>
+            <span class="olc-chip"><i class="fas fa-calendar-day" aria-hidden="true"></i> @Model.LectureDate.ToString("yyyy/MM/dd", inv)</span>
+            <span class="olc-chip">
+                @if (isFull)
+                {
+                    <i class="fas fa-film" aria-hidden="true"></i> <span>فيديو كامل</span>
+                }
+                else
+                {
+                    <i class="fas fa-list-ol" aria-hidden="true"></i> <span>@Model.Items.Count فيديو للمؤشرات</span>
+                }
+            </span>
+        </div>
+        <div class="olc-hero-text">
+            <h1>@Model.Title</h1>
+            <p>@Model.LectureTitle</p>
+        </div>
+    </header>
+
+    @if (Model.IsReview)
+    {
+        <div class="olc-banner olc-banner-info" role="status" id="olcReviewBanner">
+            <i class="fas fa-eye" aria-hidden="true"></i>
+            <div><strong>وضع المراجعة:</strong> أتممت هذه المحاضرة. يمكنك التنقّل بحرية داخل الفيديو، ولا تُحتسب هذه المشاهدة.</div>
+        </div>
+    }
+    else if (string.IsNullOrEmpty(pingUrl))
+    {
+        <div class="olc-banner olc-banner-warn" role="status" id="olcNoTrackingBanner">
+            <i class="fas fa-circle-info" aria-hidden="true"></i>
+            <div>تسجيل التقدّم لهذه المحاضرة غير مفعّل بعد؛ يمكنك المشاهدة الآن، وسيُحتسب الإتمام بعد تفعيله.</div>
+        </div>
+    }
+
+    @if (!hasPlayableSource && (isFull || Model.Items.Count == 0))
+    {
+        <div class="olc-state olc-state-error" role="alert">
+            <div class="olc-state-ic" aria-hidden="true"><i class="fas fa-video-slash"></i></div>
+            <h2>الفيديو غير متاح حاليًا</h2>
+            <p>تعذّر تجهيز فيديو هذه المحاضرة. تواصل مع الإدارة.</p>
+            <a class="olc-btn" href="@indexUrl"><i class="fas fa-arrow-right" aria-hidden="true"></i> العودة للمحتوى</a>
+        </div>
+    }
+    else
+    {
+        <div id="olcWatchRoot"
+             class="olc-watch-layout"
+             data-content-id="@Model.Id"
+             data-mode="@(isFull ? "full" : "items")"
+             data-review="@(Model.IsReview ? "1" : "0")"
+             data-ping-url="@pingUrl"
+             data-next-url="@nextUrl"
+             data-provider="@(Model.Embed?.Provider.ToString())"
+             data-external-id="@(Model.Embed?.ExternalId)"
+             data-embed-url="@(Model.Embed?.EmbedUrl)"
+             data-duration="@(isFull ? Model.DurationSeconds?.ToString(inv) : null)"
+             data-required="@(isFull ? Model.RequiredSeconds.ToString(inv) : null)"
+             data-resume="@(isFull ? Model.ResumeAtSeconds.ToString(inv) : null)"
+             data-completed="@(Model.IsCompleted ? "1" : "0")">
+
+            @Html.AntiForgeryToken()
+
+            <section class="olc-card" aria-label="مشغّل الفيديو">
+                <div class="olc-now">
+                    <span class="olc-pill olc-pill-next"><i class="fas fa-circle-play" aria-hidden="true"></i> يُعرض الآن</span>
+                    <h2 id="olcNowTitle">@(isFull ? Model.Title : firstOpen?.DisplayTitle)</h2>
+                </div>
+                <div class="olc-player-wrap" id="olcPlayerWrap">
+                    <div id="olcPlayerHost" class="olc-player-host"></div>
+                    @* P2: طبقة حماية — تمنع النقر على عناصر المنصة وقائمة الكليك يمين؛ النقر عليها = تشغيل/إيقاف *@
+                    <div class="olc-player-shield" id="olcPlayerShield" aria-hidden="true"></div>
+                    @* P1: علامة مائية بهوية الطالب من الخادم — نسختان بمسارين مختلفين *@
+                    <div class="olc-watermark olc-watermark-a" aria-hidden="true"><span class="olc-wm-name">@Model.Watermark.Name</span>@if (!string.IsNullOrEmpty(Model.Watermark.NationalId)){<span class="olc-wm-id">@Model.Watermark.NationalId</span>}</div>
+                    <div class="olc-watermark olc-watermark-b" aria-hidden="true"><span class="olc-wm-name">@Model.Watermark.Name</span>@if (!string.IsNullOrEmpty(Model.Watermark.NationalId)){<span class="olc-wm-id">@Model.Watermark.NationalId</span>}</div>
+                    @* P3: أدواتنا فقط (أدوات المنصة مخفية) *@
+                    <div class="olc-player-controls" id="olcPlayerControls" dir="ltr">
+                        <button type="button" id="olcBtnPlay" class="olc-ctl-btn" aria-label="تشغيل / إيقاف مؤقت"><i class="fas fa-play" aria-hidden="true"></i></button>
+                        <button type="button" id="olcBtnMute" class="olc-ctl-btn" aria-label="كتم / تشغيل الصوت"><i class="fas fa-volume-up" aria-hidden="true"></i></button>
+                        <span class="olc-ctl-time" id="olcTime">0:00 / 0:00</span>
+                        <input type="range" id="olcSeek" class="olc-seek" min="0" max="1000" value="0" step="1"
+                               aria-label="@(Model.IsReview ? "موضع الفيديو" : "موضع الفيديو (يمكنك الرجوع فقط داخل ما شاهدته)")" />
+                        <button type="button" id="olcBtnFull" class="olc-ctl-btn" aria-label="ملء الشاشة"><i class="fas fa-expand" aria-hidden="true"></i></button>
+                    </div>
+                </div>
+                <div class="olc-player-state" id="olcState" role="status" aria-live="polite"></div>
+                @if (!string.IsNullOrWhiteSpace(Model.Description))
+                {
+                    <p class="olc-description">@Model.Description</p>
+                }
+            </section>
+
+            <aside>
+                @if (isFull)
+                {
+                    <div class="olc-card">
+                        <div class="olc-side-head">
+                            <h2>فصول المحاضرة</h2>
+                            @if (Model.Items.Count > 0)
+                            {
+                                <span class="olc-side-count">@Model.CompletedItems / @Model.Items.Count</span>
+                            }
+                        </div>
+                        @if (Model.Items.Count == 0)
+                        {
+                            <p class="olc-curriculum-empty">هذه المحاضرة فيديو واحد بلا فصول.</p>
+                        }
+                        else
+                        {
+                            @* FullVideo: القفز لفصل فقط داخل ما شوهد (P4) — الشرط يُعاد في JS مقابل maxPos الحالي *@
+                            <ol class="olc-items" id="olcChapterList">
+                                @foreach (var ch in Model.Items)
+                                {
+                                    <li class="olc-item @(ch.ReachedEnd && !Model.IsReview ? "is-done" : "") @(ch.IsUnlocked ? "" : "is-locked")"
+                                        data-start="@(ch.StartSeconds ?? 0)" data-end="@(ch.EndSeconds?.ToString(inv) ?? "")">
+                                        <i class="olc-item-icon fas @(ch.ReachedEnd && !Model.IsReview ? "fa-circle-check" : ch.IsUnlocked ? "fa-bookmark" : "fa-lock")" aria-hidden="true"></i>
+                                        <span class="olc-item-body">
+                                            <span class="olc-item-title">@ch.DisplayTitle</span>
+                                            <span class="olc-item-meta">
+                                                <bdi dir="ltr">@Fmt(ch.StartSeconds) – @Fmt(ch.EndSeconds)</bdi>
+                                                @if (ch.ReachedEnd && !Model.IsReview)
+                                                {
+                                                    <span class="olc-reached"> · وصلتَ لنهايته</span>
+                                                }
+                                            </span>
+                                        </span>
+                                        <button type="button" class="olc-btn olc-btn-outline olc-go-chapter" aria-label="الانتقال إلى @ch.DisplayTitle">انتقال</button>
+                                    </li>
+                                }
+                            </ol>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="olc-card">
+                        <div class="olc-side-head">
+                            <h2>فيديوهات المؤشرات</h2>
+                            <span class="olc-side-count" id="olcItemsCount">@Model.CompletedItems / @Model.Items.Count</span>
+                        </div>
+                        @* R14 + P6: المصدر يُطبع فقط للمكتمل (مراجعة) والمفتوح الحالي والتالي مباشرة — يقرره الخادم *@
+                        <ol class="olc-items" id="olcItemList">
+                            @{ var position = 0; }
+                            @foreach (var item in Model.Items)
+                            {
+                                position++;
+                                var done = item.IsCompleted && !Model.IsReview;
+                                var canSelect = item.IsUnlocked && item.Embed is not null;
+                                <li class="olc-item @(done ? "is-done" : "") @(item.IsUnlocked ? "" : "is-locked")"
+                                    data-item-id="@item.Id"
+                                    data-title="@item.DisplayTitle"
+                                    data-provider="@(item.Embed?.Provider.ToString())"
+                                    data-external-id="@(item.Embed?.ExternalId)"
+                                    data-embed-url="@(item.Embed?.EmbedUrl)"
+                                    data-duration="@(item.DurationSeconds?.ToString(inv) ?? "")"
+                                    data-required="@item.RequiredSeconds"
+                                    data-resume="@item.ResumeAtSeconds"
+                                    data-completed="@(item.IsCompleted ? "1" : "0")"
+                                    data-unlocked="@(item.IsUnlocked ? "1" : "0")">
+                                    <i class="olc-item-icon fas @(done ? "fa-circle-check" : item.IsUnlocked ? "fa-circle-play" : "fa-lock")" aria-hidden="true"></i>
+                                    <span class="olc-item-body">
+                                        <span class="olc-item-title">@position. @item.DisplayTitle</span>
+                                        @if (!string.IsNullOrWhiteSpace(item.Title) && item.Title != item.LessonTitle && !string.IsNullOrWhiteSpace(item.LessonTitle))
+                                        {
+                                            <span class="olc-item-meta">@item.LessonTitle</span>
+                                        }
+                                        @if (!item.IsUnlocked)
+                                        {
+                                            <span class="olc-item-meta">أكمل الفيديو السابق أولًا</span>
+                                        }
+                                    </span>
+                                    @if (canSelect)
+                                    {
+                                        <button type="button" class="olc-btn olc-btn-outline olc-select-item">@(item.IsCompleted ? "مراجعة" : "مشاهدة")</button>
+                                    }
+                                </li>
+                            }
+                        </ol>
+                    </div>
+                }
+
+                @* المحاضرة التالية: تظهر عند إتمام هذه (من الخادم عند التحميل، أو من رد النبضة lectureCompleted/nextLectureUnlocked — P7) *@
+                <div class="olc-card olc-next-card" id="olcNextBox" hidden="@(!(Model.IsCompleted && (nextUrl is null || Model.NextLectureUnlocked)))">
+                    <h3><i class="fas fa-forward" aria-hidden="true"></i> المحاضرة التالية</h3>
+                    @if (Model.NextLectureContentId.HasValue)
+                    {
+                        <p>@Model.NextLectureTitle</p>
+                        <a class="olc-btn" href="@nextUrl" id="olcNextLink"><i class="fas fa-play" aria-hidden="true"></i> انتقل إليها</a>
+                    }
+                    else
+                    {
+                        <p>أتممت آخر محاضرة منشورة في هذا المنهج.</p>
+                        <a class="olc-btn olc-btn-outline" href="@indexUrl"><i class="fas fa-arrow-right" aria-hidden="true"></i> العودة للمحتوى</a>
+                    }
+                </div>
+            </aside>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    @if (hasPlayableSource || (!isFull && Model.Items.Count > 0))
+    {
+        <script src="~/js/online-lecture-player.js" asp-append-version="true"></script>
+    }
+}

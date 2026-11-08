@@ -580,7 +580,7 @@ namespace QdratNew.Tests.OnlineLecture
                          || (m.ReturnType.IsGenericType && typeof(IActionResult).IsAssignableFrom(m.ReturnType.GetGenericArguments()[0])))
                 .ToList();
 
-            Assert.Equal(new[] { "AddItem", "Batches", "Create", "Edit", "Hide", "Publish", "RefreshItem", "RemoveItem", "Reorder", "Save", "SaveChapters" }, // OLC-S4.2: Batches
+            Assert.Equal(new[] { "AddItem", "Batches", "Create", "Edit", "Hide", "Publish", "RefreshItem", "RemoveItem", "Reorder", "Report", "Save", "SaveChapters" }, // OLC-S4.2: Batches · OLC-S7.3: Report
                          actions.Select(a => a.Name).OrderBy(n => n, StringComparer.Ordinal));
             foreach (var m in actions)
             {

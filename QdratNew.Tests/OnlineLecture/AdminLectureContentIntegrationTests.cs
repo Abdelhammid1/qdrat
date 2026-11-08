@@ -273,6 +273,41 @@ namespace QdratNew.Tests.OnlineLecture
         }
 
         [Fact]
+        public async Task S7_Report_And_BatchKpis_OverHttp()
+        {
+            await DbAsync(db => db.Batches.Where(b => b.Id == _batchId).ExecuteUpdateAsync(s => s.SetProperty(b => b.IsOnlineLearning, true)));
+            await DbAsync(async db =>
+            {
+                db.LectureContents.Add(new LectureContent
+                {
+                    LectureId = _lectureId, Title = "OLCS7 تقرير", ContentMode = LectureContentMode.FullVideo, Status = LectureContentStatus.Published,
+                    VideoProvider = LectureVideoProvider.YouTube, VideoUrl = "https://youtu.be/dQw4w9WgXcQ", VideoExternalId = "dQw4w9WgXcQ",
+                    DurationSeconds = 600, PublishedAt = DateTime.UtcNow, PublishedByUserId = OwnerUser, CreatedAt = DateTime.UtcNow
+                });
+                return await db.SaveChangesAsync();
+            });
+
+            var report = await GetHtmlAsync($"/Admin/LectureContents/Report?lectureId={_lectureId}");
+            Assert.Contains("تقرير المشاهدة", report);
+            Assert.Contains("OLCS7 تقرير", report);
+            Assert.Contains("أتمّوا المحاضرة", report);
+            Assert.Contains("متوقفون عند القفل", report);
+
+            Assert.Contains($"/Admin/LectureContents/Report?lectureId={_lectureId}", await GetHtmlAsync($"/Admin/LectureContents/Edit?lectureId={_lectureId}"));
+
+            // S7.4: KPIs في بطاقة الدفعة
+            var details = await GetHtmlAsync($"/Admin/Batches/Details/{_batchId}");
+            Assert.Contains("المحاضرات المنشورة", details);
+            Assert.Contains("متوسط زمن النشر بعد المحاضرة", details);
+            Assert.Contains("نسبة الإتمام لكل منهج", details);
+
+            // بلا صلاحية ⇒ 403، ومحاضرة بلا محتوى ⇒ 404، والطالب لا يفتحها
+            Assert.Equal(HttpStatusCode.Forbidden, (await Client(NoPermUser, "Admin").GetAsync($"/Admin/LectureContents/Report?lectureId={_lectureId}")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, (await Client(OwnerUser, "Owner").GetAsync("/Admin/LectureContents/Report?lectureId=0")).StatusCode);
+            Assert.NotEqual(HttpStatusCode.OK, (await Client(OwnerUser, "Student").GetAsync($"/Admin/LectureContents/Report?lectureId={_lectureId}")).StatusCode);
+        }
+
+        [Fact]
         public async Task WithoutLectureContentsPermission_IsForbidden()
         {
             var get = await Client(NoPermUser, "Admin").GetAsync($"/Admin/LectureContents/Edit?lectureId={_lectureId}");

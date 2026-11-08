@@ -62,6 +62,15 @@ namespace QdratNew.Areas.Admin.Controllers
             if (summary.CanToggle && summary.IsPartnerBatch)
                 summary.CanToggle = (await _authorization.AuthorizeAsync(User, AdminPermissionPolicies.LectureContents_ManagePartners)).Succeeded;
 
+            // OLC-S7.4: KPIs الدفعة الأونلاين — فقط حين يوجد محتوى منشور، ولدفعة الشريك بصلاحية ManagePartners (R18)
+            if (summary.PublishedCount > 0)
+            {
+                var canSeeKpis = !summary.IsPartnerBatch
+                                 || (await _authorization.AuthorizeAsync(User, AdminPermissionPolicies.LectureContents_ManagePartners)).Succeeded;
+                if (canSeeKpis)
+                    summary.Kpis = await _lectureContentAdmin.GetBatchKpisAsync(batchId, HttpContext.RequestAborted);
+            }
+
             return summary;
         }
 

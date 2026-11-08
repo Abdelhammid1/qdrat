@@ -1157,6 +1157,12 @@ builder.Services.AddScoped<QdratNew.Services.OnlineLecture.ILectureSequenceServi
                            QdratNew.Services.OnlineLecture.LectureSequenceService>();
 builder.Services.AddScoped<QdratNew.Services.OnlineLecture.IStudentOnlineLearningService,
                            QdratNew.Services.OnlineLecture.StudentOnlineLearningService>();
+// OLC-S6: صفحة المشاهدة المحمية (R2 + R15 + C.7)
+builder.Services.AddScoped<QdratNew.Services.OnlineLecture.IStudentLectureWatchService,
+                           QdratNew.Services.OnlineLecture.StudentLectureWatchService>();
+// OLC-S7: نبضة المشاهدة بزمن الخادم (P5/P7 + R13/R14) — مسار OnlineLearning/Ping بسياسة olc-ping
+builder.Services.AddScoped<QdratNew.Services.OnlineLecture.IStudentLectureProgressService,
+                           QdratNew.Services.OnlineLecture.StudentLectureProgressService>();
 builder.Services.AddScoped<ILectureInstructorSyncService, LectureInstructorSyncService>();
 builder.Services.AddScoped<IEmployeeBatchAccessService, EmployeeBatchAccessService>();
 builder.Services.AddScoped<QdratNew.Services.Admin.EmployeeDashboard.IEmployeeDashboardService,
@@ -1244,6 +1250,15 @@ builder.Services.AddRateLimiter(o =>
         }));
     // RTK-S4 (R5): نبضات الفيديو — 20 طلب / دقيقة لكل مستخدم (النبضة العادية كل 15ث + أحداث pause/ended)
     o.AddPolicy("rtk-ping", ctx => System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+        ctx.User?.Identity?.Name ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "anon",
+        _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 20,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        }));
+    // OLC-S7.1 (C.7-P7): نبضات المحتوى التعليمي أونلاين — 20 طلب / دقيقة لكل مستخدم (بالهوية لا الـ IP: الطلاب خلف NAT واحد)
+    o.AddPolicy("olc-ping", ctx => System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
         ctx.User?.Identity?.Name ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "anon",
         _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
         {

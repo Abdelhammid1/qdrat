@@ -106,7 +106,8 @@ namespace QdratNew.Services.OnlineLecture
                     IsOnlineLearning = b.IsOnlineLearning,
                     OnlineLearningEnabledAt = b.OnlineLearningEnabledAt,
                     IsArchived = b.IsArchived,
-                    ActiveStudents = _db.StudentBatchEnrollments.Count(e => e.BatchId == b.Id && e.Status == ActiveEnrollmentStatus),
+                    // تعريف موحَّد مع R2 وتقرير/KPIs S7: تسجيل نشط لطالب نشط للتعلم (من يصل للمحتوى فعلًا)
+                    ActiveStudents = _db.StudentBatchEnrollments.Count(e => e.BatchId == b.Id && e.Status == ActiveEnrollmentStatus && e.Student.IsActiveForLearning),
                     LecturesCount = _db.Lecture.Count(l => l.BatchId == b.Id),
                     ContentsCount = _db.LectureContents.Count(c => c.Lecture.BatchId == b.Id),
                     PublishedCount = _db.LectureContents.Count(c => c.Lecture.BatchId == b.Id && c.Status == LectureContentStatus.Published)
