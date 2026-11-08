@@ -14,5 +14,8 @@ namespace QdratNew.Services.Exams.Models
 
         // Sprint 17 (MSE-J / J2): الرمز المرجعي المولَّد لهذه العملية — يُعرض للأدمن فقط عند إسناد حضوري (IsOnline == false)
         public string? GeneratedReferenceCode { get; set; }
+
+        // APD-S5.1: الطلاب الذين أُسند لهم فعلًا في هذه العملية (لسجل الإرسال للمدارس)
+        public List<int> AssignedStudentIds { get; set; } = new();
     }
 }

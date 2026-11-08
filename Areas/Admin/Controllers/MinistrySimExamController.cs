@@ -11,8 +11,12 @@ using QdratNew.Helpers;
 using QdratNew.Services.Exams.Interfaces;
 using QdratNew.Services.Exams.Models;
 using QdratNew.Services.Interfaces;
+using QdratNew.Services.MinistrySim;
+using QdratNew.Services.PartnerDispatch;
 using QdratNew.Services.Reports;
 using QdratNew.ViewModels.Exam;
+using System.Security.Claims;
+using System.Text.Json;
 
 namespace QdratNew.Areas.Admin.Controllers
 {
@@ -36,6 +40,13 @@ namespace QdratNew.Areas.Admin.Controllers
         private readonly ILogger<MinistrySimExamController> _logger;
         private readonly ReportBrowserProvider _reportBrowserProvider;
 
+        // APD-S5.1: جمهور الإسناد (المنصة / المدارس الشريكة) وقاعدة ملكية المحاولة
+        private readonly IDispatchAudienceService _audienceService;
+        private readonly IDispatchAudiencePickerBuilder _audiencePicker;
+        private readonly IPartnerMinistrySimDispatchService _partnerDispatch;
+        private readonly IMinistrySimOwnershipQuery _ownership;
+        private readonly IMinistrySimParentReportService _parentReportService;
+
         public MinistrySimExamController(
             ApplicationDbContext context,
             IMinistrySimExamGeneratorService generatorService,
@@ -44,7 +55,12 @@ namespace QdratNew.Areas.Admin.Controllers
             IMinistrySimExamBatchAnalyticsService batchAnalyticsService,
             ISystemSettingService settingService,
             ILogger<MinistrySimExamController> logger,
-            ReportBrowserProvider reportBrowserProvider)
+            ReportBrowserProvider reportBrowserProvider,
+            IDispatchAudienceService audienceService,
+            IDispatchAudiencePickerBuilder audiencePicker,
+            IPartnerMinistrySimDispatchService partnerDispatch,
+            IMinistrySimOwnershipQuery ownership,
+            IMinistrySimParentReportService parentReportService)
         {
             _context = context;
             _generatorService = generatorService;
@@ -54,6 +70,11 @@ namespace QdratNew.Areas.Admin.Controllers
             _settingService = settingService;
             _logger = logger;
             _reportBrowserProvider = reportBrowserProvider;
+            _audienceService = audienceService;
+            _audiencePicker = audiencePicker;
+            _partnerDispatch = partnerDispatch;
+            _ownership = ownership;
+            _parentReportService = parentReportService;
         }
 
         // نقطة الدخول من قائمة الأدمن (لم تكن موجودة في أي Sprint سابق — الميزة لم يكن لها أي رابط دخول قبل هذا):
@@ -396,21 +417,36 @@ namespace QdratNew.Areas.Admin.Controllers
 
             var validation = await _generatorService.ValidateExactCountsAsync(id);
 
+            // APD-S5.1: تكليفات المعهد فقط؛ تكليفات المدارس تُدار من مناطقها وتُعرض هنا كعدد
             var assignedBatchesCount = await _context.MinistrySimExamAssignmentsToBatches
                 .AsNoTracking()
-                .CountAsync(x => x.MinistrySimExamId == id);
+                .CountAsync(x => x.MinistrySimExamId == id && x.OwnerPartnerId == null);
 
             var assignedStudentsCount = await _context.MinistrySimExamAssignmentsToStudents
                 .AsNoTracking()
-                .CountAsync(x => x.MinistrySimExamId == id);
+                .CountAsync(x => x.MinistrySimExamId == id && x.OwnerPartnerId == null);
 
             var assignedBatches = await (
                 from a in _context.MinistrySimExamAssignmentsToBatches.AsNoTracking()
                 join b in _context.Batches.AsNoTracking() on a.BatchId equals b.Id
-                where a.MinistrySimExamId == id
+                where a.MinistrySimExamId == id && a.OwnerPartnerId == null
                 orderby b.Name
                 select new MinistrySimExamAssignedBatchVm { BatchId = b.Id, BatchName = b.Name }
             ).ToListAsync();
+
+            var partnerBatchOwners = await _context.MinistrySimExamAssignmentsToBatches
+                .AsNoTracking()
+                .Where(x => x.MinistrySimExamId == id && x.OwnerPartnerId != null)
+                .Select(x => x.OwnerPartnerId)
+                .Distinct()
+                .ToListAsync();
+
+            var partnerStudentOwners = await _context.MinistrySimExamAssignmentsToStudents
+                .AsNoTracking()
+                .Where(x => x.MinistrySimExamId == id && x.OwnerPartnerId != null)
+                .Select(x => x.OwnerPartnerId)
+                .Distinct()
+                .ToListAsync();
 
             var vm = new MinistrySimExamDetailsVm
             {
@@ -424,7 +460,8 @@ namespace QdratNew.Areas.Admin.Controllers
                 ShortfallMessages = validation.ShortfallMessages,
                 AssignedBatchesCount = assignedBatchesCount,
                 AssignedStudentsCount = assignedStudentsCount,
-                AssignedBatches = assignedBatches
+                AssignedBatches = assignedBatches,
+                PartnerSchoolsCount = partnerBatchOwners.Union(partnerStudentOwners).Distinct().Count()
             };
 
             return View(vm);
@@ -654,10 +691,10 @@ namespace QdratNew.Areas.Admin.Controllers
             if (oldQuestion == null)
                 return NotFound("❌ لم يتم العثور على السؤال.");
 
-            // الأسئلة المستخدمة فعليًا داخل نفس المرحلة تُستبعد من البدائل لمنع تكرار نفس السؤال مرتين بالمرحلة
+            // الأسئلة المستخدمة في الاختبار كله تُستبعد من البدائل لمنع تكرار نفس السؤال عبر الأقسام
             var usedQuestionIds = await _context.MinistrySimExamStageQuestions
                 .AsNoTracking()
-                .Where(q => q.MinistrySimExamStageId == link.MinistrySimExamStageId)
+                .Where(q => q.MinistrySimExamStage.MinistrySimExamId == ministrySimExamId)
                 .Select(q => q.QuestionId)
                 .ToListAsync();
 
@@ -756,6 +793,16 @@ namespace QdratNew.Areas.Admin.Controllers
             if (alreadyUsedInStage)
                 return Json(new { success = false, message = "هذا السؤال مستخدم بالفعل داخل نفس القسم." });
 
+            var ministrySimExamId = await _context.MinistrySimExamStages
+                .AsNoTracking()
+                .Where(s => s.Id == link.MinistrySimExamStageId)
+                .Select(s => s.MinistrySimExamId)
+                .FirstOrDefaultAsync();
+
+            var conflict = await _generatorService.FindDuplicateConflictAsync(ministrySimExamId, newQuestionId, link.Id);
+            if (conflict != null)
+                return Json(new { success = false, message = conflict });
+
             link.QuestionId = newQuestionId;
             link.IsManuallySelected = true;
 
@@ -817,9 +864,10 @@ namespace QdratNew.Areas.Admin.Controllers
             if (lesson == null)
                 return NotFound("❌ لم يتم العثور على المؤشر المطلوب.");
 
+            // الأسئلة المستخدمة في الاختبار كله تُستبعد لمنع تكرار نفس السؤال عبر الأقسام
             var usedQuestionIds = await _context.MinistrySimExamStageQuestions
                 .AsNoTracking()
-                .Where(q => q.MinistrySimExamStageId == stageId)
+                .Where(q => q.MinistrySimExamStage.MinistrySimExamId == stage.MinistrySimExamId)
                 .Select(q => q.QuestionId)
                 .ToListAsync();
 
@@ -866,6 +914,7 @@ namespace QdratNew.Areas.Admin.Controllers
         }
 
         // Sprint 8 (MSE-E / E1): شاشة اختيار دفعة/دفعات لإسناد الاختبار — يتطلب IsPublished == true
+        // APD-S5.1: اختيار الجمهور: دفعات المنصة (المعهد فقط) أو المدارس الشريكة (تكليف تملكه كل مدرسة)
         [HttpGet]
         public async Task<IActionResult> AssignToBatch(int id)
         {
@@ -888,33 +937,29 @@ namespace QdratNew.Areas.Admin.Controllers
                 .Select(c => c.Name)
                 .FirstOrDefaultAsync();
 
-            var assignedBatchIds = await _context.MinistrySimExamAssignmentsToBatches
+            var selection = TempData[AudienceSelectionKey(id)] is string json
+                ? JsonSerializer.Deserialize<AudienceSelection>(json) ?? new AudienceSelection()
+                : new AudienceSelection();
+
+            var assignedPlatformBatchIds = await _context.MinistrySimExamAssignmentsToBatches
                 .AsNoTracking()
-                .Where(x => x.MinistrySimExamId == id)
+                .Where(x => x.MinistrySimExamId == id && x.OwnerPartnerId == null)
                 .Select(x => x.BatchId)
                 .ToListAsync();
 
-            var batches = await _context.Batches
-                .AsNoTracking()
-                .Where(b => b.CourseId == exam.CourseId && !b.IsDeleted && !b.IsArchived)
-                .OrderBy(b => b.Name)
-                .Select(b => new MinistrySimExamBatchOptionVm
-                {
-                    BatchId = b.Id,
-                    Name = b.Name,
-                    EnrolledStudentsCount = b.StudentBatchEnrollments.Count(e => e.Status == "Active")
-                })
-                .ToListAsync();
-
-            foreach (var batch in batches)
-                batch.AlreadyAssigned = assignedBatchIds.Contains(batch.BatchId);
+            var picker = await _audiencePicker.BuildAsync(
+                User,
+                MinistrySimSource(exam.CourseId),
+                selection,
+                includePartners: selection.Audience == DispatchAudience.Partners);
+            picker.AlreadyAssignedPlatformBatchIds = assignedPlatformBatchIds;
 
             var vm = new MinistrySimExamAssignBatchPageVm
             {
                 ExamId = exam.Id,
                 Title = exam.Title,
                 CourseName = courseName,
-                Batches = batches
+                AudiencePicker = picker
             };
 
             return View(vm);
@@ -922,29 +967,37 @@ namespace QdratNew.Areas.Admin.Controllers
 
         // Sprint 8 (MSE-E / E1): نفس اشتقاق CreatedByInstructorId المستخدم في Create POST — أول مدرب مرتبط بمناهج دورة الاختبار
         // Sprint 17 (MSE-J / J2): isOnline من Radio أونلاين/حضوري في الشاشة — حضوري يولّد رمزًا مرجعيًا يُعرض في Details بعد التحويل
+        // APD-S5.1: batchIds (الاسم القديم) مقبول كدفعات منصة. «المدارس الشريكة» تتطلب PartnerDispatch.Send.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> AssignToBatch(int id, List<int> batchIds, bool isOnline = true, DateTime? visibleFrom = null)
+        public async Task<IActionResult> AssignToBatch(int id, List<int> batchIds, bool isOnline = true, DateTime? visibleFrom = null, AudienceSelection? selection = null)
         {
-            var courseId = await _context.MinistrySimExams
+            selection ??= new AudienceSelection();
+
+            var exam = await _context.MinistrySimExams
                 .AsNoTracking()
                 .Where(e => e.Id == id)
-                .Select(e => e.CourseId)
+                .Select(e => new { e.Id, e.CourseId })
                 .FirstOrDefaultAsync();
 
-            var curriculumIds = await _context.CourseCurriculums
-                .AsNoTracking()
-                .Where(cc => cc.CourseId == courseId)
-                .Select(cc => cc.CurriculumId)
-                .ToListAsync();
+            if (exam == null)
+                return NotFound("❌ لم يتم العثور على اختبار معمل القياس المطلوب.");
 
-            var instructorId = await _context.InstructorCurriculumBatches
-                .AsNoTracking()
-                .Where(icb => EF.Constant(curriculumIds).Contains(icb.CurriculumId))
-                .Select(icb => (int?)icb.InstructorId)
-                .FirstOrDefaultAsync();
+            var instructorId = await ResolveCourseInstructorIdAsync(exam.CourseId);
 
-            var result = await _assignmentService.AssignToBatchesAsync(id, batchIds, instructorId, isOnline, visibleFrom);
+            if (selection.Audience == DispatchAudience.Partners)
+                return await AssignToPartnersAsync(id, exam.CourseId, selection, new MinistrySimAssignOptions(isOnline, visibleFrom, instructorId));
+
+            selection.PlatformBatchIds = (selection.PlatformBatchIds ?? new List<int>())
+                .Concat(batchIds ?? new List<int>())
+                .Distinct()
+                .ToList();
+
+            var audience = await _audienceService.ValidateAsync(MinistrySimSource(exam.CourseId), selection, canOverride: false);
+            if (!audience.IsValid)
+                return RedisplayAssignToBatch(id, selection, "⚠️ " + string.Join(" ", audience.Errors));
+
+            var result = await _assignmentService.AssignToBatchesAsync(id, audience.PlatformBatchIds, instructorId, isOnline, visibleFrom);
 
             TempData[result.Success ? "Success" : "Error"] = result.Message;
             if (result.SkippedMessages.Any())
@@ -955,7 +1008,63 @@ namespace QdratNew.Areas.Admin.Controllers
             return RedirectToAction(nameof(Details), new { id });
         }
 
+        private async Task<IActionResult> AssignToPartnersAsync(int examId, int courseId, AudienceSelection selection, MinistrySimAssignOptions options)
+        {
+            if (!await _audiencePicker.CanSendAsync(User))
+                return Forbid();
+
+            var audience = await _audienceService.ValidateAsync(
+                MinistrySimSource(courseId),
+                selection,
+                await _audiencePicker.CanOverrideAsync(User));
+
+            if (!audience.IsValid)
+                return RedisplayAssignToBatch(examId, selection, "⚠️ " + string.Join(" ", audience.Errors));
+
+            var outcome = await _partnerDispatch.AssignToBatchesAsync(examId, audience.Partners, options, CurrentActor());
+
+            if (outcome.IsNotFound)
+                return NotFound("❌ لم يتم العثور على اختبار معمل القياس المطلوب.");
+
+            if (outcome.ValidationError != null)
+                return RedisplayAssignToBatch(examId, selection, outcome.ValidationError);
+
+            TempData[PartnerDispatchController.OutcomeTempDataKey] = JsonSerializer.Serialize(outcome);
+            return RedirectToAction("Result", "PartnerDispatch", new { area = "Admin" });
+        }
+
+        private IActionResult RedisplayAssignToBatch(int examId, AudienceSelection selection, string error)
+        {
+            TempData["Error"] = error;
+            TempData[AudienceSelectionKey(examId)] = JsonSerializer.Serialize(selection);
+            return RedirectToAction(nameof(AssignToBatch), new { id = examId });
+        }
+
+        private static string AudienceSelectionKey(int examId) => $"MseAudience_{examId}";
+
+        private static DispatchSource MinistrySimSource(int courseId)
+            => new(PartnerDispatchKind.MinistrySim, null, null, courseId);
+
+        private DispatchActor CurrentActor()
+            => new(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "", User.Identity?.Name);
+
+        private async Task<int?> ResolveCourseInstructorIdAsync(int courseId)
+        {
+            var curriculumIds = await _context.CourseCurriculums
+                .AsNoTracking()
+                .Where(cc => cc.CourseId == courseId)
+                .Select(cc => cc.CurriculumId)
+                .ToListAsync();
+
+            return await _context.InstructorCurriculumBatches
+                .AsNoTracking()
+                .Where(icb => EF.Constant(curriculumIds).Contains(icb.CurriculumId))
+                .Select(icb => (int?)icb.InstructorId)
+                .FirstOrDefaultAsync();
+        }
+
         // Sprint 8 (MSE-E / E2): شاشة اختيار طالب/طلاب محددين لإسناد الاختبار — يتطلب IsPublished == true
+        // APD-S5.1: دفعات المعهد، ودفعات المدارس المؤهلة لمن يملك PartnerDispatch.Send (الطالب يُسنَد باسم مدرسته)
         [HttpGet]
         public async Task<IActionResult> AssignToStudent(int id)
         {
@@ -980,17 +1089,35 @@ namespace QdratNew.Areas.Admin.Controllers
 
             var batches = await _context.Batches
                 .AsNoTracking()
-                .Where(b => b.CourseId == exam.CourseId && !b.IsDeleted && !b.IsArchived)
+                .Where(b => b.CourseId == exam.CourseId && !b.IsDeleted && !b.IsArchived && b.Branch.PartnerId == null)
                 .OrderBy(b => b.Name)
                 .Select(b => new MinistrySimExamBatchDropdownVm { BatchId = b.Id, Name = b.Name })
                 .ToListAsync();
+
+            var partnerGroups = new List<MinistrySimExamPartnerBatchGroupVm>();
+            if (await _audiencePicker.CanSendAsync(User))
+            {
+                var partners = await _audienceService.GetPartnersAsync(MinistrySimSource(exam.CourseId));
+                partnerGroups = partners
+                    .Where(p => p.Batches.Count > 0)
+                    .Select(p => new MinistrySimExamPartnerBatchGroupVm
+                    {
+                        PartnerId = p.PartnerId,
+                        PartnerName = p.Name,
+                        Eligible = p.Eligible,
+                        BlockReason = p.BlockReason,
+                        Batches = p.Batches.Select(b => new MinistrySimExamBatchDropdownVm { BatchId = b.BatchId, Name = b.Name }).ToList()
+                    })
+                    .ToList();
+            }
 
             var vm = new MinistrySimExamAssignStudentPageVm
             {
                 ExamId = exam.Id,
                 Title = exam.Title,
                 CourseName = courseName,
-                Batches = batches
+                Batches = batches,
+                PartnerBatchGroups = partnerGroups
             };
 
             return View(vm);
@@ -998,16 +1125,33 @@ namespace QdratNew.Areas.Admin.Controllers
 
         // Sprint 8 (MSE-E / E2): يُستدعى عبر AJAX عند اختيار دفعة داخل شاشة إسناد الطلاب — يُرجع طلاب الدفعة كـ Checkboxes
         // مع تعليم من مُسنَد له الاختبار بالفعل، أو من لديه محاولة مسجَّلة أصلاً (القرار #7 / E4)
+        // APD-S5.1: دفعة مدرسة تتطلب PartnerDispatch.Send، وتعرض طلاب المدرسة النشطين فقط
         [HttpGet]
         public async Task<IActionResult> GetStudentsForBatch(int examId, int batchId)
         {
-            var batchExists = await _context.Batches.AsNoTracking().AnyAsync(b => b.Id == batchId);
-            if (!batchExists)
+            var batch = await _context.Batches
+                .AsNoTracking()
+                .Where(b => b.Id == batchId)
+                .Select(b => new { b.Id, b.Branch.PartnerId })
+                .FirstOrDefaultAsync();
+
+            if (batch == null)
                 return NotFound("❌ لم يتم العثور على الدفعة.");
 
-            var students = await _context.StudentBatchEnrollments
+            if (batch.PartnerId.HasValue && !await _audiencePicker.CanSendAsync(User))
+                return Forbid();
+
+            var enrollments = _context.StudentBatchEnrollments
                 .AsNoTracking()
-                .Where(e => e.BatchId == batchId && e.Status == "Active")
+                .Where(e => e.BatchId == batchId && e.Status == "Active");
+
+            if (batch.PartnerId.HasValue)
+            {
+                var partnerId = batch.PartnerId.Value;
+                enrollments = enrollments.Where(e => e.Student.IsActiveForLearning && e.Student.Branch.PartnerId == partnerId);
+            }
+
+            var students = await enrollments
                 .OrderBy(e => e.Student.FullName)
                 .Select(e => new { e.StudentID, e.Student.FullName })
                 .ToListAsync();
@@ -1044,10 +1188,18 @@ namespace QdratNew.Areas.Admin.Controllers
 
         // Sprint 8 (MSE-E / E2): يُسنِد الاختبار للطلاب المختارين (تحقق الانتماء لدورة الاختبار + استبعاد المُكرَّر يتم داخل الخدمة)
         // Sprint 17 (MSE-J / J2): isOnline من Radio أونلاين/حضوري في الشاشة — حضوري يولّد رمزًا مرجعيًا يُعرض في Details بعد التحويل
+        // APD-S5.1: batchId من قائمة الدفعات؛ دفعة مدرسة ⇒ تكليف تملكه المدرسة بشرط عقدها (بلا تجاوز في الإسناد الفردي)
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> AssignToStudent(int id, List<int> studentIds, bool isOnline = true, DateTime? visibleFrom = null)
+        public async Task<IActionResult> AssignToStudent(int id, List<int> studentIds, bool isOnline = true, DateTime? visibleFrom = null, int? batchId = null)
         {
+            var partnerId = batchId.HasValue
+                ? await _context.Batches.AsNoTracking().Where(b => b.Id == batchId.Value).Select(b => b.Branch.PartnerId).FirstOrDefaultAsync()
+                : null;
+
+            if (partnerId.HasValue)
+                return await AssignStudentsToPartnerAsync(id, partnerId.Value, batchId!.Value, studentIds, isOnline, visibleFrom);
+
             var result = await _assignmentService.AssignToStudentsAsync(id, studentIds, isOnline, visibleFrom);
 
             TempData[result.Success ? "Success" : "Error"] = result.Message;
@@ -1059,8 +1211,58 @@ namespace QdratNew.Areas.Admin.Controllers
             return RedirectToAction(nameof(Details), new { id });
         }
 
+        private async Task<IActionResult> AssignStudentsToPartnerAsync(int examId, int partnerId, int batchId, List<int> studentIds, bool isOnline, DateTime? visibleFrom)
+        {
+            if (!await _audiencePicker.CanSendAsync(User))
+                return Forbid();
+
+            var courseId = await _context.MinistrySimExams
+                .AsNoTracking()
+                .Where(e => e.Id == examId)
+                .Select(e => (int?)e.CourseId)
+                .FirstOrDefaultAsync();
+
+            if (courseId == null)
+                return NotFound("❌ لم يتم العثور على اختبار معمل القياس المطلوب.");
+
+            var audience = await _audienceService.ValidateAsync(
+                MinistrySimSource(courseId.Value),
+                new AudienceSelection
+                {
+                    Audience = DispatchAudience.Partners,
+                    PartnerBatchIds = new Dictionary<int, List<int>> { [partnerId] = new List<int> { batchId } }
+                },
+                canOverride: false);
+
+            if (!audience.IsValid)
+            {
+                TempData["Error"] = "⚠️ " + string.Join(" ", audience.Errors);
+                return RedirectToAction(nameof(AssignToStudent), new { id = examId });
+            }
+
+            var outcome = await _partnerDispatch.AssignToStudentsAsync(
+                examId,
+                audience.Partners.Single(),
+                studentIds ?? new List<int>(),
+                new MinistrySimAssignOptions(isOnline, visibleFrom, null),
+                CurrentActor());
+
+            if (outcome.IsNotFound)
+                return NotFound("❌ لم يتم العثور على اختبار معمل القياس المطلوب.");
+
+            if (outcome.ValidationError != null)
+            {
+                TempData["Error"] = outcome.ValidationError;
+                return RedirectToAction(nameof(AssignToStudent), new { id = examId });
+            }
+
+            TempData[PartnerDispatchController.OutcomeTempDataKey] = JsonSerializer.Serialize(outcome);
+            return RedirectToAction("Result", "PartnerDispatch", new { area = "Admin" });
+        }
+
         // Sprint 14 (MSE-H / H2): شاشة اختيار الطالب لعرض نتيجته (Drill-down) — كل طالب مُسنَد له الاختبار
         // فعليًا (مباشرة أو عبر دفعة)، بحالته الحالية. مرتبطة من قسم "الإسناد" في Details.cshtml.
+        // APD-S5.1: طلاب المعهد فقط؛ طالب تملك مدرسته تكليفه يُتابَع من منطقة المدرسة (IMinistrySimOwnershipQuery)
         [HttpGet]
         public async Task<IActionResult> SelectStudentForResult(int id)
         {
@@ -1072,40 +1274,20 @@ namespace QdratNew.Areas.Admin.Controllers
             if (exam == null)
                 return NotFound("❌ لم يتم العثور على اختبار معمل القياس المطلوب.");
 
-            var directStudentIds = await _context.MinistrySimExamAssignmentsToStudents
-                .AsNoTracking()
-                .Where(x => x.MinistrySimExamId == id)
-                .Select(x => x.StudentId)
-                .ToListAsync();
-
-            var assignedBatchIds = await _context.MinistrySimExamAssignmentsToBatches
-                .AsNoTracking()
-                .Where(x => x.MinistrySimExamId == id)
-                .Select(x => x.BatchId)
-                .ToListAsync();
-
-            var batchStudentIds = assignedBatchIds.Any()
-                ? await _context.StudentBatchEnrollments
-                    .AsNoTracking()
-                    .Where(e => e.Status == "Active" && EF.Constant(assignedBatchIds).Contains(e.BatchId))
-                    .Select(e => e.StudentID)
-                    .ToListAsync()
-                : new List<int>();
-
-            var studentIds = directStudentIds.Union(batchStudentIds).Distinct().ToList();
-
-            var students = await _context.Students
-                .AsNoTracking()
-                .Where(s => EF.Constant(studentIds).Contains(s.StudentID))
+            var students = await _ownership.PlatformStudents(id)
                 .OrderBy(s => s.FullName)
                 .Select(s => new { s.StudentID, s.FullName })
                 .ToListAsync();
 
-            var attempts = await _context.MinistrySimExamStudentAttempts
-                .AsNoTracking()
-                .Where(a => a.MinistrySimExamId == id && EF.Constant(studentIds).Contains(a.StudentId))
-                .Select(a => new { a.StudentId, a.IsCompleted, a.TotalScorePercent })
-                .ToListAsync();
+            var studentIds = students.Select(s => s.StudentID).ToList();
+
+            var attempts = studentIds.Any()
+                ? await _context.MinistrySimExamStudentAttempts
+                    .AsNoTracking()
+                    .Where(a => a.MinistrySimExamId == id && EF.Constant(studentIds).Contains(a.StudentId))
+                    .Select(a => new { a.StudentId, a.IsCompleted, a.TotalScorePercent })
+                    .ToListAsync()
+                : new();
 
             var vm = new MinistrySimExamSelectStudentVm
             {
@@ -1129,10 +1311,17 @@ namespace QdratNew.Areas.Admin.Controllers
             return View(vm);
         }
 
+        // APD-S5.1: نتيجة طالب تملكها مدرسة شريكة لا تُعرض في الأدمن (404 كأنها غير موجودة)
+        private Task<bool> IsPartnerOwnedAsync(int examId, int studentId)
+            => _ownership.IsOwnedByAnyPartnerAsync(examId, studentId, HttpContext.RequestAborted);
+
         // Sprint 14 (MSE-H / H2): نتيجة طالب واحد محدد — قراءة فقط، عبر IMinistrySimExamResultService (H1)
         [HttpGet]
         public async Task<IActionResult> StudentResult(int id, int studentId)
         {
+            if (await IsPartnerOwnedAsync(id, studentId))
+                return NotFound("❌ لم يتم العثور على هذا الاختبار.");
+
             var lookup = await _resultService.GetResultAsync(id, studentId);
 
             switch (lookup.Status)
@@ -1157,6 +1346,9 @@ namespace QdratNew.Areas.Admin.Controllers
         [HttpGet]
         public async Task<IActionResult> StudentQuestionReview(int id, int studentId, int stageNumber)
         {
+            if (await IsPartnerOwnedAsync(id, studentId))
+                return NotFound("❌ لم يتم العثور على قسم اختبار معمل القياس المطلوب.");
+
             var lookup = await _resultService.GetQuestionReviewAsync(id, studentId, stageNumber);
 
             switch (lookup.Status)
@@ -1181,6 +1373,7 @@ namespace QdratNew.Areas.Admin.Controllers
         // (تفصيل المراحل الخمس مؤجَّل لـSprint 16 / I3-I4). مرتبطة من قسم "نتائج الطلاب" في Details.cshtml.
         // Sprint 18 (MSE-K / K1): استُخرج منطق الحساب بالكامل إلى IMinistrySimExamBatchAnalyticsService
         // بلا أي تغيير في السلوك، ليُعاد استخدامه من ParentReport عبر GetBatchAverageStatsAsync.
+        // APD-S5.1: تكليف المعهد فقط (الخدمة ترجع AssignmentNotFound لتكليف مدرسة)
         [HttpGet]
         public async Task<IActionResult> BatchAnalytics(int examId, int batchId)
         {
@@ -1202,125 +1395,42 @@ namespace QdratNew.Areas.Admin.Controllers
         // Sprint 18 (MSE-K / K2): تقرير شامل موجَّه لولي الأمر — ملخص إحصائي فقط (بلا تفصيل سؤال بسؤال، قرار مُقفَل)
         // + مقارنة بمتوسط دفعة الطالب عبر GetBatchAverageStatsAsync (K1) بلا تكرار حساب BatchAnalytics.
         // Sprint 19 (MSE-K / K3+K4): + اتجاه الأداء عبر محاولات سابقة + ملاحظات المدرّس + رأس خطاب حقيقي (شعار/اسم/عنوان المعهد).
+        // APD-S5.2: البناء انتقل إلى IMinistrySimParentReportService ليشاركه تقرير المدرسة الشريكة
         [HttpGet]
         public async Task<IActionResult> ParentReport(int examId, int studentId, bool print = false)
         {
-            var lookup = await _resultService.GetResultAsync(examId, studentId);
+            if (await IsPartnerOwnedAsync(examId, studentId))
+                return NotFound("❌ لم يتم العثور على هذا الاختبار.");
+
+            var lookup = await _parentReportService.BuildAsync(examId, studentId, null, print, HttpContext.RequestAborted);
 
             switch (lookup.Status)
             {
-                case MinistrySimExamResultStatus.ExamNotFound:
+                case MinistrySimParentReportStatus.ExamNotFound:
                     return NotFound("❌ لم يتم العثور على هذا الاختبار.");
 
-                case MinistrySimExamResultStatus.AttemptNotFound:
+                case MinistrySimParentReportStatus.StudentNotFound:
+                    return NotFound("❌ لم يتم العثور على الطالب المطلوب.");
+
+                case MinistrySimParentReportStatus.AttemptNotFound:
                     TempData["Error"] = "لا توجد محاولة مسجَّلة لهذا الطالب في هذا الاختبار.";
                     return RedirectToAction(nameof(SelectStudentForResult), new { id = examId });
 
-                case MinistrySimExamResultStatus.NotCompleted:
+                case MinistrySimParentReportStatus.NotCompleted:
                     TempData["Error"] = "لم يُتم هذا الطالب أقسام الاختبار بعد.";
                     return RedirectToAction(nameof(SelectStudentForResult), new { id = examId });
             }
 
-            var resultVm = lookup.Vm;
-
-            var student = await _context.Students
-                .AsNoTracking()
-                .Include(s => s.Parent)
-                .FirstOrDefaultAsync(s => s.StudentID == studentId);
-
-            if (student == null)
-                return NotFound("❌ لم يتم العثور على الطالب المطلوب.");
-
-            var exam = await _context.MinistrySimExams
-                .AsNoTracking()
-                .Include(e => e.Course)
-                .FirstOrDefaultAsync(e => e.Id == examId);
-
-            if (exam == null)
-                return NotFound("❌ لم يتم العثور على اختبار معمل القياس المطلوب.");
-
-            // بطاقة المقارنة: دفعة الطالب الفعلية ضمن دورة هذا الاختبار (بصرف النظر عن مسار الإسناد — دفعة أو فردي)
-            var studentBatch = await _context.StudentBatchEnrollments
-                .AsNoTracking()
-                .Where(e => e.StudentID == studentId && e.Status == "Active" && e.Batch.CourseId == exam.CourseId)
-                .Select(e => new { e.BatchId, BatchName = e.Batch.Name })
-                .FirstOrDefaultAsync();
-
-            var batchStats = studentBatch != null
-                ? await _batchAnalyticsService.GetBatchAverageStatsAsync(examId, studentBatch.BatchId)
-                : new MinistrySimExamBatchAverageStatsVm();
-
-            // المحاولة الحالية — نحتاج Id لحفظ/عرض RecommendationsNote (Sprint 19 / K3)
-            var attempt = await _context.MinistrySimExamStudentAttempts
-                .AsNoTracking()
-                .Where(a => a.MinistrySimExamId == examId && a.StudentId == studentId)
-                .Select(a => new { a.Id, a.RecommendationsNote })
-                .FirstOrDefaultAsync();
-
-            // اتجاه الأداء عبر كل محاولات هذا الطالب المكتملة في اختبارات محاكاة سابقة (Sprint 19 / K3)
-            var trend = await _context.MinistrySimExamStudentAttempts
-                .AsNoTracking()
-                .Where(a => a.StudentId == studentId && a.IsCompleted && a.CompletedAt != null)
-                .OrderBy(a => a.CompletedAt)
-                .Select(a => new MinistrySimExamParentReportTrendPointVm
-                {
-                    ExamTitle = a.MinistrySimExam.Title,
-                    CompletedAt = a.CompletedAt.Value,
-                    TotalScorePercent = a.TotalScorePercent ?? 0
-                })
-                .ToListAsync();
+            var vm = lookup.Vm!;
 
             // رأس الخطاب — Sprint 19 (K4): شعار/اسم/عنوان المعهد الفعليين بدل Placeholder ثابت
             var siteLogoPath = await _settingService.GetAsync("SiteLogoPath");
             var instituteName = await _settingService.GetAsync("SiteName");
             var instituteAddress = await _settingService.GetAsync("InstituteAddress");
 
-            var vm = new MinistrySimExamParentReportVm
-            {
-                InstituteName = string.IsNullOrWhiteSpace(instituteName) ? "معهد القدرات للتدريب" : instituteName,
-                InstituteAddress = instituteAddress,
-                SiteLogoUrl = string.IsNullOrWhiteSpace(siteLogoPath) ? Url.Content("~/assets/logo.png") : Url.Content(siteLogoPath),
-
-                MinistrySimExamId = exam.Id,
-                ExamTitle = exam.Title,
-                CourseName = exam.Course.Name,
-
-                StudentId = student.StudentID,
-                StudentFullName = student.FullName,
-                BatchName = studentBatch?.BatchName,
-
-                ParentFullName = student.Parent?.FullName,
-                ParentPhoneNumber = student.Parent?.PhoneNumber,
-                ParentRelationToStudent = student.Parent?.RelationToStudent.ToString(),
-
-                AttemptId = attempt?.Id ?? 0,
-                AttemptCompletedAt = resultVm.CompletedAt,
-                TotalScorePercent = resultVm.TotalScorePercent,
-                QuantScorePercent = resultVm.QuantPercent,
-                VerbalScorePercent = resultVm.VerbalPercent,
-                Stages = resultVm.Stages.Select(s => new MinistrySimExamParentReportStageVm
-                {
-                    StageNumber = s.StageNumber,
-                    StagePercentScore = s.StagePercentScore,
-                    TimeExpired = s.TimeExpired,
-                    DurationMinutes = s.DurationMinutes,
-                    MotivationMessage = ResultToneHelper.Build(s.StagePercentScore, ResultContext.Exam).MotivationMsg
-                }).ToList(),
-
-                BatchTotalStudents = batchStats.TotalStudents,
-                BatchAvgScorePercent = batchStats.AvgScorePercent,
-                BatchAvgQuantPercent = batchStats.AvgQuantPercent,
-                BatchAvgVerbalPercent = batchStats.AvgVerbalPercent,
-
-                PreviousAttemptsTrend = trend,
-                RecommendationsNote = attempt?.RecommendationsNote,
-                IsPrintMode = print
-            };
-
-            // توصية محفِّزة عامة على مستوى الاختبار كامل — نفس نبرة "بلا لغة رسوب" المعتمدة بكل المنصة
-            var overallTone = ResultToneHelper.Build(vm.TotalScorePercent, ResultContext.Exam);
-            vm.OverallMotivationHeading = overallTone.MotivationHeading;
-            vm.OverallMotivationMessage = overallTone.MotivationMsg;
+            vm.InstituteName = string.IsNullOrWhiteSpace(instituteName) ? "معهد القدرات للتدريب" : instituteName;
+            vm.InstituteAddress = instituteAddress;
+            vm.SiteLogoUrl = string.IsNullOrWhiteSpace(siteLogoPath) ? Url.Content("~/assets/logo.png") : Url.Content(siteLogoPath);
 
             return View(vm);
         }
@@ -1332,6 +1442,10 @@ namespace QdratNew.Areas.Admin.Controllers
         {
             var attempt = await _context.MinistrySimExamStudentAttempts.FindAsync(attemptId);
             if (attempt == null)
+                return NotFound();
+
+            // APD-S5.1: محاولة تملكها مدرسة شريكة تُحفظ ملاحظاتها من منطقة المدرسة فقط
+            if (await IsPartnerOwnedAsync(attempt.MinistrySimExamId, attempt.StudentId))
                 return NotFound();
 
             attempt.RecommendationsNote = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
@@ -1346,6 +1460,10 @@ namespace QdratNew.Areas.Admin.Controllers
         [HttpGet]
         public async Task<IActionResult> ParentReportPdf(int examId, int studentId)
         {
+            // APD-S5.1: لا يُفتح المتصفح لتقرير طالب تملكه مدرسة شريكة
+            if (await IsPartnerOwnedAsync(examId, studentId))
+                return NotFound("❌ لم يتم العثور على هذا الاختبار.");
+
             var url = Url.Action("ParentReport", "MinistrySimExam",
                 new { area = "Admin", examId, studentId, print = true }, Request.Scheme);
 

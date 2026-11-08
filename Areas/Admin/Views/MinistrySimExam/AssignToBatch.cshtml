@@ -3,6 +3,10 @@
     ViewData["Title"] = "إسناد لدفعة/دفعات";
 }
 
+@section Styles {
+    <link rel="stylesheet" href="~/css/admin-dispatch-audience.css" asp-append-version="true" />
+}
+
 <style>
     .qdrat-page { direction: rtl; text-align: right; }
 
@@ -82,40 +86,35 @@
             <div class="form-text">اتركه فارغًا ليظهر الاختبار للطلاب فورًا، أو حدد التاريخ والوقت الذي يبدأ فيه الظهور في أريا الطالب.</div>
         </div>
 
+        @* APD-S5.1: دفعات المنصة (المعهد فقط) أو المدارس الشريكة: تكليف تملكه كل مدرسة وتتابعه من منطقتها *@
         <div class="qdrat-card">
-            @if (!Model.Batches.Any())
+            @if (Model.AudiencePicker != null)
             {
-                <div class="qdrat-empty">
-                    <i class="bi bi-inbox" style="font-size:28px"></i>
-                    <p class="mb-0 mt-2">لا توجد دفعات نشطة لهذه الدورة بعد.</p>
-                </div>
-            }
-            else
-            {
-                @foreach (var batch in Model.Batches)
-                {
-                    <div class="qdrat-batch-row @(batch.AlreadyAssigned ? "assigned" : "")">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" name="batchIds" value="@batch.BatchId"
-                                   id="batch-@batch.BatchId" @(batch.AlreadyAssigned ? "checked disabled" : "") />
-                            <label class="form-check-label" for="batch-@batch.BatchId">
-                                <strong>@batch.Name</strong> — @batch.EnrolledStudentsCount طالب مسجَّل
-                            </label>
-                        </div>
-                        @if (batch.AlreadyAssigned)
-                        {
-                            <span class="badge bg-success">مُسنَدة بالفعل</span>
-                        }
-                    </div>
-                }
+                <partial name="~/Areas/Admin/Views/Shared/_DispatchAudiencePicker.cshtml" model="Model.AudiencePicker" />
+                <div class="form-text mt-2">اختيار دفعة مُسنَدة بالفعل يُسند الاختبار لطلابها الجدد فقط، ولا يكرره لمن أُسند له.</div>
             }
         </div>
 
-        @if (Model.Batches.Any(b => !b.AlreadyAssigned))
-        {
-            <button type="submit" class="btn qdrat-btn-primary">
-                <i class="bi bi-send-check ms-1"></i> إسناد الدفعات المختارة
-            </button>
-        }
+        <button type="submit" class="btn qdrat-btn-primary" id="mseAssignBatchSubmit">
+            <i class="bi bi-send-check ms-1"></i> إسناد الدفعات المختارة
+        </button>
     </form>
 </div>
+
+@section Scripts {
+    <script src="~/js/admin-dispatch-audience.js" asp-append-version="true"></script>
+    <script>
+        (function () {
+            // منع الضغطة المزدوجة؛ الخادم يقفل لكل مدرسة أيضًا
+            var form = document.querySelector('form[action*="AssignToBatch"]');
+            var button = document.getElementById('mseAssignBatchSubmit');
+            if (!form || !button) return;
+            form.addEventListener('submit', function () {
+                setTimeout(function () {
+                    button.disabled = true;
+                    button.innerHTML = '<span class="spinner-border spinner-border-sm ms-1" role="status"></span> جارٍ الإسناد...';
+                }, 0);
+            });
+        })();
+    </script>
+}

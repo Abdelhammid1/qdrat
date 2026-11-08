@@ -53,6 +53,7 @@ namespace QdratNew.Services.Partner
 
                 CanUsePlacementExams = sub.CanUsePlacementExams,
                 CanUsePerformanceIndicatorExams = sub.CanUsePerformanceIndicatorExams,
+                CanUseMinistrySimExams = sub.CanUseMinistrySimExams, // APD-S5.2
 
                 CanUseReinforcementSkills = sub.CanUseReinforcementSkills,
                 CanUseRemedialPlans = sub.CanUseRemedialPlans,

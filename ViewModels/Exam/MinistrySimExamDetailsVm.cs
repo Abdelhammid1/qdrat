@@ -22,6 +22,9 @@ namespace QdratNew.ViewModels.Exam
         public int AssignedBatchesCount { get; set; }
         public int AssignedStudentsCount { get; set; }
 
+        // APD-S5.1: عدد المدارس الشريكة التي لها تكليف في هذا الاختبار (تُدار من مناطقها ولا تُحسب أعلاه)
+        public int PartnerSchoolsCount { get; set; }
+
         // Sprint 15 (MSE-I / I2): الدفعات المُسنَد لها الاختبار — تُستخدم لروابط "تحليلات الدفعة" لكل دفعة
         public List<MinistrySimExamAssignedBatchVm> AssignedBatches { get; set; } = new();
     }

@@ -6,10 +6,11 @@ namespace QdratNew.Services.Exams.Interfaces
     // Sprint 18 (MSE-K / K1): استخراج منطق تحليلات الدفعة (BatchAnalytics — MSE-I، Sprint 15/16) من الـController
     // إلى خدمة، بلا تغيير سلوكها، + إضافة GetBatchAverageStatsAsync الخفيف لإعادة استخدامه في تقرير ولي الأمر
     // (ParentReport) دون تكرار نفس منطق حساب متوسطات الدفعة.
+    // APD-S5.1: ownerPartnerId = null ⇒ تكليف المعهد وطلابه فقط، وإلا تكليف هذه المدرسة وطلابها (IMinistrySimOwnershipQuery).
     public interface IMinistrySimExamBatchAnalyticsService
     {
-        Task<MinistrySimExamBatchAnalyticsLookup> GetBatchAnalyticsAsync(int ministrySimExamId, int batchId);
+        Task<MinistrySimExamBatchAnalyticsLookup> GetBatchAnalyticsAsync(int ministrySimExamId, int batchId, int? ownerPartnerId = null);
 
-        Task<MinistrySimExamBatchAverageStatsVm> GetBatchAverageStatsAsync(int ministrySimExamId, int batchId);
+        Task<MinistrySimExamBatchAverageStatsVm> GetBatchAverageStatsAsync(int ministrySimExamId, int batchId, int? ownerPartnerId = null);
     }
 }

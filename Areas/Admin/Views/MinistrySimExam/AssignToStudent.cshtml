@@ -83,7 +83,7 @@
 
     <div class="qdrat-card">
         <label for="batchSelect" class="form-label fw-bold">اختر الدفعة</label>
-        @if (!Model.Batches.Any())
+        @if (!Model.Batches.Any() && !Model.PartnerBatchGroups.Any())
         {
             <div class="qdrat-empty">
                 <i class="bi bi-inbox" style="font-size:28px"></i>
@@ -92,13 +92,34 @@
         }
         else
         {
-            <select id="batchSelect" class="form-select">
+            @* APD-S5.1: دفعة مدرسة ⇒ يُسنَد الاختبار باسم المدرسة وتتابعه من منطقتها *@
+            <select id="batchSelect" name="batchId" form="assignForm" class="form-select">
                 <option value="">— اختر دفعة —</option>
-                @foreach (var batch in Model.Batches)
+                @if (Model.Batches.Any())
                 {
-                    <option value="@batch.BatchId">@batch.Name</option>
+                    <optgroup label="دفعات المنصة">
+                        @foreach (var batch in Model.Batches)
+                        {
+                            <option value="@batch.BatchId">@batch.Name</option>
+                        }
+                    </optgroup>
+                }
+                @foreach (var group in Model.PartnerBatchGroups)
+                {
+                    <optgroup label="@(group.Eligible ? $"مدرسة شريكة: {group.PartnerName}" : $"مدرسة شريكة: {group.PartnerName} ({group.BlockReason})")">
+                        @foreach (var batch in group.Batches)
+                        {
+                            <option value="@batch.BatchId" data-partner-batch="@group.PartnerId" disabled="@(!group.Eligible)">@batch.Name</option>
+                        }
+                    </optgroup>
                 }
             </select>
+            @if (Model.PartnerBatchGroups.Any())
+            {
+                <div class="form-text" id="partnerBatchHint" hidden>
+                    الطلاب يُسنَدون باسم هذه المدرسة: يتابعهم المدرس من منطقة المدرسة، ولا تظهر نتائجهم في الأدمن.
+                </div>
+            }
         }
     </div>
 
@@ -129,8 +150,14 @@
 
             if (!batchSelect) return;
 
+            var partnerHint = document.getElementById('partnerBatchHint');
+
             batchSelect.addEventListener('change', function () {
                 var batchId = batchSelect.value;
+                if (partnerHint) {
+                    var option = batchSelect.options[batchSelect.selectedIndex];
+                    partnerHint.hidden = !(option && option.hasAttribute('data-partner-batch'));
+                }
                 if (!batchId) {
                     studentsCard.hidden = true;
                     submitBtn.hidden = true;

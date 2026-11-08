@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using QdratNew.Data;
 using QdratNew.Entities;
 using QdratNew.Enums;
+using QdratNew.Services.PartnerDispatch;
 using QdratNew.Tests.Integration;
 using Xunit;
 
@@ -379,6 +380,8 @@ namespace QdratNew.Tests.AdminPartnerDispatch
         [Fact]
         public async Task Override_NeedsPermissionAndReason_AndIsLogged()
         {
+            await RemoveProfessionalModelsFromContractAsync(_seed.PartnerA);
+
             var form = new[]
             {
                 Field("ModelId", _seed.ModelNotForAnyone),
@@ -389,9 +392,9 @@ namespace QdratNew.Tests.AdminPartnerDispatch
                 Field("EndAt", SaudiLocal(2))
             };
 
-            // نموذج غير متاح بلا تجاوز
+            // العقد لا يشمل النماذج الاحترافية: مرفوض بلا تجاوز
             var blocked = await PostAsync(Owner(), OwnerUser, $"{Base}/CreateModelHomework", form);
-            Assert.Contains("النموذج غير متاح", await HtmlAsync(blocked));
+            Assert.Contains(DispatchRules.ProfessionalModelsMissing, await HtmlAsync(blocked));
 
             var reason = "اتفاق خاص مع إدارة المدرسة";
             var overrideFields = form.Concat(new[] { Field("OverrideContract", "true"), Field("OverrideReason", reason) }).ToList();
@@ -412,6 +415,33 @@ namespace QdratNew.Tests.AdminPartnerDispatch
             Assert.True(log.ContractOverridden);
             Assert.Equal(reason, log.OverrideReason);
         }
+
+        // الأدمن يرسل أي نموذج (حتى الداخلي غير المتاح في مكتبة الشريك) لشريك عقده يشمل النماذج الاحترافية
+        [Fact]
+        public async Task InternalModel_SendsToPartnerWithProfessionalModelsContract_WithoutOverride()
+        {
+            var sent = await PostAsync(Owner(), OwnerUser, $"{Base}/CreateModelHomework", new[]
+            {
+                Field("ModelId", _seed.ModelNotForAnyone),
+                Field("Title", HomeworkTitle),
+                Field("Audience", (int)DispatchAudience.Partners),
+                Field($"PartnerBatchIds[{_seed.PartnerA}]", _seed.BatchA1),
+                Field("StartAt", SaudiLocal(0)),
+                Field("EndAt", SaudiLocal(2))
+            });
+
+            Assert.Equal(HttpStatusCode.Redirect, sent.StatusCode);
+            var log = await ReadAsync(db => db.PartnerDispatchLogs.AsNoTracking().SingleAsync(l => l.PartnerId == _seed.PartnerA));
+            Assert.False(log.ContractOverridden);
+        }
+
+        private Task RemoveProfessionalModelsFromContractAsync(int partnerId)
+            => ReadAsync(async db =>
+            {
+                var contracts = await db.PartnerSubscriptions.Where(s => s.PartnerId == partnerId).ToListAsync();
+                contracts.ForEach(c => c.CanUseProfessionalModels = false);
+                return await db.SaveChangesAsync();
+            });
 
         [Fact]
         public async Task DisabledSwitch_RejectsPartnersRequest()

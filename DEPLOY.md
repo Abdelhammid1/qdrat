@@ -45,6 +45,32 @@ images/profiles/. الفروقات في js/css/lib هي مكتبات ثابتة 
 validation) وليست ملفات مستخدمين، ولا تحتاج حماية.
 
 
+## 📋 نشر إصلاح تكرار الإجابات والأسئلة في معمل القياس (MSE)
+
+**1) قبل نشر الكود:**
+```sql
+BACKUP DATABASE [QdratNewDB] TO DISK = N'/var/opt/mssql/backup/QdratNewDB_before_MSE_UniqueAnswer.bak' WITH INIT, COMPRESSION;
+```
+شغّل `Migrations/Scripts/MSE_Diagnose_DuplicateAnswers.sql` واحفظ ناتجه: هو سجل الطلاب المتأثرين، وبعد الخطوة التالية يختفي التكرار. ثم شغّل `Migrations/Scripts/MSE_UniqueStudentAnswer.sql` (Idempotent).
+
+- يبقي أحدث صف لكل سؤال، وينسخ الأقدم إلى `MinistrySimExamStudentAnswers_DuplicatesBackup`، ثم ينشئ الفهرس الفريد.
+- **لا يعيد حساب الدرجات:** `StagePercentScore` و`TotalScorePercent` المحفوظة تبقى كما هي، وقد تكون مضخّمة لمن ظهر في الفحص. إعادة الحساب قرار منفصل مؤجل.
+
+**2) التحقق:**
+```sql
+SELECT COUNT(*) FROM sys.indexes WHERE name = N'IX_MinistrySimExamStudentAnswers_MinistrySimExamStudentAttemptId_MinistrySimExamStageQuestionId' AND is_unique = 1; -- 1
+SELECT COUNT(*) FROM __EFMigrationsHistory WHERE MigrationId = N'20261105143557_MSE_UniqueStudentAnswer'; -- 1
+```
+
+**3) بعد نشر الكود:**
+- الطالب: اضغط «التالي» مرتين بسرعة ثم غيّر الإجابة، وتأكد أن صفحة الحل تعمل وأن آخر إجابة هي الظاهرة.
+- الأدمن: الاختبار **المنشور** لا يتغير. المسودة التي فيها سؤال مكرر أو مشابه تُمنع من النشر وتظهر أسبابها في Details، وتُحل بالاستبدال أو إعادة التوليد.
+- قد تظهر رسالة نقص جديدة عند بناء قسم: «بعد استبعاد ... سؤال مكرر أو مشابه». معناها أن البنك لا يكفي بلا تكرار.
+
+**4) مفتاح الضبط:** `MinistrySimExam.QuestionSimilarityPercent` في `SystemSettings` (الافتراضي 70؛ 0 يوقف فحص التشابه ويبقي منع السؤال نفسه).
+
+**5) التراجع:** `Migrations/Scripts/MSE_UniqueStudentAnswer_Rollback.sql` يعيد الفهرس القديم ولا يعيد الصفوف المحذوفة (نسختها في الجدول الاحتياطي). الكود الجديد يعمل بعد التراجع.
+
 ## 📋 نشر Epic RL (سجل معنا + لوحة طلبات الالتحاق) — RL-S6
 
 ### 1) قبل النشر (Backup إلزامي)
@@ -121,8 +147,19 @@ UPDATE SystemSettings SET [Value] = N'true'  WHERE [Key] = N'RemedialTrack.Enabl
 
 ---
 
-## 📋 نشر Epic APD (جمهور الإرسال: المنصة أو المدارس الشريكة) — APD-S1 (الأساس)
-> يُستكمل هذا القسم في APD-S6.2. بعد S1 لا تتغير أي شاشة إرسال؛ الجديد: علَم «معمل القياس» في عقد الشريك، ووحدة صلاحيات «الإرسال للمدارس الشريكة» في مصفوفة البروفايل.
+## 📋 نشر Epic APD (جمهور الإرسال: المنصة أو المدارس الشريكة) — APD-S1 إلى S6
+> شاشات الإرسال الخمس في الأدمن تعرض «جمهور الإرسال»: دفعات المنصة (السلوك السابق على دفعات المعهد فقط) أو عدة مدارس شريكة. ما يُرسل لمدرسة يصبح ملكها، يُتابَع من منطقتها، ويختفي من قوائم الأدمن وتقاريره. التفاصيل لكل Sprint في البنود 1–9 أدناه.
+
+### 0) ملخص نشر الـ Epic كاملًا (إن نُشر دفعة واحدة)
+1. **Backup** لقاعدة الإنتاج (البند 1).
+2. السكربتات بالترتيب، كلها Idempotent وإضافات فقط:
+   `APD_PartnerDispatch.sql` ← `APD_PerformanceIndicatorTemplate.sql` ← `MSE_UniqueStudentAnswer.sql` ← `APD_MinistrySimPartnerHidden.sql`.
+   تحقق بعد كل سكربت بالاستعلامات في بنده. **الكود لا يُنشر قبل السكربتات** لأنه يقرأ الأعمدة الجديدة.
+3. نشر الكود، ثم التحقق من الـ symlinks في أعلى هذا الملف.
+4. بعد النشر: فعّل «معمل القياس» ومؤشر الأداء في عقود المدارس المعنية، وراجع وحدة «الإرسال للمدارس الشريكة» في البروفايلات (`Send` ممنوحة تلقائيًا لمن يملك `ManageModelHomework`، و`Override` و`ReadLog` يدويًا).
+5. **Smoke (مدرسة تجريبية واحدة):** أرسل من كل شاشة من الخمس، وتأكد من ظهور الإرسال في منطقة المدرسة وغيابه عن الأدمن، ومن ظهوره في `Admin/PartnerDispatchLog`. ثم اختبار يدوي وفق `Docs/UAT/APD_UAT.md`.
+6. **المراقبة أول 24 ساعة:** أخطاء `PartnerDispatch`/`PartnerMinistrySim`/`PartnerPerformance` في سجلات Serilog، وزمن طلبات الإرسال لعدد كبير من المدارس.
+7. **الإيقاف الفوري** بلا إعادة تشغيل: `PartnerDispatch.Enabled = false` (البند 4). **التراجع الكامل** بعد سحب الكود فقط وبعكس ترتيب السكربتات: `APD_MinistrySimPartnerHidden_Rollback.sql` ← `APD_PerformanceIndicatorTemplate_Rollback.sql` ← `APD_PartnerDispatch_Rollback.sql` (`MSE_UniqueStudentAnswer.sql` إصلاح مستقل لا يلزم التراجع عنه؛ والأخير يحذف أعمدة الملكية وسجل الإرسال، فما أُرسل للمدارس يعود ظاهرًا للأدمن كأنه للمعهد).
 
 ### 1) قبل نشر الكود (Backup إلزامي)
 ```sql
@@ -180,6 +217,25 @@ SELECT COUNT(*) FROM __EFMigrationsHistory WHERE MigrationId = N'20261105131916_
 - **يختفي من الأدمن:** كل نسخة `OwnerPartnerId` فيها قيمة، من القوائم والتقارير ولوحة الأداء وتفاصيل المستخدم. القوالب تظهر في الأرشيف بوسم «قالب إرسال للشركاء».
 - **تغيّر تحت «المنصة»:** دفعات المعهد وطلابه فقط في `Create` و`CreateFromProfessionalModel`، والدفعات المؤرشفة والمحذوفة لم تعد ضمن الاختيار.
 - **تراجع** (بعد سحب الكود فقط): `Migrations/Scripts/APD_PerformanceIndicatorTemplate_Rollback.sql`. نسخ المدارس لا تتأثر، والقوالب تبقى اختبارات مؤرشفة عادية.
+
+### 8) APD-S5 (معمل القياس)
+- **الترتيب:** يتطلب سكربتات APD-S1 وAPD-S4 و`MSE_UniqueStudentAnswer.sql` مطبقة قبله.
+- **قبل نشر الكود، بعد Backup:** شغّل `Migrations/Scripts/APD_MinistrySimPartnerHidden.sql` (Idempotent، يضيف عمودين يقبلان NULL فقط). الكود الجديد يقرأ العمودين، فلا يُنشر قبله.
+```sql
+SELECT COL_LENGTH(N'MinistrySimExamAssignmentsToBatches', N'HiddenByOwnerAt');   -- 8
+SELECT COL_LENGTH(N'MinistrySimExamAssignmentsToStudents', N'HiddenByOwnerAt');  -- 8
+SELECT COUNT(*) FROM __EFMigrationsHistory WHERE MigrationId = N'20261105214613_APD_MinistrySimPartnerHidden'; -- 1
+```
+- **بعد النشر:** رابط «معمل القياس» في سايدبار الشريك للعقد الذي يشمل `CanUseMinistrySimExams` (من شاشة اشتراك الشريك في الأدمن).
+- **تغيّر في الأدمن:** شاشتا الإسناد (`AssignToBatch` و`AssignToStudent`) وشاشة `MinistrySimExamAssignments` تعرض دفعات المعهد فقط تحت «المنصة»، وإسناد دفعة شريك أو طالبها باسم المعهد يُرفض. نتائج طلاب المدارس وتحليلات دفعاتها وتقارير أولياء أمورها لا تظهر للأدمن (404)، وتفاصيل الاختبار تعرض عدد المدارس فقط.
+- **ما أُسند قبل APD-S5** بلا مالك ويبقى ظاهرًا للأدمن كما هو.
+- **تراجع** (بعد سحب الكود فقط): `Migrations/Scripts/APD_MinistrySimPartnerHidden_Rollback.sql`. ما أخفته المدارس يعود ظاهرًا لها، ولا أثر على الطلاب.
+
+### 9) APD-S6 (سجل الإرسال والاعتماد)
+- **لا Migration ولا سكربت جديد.** الصفحة تقرأ `PartnerDispatchLogs` من APD-S1.
+- **الجديد في الأدمن:** `Admin/PartnerDispatchLog` (رابط «سجل الإرسال للمدارس» في السايدبار) بصلاحية `PartnerDispatch.ReadLog` فقط: فلاتر النوع والمدرسة والمرسل والتجاوز والتاريخ (بتوقيت السعودية)، صف لكل عملية إرسال وتفاصيل لكل مدرسة ودفعة، وتصدير Excel (حد 10,000 سطر؛ ضيّق الفلاتر لما بعده). لا روابط لنتائج الطلاب.
+- **امنح `ReadLog` يدويًا** لمن يحتاجه من مصفوفة البروفايل (لا يُمنح تلقائيًا).
+- **تحقق بعد النشر:** افتح السجل بحساب له `ReadLog` وتأكد من ظهور آخر إرسال تجريبي، ثم صدّر Excel. بحساب بلا `ReadLog` يجب أن يُرفض الرابط (403) ولا يظهر في السايدبار.
 
 ## 📋 نشر Epic PPM (إتاحة النماذج الاحترافية للشركاء والإرسال من نموذج) — PPM-S1 إلى S6
 

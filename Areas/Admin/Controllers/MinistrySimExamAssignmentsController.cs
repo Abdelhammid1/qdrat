@@ -15,6 +15,7 @@ namespace QdratNew.Areas.Admin.Controllers
     // شاشة تصفّح إسنادات اختبار معمل القياس عبر 3 محاور: الدفعات / طلاب المعهد (إسناد فردي) / طلاب ضيوف —
     // مكمّلة لشاشات الإسناد الحالية (AssignToBatch/AssignToStudent) المرتبطة باختبار واحد، هذه الشاشة تتصفّح
     // من زاوية الدفعة/الطالب/الضيف عبر كل الاختبارات.
+    // APD-S5.1: دفعات المعهد وتكليفاته فقط؛ ما أُسند لمدرسة شريكة يُتابَع من منطقتها.
     [Area("Admin")]
     [Authorize(Roles = "Admin,SuperAdmin,Owner,Developer,Employee,DataEntry")]
     public class MinistrySimExamAssignmentsController : Controller
@@ -40,7 +41,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
             var batches = await _context.Batches
                 .AsNoTracking()
-                .Where(b => !b.IsDeleted && !b.IsArchived && EF.Constant(coursesWithExamIds).Contains(b.CourseId))
+                .Where(b => !b.IsDeleted && !b.IsArchived && b.Branch.PartnerId == null && EF.Constant(coursesWithExamIds).Contains(b.CourseId))
                 .OrderBy(b => b.Name)
                 .Select(b => new MinistrySimExamBatchCardVm
                 {
@@ -48,12 +49,13 @@ namespace QdratNew.Areas.Admin.Controllers
                     Name = b.Name,
                     CourseName = b.Course.Name,
                     EnrolledStudentsCount = b.StudentBatchEnrollments.Count(e => e.Status == "Active"),
-                    AssignedExamsCount = _context.MinistrySimExamAssignmentsToBatches.Count(a => a.BatchId == b.Id)
+                    AssignedExamsCount = _context.MinistrySimExamAssignmentsToBatches.Count(a => a.BatchId == b.Id && a.OwnerPartnerId == null)
                 })
                 .ToListAsync();
 
             var studentAssignments = await _context.MinistrySimExamAssignmentsToStudents
                 .AsNoTracking()
+                .Where(a => a.OwnerPartnerId == null)
                 .Select(a => new { a.StudentId, a.Student.FullName, ExamTitle = a.MinistrySimExam.Title })
                 .ToListAsync();
 
@@ -105,14 +107,14 @@ namespace QdratNew.Areas.Admin.Controllers
             var batch = await _context.Batches
                 .AsNoTracking()
                 .Include(b => b.Course)
-                .FirstOrDefaultAsync(b => b.Id == batchId);
+                .FirstOrDefaultAsync(b => b.Id == batchId && b.Branch.PartnerId == null);
 
             if (batch == null)
                 return NotFound("❌ لم يتم العثور على الدفعة المطلوبة.");
 
             var assignedExams = await _context.MinistrySimExamAssignmentsToBatches
                 .AsNoTracking()
-                .Where(a => a.BatchId == batchId)
+                .Where(a => a.BatchId == batchId && a.OwnerPartnerId == null)
                 .OrderByDescending(a => a.AssignedAt)
                 .Select(a => new MinistrySimExamAssignedExamRowVm
                 {

@@ -7,8 +7,11 @@ namespace QdratNew.ViewModels.Exam
     // + مقارنة بمتوسط دفعة الطالب. StudentFullExamReportVm القديم كود ميت غير مستخدم — لا يُعاد استخدامه هنا.
     // Sprint 19 (MSE-K / K3+K4): أُضيف رأس خطاب حقيقي (InstituteName/InstituteAddress/SiteLogoUrl)،
     // اتجاه الأداء عبر محاولات سابقة (PreviousAttemptsTrend)، وحقل RecommendationsNote القابل للتحرير.
-    public class MinistrySimExamParentReportVm
+    public class MinistrySimExamParentReportVm : QdratNew.ViewModels.Reports.IReportLetterhead
     {
+        // APD-S5.2: رأس المدرسة الشريكة في تقريرها. null = رأس المعهد من الإعدادات (سلوك الأدمن كما هو)
+        public QdratNew.ViewModels.Reports.ReportLetterhead? Letterhead { get; set; }
+
         // رأس الخطاب — Sprint 19 (K4): مربوط فعليًا بـISystemSettingService بدل Placeholder ثابت
         public DateTime ReportGeneratedAt { get; set; } = DateTime.Now;
         public string InstituteName { get; set; }
@@ -51,6 +54,9 @@ namespace QdratNew.ViewModels.Exam
 
         // true عندما تُعرض الشاشة في وضع الطباعة/PDF (Puppeteer) — تُخفي عناصر التحرير (K5)
         public bool IsPrintMode { get; set; }
+
+        // APD-S5.2: false = الملاحظات للقراءة فقط (مدرسة انتهى عقدها أو لا يشمل معمل القياس)
+        public bool CanEditNote { get; set; } = true;
 
         // توصية محفِّزة عامة على مستوى الاختبار كامل — مبنية عبر ResultToneHelper (بلا لغة رسوب إطلاقًا)
         public string OverallMotivationHeading { get; set; }

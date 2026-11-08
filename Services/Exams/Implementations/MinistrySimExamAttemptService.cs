@@ -288,11 +288,16 @@ namespace QdratNew.Services.Exams.Implementations
                 }
             }
 
+            // عند وجود صفوف مكررة يُحدَّث الأحدث، وهو الصف الذي تعتمده كل القراءات
             var answer = await _context.MinistrySimExamStudentAnswers
-                .FirstOrDefaultAsync(a => a.MinistrySimExamStudentAttemptId == attemptId
-                                           && a.MinistrySimExamStageQuestionId == stageQuestionId);
+                .Where(a => a.MinistrySimExamStudentAttemptId == attemptId
+                            && a.MinistrySimExamStageQuestionId == stageQuestionId)
+                .OrderByDescending(a => a.Id)
+                .FirstOrDefaultAsync();
 
-            if (answer == null)
+            var isNewAnswer = answer == null;
+
+            if (isNewAnswer)
             {
                 answer = new MinistrySimExamStudentAnswer
                 {
@@ -313,7 +318,31 @@ namespace QdratNew.Services.Exams.Implementations
                 answer.IsFlaggedForReview = flagForReview;
             }
 
-            await _context.SaveChangesAsync();
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateException) when (isNewAnswer)
+            {
+                // طلبان متزامنان لنفس السؤال: الفهرس الفريد يرفض الصف الثاني، فتصبح إجابة هذا الطلب تحديثًا للصف الموجود (آخر إجابة تُعتمد)
+                _context.Entry(answer).State = EntityState.Detached;
+
+                var existing = await _context.MinistrySimExamStudentAnswers
+                    .Where(a => a.MinistrySimExamStudentAttemptId == attemptId
+                                && a.MinistrySimExamStageQuestionId == stageQuestionId)
+                    .OrderByDescending(a => a.Id)
+                    .FirstOrDefaultAsync();
+
+                if (existing == null)
+                    throw;
+
+                existing.SelectedOptionId = selectedOptionId;
+                existing.IsCorrect = isCorrect;
+                existing.AnsweredAt = DateTime.Now;
+                existing.IsFlaggedForReview = flagForReview;
+
+                await _context.SaveChangesAsync();
+            }
         }
 
         // القفل النهائي أحادي الاتجاه (F4). لا يوجد أي مسار كود بعد هذه الدالة يعيد IsLocked إلى false.
@@ -347,10 +376,8 @@ namespace QdratNew.Services.Exams.Implementations
                 .CountAsync(sq => sq.MinistrySimExamStage.MinistrySimExamId == attempt.MinistrySimExamId
                                    && sq.MinistrySimExamStage.StageNumber == stageNumber);
 
-            var stageCorrectCount = await _context.MinistrySimExamStudentAnswers
-                .AsNoTracking()
-                .CountAsync(a => a.MinistrySimExamStudentAttemptId == attemptId
-                                  && a.IsCorrect == true
+            var stageCorrectCount = await LatestAnswers(attemptId)
+                .CountAsync(a => a.IsCorrect == true
                                   && a.StageQuestion.MinistrySimExamStage.MinistrySimExamId == attempt.MinistrySimExamId
                                   && a.StageQuestion.MinistrySimExamStage.StageNumber == stageNumber);
 
@@ -374,9 +401,8 @@ namespace QdratNew.Services.Exams.Implementations
                         .AsNoTracking()
                         .CountAsync(sq => sq.MinistrySimExamStage.MinistrySimExamId == attempt.MinistrySimExamId);
 
-                    var totalCorrectCount = await _context.MinistrySimExamStudentAnswers
-                        .AsNoTracking()
-                        .CountAsync(a => a.MinistrySimExamStudentAttemptId == attemptId && a.IsCorrect == true);
+                    var totalCorrectCount = await LatestAnswers(attemptId)
+                        .CountAsync(a => a.IsCorrect == true);
 
                     attempt.IsCompleted = true;
                     attempt.CompletedAt = DateTime.Now;
@@ -388,6 +414,18 @@ namespace QdratNew.Services.Exams.Implementations
             }
 
             return progress;
+        }
+
+        // صف واحد لكل سؤال (الأحدث): الجدول بلا فهرس فريد فقد يوجد تكرار من طلبين متزامنين، ولا يجوز أن يُحتسب السؤال مرتين.
+        private IQueryable<MinistrySimExamStudentAnswer> LatestAnswers(int attemptId)
+        {
+            return _context.MinistrySimExamStudentAnswers
+                .AsNoTracking()
+                .Where(a => a.MinistrySimExamStudentAttemptId == attemptId
+                            && !_context.MinistrySimExamStudentAnswers.Any(newer =>
+                                newer.MinistrySimExamStudentAttemptId == attemptId
+                                && newer.MinistrySimExamStageQuestionId == a.MinistrySimExamStageQuestionId
+                                && newer.Id > a.Id));
         }
 
         // Sprint 10 (F3): الحسم النهائي لانتهاء الوقت يكون هنا فقط، بمقارنة وقت الخادم — لا ثقة بأي مؤقت Client.

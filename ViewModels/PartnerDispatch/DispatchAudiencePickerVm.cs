@@ -35,6 +35,9 @@ namespace QdratNew.ViewModels.PartnerDispatch
 
         // APD-S4.1: قالب مؤشر الأداء يُرسل للمدارس فقط، فلا يظهر خيار المنصة
         public bool PartnersOnly { get; set; }
+
+        // APD-S5.1: دفعات منصة مُسنَد لها المصدر من قبل (معمل القياس): تُعلَّم بوسم، واختيارها يُسند لطلابها الجدد فقط
+        public IReadOnlyCollection<int> AlreadyAssignedPlatformBatchIds { get; set; } = Array.Empty<int>();
     }
 
     // APD-S1.4: قائمة المدارس ودفعاتها (_DispatchAudiencePartners) — تُعرض داخل الـ Picker وتُرجعها AudienceOptions

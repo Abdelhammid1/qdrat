@@ -251,6 +251,7 @@ namespace QdratNew.Services.PartnerDispatch
                 if (sendNow)
                     await InsertDeliveryAsync(exam, students, nowUtc, ct);
 
+                var uniqueCounts = DispatchRules.UniqueStudentsPerBatch(recipients);
                 await _dispatchLog.WriteAsync(
                     batchIds
                         .Select(batchId => new PartnerDispatchLog
@@ -262,7 +263,7 @@ namespace QdratNew.Services.PartnerDispatch
                             PartnerId = partnerId,
                             BatchId = batchId,
                             TargetEntityId = exam.Id,
-                            StudentsCount = sendNow ? recipients[batchId].Count : 0, // 0 = مسودة لم تصل لطالب
+                            StudentsCount = sendNow ? uniqueCounts[batchId] : 0, // 0 = مسودة لم تصل لطالب
                             ContractOverridden = scope.ContractOverridden,
                             OverrideReason = scope.OverrideReason,
                             SentByUserId = scope.UserId!,

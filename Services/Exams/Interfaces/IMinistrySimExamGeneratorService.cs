@@ -27,5 +27,9 @@ namespace QdratNew.Services.Exams.Interfaces
 
         // Sprint 7 (MSE-D / D4): يضيف سؤالاً واحدًا محددًا يدويًا من نفس المؤشر/الصعوبة إلى المرحلة
         Task<MinistrySimExamManualAddResult> AddQuestionManuallyAsync(int stageId, int lessonId, DifficultyLevel difficulty, Guid questionId);
+
+        // يعيد رسالة عربية إن كان السؤال موجودًا في الاختبار أو يشبه أحد أسئلته، وإلا null.
+        // ignoreStageQuestionId: السؤال الذي سيُستبدل، فلا يُقارن البديل به.
+        Task<string> FindDuplicateConflictAsync(int ministrySimExamId, Guid questionId, int? ignoreStageQuestionId = null);
     }
 }

@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using QdratNew.Data;
 using QdratNew.Enums;
 using QdratNew.Services.PartnerDispatch;
@@ -30,7 +31,7 @@ namespace QdratNew.Tests.AdminPartnerDispatch
         }
 
         private static DispatchAudienceService NewService(ApplicationDbContext db)
-            => new(db, new ProfessionalModelAvailabilityService(db));
+            => new(db);
 
         private static DispatchSource HomeworkFrom(int modelId) => new(PartnerDispatchKind.Homework, modelId, null, null);
 
@@ -111,16 +112,37 @@ namespace QdratNew.Tests.AdminPartnerDispatch
         }
 
         [SqlServerFact]
-        public async Task Partners_ModelNotAvailable_IsOverridable()
+        public async Task Partners_ContractWithoutProfessionalModels_IsOverridable()
+        {
+            var (seed, db, service) = await ArrangeAsync();
+            await using var _ = db;
+            await RemoveProfessionalModelsFromContractAsync(db, seed.PartnerA);
+
+            var a = (await service.GetPartnersAsync(HomeworkFrom(seed.ModelLinkedToA))).Single(p => p.PartnerId == seed.PartnerA);
+
+            Assert.False(a.Eligible);
+            Assert.Equal(DispatchRules.ProfessionalModelsMissing, a.BlockReason);
+            Assert.True(a.Overridable);
+        }
+
+        // الأدمن هو المرسل: إتاحة النموذج في مكتبة الشريك لا تحجب الإرسال، العقد وحده يحكم
+        [SqlServerFact]
+        public async Task Partners_InternalModel_IsEligible_WhenContractIncludesProfessionalModels()
         {
             var (seed, db, service) = await ArrangeAsync();
             await using var _ = db;
 
             var a = (await service.GetPartnersAsync(HomeworkFrom(seed.ModelNotForAnyone))).Single(p => p.PartnerId == seed.PartnerA);
 
-            Assert.False(a.Eligible);
-            Assert.Equal(DispatchRules.ModelNotAvailable, a.BlockReason);
-            Assert.True(a.Overridable);
+            Assert.True(a.Eligible);
+            Assert.Null(a.BlockReason);
+        }
+
+        private static async Task RemoveProfessionalModelsFromContractAsync(ApplicationDbContext db, int partnerId)
+        {
+            var contracts = await db.PartnerSubscriptions.Where(s => s.PartnerId == partnerId).ToListAsync();
+            contracts.ForEach(c => c.CanUseProfessionalModels = false);
+            await db.SaveChangesAsync();
         }
 
         [SqlServerFact]
@@ -338,10 +360,11 @@ namespace QdratNew.Tests.AdminPartnerDispatch
         }
 
         [SqlServerFact]
-        public async Task Validate_ModelNotAvailable_CanBeOverridden()
+        public async Task Validate_ContractWithoutProfessionalModels_CanBeOverridden()
         {
             var (seed, db, service) = await ArrangeAsync();
             await using var _ = db;
+            await RemoveProfessionalModelsFromContractAsync(db, seed.PartnerA);
 
             var selection = Partners((seed.PartnerA, new[] { seed.BatchA1 }));
             selection.OverrideContract = true;

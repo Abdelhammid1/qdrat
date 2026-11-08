@@ -4735,6 +4735,9 @@ namespace QdratNew.Migrations
                     b.Property<int?>("CreatedByInstructorId")
                         .HasColumnType("int");
 
+                    b.Property<DateTime?>("HiddenByOwnerAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<bool>("IsOnline")
                         .HasColumnType("bit");
 
@@ -4802,6 +4805,9 @@ namespace QdratNew.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime>("AssignedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("HiddenByOwnerAt")
                         .HasColumnType("datetime2");
 
                     b.Property<bool>("IsOnline")
@@ -5007,7 +5013,8 @@ namespace QdratNew.Migrations
 
                     b.HasIndex("MinistrySimExamStageQuestionId");
 
-                    b.HasIndex("MinistrySimExamStudentAttemptId");
+                    b.HasIndex("MinistrySimExamStudentAttemptId", "MinistrySimExamStageQuestionId")
+                        .IsUnique();
 
                     b.ToTable("MinistrySimExamStudentAnswers");
                 });

@@ -29,5 +29,8 @@ namespace QdratNew.Entities
         // APD-S1: الشريك المالك (null = ملك المعهد). ما يُرسل لشريك يُدار من منطقته ويختفي من إدارة الأدمن.
         public int? OwnerPartnerId { get; set; }
         public Partner? OwnerPartner { get; set; }
+
+        // APD-S5.2: إخفاء المدرسة المالكة للتكليف من قائمتها فقط (لا يؤثر على الطلاب ونتائجهم). null = ظاهر.
+        public DateTime? HiddenByOwnerAt { get; set; }
     }
 }

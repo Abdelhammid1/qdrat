@@ -24,6 +24,10 @@ namespace QdratNew.Tests.AdminPartnerDispatch
     // APD-S4: منهج مستقل بمحور ودرس وسؤالين مرتبط بكورس الدفعات، وقالب جاهز، وعقدا A وB يشملان مؤشر الأداء.
     internal sealed record ApdPerformanceSeed(int CurriculumId, int TemplateId, int SectionId, Guid QuestionA, Guid QuestionB, int StudentB);
 
+    // APD-S5: اختبار معمل قياس منشور على كورس الدفعات (قسم واحد وسؤالان)، وعقدا A وB يشملان معمل القياس.
+    // StudentB: طالب B النشط في B1. StudentA2: طالب A ثانٍ نشط في A1.
+    internal sealed record ApdMinistrySimSeed(int ExamId, int StudentB, int StudentA2, int StageQuestionA, int StageQuestionB);
+
     internal static class ApdTestData
     {
         public const string Marker = "APDS1";
@@ -38,6 +42,8 @@ namespace QdratNew.Tests.AdminPartnerDispatch
         private const string Assignments = "(SELECT Id FROM ExamAssignmentsToBatches WHERE BatchId IN " + Batches + ")";
         private const string Models = "(SELECT Id FROM ProfessionalModels WHERE Title LIKE 'APDS1%')";
         private const string PerformanceExams = "(SELECT Id FROM PerformanceIndicatorExams WHERE Title LIKE 'APDS1%' OR OwnerPartnerId IN " + Partners + ")";
+        private const string SimExams = "(SELECT Id FROM MinistrySimExams WHERE Title LIKE 'APDS1%')";
+        private const string SimAttempts = "(SELECT Id FROM MinistrySimExamStudentAttempts WHERE MinistrySimExamId IN " + SimExams + " OR StudentId IN " + Students + ")";
 
         public static async Task CleanupAsync(ApplicationDbContext db)
         {
@@ -49,6 +55,14 @@ namespace QdratNew.Tests.AdminPartnerDispatch
                 "DELETE FROM AdminProfiles WHERE Name LIKE 'APDS1%'",
                 "DELETE FROM AdminUserProfiles WHERE UserId LIKE 'apds1-%'",
                 $"DELETE FROM PartnerDispatchLogs WHERE PartnerId IN {Partners}",
+                $"DELETE FROM MinistrySimExamStudentAnswers WHERE MinistrySimExamStudentAttemptId IN {SimAttempts}",
+                $"DELETE FROM MinistrySimExamStudentStageProgresses WHERE MinistrySimExamStudentAttemptId IN {SimAttempts}",
+                $"DELETE FROM MinistrySimExamStudentAttempts WHERE Id IN {SimAttempts}",
+                $"DELETE FROM MinistrySimExamAssignmentsToStudents WHERE MinistrySimExamId IN {SimExams} OR StudentId IN {Students}",
+                $"DELETE FROM MinistrySimExamAssignmentsToBatches WHERE MinistrySimExamId IN {SimExams} OR BatchId IN {Batches}",
+                $"DELETE FROM MinistrySimExamStageQuestions WHERE MinistrySimExamStageId IN (SELECT Id FROM MinistrySimExamStages WHERE MinistrySimExamId IN {SimExams})",
+                $"DELETE FROM MinistrySimExamStages WHERE MinistrySimExamId IN {SimExams}",
+                "DELETE FROM MinistrySimExams WHERE Title LIKE 'APDS1%'",
                 $"DELETE FROM QuestionAttemptNew WHERE PerformanceIndicatorExamId IN {PerformanceExams}",
                 $"DELETE FROM PerformanceIndicatorExamStudents WHERE PerformanceIndicatorExamId IN {PerformanceExams}",
                 $"DELETE FROM PerformanceIndicatorExamQuestions WHERE PerformanceIndicatorExamId IN {PerformanceExams}",
@@ -220,6 +234,91 @@ namespace QdratNew.Tests.AdminPartnerDispatch
 
             db.ChangeTracker.Clear();
             return new ApdPerformanceSeed(curriculum.Id, template.Id, section.Id, questionA.Id, questionB.Id, studentB);
+        }
+
+        public static async Task<ApdMinistrySimSeed> PrepareMinistrySimAsync(ApplicationDbContext db, ApdSeed seed)
+        {
+            var contracts = await db.PartnerSubscriptions
+                .Where(s => s.PartnerId == seed.PartnerA || s.PartnerId == seed.PartnerB)
+                .ToListAsync();
+            contracts.ForEach(c => c.CanUseMinistrySimExams = true);
+
+            // سياق الشريك يتطلب فترة نشطة، والأساس يضيفها لعقد A فقط
+            db.PartnerSubscriptionPeriods.Add(new PartnerSubscriptionPeriod
+            {
+                PartnerSubscriptionId = contracts.Single(c => c.PartnerId == seed.PartnerB).Id,
+                StartDate = DateTime.Today.AddDays(-1),
+                EndDate = DateTime.Today.AddDays(30)
+            });
+
+            var instructorId = await db.Instructors.AsNoTracking().Select(i => i.Id).FirstAsync();
+            var sectionId = await db.Sections.AsNoTracking().Select(s => s.Id).FirstAsync();
+            var questionIds = await db.Questions.AsNoTracking()
+                .Where(q => q.LessonId != null && q.Options.Any())
+                .Select(q => q.Id)
+                .Take(2)
+                .ToListAsync();
+
+            var stage = new MinistrySimExamStage
+            {
+                StageNumber = 1, QuantSectionId = sectionId, QuantQuestionCount = 2,
+                VerbalSectionId = sectionId, VerbalQuestionCount = 0, DurationMinutes = 26
+            };
+            var first = new MinistrySimExamStageQuestion { QuestionId = questionIds[0], StageOrder = 1, GlobalOrder = 1, IsQuant = true };
+            var second = new MinistrySimExamStageQuestion { QuestionId = questionIds[1], StageOrder = 2, GlobalOrder = 2, IsQuant = true };
+            stage.Questions.Add(first);
+            stage.Questions.Add(second);
+
+            var exam = new MinistrySimExam
+            {
+                CourseId = seed.CourseId, Title = $"{Marker} معمل قياس", TotalStages = 1, IsPublished = true,
+                PublishedAt = DateTime.Now, CreatedByInstructorId = instructorId
+            };
+            exam.Stages.Add(stage);
+            db.MinistrySimExams.Add(exam);
+
+            var branchA = await db.Batches.Where(b => b.Id == seed.BatchA1).Select(b => b.BranchId).FirstAsync();
+            db.Users.Add(NewUser("apds1-sa2"));
+            var studentA2 = new Student
+            {
+                NationalID = $"{Marker}A2", FullName = $"طالب {Marker} A2", Gender = "ذكر", Age = 17,
+                School = "-", Level = "-", UserId = "apds1-sa2", BranchId = branchA, IsActiveForLearning = true
+            };
+            db.Students.Add(studentA2);
+            await db.SaveChangesAsync();
+
+            db.StudentBatchEnrollments.Add(new StudentBatchEnrollment { StudentID = studentA2.StudentID, BatchId = seed.BatchA1 });
+            await db.SaveChangesAsync();
+
+            var studentB = await db.StudentBatchEnrollments.AsNoTracking()
+                .Where(e => e.BatchId == seed.BatchB1)
+                .Select(e => e.StudentID)
+                .FirstAsync();
+
+            db.ChangeTracker.Clear();
+            return new ApdMinistrySimSeed(exam.Id, studentB, studentA2.StudentID, first.Id, second.Id);
+        }
+
+        // محاولة مكتملة بقسم واحد: إجابة صحيحة للسؤال الأول، والثاني بلا إجابة
+        public static async Task<int> CompleteSimAttemptAsync(ApplicationDbContext db, ApdMinistrySimSeed sim, int studentId, double score = 50)
+        {
+            var attempt = new MinistrySimExamStudentAttempt
+            {
+                MinistrySimExamId = sim.ExamId, StudentId = studentId, StartedAt = DateTime.Now.AddMinutes(-30),
+                CompletedAt = DateTime.Now, IsCompleted = true, TotalScorePercent = score
+            };
+            attempt.StageProgress.Add(new MinistrySimExamStudentStageProgress
+            {
+                StageNumber = 1, StartedAt = DateTime.Now.AddMinutes(-30), EndAt = DateTime.Now, IsLocked = true, StagePercentScore = score
+            });
+            attempt.Answers.Add(new MinistrySimExamStudentAnswer
+            {
+                MinistrySimExamStageQuestionId = sim.StageQuestionA, SelectedOptionId = 0, IsCorrect = true
+            });
+            db.MinistrySimExamStudentAttempts.Add(attempt);
+            await db.SaveChangesAsync();
+            db.ChangeTracker.Clear();
+            return attempt.Id;
         }
 
         public static ApplicationUser NewUser(string userName) => new()

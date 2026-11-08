@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using QdratNew.Data;
 using QdratNew.Entities;
 using QdratNew.Enums;
-using QdratNew.Services.ProfessionalModels;
 
 namespace QdratNew.Services.PartnerDispatch
 {
@@ -13,17 +12,15 @@ namespace QdratNew.Services.PartnerDispatch
         private const string ActiveEnrollmentStatus = "Active";
 
         private readonly ApplicationDbContext _context;
-        private readonly IProfessionalModelAvailabilityService _availability;
 
-        public DispatchAudienceService(ApplicationDbContext context, IProfessionalModelAvailabilityService availability)
+        public DispatchAudienceService(ApplicationDbContext context)
         {
             _context = context;
-            _availability = availability;
         }
 
         private sealed record ResolvedSource(DispatchSource Source, int? CurriculumId, int? CourseId);
 
-        private sealed record PartnerContract(bool Homework, bool Exams, bool Placement, bool PerformanceIndicator, bool MinistrySim);
+        private sealed record PartnerContract(bool Homework, bool Exams, bool Placement, bool PerformanceIndicator, bool MinistrySim, bool ProfessionalModels);
 
         private sealed record Eligibility(bool Eligible, string? BlockReason, bool Overridable);
 
@@ -76,8 +73,6 @@ namespace QdratNew.Services.PartnerDispatch
             if (listed.Count == 0)
                 return Array.Empty<PartnerEligibilityVm>();
 
-            var modelAccess = await LoadModelAccessAsync(resolved, ct);
-
             var batches = await PartnerBatches(resolved)
                 .OrderBy(b => b.Name)
                 .Select(b => new PartnerBatchRow
@@ -99,7 +94,7 @@ namespace QdratNew.Services.PartnerDispatch
             return listed
                 .Select(p =>
                 {
-                    var eligibility = Evaluate(resolved.Source, contracts.GetValueOrDefault(p.Id), modelAccess, p.Id);
+                    var eligibility = Evaluate(resolved.Source, contracts.GetValueOrDefault(p.Id));
                     return new PartnerEligibilityVm
                     {
                         PartnerId = p.Id,
@@ -193,7 +188,6 @@ namespace QdratNew.Services.PartnerDispatch
                 .ToDictionaryAsync(b => b.Id, b => b.PartnerId, ct);
 
             var contracts = await LoadContractsAsync(partnerIds, ct);
-            var modelAccess = await LoadModelAccessAsync(resolved, ct);
 
             var reason = selection.OverrideReason?.Trim();
             var overrideChecked = false;
@@ -211,7 +205,7 @@ namespace QdratNew.Services.PartnerDispatch
                 if (item.BatchIds.Any(id => !batchOwners.TryGetValue(id, out var owner) || owner != item.PartnerId))
                     errors.Add($"{name}: دفعة أو أكثر لا تخص هذه المدرسة أو لم تعد متاحة لهذا الإرسال.");
 
-                var eligibility = Evaluate(resolved.Source, contracts.GetValueOrDefault(item.PartnerId), modelAccess, item.PartnerId);
+                var eligibility = Evaluate(resolved.Source, contracts.GetValueOrDefault(item.PartnerId));
                 var overridden = false;
 
                 if (!eligibility.Eligible)
@@ -281,7 +275,9 @@ namespace QdratNew.Services.PartnerDispatch
         // =====================================================
         // الأهلية
         // =====================================================
-        private static Eligibility Evaluate(DispatchSource source, PartnerContract? contract, HashSet<int> modelAccess, int partnerId)
+        // الأدمن هو المرسل: الإرسال من نموذج احترافي يُحكم بعقد الشريك (CanUseProfessionalModels) فقط،
+        // لا بإتاحة النموذج في مكتبة الشريك (IsForPartners/IsGlobal/الربط)؛ تلك تخص ما يرسله الشريك بنفسه.
+        private static Eligibility Evaluate(DispatchSource source, PartnerContract? contract)
         {
             if (contract == null)
                 return new Eligibility(false, DispatchRules.NoActiveContract, false);
@@ -289,8 +285,8 @@ namespace QdratNew.Services.PartnerDispatch
             if (!HasFeature(contract, source.Kind))
                 return new Eligibility(false, DispatchRules.FeatureMissing(source.Kind), true);
 
-            if (source.IsFromProfessionalModel && !modelAccess.Contains(partnerId))
-                return new Eligibility(false, DispatchRules.ModelNotAvailable, true);
+            if (source.IsFromProfessionalModel && !contract.ProfessionalModels)
+                return new Eligibility(false, DispatchRules.ProfessionalModelsMissing, true);
 
             return new Eligibility(true, null, true);
         }
@@ -324,7 +320,8 @@ namespace QdratNew.Services.PartnerDispatch
                     s.CanCreateExams,
                     s.CanUsePlacementExams,
                     s.CanUsePerformanceIndicatorExams,
-                    s.CanUseMinistrySimExams
+                    s.CanUseMinistrySimExams,
+                    s.CanUseProfessionalModels
                 })
                 .ToListAsync(ct);
 
@@ -337,16 +334,8 @@ namespace QdratNew.Services.PartnerDispatch
                         g.Any(r => r.CanCreateExams),
                         g.Any(r => r.CanUsePlacementExams),
                         g.Any(r => r.CanUsePerformanceIndicatorExams),
-                        g.Any(r => r.CanUseMinistrySimExams)));
-        }
-
-        // نوع النموذج لا يُشترط هنا: توافق النوع مع الشاشة مسؤولية خدمة الإرسال
-        private async Task<HashSet<int>> LoadModelAccessAsync(ResolvedSource resolved, CancellationToken ct)
-        {
-            if (!resolved.Source.IsFromProfessionalModel || !resolved.Source.ProfessionalModelId.HasValue)
-                return new HashSet<int>();
-
-            return await _availability.GetPartnerIdsWithAccessAsync(resolved.Source.ProfessionalModelId.Value, null, ct);
+                        g.Any(r => r.CanUseMinistrySimExams),
+                        g.Any(r => r.CanUseProfessionalModels)));
         }
 
         // =====================================================

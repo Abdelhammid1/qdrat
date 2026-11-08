@@ -58,10 +58,21 @@ namespace QdratNew.Areas.Admin.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [AdminPermission("CorporateRequests", "Manage")]
-        public async Task<IActionResult> EditStatus(EditCorporateStatusViewModel vm)
+        public async Task<IActionResult> EditStatus(EditCorporateStatusViewModel vm, int returnPage = 0)
         {
             var req = await _context.CorporateRegistrationRequests.FindAsync(vm.Id);
             if (req == null) return NotFound();
+
+            // حقول العرض فقط لا تُرسل من النموذج؛ ومع تفعيل Nullable تُعتبر مطلوبة ضمنيًا
+            // فكان ModelState يفشل ولا يُحفظ التعديل. نتجاهلها هنا ونملؤها من قاعدة البيانات.
+            foreach (var key in new[]
+            {
+                nameof(vm.FullName), nameof(vm.EmployeeNumber), nameof(vm.Email), nameof(vm.NationalID),
+                nameof(vm.PhoneNumber), nameof(vm.Residence), nameof(vm.CompanyName)
+            })
+            {
+                ModelState.Remove(key);
+            }
 
             if (!ModelState.IsValid)
             {
@@ -85,7 +96,7 @@ namespace QdratNew.Areas.Admin.Controllers
 
             await _context.SaveChangesAsync();
             TempData["Success"] = "✅ تم تحديث حالة الطلب بنجاح.";
-            return RedirectToAction(nameof(Index));
+            return RedirectToAction(nameof(Index), new { page = returnPage > 0 ? returnPage : (int?)null });
         }
 
         [HttpPost]

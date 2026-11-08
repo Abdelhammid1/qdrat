@@ -1,6 +1,9 @@
 @model QdratNew.ViewModels.Exam.MinistrySimExamParentReportVm
+@using QdratNew.Helpers
 @{
     Layout = "~/Areas/Admin/Views/Shared/_ReportLayout.cshtml";
+    // APD-S5.2: نفس التقرير للمدرسة الشريكة برأسها (Model.Letterhead) وروابطها، وبلا PDF من الخادم
+    var mseRoutes = MinistrySimResultRoutes.For(ViewContext);
     ViewData["Title"] = "تقرير أداء الطالب — اختبار محاكاة اختبار الوزارة";
 
     var trendLabelsJs = string.Join(",", Model.PreviousAttemptsTrend
@@ -264,7 +267,7 @@
 <div class="card-box pr-note-box">
     <h5 class="report-title mb-3">ملاحظات وتوصيات المدرّس</h5>
 
-    @if (Model.IsPrintMode)
+    @if (Model.IsPrintMode || !Model.CanEditNote)
     {
         @if (!string.IsNullOrWhiteSpace(Model.RecommendationsNote))
         {
@@ -294,13 +297,22 @@
        الـPDF بوسيط "screen" الآن (راجع ParentReportPdf) فلن تنطبق قاعدة @@media print { .no-print } هنا *@
     <div class="text-center d-flex justify-content-center gap-2 flex-wrap" style="margin: 10px 0 24px;">
         <a class="btn btn-outline-secondary px-4"
-           href="@Url.Action("StudentResult", "MinistrySimExam", new { area = "Admin", id = Model.MinistrySimExamId, studentId = Model.StudentId })">
+           href="@Url.Action("StudentResult", mseRoutes.Controller, new { area = mseRoutes.Area, id = Model.MinistrySimExamId, studentId = Model.StudentId })">
             العودة لنتيجة الطالب
         </a>
-        <a class="btn btn-report px-4"
-           href="@Url.Action("ParentReportPdf", "MinistrySimExam", new { area = "Admin", examId = Model.MinistrySimExamId, studentId = Model.StudentId })">
-            <i class="fas fa-file-pdf ms-1"></i> تنزيل PDF لولي الأمر
-        </a>
+        @if (mseRoutes.CanDownloadPdf)
+        {
+            <a class="btn btn-report px-4"
+               href="@Url.Action("ParentReportPdf", "MinistrySimExam", new { area = "Admin", examId = Model.MinistrySimExamId, studentId = Model.StudentId })">
+                <i class="fas fa-file-pdf ms-1"></i> تنزيل PDF لولي الأمر
+            </a>
+        }
+        else
+        {
+            <button type="button" class="btn btn-report px-4" onclick="window.print()" data-mse-print>
+                <i class="fas fa-print ms-1"></i> طباعة / حفظ PDF
+            </button>
+        }
     </div>
 }
 
@@ -448,7 +460,7 @@
                     var note = document.getElementById('recommendationsNote').value;
                     var token = document.querySelector('#antiForgeryForm input[name="__RequestVerificationToken"]').value;
                     status.textContent = 'جارٍ الحفظ...';
-                    fetch('@Url.Action("SaveParentReportNote", "MinistrySimExam", new { area = "Admin" })', {
+                    fetch('@Url.Action("SaveParentReportNote", mseRoutes.Controller, new { area = mseRoutes.Area })', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                         body: 'attemptId=@Model.AttemptId&note=' + encodeURIComponent(note) + '&__RequestVerificationToken=' + encodeURIComponent(token)

@@ -274,6 +274,7 @@ namespace QdratNew.Services.PartnerDispatch
                     cancellationToken: ct);
 
                 var nowUtc = DateTime.UtcNow;
+                var uniqueCounts = DispatchRules.UniqueStudentsPerBatch(recipients);
                 await _dispatchLog.WriteAsync(
                     recipients
                         .Select(r => new PartnerDispatchLog
@@ -285,7 +286,7 @@ namespace QdratNew.Services.PartnerDispatch
                             PartnerId = target.PartnerId,
                             BatchId = r.Key,
                             TargetEntityId = exam.Id,
-                            StudentsCount = r.Value.Count,
+                            StudentsCount = uniqueCounts[r.Key],
                             ContractOverridden = target.ContractOverridden,
                             OverrideReason = target.OverrideReason,
                             SentByUserId = actor.UserId,

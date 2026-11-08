@@ -213,9 +213,12 @@ namespace QdratNew.Areas.Students.Controllers
                                       && sq.MinistrySimExamStage.StageNumber == previousStageNumber);
                 vm.PreviousStageAnswered = await _context.MinistrySimExamStudentAnswers
                     .AsNoTracking()
-                    .CountAsync(a => a.MinistrySimExamStudentAttemptId == attempt.Id
-                                     && a.SelectedOptionId != null
-                                     && a.StageQuestion.MinistrySimExamStage.StageNumber == previousStageNumber);
+                    .Where(a => a.MinistrySimExamStudentAttemptId == attempt.Id
+                                && a.SelectedOptionId != null
+                                && a.StageQuestion.MinistrySimExamStage.StageNumber == previousStageNumber)
+                    .Select(a => a.MinistrySimExamStageQuestionId)
+                    .Distinct()
+                    .CountAsync();
             }
 
             // قد يضم الفرع الواحد أكثر من محور (محاور إضافية)؛ تُعرض كلها بالأساسي أولاً
@@ -451,6 +454,7 @@ namespace QdratNew.Areas.Students.Controllers
             var existingFlag = await _context.MinistrySimExamStudentAnswers
                 .AsNoTracking()
                 .Where(a => a.MinistrySimExamStudentAttemptId == attempt.Id && a.MinistrySimExamStageQuestionId == stageQuestionId)
+                .OrderByDescending(a => a.Id)
                 .Select(a => (bool?)a.IsFlaggedForReview)
                 .FirstOrDefaultAsync();
 
@@ -653,13 +657,18 @@ namespace QdratNew.Areas.Students.Controllers
             if (question == null)
                 return null;
 
-            var stageAnswers = await _context.MinistrySimExamStudentAnswers
+            var stageAnswerRows = await _context.MinistrySimExamStudentAnswers
                 .AsNoTracking()
                 .Where(a => a.MinistrySimExamStudentAttemptId == attemptId
                     && a.StageQuestion.MinistrySimExamStage.MinistrySimExamId == examId
                     && a.StageQuestion.MinistrySimExamStage.StageNumber == stageNumber)
-                .Select(a => new { a.MinistrySimExamStageQuestionId, a.SelectedOptionId, a.IsFlaggedForReview })
-                .ToDictionaryAsync(a => a.MinistrySimExamStageQuestionId);
+                .Select(a => new { a.Id, a.MinistrySimExamStageQuestionId, a.SelectedOptionId, a.IsFlaggedForReview })
+                .ToListAsync();
+
+            // قد يوجد أكثر من صف لنفس السؤال (طلبان متزامنان، والجدول بلا فهرس فريد) — الأحدث هو المعتمد
+            var stageAnswers = stageAnswerRows
+                .GroupBy(a => a.MinistrySimExamStageQuestionId)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(a => a.Id).First());
 
             stageAnswers.TryGetValue(currentEntry.Id, out var currentAnswer);
 

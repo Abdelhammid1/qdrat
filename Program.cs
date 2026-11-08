@@ -952,12 +952,17 @@ builder.Services.AddScoped<QdratNew.Services.ProfessionalModels.IProfessionalMod
 builder.Services.AddScoped<QdratNew.Services.ProfessionalModels.IProfessionalModelSendService, QdratNew.Services.ProfessionalModels.ProfessionalModelSendService>(); // PPM-S3
 builder.Services.AddScoped<QdratNew.Services.PartnerDispatch.IDispatchAudienceService, QdratNew.Services.PartnerDispatch.DispatchAudienceService>(); // APD-S1.2
 builder.Services.AddScoped<QdratNew.Services.PartnerDispatch.IPartnerDispatchLogService, QdratNew.Services.PartnerDispatch.PartnerDispatchLogService>(); // APD-S1.2
+builder.Services.AddScoped<QdratNew.Services.PartnerDispatch.IPartnerDispatchLogReportService, QdratNew.Services.PartnerDispatch.PartnerDispatchLogReportService>(); // APD-S6.1
 builder.Services.AddScoped<QdratNew.Services.PartnerDispatch.IDispatchAudiencePickerBuilder, QdratNew.Services.PartnerDispatch.DispatchAudiencePickerBuilder>(); // APD-S1.4
 builder.Services.AddScoped<QdratNew.Services.PartnerDispatch.IPartnerModelDispatchService, QdratNew.Services.PartnerDispatch.PartnerModelDispatchService>(); // APD-S2.1
 builder.Services.AddScoped<QdratNew.Services.PartnerDispatch.IPartnerOwnedItemsService, QdratNew.Services.PartnerDispatch.PartnerOwnedItemsService>(); // APD-S2.3
 builder.Services.AddScoped<QdratNew.Services.PartnerDispatch.IPartnerPlacementDispatchService, QdratNew.Services.PartnerDispatch.PartnerPlacementDispatchService>(); // APD-S3.1
 builder.Services.AddScoped<QdratNew.Services.PartnerDispatch.IPartnerPerformanceDispatchService, QdratNew.Services.PartnerDispatch.PartnerPerformanceDispatchService>(); // APD-S4.1
 builder.Services.AddScoped<QdratNew.Services.PerformanceIndicator.PartnerScope.IPartnerPerformanceExamService, QdratNew.Services.PerformanceIndicator.PartnerScope.PartnerPerformanceExamService>(); // APD-S4.2
+builder.Services.AddScoped<QdratNew.Services.MinistrySim.IMinistrySimOwnershipQuery, QdratNew.Services.MinistrySim.MinistrySimOwnershipQuery>(); // APD-S5.1
+builder.Services.AddScoped<QdratNew.Services.MinistrySim.IMinistrySimParentReportService, QdratNew.Services.MinistrySim.MinistrySimParentReportService>(); // APD-S5.2
+builder.Services.AddScoped<QdratNew.Services.PartnerDispatch.IPartnerMinistrySimDispatchService, QdratNew.Services.PartnerDispatch.PartnerMinistrySimDispatchService>(); // APD-S5.1
+builder.Services.AddScoped<QdratNew.Services.MinistrySim.PartnerScope.IPartnerMinistrySimExamService, QdratNew.Services.MinistrySim.PartnerScope.PartnerMinistrySimExamService>(); // APD-S5.2
 // PPL-S3: خدمة تقارير اختبارات تحديد المستوى المشتركة
 builder.Services.AddScoped<QdratNew.Services.Exams.Placement.IPlacementExamReportService, QdratNew.Services.Exams.Placement.PlacementExamReportService>();
 builder.Services.AddScoped<ITimeZoneService, TimeZoneService>();

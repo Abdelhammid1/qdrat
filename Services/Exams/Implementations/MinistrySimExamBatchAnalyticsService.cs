@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using QdratNew.Data;
 using QdratNew.Services.Exams.Interfaces;
 using QdratNew.Services.Exams.Models;
+using QdratNew.Services.MinistrySim;
 using QdratNew.ViewModels.Exam;
 
 namespace QdratNew.Services.Exams.Implementations
@@ -16,13 +17,15 @@ namespace QdratNew.Services.Exams.Implementations
     public class MinistrySimExamBatchAnalyticsService : IMinistrySimExamBatchAnalyticsService
     {
         private readonly ApplicationDbContext _context;
+        private readonly IMinistrySimOwnershipQuery _ownership; // APD-S5.1
 
-        public MinistrySimExamBatchAnalyticsService(ApplicationDbContext context)
+        public MinistrySimExamBatchAnalyticsService(ApplicationDbContext context, IMinistrySimOwnershipQuery ownership)
         {
             _context = context;
+            _ownership = ownership;
         }
 
-        public async Task<MinistrySimExamBatchAnalyticsLookup> GetBatchAnalyticsAsync(int ministrySimExamId, int batchId)
+        public async Task<MinistrySimExamBatchAnalyticsLookup> GetBatchAnalyticsAsync(int ministrySimExamId, int batchId, int? ownerPartnerId = null)
         {
             var exam = await _context.MinistrySimExams
                 .AsNoTracking()
@@ -33,12 +36,12 @@ namespace QdratNew.Services.Exams.Implementations
 
             var assignmentExists = await _context.MinistrySimExamAssignmentsToBatches
                 .AsNoTracking()
-                .AnyAsync(x => x.MinistrySimExamId == ministrySimExamId && x.BatchId == batchId);
+                .AnyAsync(x => x.MinistrySimExamId == ministrySimExamId && x.BatchId == batchId && x.OwnerPartnerId == ownerPartnerId);
 
             if (!assignmentExists)
                 return new MinistrySimExamBatchAnalyticsLookup { Status = MinistrySimExamBatchAnalyticsStatus.AssignmentNotFound };
 
-            var vm = await BuildAnalyticsCoreAsync(ministrySimExamId, batchId, exam.Title);
+            var vm = await BuildAnalyticsCoreAsync(ministrySimExamId, batchId, exam.Title, ownerPartnerId);
 
             return new MinistrySimExamBatchAnalyticsLookup { Status = MinistrySimExamBatchAnalyticsStatus.Ok, Vm = vm };
         }
@@ -46,7 +49,7 @@ namespace QdratNew.Services.Exams.Implementations
         // Sprint 18 (MSE-K / K1): نسخة خفيفة لتقرير ولي الأمر — لا تتحقق من وجود إسناد صريح لهذه الدفعة
         // (الطالب قد يكون مُسنَدًا له الاختبار فرديًا، ودفعته هنا تُستخدم فقط كمرجع مقارنة)، وتُرجع المتوسطات
         // فقط بلا تفصيل قوائم الطلاب/المؤشرات الكاملة.
-        public async Task<MinistrySimExamBatchAverageStatsVm> GetBatchAverageStatsAsync(int ministrySimExamId, int batchId)
+        public async Task<MinistrySimExamBatchAverageStatsVm> GetBatchAverageStatsAsync(int ministrySimExamId, int batchId, int? ownerPartnerId = null)
         {
             var examTitle = await _context.MinistrySimExams
                 .AsNoTracking()
@@ -57,7 +60,7 @@ namespace QdratNew.Services.Exams.Implementations
             if (examTitle == null)
                 return new MinistrySimExamBatchAverageStatsVm();
 
-            var full = await BuildAnalyticsCoreAsync(ministrySimExamId, batchId, examTitle);
+            var full = await BuildAnalyticsCoreAsync(ministrySimExamId, batchId, examTitle, ownerPartnerId);
 
             return new MinistrySimExamBatchAverageStatsVm
             {
@@ -69,7 +72,8 @@ namespace QdratNew.Services.Exams.Implementations
         }
 
         // استخراج حرفي (بلا أي تغيير في قواعد الحساب) من جسم Controller.BatchAnalytics السابق
-        private async Task<MinistrySimExamBatchAnalyticsVm> BuildAnalyticsCoreAsync(int examId, int batchId, string examTitle)
+        // APD-S5.1: طلاب الدفعة النشطون المملوكون لنفس الجهة فقط، فلا تختلط نتائج المعهد والمدرسة في متوسط واحد
+        private async Task<MinistrySimExamBatchAnalyticsVm> BuildAnalyticsCoreAsync(int examId, int batchId, string examTitle, int? ownerPartnerId)
         {
             var batchName = await _context.Batches
                 .AsNoTracking()
@@ -77,10 +81,18 @@ namespace QdratNew.Services.Exams.Implementations
                 .Select(b => b.Name)
                 .FirstOrDefaultAsync();
 
-            var studentIds = await _context.StudentBatchEnrollments
+            var batchStudentIds = _context.StudentBatchEnrollments
                 .AsNoTracking()
                 .Where(e => e.BatchId == batchId && e.Status == "Active")
-                .Select(e => e.StudentID)
+                .Select(e => e.StudentID);
+
+            var ownedStudents = ownerPartnerId.HasValue
+                ? _ownership.PartnerStudents(examId, ownerPartnerId.Value)
+                : _ownership.PlatformStudents(examId);
+
+            var studentIds = await ownedStudents
+                .Where(s => batchStudentIds.Contains(s.StudentID))
+                .Select(s => s.StudentID)
                 .ToListAsync();
 
             var students = await _context.Students
@@ -111,7 +123,7 @@ namespace QdratNew.Services.Exams.Implementations
                 : _context.MinistrySimExamStudentAnswers.AsNoTracking().Where(a => false);
 
             var answers = await answersQuery
-                .Select(a => new { a.MinistrySimExamStudentAttemptId, a.MinistrySimExamStageQuestionId, a.IsCorrect, a.SelectedOptionId })
+                .Select(a => new { a.Id, a.MinistrySimExamStudentAttemptId, a.MinistrySimExamStageQuestionId, a.IsCorrect, a.SelectedOptionId })
                 .ToListAsync();
 
             var studentSummaries = new List<MinistrySimExamStudentSummaryVm>();
@@ -136,7 +148,12 @@ namespace QdratNew.Services.Exams.Implementations
                     if (attempt.IsCompleted) completedCount++;
                     else inProgressCount++;
 
-                    var attemptAnswers = answers.Where(a => a.MinistrySimExamStudentAttemptId == attempt.Id).ToList();
+                    // عند تكرار صف الإجابة لنفس السؤال يُعتمد الأحدث
+                    var attemptAnswers = answers
+                        .Where(a => a.MinistrySimExamStudentAttemptId == attempt.Id)
+                        .GroupBy(a => a.MinistrySimExamStageQuestionId)
+                        .Select(g => g.OrderByDescending(a => a.Id).First())
+                        .ToList();
 
                     var correct = 0;
                     var wrong = 0;

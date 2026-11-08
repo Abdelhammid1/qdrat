@@ -7,6 +7,9 @@ namespace QdratNew.ViewModels.Exam
         public string Title { get; set; }
         public string CourseName { get; set; }
         public List<MinistrySimExamBatchOptionVm> Batches { get; set; } = new();
+
+        // APD-S5.1: اختيار جمهور الإسناد (دفعات المنصة / المدارس الشريكة)
+        public QdratNew.ViewModels.PartnerDispatch.DispatchAudiencePickerVm? AudiencePicker { get; set; }
     }
 
     public class MinistrySimExamBatchOptionVm
@@ -23,6 +26,19 @@ namespace QdratNew.ViewModels.Exam
         public int ExamId { get; set; }
         public string Title { get; set; }
         public string CourseName { get; set; }
+        public List<MinistrySimExamBatchDropdownVm> Batches { get; set; } = new();
+
+        // APD-S5.1: دفعات المدارس المؤهلة (تظهر لمن يملك PartnerDispatch.Send فقط). الطالب الفردي تحت المدرسة = طالب من فروعها
+        public List<MinistrySimExamPartnerBatchGroupVm> PartnerBatchGroups { get; set; } = new();
+    }
+
+    // APD-S5.1: مدرسة شريكة ودفعاتها في قائمة اختيار الدفعة لإسناد طلاب فرديين
+    public class MinistrySimExamPartnerBatchGroupVm
+    {
+        public int PartnerId { get; set; }
+        public string PartnerName { get; set; }
+        public bool Eligible { get; set; }
+        public string? BlockReason { get; set; }
         public List<MinistrySimExamBatchDropdownVm> Batches { get; set; } = new();
     }
 

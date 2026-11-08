@@ -63,10 +63,13 @@ namespace QdratNew.Services.Exams.Implementations
             var answers = await _context.MinistrySimExamStudentAnswers
                 .AsNoTracking()
                 .Where(a => a.MinistrySimExamStudentAttemptId == attempt.Id)
-                .Select(a => new { a.MinistrySimExamStageQuestionId, a.IsCorrect, a.SelectedOptionId })
+                .Select(a => new { a.Id, a.MinistrySimExamStageQuestionId, a.IsCorrect, a.SelectedOptionId })
                 .ToListAsync();
 
-            var answersByStageQuestionId = answers.ToDictionary(a => a.MinistrySimExamStageQuestionId);
+            // عند تكرار صف الإجابة لنفس السؤال يُعتمد الأحدث
+            var answersByStageQuestionId = answers
+                .GroupBy(a => a.MinistrySimExamStageQuestionId)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(a => a.Id).First());
 
             var stages = attempt.StageProgress
                 .OrderBy(p => p.StageNumber)
@@ -183,7 +186,10 @@ namespace QdratNew.Services.Exams.Implementations
                 .Where(a => a.MinistrySimExamStudentAttemptId == attempt.Id && EF.Constant(stageQuestionIds).Contains(a.MinistrySimExamStageQuestionId))
                 .ToListAsync();
 
-            var answersByStageQuestionId = answers.ToDictionary(a => a.MinistrySimExamStageQuestionId);
+            // عند تكرار صف الإجابة لنفس السؤال يُعتمد الأحدث
+            var answersByStageQuestionId = answers
+                .GroupBy(a => a.MinistrySimExamStageQuestionId)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(a => a.Id).First());
 
             var questionItems = stageQuestions.Select(sq =>
             {

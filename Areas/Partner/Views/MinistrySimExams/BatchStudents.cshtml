@@ -1,0 +1,126 @@
+@model QdratNew.ViewModels.Partner.MinistrySim.PartnerMinistrySimStudentsVm
+
+@{
+    ViewData["Title"] = "نتائج معمل القياس";
+    var currentBatch = Model.Batches.FirstOrDefault(b => b.BatchId == Model.BatchId);
+}
+
+<div class="pp-page" id="partnerMinistrySimStudents">
+    <partial name="~/Areas/Partner/Views/PerformanceIndicatorExams/_PerformanceAlerts.cshtml" />
+
+    <div class="pp-head">
+        <div>
+            <h1><i class="fa-solid fa-user-graduate" aria-hidden="true"></i> @Model.Title</h1>
+            <p>
+                الدورة: @Model.CourseName
+                @if (currentBatch != null)
+                {
+                    <span> · الدفعة: @currentBatch.Name</span>
+                    @if (!currentBatch.IsOnline)
+                    {
+                        <span> · حضوري، الرمز المرجعي: <span class="pp-code">@currentBatch.ReferenceCode</span></span>
+                    }
+                }
+            </p>
+        </div>
+
+        <div class="pp-head-actions">
+            <a asp-action="Index" class="pp-btn pp-btn-light">
+                <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                كل الاختبارات
+            </a>
+        </div>
+    </div>
+
+    <div class="pp-stats">
+        <div class="pp-stat"><b>@Model.Students.Count</b><span>إجمالي الطلاب</span></div>
+        <div class="pp-stat"><b>@Model.CompletedCount</b><span>أكملوا</span></div>
+        <div class="pp-stat"><b>@Model.InProgressCount</b><span>قيد الحل</span></div>
+        <div class="pp-stat"><b>@Model.NotStartedCount</b><span>لم يبدؤوا</span></div>
+    </div>
+
+    @if (Model.Batches.Any())
+    {
+        <div class="pp-card">
+            <h2 class="pp-card-title"><i class="fa-solid fa-layer-group" aria-hidden="true"></i> الدفعات</h2>
+            <div class="pp-actions">
+                <a asp-action="BatchStudents" asp-route-id="@Model.ExamId" class="pp-btn pp-btn-sm @(Model.BatchId == null ? "pp-btn-primary" : "pp-btn-light")">كل الطلاب</a>
+                @foreach (var batch in Model.Batches)
+                {
+                    <a asp-action="BatchStudents" asp-route-id="@Model.ExamId" asp-route-batchId="@batch.BatchId"
+                       class="pp-btn pp-btn-sm @(Model.BatchId == batch.BatchId ? "pp-btn-primary" : "pp-btn-light")">@batch.Name</a>
+                    <a asp-action="BatchAnalytics" asp-route-examId="@Model.ExamId" asp-route-batchId="@batch.BatchId"
+                       class="pp-btn pp-btn-sm pp-btn-light" title="تحليلات @batch.Name">
+                        <i class="fa-solid fa-chart-column" aria-hidden="true"></i> تحليلات
+                    </a>
+                }
+            </div>
+        </div>
+    }
+
+    <div class="pp-card">
+        <h2 class="pp-card-title"><i class="fa-solid fa-table-list" aria-hidden="true"></i> الطلاب</h2>
+
+        @if (!Model.Students.Any())
+        {
+            <div class="pp-empty">
+                <i class="fa-solid fa-inbox" aria-hidden="true"></i>
+                <h2>لا يوجد طلاب في هذا الاختبار</h2>
+                <p class="pp-muted">يظهر هنا طلاب مدرستك النشطون المُسنَد لهم الاختبار.</p>
+            </div>
+        }
+        else
+        {
+            <div class="pp-table-wrap">
+                <table class="pp-table pp-table-cards">
+                    <thead>
+                        <tr>
+                            <th>الطالب</th>
+                            <th>الدفعة</th>
+                            <th>الحالة</th>
+                            <th>الدرجة</th>
+                            <th>الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var student in Model.Students)
+                        {
+                            <tr data-mse-student="@student.StudentId">
+                                <td data-label="الطالب"><strong>@student.FullName</strong></td>
+                                <td data-label="الدفعة">@(student.BatchName ?? "إسناد فردي")</td>
+                                <td data-label="الحالة">
+                                    @if (student.IsCompleted)
+                                    {
+                                        <span class="pp-badge pp-badge-ok">مكتمل</span>
+                                    }
+                                    else if (student.HasAttempt)
+                                    {
+                                        <span class="pp-badge pp-badge-warn">قيد الحل</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="pp-badge pp-badge-muted">لم يبدأ</span>
+                                    }
+                                </td>
+                                <td data-label="الدرجة">@(student.IsCompleted && student.ScorePercent.HasValue ? $"{student.ScorePercent.Value:0.#}%" : "—")</td>
+                                <td data-label="الإجراءات">
+                                    @if (student.IsCompleted)
+                                    {
+                                        <div class="pp-actions">
+                                            <a asp-action="StudentResult" asp-route-id="@Model.ExamId" asp-route-studentId="@student.StudentId" class="pp-btn pp-btn-sm pp-btn-primary">النتيجة</a>
+                                            <a asp-action="ParentReport" asp-route-examId="@Model.ExamId" asp-route-studentId="@student.StudentId" class="pp-btn pp-btn-sm pp-btn-light">تقرير ولي الأمر</a>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span class="pp-muted">النتيجة بعد إنهاء الأقسام</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>

@@ -173,6 +173,45 @@
     var noMatchClear = document.getElementById('crNoMatchClear');
     if (noMatchClear) noMatchClear.addEventListener('click', clearAllFilters);
 
+    // ===== تذكّر صفحة الجدول: الرجوع من شاشة التعديل لنفس الصفحة =====
+    var STATE_KEY = 'crListState';
+    function readState() {
+        try { return JSON.parse(sessionStorage.getItem(STATE_KEY) || 'null'); } catch (e) { return null; }
+    }
+    function writeState(s) {
+        try { if (s) sessionStorage.setItem(STATE_KEY, JSON.stringify(s)); else sessionStorage.removeItem(STATE_KEY); } catch (e) { }
+    }
+
+    // الرجوع من شاشة التعديل فقط (يوجد ?page=) نستعيد الفلاتر والبحث ثم الصفحة؛ الدخول العادي يبدأ نظيفًا
+    var startPage = parseInt(new URLSearchParams(window.location.search).get('page'), 10);
+    var saved = readState();
+    writeState(null);
+    if (startPage > 0) {
+        if (saved) {
+            filters.status = saved.status || '';
+            filters.company = saved.company || '';
+            filters.days = Number(saved.days) || 0;
+            if (range) range.value = String(filters.days);
+            if (searchInput) searchInput.value = saved.search || '';
+            dt.search(normalizeDigits((saved.search || '').trim()));
+            syncFilterUi();
+        }
+        dt.page(Math.min(startPage, Math.max(dt.page.info().pages, 1)) - 1).draw('page');
+    }
+
+    // عند الضغط على "تعديل الحالة" نحفظ الفلاتر والبحث ونضيف رقم الصفحة الحالية للرابط
+    $(tableEl).on('click', 'a[href*="EditStatus"]', function () {
+        writeState({
+            status: filters.status,
+            company: filters.company,
+            days: filters.days,
+            search: searchInput ? searchInput.value : ''
+        });
+        var url = new URL(this.href, window.location.origin);
+        url.searchParams.set('returnPage', String(dt.page() + 1));
+        this.href = url.pathname + url.search;
+    });
+
     refreshRelativeTimes();
     updateResultUi();
 })();

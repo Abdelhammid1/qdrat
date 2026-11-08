@@ -1629,6 +1629,11 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             .HasForeignKey(x => x.MinistrySimExamStudentAttemptId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // صف إجابة واحد لكل سؤال في المحاولة؛ آخر إجابة تحدّثه
+        modelBuilder.Entity<MinistrySimExamStudentAnswer>()
+            .HasIndex(x => new { x.MinistrySimExamStudentAttemptId, x.MinistrySimExamStageQuestionId })
+            .IsUnique();
+
         modelBuilder.Entity<MinistrySimExamStudentAnswer>()
             .HasOne(x => x.StageQuestion)
             .WithMany()

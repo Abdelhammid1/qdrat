@@ -1,0 +1,254 @@
+@model QdratNew.ViewModels.PartnerDispatch.PartnerDispatchLogIndexViewModel
+@using QdratNew.Enums
+@using QdratNew.Services.PartnerDispatch
+@{
+    ViewData["Title"] = "سجل الإرسال للمدارس الشريكة";
+    var f = Model.Filter;
+    var r = Model.Result;
+
+    string Local(DateTime utc) => PartnerDispatchLogReportService.ToDisplayTime(utc).ToString("yyyy/MM/dd HH:mm");
+
+    // نفس الفلاتر في روابط الصفحات والتصدير
+    Dictionary<string, string> RouteWith(int? page)
+    {
+        var d = new Dictionary<string, string>();
+        if (f.Kind.HasValue) d["Kind"] = ((int)f.Kind.Value).ToString();
+        if (f.PartnerId.HasValue) d["PartnerId"] = f.PartnerId.Value.ToString();
+        if (f.FromDate.HasValue) d["FromDate"] = f.FromDate.Value.ToString("yyyy-MM-dd");
+        if (f.ToDate.HasValue) d["ToDate"] = f.ToDate.Value.ToString("yyyy-MM-dd");
+        if (!string.IsNullOrWhiteSpace(f.SentByUserId)) d["SentByUserId"] = f.SentByUserId!;
+        if (f.Overridden.HasValue) d["Overridden"] = f.Overridden.Value ? "true" : "false";
+        if (page.HasValue) d["Page"] = page.Value.ToString();
+        return d;
+    }
+}
+
+@section Styles {
+    <style>
+        .pdl-page { --ink:#0D1B2A; --ink-2:#2C3E50; --ink-3:#5A6A7A; --ink-4:#8FA0B0; --border:#DDE4EC; --canvas:#F3F6FA;
+                    --blue:#1B5EAE; --blue-bg:#E8F1FB; --amber:#B45309; --amber-bg:#FEF3C7; --emerald:#0D7A5B; --emerald-bg:#E4F5EE;
+                    background:var(--canvas); min-height:100vh; padding:28px 24px 64px; direction:rtl; font-family:'Cairo',sans-serif; color:var(--ink-2); }
+        .pdl-title { font-size:20px; font-weight:700; color:var(--ink); margin:0; }
+        .pdl-sub { font-size:14px; color:var(--ink-3); margin:4px 0 0; }
+        .pdl-card { background:#fff; border:1px solid var(--border); border-radius:14px; box-shadow:0 2px 8px rgba(13,27,42,.06); }
+        .pdl-filters { padding:16px; }
+        .pdl-filters label { font-size:12.5px; color:var(--ink-3); font-weight:600; margin-bottom:4px; }
+        .pdl-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:16px 0; }
+        .pdl-stat { background:#fff; border:1px solid var(--border); border-radius:12px; padding:12px 14px; }
+        .pdl-stat b { display:block; font-size:22px; color:var(--ink); }
+        .pdl-stat span { font-size:12.5px; color:var(--ink-3); }
+        .pdl-group { border-bottom:1px solid var(--border); }
+        .pdl-group:last-child { border-bottom:0; }
+        .pdl-group > summary { list-style:none; cursor:pointer; padding:14px 16px; display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; }
+        .pdl-group > summary::-webkit-details-marker { display:none; }
+        .pdl-group > summary:focus-visible { outline:2px solid var(--blue); outline-offset:-2px; }
+        .pdl-group[open] > summary { background:#FAFBFD; }
+        .pdl-chev { transition:transform .15s; color:var(--ink-4); }
+        .pdl-group[open] .pdl-chev { transform:rotate(-90deg); }
+        .pdl-gtitle { font-weight:700; color:var(--ink); flex:1 1 220px; min-width:0; overflow-wrap:anywhere; }
+        .pdl-meta { font-size:12.5px; color:var(--ink-3); white-space:nowrap; }
+        .pdl-chip { display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:600; white-space:nowrap; }
+        .pdl-kind { background:var(--blue-bg); color:var(--blue); }
+        .pdl-over { background:var(--amber-bg); color:var(--amber); }
+        .pdl-draft { background:#EDE9FE; color:#6D28D9; }
+        .pdl-sent { background:var(--emerald-bg); color:var(--emerald); }
+        .pdl-lines { padding:0 16px 14px; overflow-x:auto; }
+        .pdl-lines table { width:100%; border-collapse:collapse; font-size:13px; }
+        .pdl-lines th, .pdl-lines td { padding:8px 10px; text-align:right; border-bottom:1px solid var(--border); vertical-align:top; }
+        .pdl-lines th { color:var(--ink-3); font-weight:600; background:#FAFBFD; font-size:12px; white-space:nowrap; }
+        .pdl-reason { font-size:12px; color:var(--amber); max-width:320px; overflow-wrap:anywhere; }
+        .pdl-empty { padding:48px 20px; text-align:center; color:var(--ink-4); }
+        @@media (max-width:600px) { .pdl-page { padding:18px 10px 48px; } .pdl-meta { white-space:normal; } }
+    </style>
+}
+
+<div class="pdl-page" id="partnerDispatchLog">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+        <div>
+            <h1 class="pdl-title">سجل الإرسال للمدارس الشريكة</h1>
+            <p class="pdl-sub">ما أرسله المعهد للمدارس من الشاشات الخمس: من أرسل، ماذا، لأي مدرسة ودفعة، وعدد الطلاب، وهل تم تجاوز العقد. للقراءة فقط، والنتائج تُتابَع من منطقة كل مدرسة.</p>
+        </div>
+        <a class="btn btn-success btn-sm" id="pdlExport"
+           asp-action="Export" asp-all-route-data="RouteWith(null)">
+            <i class="fas fa-file-excel ms-1"></i> تصدير Excel
+        </a>
+    </div>
+
+    <form method="get" asp-action="Index" class="pdl-card pdl-filters" id="pdlFilters">
+        <div class="row g-2 align-items-end">
+            <div class="col-6 col-md-2">
+                <label for="Kind">النوع</label>
+                <select id="Kind" name="Kind" class="form-select form-select-sm">
+                    <option value="">الكل</option>
+                    @foreach (var kind in Enum.GetValues<PartnerDispatchKind>())
+                    {
+                        <option value="@((int)kind)" selected="@(f.Kind == kind)">@PartnerDispatchKindLabels.Of(kind)</option>
+                    }
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label for="PartnerId">المدرسة</label>
+                <select id="PartnerId" name="PartnerId" class="form-select form-select-sm">
+                    <option value="">كل المدارس</option>
+                    @foreach (var p in Model.Options.Partners)
+                    {
+                        <option value="@p.Value" selected="@(f.PartnerId?.ToString() == p.Value)">@p.Text</option>
+                    }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label for="SentByUserId">المرسل</label>
+                <select id="SentByUserId" name="SentByUserId" class="form-select form-select-sm">
+                    <option value="">الكل</option>
+                    @foreach (var s in Model.Options.Senders)
+                    {
+                        <option value="@s.Value" selected="@(f.SentByUserId == s.Value)">@s.Text</option>
+                    }
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label for="Overridden">تجاوز العقد</label>
+                <select id="Overridden" name="Overridden" class="form-select form-select-sm">
+                    <option value="">الكل</option>
+                    <option value="true" selected="@(f.Overridden == true)">بتجاوز</option>
+                    <option value="false" selected="@(f.Overridden == false)">بلا تجاوز</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-1">
+                <label for="FromDate">من</label>
+                <input id="FromDate" name="FromDate" type="date" class="form-control form-control-sm" value="@f.FromDate?.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-6 col-md-1">
+                <label for="ToDate">إلى</label>
+                <input id="ToDate" name="ToDate" type="date" class="form-control form-control-sm" value="@f.ToDate?.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-12 col-md-1 d-flex gap-1">
+                <button type="submit" class="btn btn-primary btn-sm flex-fill">عرض</button>
+                @if (f.HasAny)
+                {
+                    <a asp-action="Index" class="btn btn-outline-secondary btn-sm" title="إزالة الفلاتر" aria-label="إزالة الفلاتر">✕</a>
+                }
+            </div>
+        </div>
+        <div class="form-text mt-2">التواريخ بتوقيت السعودية وتشمل اليوم كاملًا.</div>
+    </form>
+
+    <div class="pdl-stats" aria-label="ملخص النتائج">
+        <div class="pdl-stat"><b>@r.TotalGroups.ToString("N0")</b><span>عملية إرسال</span></div>
+        <div class="pdl-stat"><b>@r.TotalLines.ToString("N0")</b><span>مدرسة × دفعة</span></div>
+        <div class="pdl-stat"><b>@r.TotalStudents.ToString("N0")</b><span>طالب وصلهم الإرسال</span></div>
+        <div class="pdl-stat"><b>@r.OverriddenLines.ToString("N0")</b><span>سطر بتجاوز العقد</span></div>
+    </div>
+
+    <div class="pdl-card">
+        @if (r.Groups.Count == 0)
+        {
+            <div class="pdl-empty" id="pdlEmpty">
+                <i class="fas fa-paper-plane fa-2x mb-2 d-block"></i>
+                @(f.HasAny ? "لا توجد عمليات إرسال مطابقة للفلاتر." : "لم يُرسل المعهد شيئًا للمدارس الشريكة بعد.")
+            </div>
+        }
+        else
+        {
+            @foreach (var g in r.Groups)
+            {
+                <details class="pdl-group" data-group="@g.DispatchGroupId">
+                    <summary>
+                        <i class="fas fa-chevron-left pdl-chev" aria-hidden="true"></i>
+                        <span class="pdl-chip pdl-kind">@PartnerDispatchKindLabels.Of(g.Kind)</span>
+                        <span class="pdl-gtitle">@g.Title</span>
+                        <span class="pdl-meta">@g.PartnersCount مدرسة · @g.BatchesCount دفعة · @g.StudentsCount طالب</span>
+                        @if (g.AnyOverridden)
+                        {
+                            <span class="pdl-chip pdl-over">تجاوز العقد</span>
+                        }
+                        @if (g.HasDraft)
+                        {
+                            <span class="pdl-chip pdl-draft">مسودة لدى المدرسة</span>
+                        }
+                        <span class="pdl-meta"><i class="far fa-user ms-1"></i>@g.SentByName</span>
+                        <span class="pdl-meta"><i class="far fa-clock ms-1"></i>@Local(g.SentAtUtc)</span>
+                    </summary>
+                    <div class="pdl-lines">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>المدرسة</th>
+                                    <th>الدفعة</th>
+                                    <th>الفرع</th>
+                                    <th>الطلاب</th>
+                                    <th>الحالة</th>
+                                    <th>العقد</th>
+                                    <th>رقم العنصر</th>
+                                    <th>الوقت</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var line in g.Lines)
+                                {
+                                    <tr>
+                                        <td>@line.PartnerName</td>
+                                        <td>@(line.BatchName ?? $"#{line.BatchId} (محذوفة)")</td>
+                                        <td>@line.BranchName</td>
+                                        <td>@(line.DraftState == PartnerDispatchDraftState.None ? line.StudentsCount.ToString() : "—")</td>
+                                        <td>
+                                            @switch (line.DraftState)
+                                            {
+                                                case PartnerDispatchDraftState.DraftPending:
+                                                    <span class="pdl-chip pdl-draft">مسودة لم تُرسل</span>
+                                                    break;
+                                                case PartnerDispatchDraftState.DraftSentByPartner:
+                                                    <span class="pdl-chip pdl-sent" title="أرسلتها المدرسة من منطقتها؛ عدد الطلاب لا يُسجَّل هنا">أرسلتها المدرسة</span>
+                                                    break;
+                                                default:
+                                                    <span class="pdl-chip pdl-sent">أُرسل</span>
+                                                    break;
+                                            }
+                                        </td>
+                                        <td>
+                                            @if (line.ContractOverridden)
+                                            {
+                                                <span class="pdl-chip pdl-over">تجاوز</span>
+                                                @if (!string.IsNullOrEmpty(line.OverrideReason))
+                                                {
+                                                    <div class="pdl-reason">@line.OverrideReason</div>
+                                                }
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">ضمن العقد</span>
+                                            }
+                                        </td>
+                                        <td>@line.TargetEntityId</td>
+                                        <td class="text-nowrap">@Local(line.SentAtUtc)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </details>
+            }
+        }
+    </div>
+
+    @if (r.TotalPages > 1)
+    {
+        <nav class="mt-3" aria-label="صفحات السجل">
+            <ul class="pagination pagination-sm justify-content-center flex-wrap">
+                <li class="page-item @(r.Page <= 1 ? "disabled" : "")">
+                    <a class="page-link" asp-action="Index" asp-all-route-data="RouteWith(r.Page - 1)">السابق</a>
+                </li>
+                @for (var p = Math.Max(1, r.Page - 3); p <= Math.Min(r.TotalPages, r.Page + 3); p++)
+                {
+                    <li class="page-item @(p == r.Page ? "active" : "")">
+                        <a class="page-link" asp-action="Index" asp-all-route-data="RouteWith(p)">@p</a>
+                    </li>
+                }
+                <li class="page-item @(r.Page >= r.TotalPages ? "disabled" : "")">
+                    <a class="page-link" asp-action="Index" asp-all-route-data="RouteWith(r.Page + 1)">التالي</a>
+                </li>
+            </ul>
+            <div class="text-center small text-muted">صفحة @r.Page من @r.TotalPages</div>
+        </nav>
+    }
+</div>

@@ -26,7 +26,7 @@ namespace QdratNew.Services.PartnerDispatch
 
         public bool Eligible { get; init; }
 
-        // «لا عقد نشط» / «العقد لا يشمل …» / «النموذج غير متاح لهذا الشريك»
+        // «لا عقد نشط» / «العقد لا يشمل …» (الميزة أو النماذج الاحترافية)
         public string? BlockReason { get; init; }
 
         // false عند عدم وجود عقد نشط: لا يُتجاوز أبدًا
@@ -74,8 +74,19 @@ namespace QdratNew.Services.PartnerDispatch
         public const int OverrideReasonMinLength = 10;
         public const int OverrideReasonMaxLength = 500;
 
+        // APD-S6.2: عدد الطلاب لكل دفعة في سجل الإرسال بلا تكرار: الطالب المسجل في دفعتين مختارتين
+        // يُحسب مرة واحدة في أول دفعة (بترتيب أرقام الدفعات)، فمجموع أسطر الإرسال = عدد من وصلهم فعلًا.
+        public static Dictionary<int, int> UniqueStudentsPerBatch(IReadOnlyDictionary<int, List<int>> recipients)
+        {
+            var seen = new HashSet<int>();
+            var counts = new Dictionary<int, int>();
+            foreach (var batchId in recipients.Keys.OrderBy(id => id))
+                counts[batchId] = recipients[batchId].Count(seen.Add);
+            return counts;
+        }
+
         public const string NoActiveContract = "لا عقد نشط";
-        public const string ModelNotAvailable = "النموذج غير متاح لهذا الشريك";
+        public const string ProfessionalModelsMissing = "العقد لا يشمل النماذج الاحترافية";
 
         public static string FeatureMissing(PartnerDispatchKind kind) => kind switch
         {

@@ -62,8 +62,17 @@ namespace QdratNew.Services.Exams.Implementations
             var newStageQuestions = new List<MinistrySimExamStageQuestion>();
             var usedThisCall = new HashSet<Guid>(excludeQuestionIds);
 
-            await SelectAxisQuestionsAsync(stage, quantSelections, stage.QuantSectionId, sectionTitles, "المحور الكمي", isQuant: true, newStageQuestions, usedThisCall, result);
-            await SelectAxisQuestionsAsync(stage, verbalSelections, stage.VerbalSectionId, sectionTitles, "المحور اللفظي", isQuant: false, newStageQuestions, usedThisCall, result);
+            // منع التكرار على مستوى الاختبار كله: أسئلة بقية الأقسام تدخل في المقارنة، وأسئلة هذا القسم تُستبدل
+            var similarityThreshold = await GetSimilarityThresholdAsync();
+            var selectedInExam = (await LoadExamQuestionTextsAsync(stage.MinistrySimExamId))
+                .Where(q => q.StageNumber != stage.StageNumber)
+                .ToList();
+
+            foreach (var question in selectedInExam)
+                usedThisCall.Add(question.Id);
+
+            await SelectAxisQuestionsAsync(stage, quantSelections, stage.QuantSectionId, sectionTitles, "المحور الكمي", isQuant: true, newStageQuestions, usedThisCall, selectedInExam, similarityThreshold, result);
+            await SelectAxisQuestionsAsync(stage, verbalSelections, stage.VerbalSectionId, sectionTitles, "المحور اللفظي", isQuant: false, newStageQuestions, usedThisCall, selectedInExam, similarityThreshold, result);
 
             // إعادة البناء الكاملة لأسئلة المرحلة (لا دمج جزئي عند الضغط على "بناء الأسئلة" مجددًا)
             var oldQuestions = await _context.MinistrySimExamStageQuestions
@@ -98,6 +107,8 @@ namespace QdratNew.Services.Exams.Implementations
             bool isQuant,
             List<MinistrySimExamStageQuestion> newStageQuestions,
             HashSet<Guid> usedThisCall,
+            List<MinistrySimExamQuestionText> selectedInExam,
+            int similarityThreshold,
             MinistrySimExamGenerationResult result)
         {
             if (!selections.Any())
@@ -121,7 +132,18 @@ namespace QdratNew.Services.Exams.Implementations
                             && q.IsReviewed
                             && !q.IsRejected
                             && q.CorrectAnswer != null)
-                .Select(q => new { q.Id, q.LessonId, q.Difficulty })
+                .Select(q => new MinistrySimExamQuestionText
+                {
+                    Id = q.Id,
+                    LessonId = q.LessonId,
+                    Difficulty = q.Difficulty,
+                    VerbalPassageId = q.VerbalPassageId,
+                    ImageUrl = q.ImageUrl,
+                    Title = q.Title,
+                    ValueA = q.ValueA,
+                    ValueB = q.ValueB,
+                    CorrectAnswer = q.CorrectAnswer
+                })
                 .ToListAsync();
 
             // كل صفوف اختيار المؤشرات الحالية لهذه المرحلة تُجلَب مرة واحدة (لا استعلام داخل الحلقة)
@@ -140,7 +162,7 @@ namespace QdratNew.Services.Exams.Implementations
                     .OrderBy(_ => rnd.Next())
                     .ToList();
 
-                var take = pool.Take(sel.RequestedCount).ToList();
+                var (take, rejectedAsSimilar) = PickDistinctQuestions(pool, sel.RequestedCount, selectedInExam, similarityThreshold);
 
                 foreach (var q in take)
                 {
@@ -168,9 +190,147 @@ namespace QdratNew.Services.Exams.Implementations
                     result.IsSuccess = false;
                     result.ShortfallMessages.Add(
                         $"{QdratNew.Helpers.SectionNameHelper.Name(stage.StageNumber)} - المحور «{sectionTitle}» - المؤشر «{lessonTitle}» - صعوبة {DifficultyArabic(sel.Difficulty)}: " +
-                        $"مطلوب {sel.RequestedCount} سؤال وناقص {shortfall} (المتاح فعليًا في البنك {take.Count}).");
+                        $"مطلوب {sel.RequestedCount} سؤال وناقص {shortfall} (المتاح فعليًا في البنك {take.Count}{SimilarityNote(rejectedAsSimilar)}).");
                 }
             }
+        }
+
+        // يأخذ من المرشحين (بترتيبهم العشوائي) حتى يكتمل العدد، متخطيًا أي سؤال يشبه ما اختير في الاختبار كله
+        private static (List<MinistrySimExamQuestionText> Picked, int RejectedAsSimilar) PickDistinctQuestions(
+            List<MinistrySimExamQuestionText> pool,
+            int requestedCount,
+            List<MinistrySimExamQuestionText> selectedInExam,
+            int similarityThreshold)
+        {
+            var picked = new List<MinistrySimExamQuestionText>();
+            var rejected = 0;
+
+            foreach (var candidate in pool)
+            {
+                if (picked.Count >= requestedCount)
+                    break;
+
+                if (selectedInExam.Any(selected => MinistrySimExamQuestionSimilarity.IsDuplicate(candidate, selected, similarityThreshold)))
+                {
+                    rejected++;
+                    continue;
+                }
+
+                picked.Add(candidate);
+                selectedInExam.Add(candidate);
+            }
+
+            return (picked, rejected);
+        }
+
+        private static string SimilarityNote(int rejectedAsSimilar) => rejectedAsSimilar > 0
+            ? $" بعد استبعاد {rejectedAsSimilar} سؤال مكرر أو مشابه لأسئلة الاختبار"
+            : string.Empty;
+
+        private async Task<int> GetSimilarityThresholdAsync()
+        {
+            var value = await _context.SystemSettings
+                .AsNoTracking()
+                .Where(s => s.Key == MinistrySimExamQuestionSimilarity.ThresholdSettingKey)
+                .Select(s => s.Value)
+                .FirstOrDefaultAsync();
+
+            return MinistrySimExamQuestionSimilarity.ParseThreshold(value);
+        }
+
+        // كل أسئلة الاختبار في استعلام واحد (إسقاط للحقول اللازمة فقط)، بترتيب الأقسام
+        private async Task<List<MinistrySimExamQuestionText>> LoadExamQuestionTextsAsync(int ministrySimExamId)
+        {
+            return await _context.MinistrySimExamStageQuestions
+                .AsNoTracking()
+                .Where(sq => sq.MinistrySimExamStage.MinistrySimExamId == ministrySimExamId)
+                .OrderBy(sq => sq.MinistrySimExamStage.StageNumber)
+                .ThenBy(sq => sq.StageOrder)
+                .Select(sq => new MinistrySimExamQuestionText
+                {
+                    Id = sq.QuestionId,
+                    LessonId = sq.Question.LessonId,
+                    Difficulty = sq.Question.Difficulty,
+                    VerbalPassageId = sq.Question.VerbalPassageId,
+                    ImageUrl = sq.Question.ImageUrl,
+                    Title = sq.Question.Title,
+                    ValueA = sq.Question.ValueA,
+                    ValueB = sq.Question.ValueB,
+                    CorrectAnswer = sq.Question.CorrectAnswer,
+                    StageQuestionId = sq.Id,
+                    StageNumber = sq.MinistrySimExamStage.StageNumber,
+                    StageOrder = sq.StageOrder
+                })
+                .ToListAsync();
+        }
+
+        private static string DescribePosition(MinistrySimExamQuestionText question)
+            => $"{QdratNew.Helpers.SectionNameHelper.Name(question.StageNumber)} - السؤال {question.StageOrder}";
+
+        public async Task<string> FindDuplicateConflictAsync(int ministrySimExamId, Guid questionId, int? ignoreStageQuestionId = null)
+        {
+            var candidate = await _context.Questions
+                .AsNoTracking()
+                .Where(q => q.Id == questionId)
+                .Select(q => new MinistrySimExamQuestionText
+                {
+                    Id = q.Id,
+                    VerbalPassageId = q.VerbalPassageId,
+                    ImageUrl = q.ImageUrl,
+                    Title = q.Title,
+                    ValueA = q.ValueA,
+                    ValueB = q.ValueB,
+                    CorrectAnswer = q.CorrectAnswer
+                })
+                .FirstOrDefaultAsync();
+
+            if (candidate == null)
+                return null;
+
+            var threshold = await GetSimilarityThresholdAsync();
+            var examQuestions = await LoadExamQuestionTextsAsync(ministrySimExamId);
+
+            foreach (var existing in examQuestions.Where(q => q.StageQuestionId != ignoreStageQuestionId))
+            {
+                if (existing.Id == candidate.Id)
+                    return $"هذا السؤال مستخدم بالفعل في هذا الاختبار ({DescribePosition(existing)}).";
+
+                if (MinistrySimExamQuestionSimilarity.IsDuplicate(candidate, existing, threshold))
+                    return $"هذا السؤال يشبه سؤالًا موجودًا في الاختبار بنسبة {MinistrySimExamQuestionSimilarity.ScorePercent(candidate, existing)}% ({DescribePosition(existing)}).";
+            }
+
+            return null;
+        }
+
+        // فحص بوابة النشر: أزواج الأسئلة المكررة أو المتشابهة في الاختبار كله
+        private static List<string> FindDuplicatesInExam(List<MinistrySimExamQuestionText> questions, int threshold)
+        {
+            const int MaxMessages = 20;
+
+            var messages = new List<string>();
+            var total = 0;
+
+            for (var i = 0; i < questions.Count; i++)
+            {
+                for (var j = i + 1; j < questions.Count; j++)
+                {
+                    if (!MinistrySimExamQuestionSimilarity.IsDuplicate(questions[i], questions[j], threshold))
+                        continue;
+
+                    total++;
+                    if (messages.Count >= MaxMessages)
+                        continue;
+
+                    messages.Add(questions[i].Id == questions[j].Id
+                        ? $"سؤال مكرر: {DescribePosition(questions[i])} هو نفسه {DescribePosition(questions[j])}."
+                        : $"سؤالان متشابهان بنسبة {MinistrySimExamQuestionSimilarity.ScorePercent(questions[i], questions[j])}%: {DescribePosition(questions[i])} و{DescribePosition(questions[j])}.");
+                }
+            }
+
+            if (total > MaxMessages)
+                messages.Add($"وتوجد {total - MaxMessages} حالة تكرار أخرى لم تُعرض.");
+
+            return messages;
         }
 
         private void UpsertIndicatorSelection(
@@ -379,6 +539,19 @@ namespace QdratNew.Services.Exams.Implementations
                 }
             }
 
+            // الاختبار المنشور لا يُعاد فحصه: هذه البوابة تخص النشر فقط، ولا أثر لها على ما أُرسل للطلاب
+            if (!exam.IsPublished)
+            {
+                var threshold = await GetSimilarityThresholdAsync();
+                var duplicates = FindDuplicatesInExam(await LoadExamQuestionTextsAsync(ministrySimExamId), threshold);
+
+                if (duplicates.Any())
+                {
+                    result.IsValid = false;
+                    result.ShortfallMessages.AddRange(duplicates);
+                }
+            }
+
             return result;
         }
 
@@ -456,27 +629,48 @@ namespace QdratNew.Services.Exams.Implementations
                 .Where(sq => questionMeta.Any(m => m.Id == sq.QuestionId && m.LessonId == lessonId && m.Difficulty == difficulty))
                 .ToList();
 
-            var usedElsewhere = stageQuestions
-                .Where(sq => !toRemove.Contains(sq))
-                .Select(sq => sq.QuestionId)
+            // منع التكرار على مستوى الاختبار كله، لا هذا القسم فقط: كل ما يبقى بعد إزالة أسئلة هذا المؤشر يدخل في المقارنة
+            var removedLinkIds = toRemove.Select(sq => sq.Id).ToHashSet();
+            var selectedInExam = (await LoadExamQuestionTextsAsync(stage.MinistrySimExamId))
+                .Where(q => !removedLinkIds.Contains(q.StageQuestionId))
                 .ToList();
+
+            var usedElsewhere = selectedInExam
+                .Select(q => q.Id)
+                .Distinct()
+                .ToList();
+
+            var similarityThreshold = await GetSimilarityThresholdAsync();
 
             if (toRemove.Any())
                 _context.MinistrySimExamStageQuestions.RemoveRange(toRemove);
             await _context.SaveChangesAsync();
 
             // نفس شروط جودة السؤال المستخدمة في ExamQuestionSelectorService — بدون أي تكملة تلقائية للنقص من مصدر آخر
-            var candidateIds = await _context.Questions
+            var candidates = await _context.Questions
                 .AsNoTracking()
                 .Where(q => q.LessonId == lessonId
                             && q.Difficulty == difficulty
                             && q.IsReviewed && !q.IsRejected && q.CorrectAnswer != null
                             && !EF.Constant(usedElsewhere).Contains(q.Id))
-                .Select(q => q.Id)
+                .Select(q => new MinistrySimExamQuestionText
+                {
+                    Id = q.Id,
+                    LessonId = q.LessonId,
+                    Difficulty = q.Difficulty,
+                    VerbalPassageId = q.VerbalPassageId,
+                    ImageUrl = q.ImageUrl,
+                    Title = q.Title,
+                    ValueA = q.ValueA,
+                    ValueB = q.ValueB,
+                    CorrectAnswer = q.CorrectAnswer
+                })
                 .ToListAsync();
 
             var rnd = new Random();
-            var picked = candidateIds.OrderBy(_ => rnd.Next()).Take(selection.RequestedCount).ToList();
+            var (pickedQuestions, rejectedAsSimilar) = PickDistinctQuestions(
+                candidates.OrderBy(_ => rnd.Next()).ToList(), selection.RequestedCount, selectedInExam, similarityThreshold);
+            var picked = pickedQuestions.Select(q => q.Id).ToList();
 
             var currentMaxOrder = await _context.MinistrySimExamStageQuestions
                 .Where(q => q.MinistrySimExamStageId == stageId)
@@ -505,7 +699,7 @@ namespace QdratNew.Services.Exams.Implementations
                 var shortfall = selection.RequestedCount - picked.Count;
                 result.ShortfallMessages.Add(
                     $"{QdratNew.Helpers.SectionNameHelper.Name(stage.StageNumber)} - المحور «{sectionTitle}» - المؤشر «{lessonTitle}» - صعوبة {DifficultyArabic(difficulty)}: " +
-                    $"مطلوب {selection.RequestedCount} سؤال وناقص {shortfall} (المتاح فعليًا في البنك {picked.Count}).");
+                    $"مطلوب {selection.RequestedCount} سؤال وناقص {shortfall} (المتاح فعليًا في البنك {picked.Count}{SimilarityNote(rejectedAsSimilar)}).");
             }
 
             return result;
@@ -538,6 +732,10 @@ namespace QdratNew.Services.Exams.Implementations
 
             if (alreadyUsed)
                 return new MinistrySimExamManualAddResult { Success = false, Message = "هذا السؤال مستخدم بالفعل داخل نفس القسم." };
+
+            var conflict = await FindDuplicateConflictAsync(stage.MinistrySimExamId, questionId);
+            if (conflict != null)
+                return new MinistrySimExamManualAddResult { Success = false, Message = conflict };
 
             var selection = await _context.MinistrySimExamStageIndicatorSelections
                 .AsNoTracking()
