@@ -1150,6 +1150,13 @@ builder.Services.AddScoped<QdratNew.Services.OnlineLecture.IPartnerEducationalCo
                            QdratNew.Services.OnlineLecture.PartnerEducationalContentPolicy>();
 builder.Services.AddScoped<QdratNew.Services.OnlineLecture.IPartnerLearningContentService,
                            QdratNew.Services.OnlineLecture.PartnerLearningContentService>();
+// OLC-S5: قسم «المحتوى التعليمي» للطالب — الوصول (R2/R3/R17) + القفل التسلسلي (R13) + صفحة القسم
+builder.Services.AddScoped<QdratNew.Services.OnlineLecture.IOnlineLearningAccessService,
+                           QdratNew.Services.OnlineLecture.OnlineLearningAccessService>();
+builder.Services.AddScoped<QdratNew.Services.OnlineLecture.ILectureSequenceService,
+                           QdratNew.Services.OnlineLecture.LectureSequenceService>();
+builder.Services.AddScoped<QdratNew.Services.OnlineLecture.IStudentOnlineLearningService,
+                           QdratNew.Services.OnlineLecture.StudentOnlineLearningService>();
 builder.Services.AddScoped<ILectureInstructorSyncService, LectureInstructorSyncService>();
 builder.Services.AddScoped<IEmployeeBatchAccessService, EmployeeBatchAccessService>();
 builder.Services.AddScoped<QdratNew.Services.Admin.EmployeeDashboard.IEmployeeDashboardService,

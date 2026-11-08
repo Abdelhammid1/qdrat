@@ -202,6 +202,7 @@ namespace QdratNew.Areas.Admin.Controllers
             }
 
             _context.SaveChanges();
+            QdratNew.Services.OnlineLecture.OnlineLearningMenuCacheSignal.Invalidate();   // OLC-S5.1: بند المحتوى التعليمي
 
             TempData["Success"] = "تم إنشاء عقد الشراكة والفترة الأولى تلقائيًا بنجاح.";
             return RedirectToAction(nameof(Index), new { partnerId = model.PartnerId });
@@ -339,6 +340,7 @@ namespace QdratNew.Areas.Admin.Controllers
             }
 
             _context.SaveChanges();
+            QdratNew.Services.OnlineLecture.OnlineLearningMenuCacheSignal.Invalidate();   // OLC-S5.1: بند المحتوى التعليمي
 
             TempData["Success"] = "تم تحديث عقد الشراكة بنجاح.";
 

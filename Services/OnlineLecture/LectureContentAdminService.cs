@@ -213,12 +213,14 @@ namespace QdratNew.Services.OnlineLecture
                 batch.IsOnlineLearning = true;
                 batch.OnlineLearningEnabledAt = DateTime.UtcNow;
                 await _db.SaveChangesAsync(ct);
+                OnlineLearningMenuCacheSignal.Invalidate();   // OLC-S5.1: رابط القائمة يظهر فورًا لطلاب الدفعة
                 return LectureContentResult.Ok("تم تفعيل التعليم أونلاين للدفعة. يمكنك الآن إضافة المحتوى من صفحة كل محاضرة.");
             }
 
             // الإلغاء: يُخفي القسم عن طلاب الدفعة فقط — المحتوى والتقدّم يبقيان كما هما (OnlineLearningEnabledAt = آخر تفعيل)
             batch.IsOnlineLearning = false;
             await _db.SaveChangesAsync(ct);
+            OnlineLearningMenuCacheSignal.Invalidate();   // OLC-S5.1: رابط القائمة يختفي فورًا
 
             var kept = await (
                     from c in _db.LectureContents.AsNoTracking()

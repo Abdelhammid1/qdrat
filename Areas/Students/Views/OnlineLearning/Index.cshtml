@@ -1,0 +1,234 @@
+@using QdratNew.Enums
+@model QdratNew.ViewModels.OnlineLecture.StudentOnlineLearningIndexVm
+@{
+    ViewData["Title"] = "المحتوى التعليمي";
+    const string LockMessage = "أكمل المحاضرة السابقة أولًا";
+}
+@section Styles {
+    <link href="~/css/student-olc.css" rel="stylesheet" asp-append-version="true" />
+}
+
+@* OLC-S5 — قسم «المحتوى التعليمي». الحالة (مكتملة/مفتوحة/مقفلة) محسوبة على الخادم (R13/R15)؛ لا رابط ولا معرّف فيديو هنا (C.5). *@
+<div class="olc-page" dir="rtl">
+    <header class="olc-hero">
+        <div class="olc-hero-row">
+            <div class="olc-hero-ic" aria-hidden="true"><i class="fas fa-circle-play"></i></div>
+            <div class="olc-hero-text">
+                <h1>المحتوى التعليمي</h1>
+                <p>
+                    @if (!string.IsNullOrWhiteSpace(Model.CourseTitle))
+                    {
+                        <span>@Model.CourseTitle</span>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(Model.BatchTitle))
+                    {
+                        <span class="olc-hero-sep">·</span><span>@Model.BatchTitle</span>
+                    }
+                </p>
+            </div>
+        </div>
+        @if (Model.IsEligible && !Model.LoadFailed && Model.TotalLectures > 0)
+        {
+            <div class="olc-hero-progress">
+                <div class="olc-hero-progress-head">
+                    <span>أنجزت @Model.CompletedLectures من @Model.TotalLectures محاضرة</span>
+                    <strong>@(Model.ProgressPercent)%</strong>
+                </div>
+                <div class="olc-bar olc-bar-light" role="progressbar" aria-valuenow="@Model.ProgressPercent" aria-valuemin="0" aria-valuemax="100" aria-label="نسبة الإنجاز الكلية">
+                    <span style="width:@(Model.ProgressPercent)%"></span>
+                </div>
+            </div>
+        }
+    </header>
+
+    @if (Model.LoadFailed)
+    {
+        <div class="olc-state olc-state-error" role="alert">
+            <div class="olc-state-ic" aria-hidden="true"><i class="fas fa-triangle-exclamation"></i></div>
+            <h2>تعذّر تحميل المحتوى التعليمي</h2>
+            <p>حدث خطأ أثناء تحميل المحاضرات. حاول مرة أخرى بعد قليل.</p>
+            <a class="olc-btn" asp-action="Index" data-olc-loading><i class="fas fa-rotate-right" aria-hidden="true"></i> إعادة المحاولة</a>
+        </div>
+    }
+    else if (!Model.IsEligible)
+    {
+        <div class="olc-state" role="status">
+            <div class="olc-state-ic" aria-hidden="true"><i class="fas fa-wifi"></i></div>
+            <h2>المحتوى التعليمي غير متاح لدورتك الحالية</h2>
+            <p>هذا القسم متاح لطلاب الدفعات الأونلاين فقط.</p>
+            @if (Model.HasOtherEligibleCourse)
+            {
+                <p class="olc-state-hint">لديك دورة أونلاين أخرى — بدّل الدورة من أعلى القائمة لعرض محتواها.</p>
+            }
+        </div>
+    }
+    else if (Model.TotalLectures == 0)
+    {
+        <div class="olc-state" role="status">
+            <div class="olc-state-ic" aria-hidden="true"><i class="fas fa-photo-film"></i></div>
+            <h2>لا توجد محاضرات منشورة بعد</h2>
+            <p>عندما ينشر المعهد محتوى محاضرات دفعتك سيظهر هنا مرتبًا حسب المنهج.</p>
+        </div>
+    }
+    else
+    {
+        <div class="olc-curricula">
+            @foreach (var curriculum in Model.Curricula)
+            {
+                var curriculumPercent = curriculum.TotalCount == 0 ? 0 : (int)Math.Floor(curriculum.CompletedCount * 100.0 / curriculum.TotalCount);
+                var curriculumDone = curriculum.TotalCount > 0 && curriculum.CompletedCount == curriculum.TotalCount;
+                <section class="olc-curriculum @(curriculumDone ? "is-done" : "")" aria-labelledby="olc-cur-@curriculum.CurriculumId">
+                    <header class="olc-curriculum-head">
+                        <div class="olc-curriculum-title">
+                            <h2 id="olc-cur-@curriculum.CurriculumId">@curriculum.Title</h2>
+                            @if (curriculum.TotalCount > 0)
+                            {
+                                <span class="olc-pill @(curriculumDone ? "olc-pill-ok" : "olc-pill-muted")">مكتمل @curriculum.CompletedCount من @curriculum.TotalCount</span>
+                            }
+                        </div>
+                        @if (curriculum.TotalCount > 0)
+                        {
+                            <div class="olc-bar" role="progressbar" aria-valuenow="@curriculumPercent" aria-valuemin="0" aria-valuemax="100" aria-label="تقدم المنهج @curriculum.Title">
+                                <span style="width:@(curriculumPercent)%"></span>
+                            </div>
+                        }
+                    </header>
+
+                    @if (curriculum.Lectures.Count == 0)
+                    {
+                        <p class="olc-curriculum-empty"><i class="fas fa-hourglass-half" aria-hidden="true"></i> لا توجد محاضرات منشورة في هذا المنهج بعد.</p>
+                    }
+                    else
+                    {
+                        <ol class="olc-lectures">
+                            @{ var number = 0; }
+                            @foreach (var lecture in curriculum.Lectures)
+                            {
+                                number++;
+                                var stateCls = lecture.IsCompleted ? "is-completed" : lecture.IsLocked ? "is-locked" : "is-open";
+                                var watchUrl = lecture.IsLocked ? null : Url.Action("Watch", "OnlineLearning", new { area = "Students", id = lecture.LectureContentId });
+                                <li class="olc-lecture @stateCls @(lecture.IsNext ? "is-next" : "")">
+                                    <div class="olc-lecture-num" aria-hidden="true">
+                                        @if (lecture.IsCompleted)
+                                        {
+                                            <i class="fas fa-check"></i>
+                                        }
+                                        else if (lecture.IsLocked)
+                                        {
+                                            <i class="fas fa-lock"></i>
+                                        }
+                                        else
+                                        {
+                                            @number
+                                        }
+                                    </div>
+
+                                    <div class="olc-lecture-body">
+                                        <div class="olc-lecture-top">
+                                            <h3 class="olc-lecture-title">@lecture.Title</h3>
+                                            @if (lecture.IsCompleted)
+                                            {
+                                                <span class="olc-pill olc-pill-ok">مكتملة</span>
+                                            }
+                                            else if (lecture.IsLocked)
+                                            {
+                                                <span class="olc-pill olc-pill-locked">مقفلة</span>
+                                            }
+                                            else if (lecture.IsNext)
+                                            {
+                                                <span class="olc-pill olc-pill-next">تابع من هنا</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="olc-pill olc-pill-open">مفتوحة</span>
+                                            }
+                                        </div>
+
+                                        <ul class="olc-lecture-meta">
+                                            <li><i class="fas fa-chalkboard" aria-hidden="true"></i> @lecture.LectureTitle</li>
+                                            <li><i class="fas fa-calendar-day" aria-hidden="true"></i> @lecture.LectureDate.ToString("yyyy/MM/dd")</li>
+                                            <li><i class="fas fa-sitemap" aria-hidden="true"></i> @lecture.SectionTitle</li>
+                                            <li>
+                                                @if (lecture.Mode == LectureContentMode.FullVideo)
+                                                {
+                                                    <i class="fas fa-film" aria-hidden="true"></i> <span>فيديو كامل</span>
+                                                }
+                                                else
+                                                {
+                                                    <i class="fas fa-list-ol" aria-hidden="true"></i> <span>@lecture.ItemsCount فيديو للمؤشرات</span>
+                                                }
+                                            </li>
+                                        </ul>
+
+                                        @if (lecture.IsLocked)
+                                        {
+                                            <p class="olc-lock-msg"><i class="fas fa-lock" aria-hidden="true"></i> @LockMessage</p>
+                                        }
+                                        else if (!lecture.IsCompleted)
+                                        {
+                                            <div class="olc-lecture-progress">
+                                                <div class="olc-bar olc-bar-sm" role="progressbar" aria-valuenow="@lecture.ProgressPercent" aria-valuemin="0" aria-valuemax="100" aria-label="تقدم المحاضرة">
+                                                    <span style="width:@(lecture.ProgressPercent)%"></span>
+                                                </div>
+                                                <span class="olc-lecture-percent">@(lecture.ProgressPercent)%</span>
+                                            </div>
+                                        }
+                                    </div>
+
+                                    <div class="olc-lecture-action">
+                                        @if (lecture.IsLocked)
+                                        {
+                                            <span class="olc-btn olc-btn-disabled" aria-disabled="true"><i class="fas fa-lock" aria-hidden="true"></i> مقفلة</span>
+                                        }
+                                        else if (watchUrl is null)
+                                        {
+                                            @* المشغّل المحمي يصل في OLC-S6؛ حتى ذلك الحين لا رابط *@
+                                            <span class="olc-btn olc-btn-disabled" aria-disabled="true" title="المشغّل قيد الإعداد"><i class="fas fa-clock" aria-hidden="true"></i> قريبًا</span>
+                                        }
+                                        else if (lecture.IsCompleted)
+                                        {
+                                            <a class="olc-btn olc-btn-outline" href="@watchUrl" data-olc-loading><i class="fas fa-rotate-left" aria-hidden="true"></i> مراجعة</a>
+                                        }
+                                        else
+                                        {
+                                            <a class="olc-btn" href="@watchUrl" data-olc-loading><i class="fas fa-play" aria-hidden="true"></i> @(lecture.ProgressPercent > 0 ? "متابعة" : "مشاهدة")</a>
+                                        }
+                                    </div>
+                                </li>
+                            }
+                        </ol>
+                    }
+                </section>
+            }
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        // حالة تحميل عند فتح محاضرة أو إعادة المحاولة (منع النقر المزدوج) — ربط واحد على مستوى الصفحة
+        (function () {
+            var page = document.querySelector('.olc-page');
+            if (!page || page.dataset.olcBound) return;
+            page.dataset.olcBound = '1';
+            page.addEventListener('click', function (e) {
+                var link = e.target.closest('a[data-olc-loading]');
+                if (!link) return;
+                if (link.classList.contains('is-loading')) { e.preventDefault(); return; }
+                link.classList.add('is-loading');
+                link.setAttribute('aria-busy', 'true');
+                var icon = link.querySelector('i');
+                if (icon) { icon.dataset.olcIcon = icon.className; icon.className = 'fas fa-spinner fa-spin'; }
+            });
+            // الرجوع من صفحة المشاهدة بزر المتصفح (bfcache) لا يُبقي الزر معلّقًا
+            window.addEventListener('pageshow', function () {
+                page.querySelectorAll('a.is-loading').forEach(function (a) {
+                    a.classList.remove('is-loading');
+                    a.removeAttribute('aria-busy');
+                    var i = a.querySelector('i[data-olc-icon]');
+                    if (i) i.className = i.dataset.olcIcon;
+                });
+            });
+        })();
+    </script>
+}
