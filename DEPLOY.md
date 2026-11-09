@@ -331,7 +331,7 @@ UPDATE PartnerSubscriptions SET CanUsePlacementExams = 0;   -- سجّل القي
 ## 📋 نشر Epic OLC (المحتوى التعليمي أونلاين للمحاضرات) — OLC-S1 (الأساس)
 
 > S1 يضيف الجداول ومفتاح الميزة فقط — لا واجهة ولا سلوك جديد للمستخدمين. الميزة **مغلقة** (`OnlineLectureContent.Enabled = false`).
-> يُستكمل هذا القسم في OLC-S7.3 قبل الإطلاق.
+> قسم الإطلاق الكامل (S2–S8) في «OLC — الإطلاق» أدناه.
 
 ### 1) قبل نشر الكود (Backup إلزامي)
 ```sql
@@ -350,3 +350,46 @@ SELECT MigrationId FROM __EFMigrationsHistory WHERE MigrationId LIKE '%OLC_AddOn
 
 ### 3) خطة التراجع
 - لا حاجة لتراجع عن S1 وحده (إضافات فقط، الميزة مغلقة). عند الضرورة: اسحب كود OLC أولًا، ثم `Migrations/Scripts/OLC_AddOnlineLectureContent_Rollback.sql` (⚠ يحذف كل محتوى OLC وتقدّم الطلاب فيه).
+
+---
+
+## 📋 OLC — الإطلاق (OLC-S2 إلى S8)
+
+> S2–S8 **بلا Migration جديدة**: السكربت الوحيد هو `OLC_AddOnlineLectureContent.sql` من S1. الميزة تبقى مغلقة حتى ينتهي الـ UAT.
+
+### 1) النشر (الميزة مغلقة)
+1. Backup كما في قسم S1 أعلاه، ثم `OLC_AddOnlineLectureContent.sql` إن لم يُطبَّق بعد (Idempotent — تشغيله مرة ثانية آمن).
+2. تأكد أن `OnlineLectureContent.Enabled = false` قبل نشر الكود:
+   ```sql
+   SELECT [Value] FROM SystemSettings WHERE [Key] = N'OnlineLectureContent.Enabled';
+   ```
+3. انشر الكود. لا باكدجات جديدة ولا مفاتيح في `appsettings`.
+4. **التجربة على نسخة من الإنتاج أولًا (OLC-S8.3):** استعِد آخر Backup باسم مختلف (مثل `QdratNewDB_OlcRehearsal`) وشغّل عليه السكربت ثم سكربت التراجع ثم السكربت مرة أخرى، وسجّل المدة. `Batches` يكسب عمودًا `NOT NULL DEFAULT 0`: على SQL Server Standard قد يعيد كتابة الجدول — صغير عندنا، لكن نفّذه خارج وقت الذروة.
+
+### 2) قبل التفعيل
+- **Nginx / CSP:** التطبيق نفسه لا يضبط `Content-Security-Policy`. إن كانت في إعداد Nginx فيجب أن تسمح بـ:
+  `frame-src https://www.youtube-nocookie.com https://player.vimeo.com` و`script-src https://www.youtube.com https://player.vimeo.com` (و`https://s.ytimg.com` لمكتبة YouTube). بدونها يظهر المشغّل فارغًا.
+- **P12 (تشغيلي):** كل فيديو YouTube «غير مدرج»، وكل فيديو Vimeo مقيّد بنطاق `qdrat.edu.sa` (Domain privacy).
+- **مدة الفيديو إلزامية للنشر (OLC-S8.1):** الفيديو الكامل وكل فيديو مؤشر يحتاج مدة يُدخلها الأدمن، وإلا يُرفض النشر، والنبضة على محتوى بلا مدة تُرفض (404) بلا احتساب. السبب: مدة المتصفح قابلة للتزوير وتفتح المحاضرة التالية بلا مشاهدة.
+- الصلاحيات: أضف `LectureContents` (Read/Create/Edit/Delete) لبروفايلات الأدمن المعنية، و`ManagePartners` لمن يدير دفعات الشركاء فقط.
+- نفّذ `Docs/UAT/OLC_C7_Manual_Checklist.md` على Chrome وSafari iPhone.
+
+### 3) التفعيل
+```sql
+UPDATE SystemSettings SET [Value] = N'true' WHERE [Key] = N'OnlineLectureContent.Enabled';
+```
+القيمة مخزّنة مؤقتًا 30 ثانية لكل نسخة من التطبيق — لا حاجة لإعادة تشغيل. ثم فعّل «التعليم أونلاين» لدفعة تجريبية واحدة من شاشة الدفعة.
+
+### 4) بعد التفعيل — تصدير Schema لخطة OLN (OLC-S8.4)
+```bash
+sqlcmd -S . -E -C -d QdratNewDB -i Migrations/Scripts/OLC_ExportContractSchema.sql -s "|" -W -o olc_schema_$(date +%F).txt
+```
+قراءة فقط (أعمدة وأنواع وأطوال وافتراضيات وفهارس ومفاتيح أجنبية وأعداد صفوف — بلا بيانات طلاب). يُسلَّم الملف لفريق `qdratAPI` لخطوة `OLN-S8.1` ويُقارن بالعقد v1.2. ملاحظتان للمقارنة: جدول المحاضرات اسمه `[Lecture]` (مفرد) وعمود مفتاح الطلاب `Students.StudentID`.
+
+### 5) المراقبة
+- Serilog: ابحث عن `OLC: ping refused — no admin duration` (محتوى منشور قبل S8 بلا مدة — أدخل مدته) و`OLC ping lost a concurrent write` (طبيعي بأعداد قليلة).
+- الـ Rate limit `olc-ping` (20/دقيقة لكل مستخدم) في ذاكرة النسخة — يكفي ما دام التطبيق نسخة واحدة خلف Nginx.
+
+### 6) التراجع
+- **أسرع تراجع:** `UPDATE SystemSettings SET [Value] = N'false' WHERE [Key] = N'OnlineLectureContent.Enabled';` — يختفي القسم خلال 30 ثانية ويبقى المحتوى وتقدّم الطلاب.
+- تراجع الكود وحده لا يحتاج سكربتًا (الجداول إضافية). `OLC_AddOnlineLectureContent_Rollback.sql` فقط عند إلغاء الميزة نهائيًا (⚠ يحذف المحتوى والتقدّم).

@@ -472,7 +472,7 @@ namespace QdratNew.Tests.OnlineLecture
             Assert.False(empty.Success);
             Assert.Contains("R5", empty.Message);
 
-            await svc.AddIndicatorVideoAsync(id, FromSource(LessonA1, RvA1), Admin);
+            await svc.AddIndicatorVideoAsync(id, FromSource(LessonA1, RvA1, "5:00"), Admin);
             Assert.True((await svc.PublishAsync(id, Admin)).Success);
         }
 
@@ -511,7 +511,7 @@ namespace QdratNew.Tests.OnlineLecture
         {
             var (svc, db) = Create();
             var id = await IndicatorAsync(svc, db);
-            await svc.AddIndicatorVideoAsync(id, FromSource(LessonA1, RvA1), Admin);
+            await svc.AddIndicatorVideoAsync(id, FromSource(LessonA1, RvA1, "5:00"), Admin);
             Assert.True((await svc.PublishAsync(id, Admin)).Success);
             var itemId = await Fresh(db, d => d.LectureContentItems.Select(i => i.Id).SingleAsync());
 

@@ -399,6 +399,11 @@ namespace QdratNew.Services.OnlineLecture
                         return LectureContentResult.Fail("مدة الفيديو غير صالحة. اكتبها بالصيغة mm:ss أو hh:mm:ss (حتى 12 ساعة).");
                     duration = seconds;
                 }
+                else if (content.Status == LectureContentStatus.Published)
+                {
+                    // OLC-S8.1: الإتمام يُحسب على مدة الأدمن فقط — لا تُزال من محتوى منشور
+                    return LectureContentResult.Fail("مدة الفيديو إلزامية للمحتوى المنشور. أخفِ المحتوى أولًا إن أردت إزالتها.");
+                }
 
                 // R4: الفصول المحفوظة يجب أن تبقى داخل مدة الفيديو
                 if (!modeChanged)

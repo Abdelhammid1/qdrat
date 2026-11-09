@@ -128,20 +128,9 @@ namespace QdratNew.Services.OnlineLecture
             vm.PublishIssues = CollectPublishIssues(vm.ContentMode!.Value, vm.VideoProvider, contentExternalId,
                 vm.DurationSeconds, items, vm.SectionId, vm.BatchIsOnline);
 
-            // ── تنبيهات لا تمنع النشر ──
-            if (vm.ContentMode == LectureContentMode.FullVideo)
-            {
-                if (vm.DurationSeconds is null)
-                    vm.PublishWarnings.Add("لم تُدخل مدة الفيديو — سيُعتمد على المدة التي يبلّغ بها المشغّل لاحتساب نسبة المشاهدة (80%).");
-                if (items.Count == 0)
-                    vm.PublishWarnings.Add("لا توجد فصول — سيرى الطالب الفيديو كاملًا بلا تقسيم للمؤشرات.");
-            }
-            else
-            {
-                var withoutDuration = items.Count(i => i.DurationSeconds is null);
-                if (withoutDuration > 0)
-                    vm.PublishWarnings.Add($"{withoutDuration} فيديو بلا مدة مُدخلة — سيُعتمد على المدة التي يبلّغ بها المشغّل.");
-            }
+            // ── تنبيهات لا تمنع النشر (غياب المدة صار مانعًا في CollectPublishIssues — OLC-S8.1) ──
+            if (vm.ContentMode == LectureContentMode.FullVideo && items.Count == 0)
+                vm.PublishWarnings.Add("لا توجد فصول — سيرى الطالب الفيديو كاملًا بلا تقسيم للمؤشرات.");
 
             if (vm.Status != LectureContentStatus.Published && curriculumId.HasValue)
             {
@@ -292,6 +281,10 @@ namespace QdratNew.Services.OnlineLecture
                 if (provider is not { } p || !LectureVideoUrlParser.IsValidId(p, externalId))
                     issues.Add("أضف رابط الفيديو الكامل (YouTube/Vimeo) من تبويب «البيانات والوضع» (R4).");
 
+                // OLC-S8.1: نسبة الـ 80% تُحسب على مدة الأدمن فقط — مدة المتصفح قابلة للتزوير فتفتح المحاضرة التالية بلا مشاهدة
+                if (durationSeconds is not > 0)
+                    issues.Add("أدخل مدة الفيديو الكامل من تبويب «البيانات والوضع» — احتساب المشاهدة يعتمد عليها.");
+
                 issues.AddRange(LectureChapterRules.Validate(
                     items.Select(i => new ChapterTiming(i.Label, i.StartSeconds, i.EndSeconds)).ToList(),
                     durationSeconds));
@@ -303,6 +296,10 @@ namespace QdratNew.Services.OnlineLecture
 
                 foreach (var bad in items.Where(i => i.VideoProvider is not { } ip || !LectureVideoUrlParser.IsValidId(ip, i.VideoExternalId)))
                     issues.Add($"فيديو المؤشر «{bad.Label}» بلا رابط صالح — احذفه وأعد إضافته (R5).");
+
+                // OLC-S8.1: لكل فيديو مؤشر مدة من الأدمن (لا يوجد عمود مدة في RemedialVideos)
+                foreach (var noDuration in items.Where(i => i.DurationSeconds is not > 0))
+                    issues.Add($"فيديو المؤشر «{noDuration.Label}» بلا مدة — احذفه وأعد إضافته مع مدته.");
             }
 
             return issues;
@@ -460,6 +457,11 @@ namespace QdratNew.Services.OnlineLecture
                 if (!LectureTimeFormat.TryParse(vm.DurationText, out var seconds) || seconds < 1)
                     return LectureContentResult.Fail("مدة الفيديو غير صالحة. اكتبها بالصيغة mm:ss أو hh:mm:ss.");
                 duration = seconds;
+            }
+            else if (content.Status == LectureContentStatus.Published)
+            {
+                // OLC-S8.1: عنصر جديد في محتوى منشور يظهر للطلاب فورًا — الإتمام يُحسب على مدة الأدمن فقط
+                return LectureContentResult.Fail("أدخل مدة الفيديو — إلزامية لإضافة فيديو إلى محتوى منشور.");
             }
 
             // ── المصدر + اللقطة (R6) ──

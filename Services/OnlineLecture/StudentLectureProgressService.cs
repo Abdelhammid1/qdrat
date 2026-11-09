@@ -99,6 +99,9 @@ namespace QdratNew.Services.OnlineLecture
                 if (request.ItemId is not null)
                     return Bad("هذه المحاضرة فيديو واحد بلا قائمة تشغيل.");
 
+                if (content.DurationSeconds is not > 0)
+                    return NoAdminDuration(request.LectureContentId, null);
+
                 var target = new FullTarget(_db, request.LectureContentId, studentId);
                 var outcome = await ApplyAsync(target, state, request, content.DurationSeconds, now, ct);
                 if (outcome is null)
@@ -120,6 +123,9 @@ namespace QdratNew.Services.OnlineLecture
                 .FirstOrDefaultAsync(ct);
             if (item is null)
                 return Missing();
+
+            if (item.DurationSeconds is not > 0)
+                return NoAdminDuration(request.LectureContentId, itemId);
 
             // R14: كل عنصر نشط أسبق (SortOrder ثم Id — نفس ترتيب صفحة المشاهدة) يجب أن يكون مكتملًا. المكتمل يُعاد idempotent.
             if (!row.IsCompleted)
@@ -432,6 +438,16 @@ namespace QdratNew.Services.OnlineLecture
 
         private static LecturePingResult Missing()
             => new(LecturePingStatus.NotFound, new StudentLecturePingResponse { Ok = false, Reason = "notfound", Message = NotFoundMessage });
+
+        /// <summary>
+        /// OLC-S8.1 — بلا مدة من الأدمن لا يُحتسب شيء: مدة المتصفح قابلة للتزوير (duration=5 ثم ended يُتمّ المحاضرة في ثوانٍ
+        /// ويفتح التالية). النشر يمنع ذلك؛ هذا حارس للبيانات القديمة. 404 notfound بلا كتابة.
+        /// </summary>
+        private LecturePingResult NoAdminDuration(int lectureContentId, int? itemId)
+        {
+            _logger.LogWarning("OLC: ping refused — no admin duration for content {ContentId} item {ItemId}", lectureContentId, itemId);
+            return Missing();
+        }
 
         private static LecturePingResult Locked(string message)
             => new(LecturePingStatus.Conflict, new StudentLecturePingResponse { Ok = false, Reason = "locked", Message = message });

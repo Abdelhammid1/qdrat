@@ -198,7 +198,7 @@ namespace QdratNew.Tests.OnlineLecture
                 VideoExternalId = mode == LectureContentMode.FullVideo ? "dQw4w9WgXcQ" : null
             };
             for (var i = 0; i < items; i++)
-                content.Items.Add(new LectureContentItem { LessonId = 500 + i, SortOrder = i, VideoProvider = LectureVideoProvider.Vimeo, VideoExternalId = "123456" + i });
+                content.Items.Add(new LectureContentItem { LessonId = 500 + i, SortOrder = i, VideoProvider = LectureVideoProvider.Vimeo, VideoExternalId = "123456" + i, DurationSeconds = 100 });
             db.LectureContents.Add(content);
             db.SaveChanges();
             db.ChangeTracker.Clear();

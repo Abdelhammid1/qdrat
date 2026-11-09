@@ -412,6 +412,26 @@ namespace QdratNew.Tests.OnlineLecture
             Assert.Equal(0, itemRows);
         }
 
+        // OLC-S8.2 — C.7-P7: 20 نبضة/دقيقة لكل مستخدم (بالهوية لا الـ IP). مستخدم فريد حتى لا يستهلك نافذة اختبارات أخرى.
+        [Fact]
+        public async Task Ping_IsRateLimitedPerUser_At21stRequestPerMinute()
+        {
+            var user = "olc-s8-rate-" + Guid.NewGuid().ToString("N");
+            var statuses = new List<HttpStatusCode>();
+            for (var i = 0; i < 21; i++)
+            {
+                var (status, _) = await PingAsync(user, new { lectureContentId = _content1, state = "playing", position = i, duration = 600 });
+                statuses.Add(status);
+            }
+
+            Assert.DoesNotContain(HttpStatusCode.TooManyRequests, statuses.Take(20));
+            Assert.Equal(HttpStatusCode.TooManyRequests, statuses[20]);
+
+            // مستخدم آخر خلف نفس الـ IP لا يتأثر
+            var (other, _) = await PingAsync(_studentAUser, new { lectureContentId = _content1, state = "paused", position = 0, duration = 600 });
+            Assert.NotEqual(HttpStatusCode.TooManyRequests, other);
+        }
+
         [Fact]
         public async Task Ping_RecordsServerTimedProgress_ThenCompletion_UnlocksNextLecture()
         {
